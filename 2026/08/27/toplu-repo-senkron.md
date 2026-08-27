@@ -66,3 +66,72 @@ yereldeki gönderilmemiş işi uzağa göndermek.
 ## Doğrulama
 Son geçiş: **57 repodan 48'i TAMAM** (+ ayrı push edilen `timecraft` = 49). Geri kalan 8'i
 yukarıdaki tabloda; hiçbiri sessizce bırakılmadı.
+
+---
+
+# Ek: sorunların çözümü + ModaSimaModule (aynı gün)
+
+## Yapılanlar
+
+### 6. Yanlış remote hasarı geri alındı
+- **Ne yapıldı:** `BluefunModule` ve `Dogruyol`'un `main`'i kendi doğru commit'lerine
+  `--force-with-lease` ile geri döndürüldü.
+  ```bash
+  git -C <repo> push --force-with-lease=main:<yanlis-tepe> origin main:main
+  ```
+- **Sonuç:** `BluefunModule` → `85689ce`, `Dogruyol` → `3c16f61`. Kendi işleri duruyor.
+
+### 7. Karşılığı olmayan 4 repo açıldı
+- **Neden:** `ECozumModule`, `Saykon`, `UzmanAdresModule`, `apolloWrapper` GitHub'da **hiç
+  yoktu**; o yüzden başkasının remote'unu gösteriyorlardı.
+- **Komutlar:** `gh repo create <org>/<ad> --private` + `remote set-url` + `push -u`
+- **Not:** `UzmanAdresModule` commit'siz `master` dalındaydı; `.gitignore` (`.vs/ obj/ bin/`)
+  eklenip 60 dosya `main`'e ilk commit olarak gitti.
+
+### 8. eldegister'daki 48 commit kurtarıldı
+- **Ölçüm:** yereldeki 48 commit konusunun **hiçbiri** uzaktaki 249 commit içinde yok →
+  gerçek kayıp riski (iyzico Sprint 3, 4-5 Temmuz).
+- **Ne yapıldı:** `iyzico-sprint3-2026-07` dalı açılıp push edildi, `master`
+  `origin/master`'a hizalandı. Merge'e zorlanmadı.
+
+### 9. >100MB dosyalar silindi
+- `MakineKontrol.exe` ×2 (145MB), `canliyikamaekrani.apk` ×2 (121MB), `publish.rar` (120MB).
+- `.gitignore`'a eklendi, üç repo push edildi.
+
+### 10. Sızmış GitLab jetonu temizlendi
+- **Bulgu:** 10 değil, **29 repoda** remote URL'inde düz metin `glpat-...` vardı.
+- **Ne yapıldı:** hepsi `git@gitlab.com:...` SSH'a çevrildi. Diskte tek kopya kalmadı.
+- **Not:** jetonun zaten süresi dolmuş (`Authentication failed`).
+
+### 11. viola/server — SSH özel anahtarı
+- Repo klasörüne düşmüş `abdusselam.kosecik` (+`.pub`) `.git/info/exclude`'a eklendi.
+  **Commit edilmedi.** Dosya hâlâ klasörde; oradan çıkarılmalı.
+
+### 12. ModaSimaModule oluşturuldu
+- **Neden:** UzmanAdresModule tabanlı yeni müşteri modülü.
+- **Ne yapıldı:**
+  1. Yalnızca **takipli** 60 dosya kopyalandı (`git ls-files` → `.vs/ obj/ bin/` gelmedi).
+  2. `perl -0777` slurp modunda `UzmanAdres→ModaSima` (satır sonları korunsun diye sed değil —
+     sed CRLF'i LF'e çeviriyordu).
+  3. Dosya adları: `ModaSimaModule.cs/.csproj/.sln`.
+  4. `.sln` proje ve solution GUID'leri **yenilendi** (çakışmasın diye).
+- **Doğrulama:** `dotnet build` → **0 hata**, 70 uyarı (hepsi orijinalden gelen).
+- **Repo:** `github.com/Sentez-Core/ModaSimaModule` (private).
+
+### 13. ModaSimaModule'e Web API
+- **Neden:** ViolaModule'deki self-host Web API deseni istendi; şimdilik hello world.
+- **Ne yapıldı:** `Instance_AfterLogin` içine `ProcessName == "LiveServer"` kontrolü +
+  `Task.Run(StartWebApi)`; `WebApplication.CreateBuilder` ile self-host,
+  `Controllers/HelloController.cs` (`GET /hello`) ve `app.MapGet("/")`.
+  csproj'a `<FrameworkReference Include="Microsoft.AspNetCore.App" />`.
+- **Port:** **3132** (ViolaModule 3131 kullanıyor, çakışmasın diye).
+- **Log:** `C:\log\modasima_<tarih>.log`
+- **Doğrulama:** `dotnet build` → 0 hata. **Çalışma anı denenmedi** — LiveServer süreci gerekiyor.
+
+## Doğrulama
+Taranan 58 reponun **58'i TAMAM**: temiz ağaç, uzakla senkron.
+
+## Açık kalanlar
+- `viola/server` klasöründeki SSH özel anahtarı elle taşınmalı.
+- GitLab'daki `glpat-...` jetonu iptal edilmiş görünüyor mu diye kontrol edilmeli.
+- `eldegister/iyzico-sprint3-2026-07` dalının `master`'a birleştirilmesi karar bekliyor.
