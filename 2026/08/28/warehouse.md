@@ -42,3 +42,27 @@ yıl–hafta–iş emri kırılımında gösteren yeni bir rapor istendi.
 ## Açık kalanlar / sonraki adım
 - Rapor tarih aralığı filtresi yok; tüm geçmiş dönüyor. Veri büyürse yıl/hafta filtresi
   veya sayfalama gerekebilir.
+
+### 2. Raporun mail ile gönderilmesi (Excel eki)
+- **Neden:** Depo Girişleri raporunun Excel'e alınıp mail olarak gönderilmesi istendi.
+- **Ne yapıldı:**
+  - Excel üretimi `BuildWarehouseReceiptsExcelAsync(warehouseId)` metoduna çıkarıldı;
+    hem indirme hem mail endpoint'i aynı byte[]'i kullanıyor (tek kaynak).
+  - `POST /api/reports/warehouse-receipts/mail` eklendi. `appsettings.json` içindeki mevcut
+    `Smtp` bölümünü (faturalarda kullanılan aynı `System.Net.Mail.SmtpClient` kalıbı)
+    kullanıyor; alıcılar varsayılan olarak `Smtp:Recipients`, `?to=a@x;b@y` ile override
+    edilebiliyor. Konu: "Depo Girisleri Raporu - dd.MM.yyyy", ek: `depo-girisleri-<tarih>.xlsx`.
+  - Controller'a `IConfiguration` enjekte edildi + `System.Net`, `System.Net.Mail` using'leri.
+  - Raporlar toolbar'ına, sadece `receipts` sekmesi aktifken görünen "Mail Gönder" butonu;
+    Vue tarafında `sendingMail` ref'i ile çift tıklama koruması ve alert ile geri bildirim.
+  - `i18n.js` TR+EN: `sendMail`, `sending`, `mailSent`, `mailSendError`.
+- **Dokunulan dosyalar:** `src/Warehouse/Controllers/Api/ReportsApiController.cs`,
+  `src/Warehouse/Views/Reports/Index.cshtml`, `src/Warehouse/wwwroot/js/i18n.js`
+- **Sonuç / doğrulama:** Build 0 error. Mail fiilen gönderilmedi (SMTP'ye çıkış yapılmadı),
+  butondan test edilmesi gerekiyor.
+- **Commit:** `f5b8a58` — Depo Girisleri raporu mail ile gonderilebiliyor
+
+## Kararlar (ek)
+- Alıcı listesi için yeni bir ayar bölümü açılmadı; faturaların kullandığı `Smtp:Recipients`
+  aynen kullanıldı. Farklı alıcı gerekirse `?to=` parametresi var.
+- Mail butonu tüm sekmeler için genelleştirilmedi; sadece istenen rapor için eklendi.
