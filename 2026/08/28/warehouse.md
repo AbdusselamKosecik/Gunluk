@@ -114,3 +114,17 @@ yıl–hafta–iş emri kırılımında gösteren yeni bir rapor istendi.
   `DATEPART(ISO_WEEK,...)` kullanılmalı. Şu an kullanıcının verdiği orijinal davranış korundu.
 - Rapor hâlâ tüm satırları çekip istemciye gönderiyor (sayfalama yok); tarih filtresi bunu
   pratikte hafifletiyor ama çok büyük aralıklarda yavaş kalabilir.
+
+### 5. Gruplamanın tek sorguya indirilmesi (düzeltme)
+- **Neden:** Kullanıcının uyarısı: tek sorgu verilmişti, ben gruplama için SQL'i dört varyanta
+  bölüp `CAST(NULL)` dolguları eklemiştim. Gereksiz karmaşa.
+- **Ne yapıldı:** `BuildWarehouseReceiptsSql` (4 varyant) ve `AddReceiptsParameters` silindi.
+  Tek `WarehouseReceiptsSql` + `ReadWarehouseReceiptsAsync` + `GroupReceipts` (LINQ, bellek içi)
+  kaldı. JSON, Excel ve mail aynı yoldan geçiyor; Excel artık ayrı SQL çalıştırmıyor.
+  Commit `b8d142d`.
+- **Sonra:** Kullanıcı sorgunun SUM + 8 kolonluk GROUP BY içeren nihai hâlini verdi; baz sorgu
+  bununla değiştirildi, üzerine yalnız filtre parametreleri ve `order by` eklendi.
+  Commit `4a05570`.
+- **Ders:** Kullanıcı hazır bir sorgu verdiyse sorguyu çoğaltma; kırılım gerekiyorsa sonucun
+  üzerinde topla.
+- **Paket:** win-x64 publish + zip yenilendi (15:27, 79.7 MB).
