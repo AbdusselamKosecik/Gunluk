@@ -80,3 +80,7 @@ yıl–hafta–iş emri kırılımında gösteren yeni bir rapor istendi.
 - **Dikkat:** Profildeki `PublishUrl` (`bin\Release\net10.0\publish\`) klasörü CLI ile
   publish'te kullanılmıyor; orada 21 Temmuz'dan kalma ESKİ bir çıktı duruyor. Deploy
   yaparken `win-x64\publish` klasörü alınmalı, diğeri yanıltıcı.
+- **Zip:** `src/Warehouse/bin/Release/warehouse-win-x64-2026-08-28.zip` (597 dosya, 79.6 MB).
+  İlk denemede `ZipFile::CreateFromDirectory` girdi adlarını ters bölü ile yazdı (Windows
+  PowerShell 5.1 davranışı, zip spec'ine aykırı; Linux/unzip ve bazı deploy araçları
+  bozuk isim üretebiliyor). Zip, girdi adları `/` ile normalize edilerek yeniden üretildi.
