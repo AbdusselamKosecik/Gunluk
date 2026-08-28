@@ -147,3 +147,75 @@ Günün asıl işi bu modülü kurtarmak oldu.
 - **Durum tabloları gerçeği yansıtmıyor** — `backlog.md` ve `sprint-01.md` güncellenmeli.
 - **Kurula gidecek madde:** `SaklamaJob`'un denetim kayıtlarını silmesi ile S2-07'nin
   "temizlik audit'e dokunmaz" kuralı çelişiyor.
+
+---
+
+## Ek — SetInvoicesTaken geri alinabilir mi? (2026-08-28)
+
+### Soru
+
+"Fatura numarasi veya UUID'ye gore SetInvoicesTaken'i geri cevirmemiz lazim, sirket
+bilgisine gore yapabilir miyiz?"
+
+### Cevap: HAYIR — CRS'in web servisinde geri alma yok
+
+- **Neden bakildi:** Kurtardigimiz `CrsIstemcisi` yalnizca `GetOutboxInvoiceList`,
+  `GetInboxInvoiceList`, `WhoAmI` cagiriyor. `SetInvoicesTaken`'in imzasini uydurmadan
+  once kaynagindan dogrulamak gerekti.
+- **Ne yapildi:** WSDL ve semalari dogrudan servisten cekildi.
+  ```bash
+  curl -s -o crs.wsdl  "https://connect.crssoft.com/Services/Integration?wsdl"
+  curl -s -o xsd0.xml  "https://connect.crssoft.com/Services/Integration?xsd=xsd0"
+  grep -o 'wsdl:operation name="[A-Za-z]*"' crs.wsdl | sed 's/.*name="//;s/"//' | sort -u
+  ```
+- **Bulgular:**
+  1. Servis 65 operasyon sunuyor. `untake`, `untaken`, `resetTaken`, `unmark`, `revert`,
+     `undo` kaliplarinin hicbiri gecmiyor.
+  2. Imza tek yonlu:
+     `SetInvoicesTaken(invoices: ArrayOfString) -> FlagResponse { Value: boolean }`.
+     **Bayrak parametresi yok** — "false ile cagirip geri al" secenegi mevcut degil.
+     Donen `Value` islemin basarisi, faturanin durumu degil.
+  3. ERP'nin uretilmis sozlesmesi de ayni:
+     `InvoiceModule/InvoiceModule/CrsSoftEInvoiceIntegration/IIntegration.cs:340`
+     → `FlagResponse SetInvoicesTaken(string[] invoices);` — dosyanin tamaminda `Taken`
+     ile ilgili baska uye yok.
+  4. **Kimlik ETTN'dir, fatura numarasi degil.**
+     `InvoiceModule/EInvoice/Integration/Providers/CrsSoftEInvoiceProvider.cs:706`
+     `ReceivedInvoice(string invoiceId)` → `SetInvoicesTaken(new[]{ invoiceId })`, log
+     satiri birebir: `"Fatura alindi bilgisi gonderilemeyen ETTN : " + invoiceId`.
+  5. Sirket bazli olmasi zaten sorun degil — her sirketin kendi CRS kimligi var, cagri
+     hangi kimlikle yapilirsa o kutuya gidiyor. Ama geri alinacak sey olmadigi icin tek
+     basina ise yaramiyor.
+- **Sonuc:** Yanlislikla isaretlenen fatura **ancak CRS destek tarafindan** duzeltilebilir.
+  API'den yapilamaz.
+
+### Yan bulgu — kendi modulumuz faturalari isaretliyor olabilirdi
+
+- **Neden:** `Taken` aramasi sirasinda semada ikinci bir yer cikti:
+  `InboxInvoiceQueryModel` icinde `SetTaken` adli **zorunlu** (`use="required"`) boolean
+  attribute. `true` ise **listeleme** faturalari "alindi" isaretliyor.
+- **Sorun:** Kurtardigimiz istemci gelen kutusu sorgusunda `OnlyNewestInvoices="false"`
+  gonderiyor ama `SetTaken`'i **hic gondermiyordu**. Yani "hicbir tarafa yazmaz" diye
+  belgeledigimiz salt okunur karsilastirma modulu, sunucunun varsayilanina bagli olarak
+  gelen faturalari isaretliyor olabilirdi — ustelik geri donusu olmayan bir islem.
+- **Ne yapildi:** `CrsIstemcisi.CagirAsync` artik gelen kutusu sorgusunda acikca
+  `SetTaken="false"` gonderiyor. Gerekcesi kodda yorum olarak duruyor.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Fatura/CrsIstemcisi.cs`,
+  `docs/api-kontrat.md`
+- **Sonuc / dogrulama:** Derleme 0 uyari / 0 hata. **Canli dogrulama yapilmadi** —
+  varsayilan yon `giden` oldugu icin gelen kutusu yolu muhtemelen hic calistirilmadi,
+  ama bu bir tahmin, olculmedi.
+- **Commit:** `ca38fea` — Gelen kutusu sorgusunda SetTaken=false acikca gonderiliyor
+
+### Ayrica not
+
+`InvoiceQueryModel` temel semasinda `InvoiceIds` ve `InvoiceNumbers` (ikisi de
+`maxOccurs="unbounded"`) alanlari var — yani **listeleme** hem UUID hem fatura numarasi
+ile filtrelenebiliyor. Bizim istemci bunlari hic kullanmiyor; tek tek fatura aramak
+gerekirse eklenecek yer burasi.
+
+## Acik kalanlar — ek
+
+- `yon=gelen` ile daha once karsilastirma yapildi mi? Yapildiysa faturalar isaretlenmis
+  olabilir ve **geri alinamaz**; CRS destekten duzeltme istenmesi gerekir. Kontrol edilmeli.
+- `SetTaken=false` degisikligi canli olarak dogrulanmadi.
