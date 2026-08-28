@@ -66,3 +66,17 @@ yıl–hafta–iş emri kırılımında gösteren yeni bir rapor istendi.
 - Alıcı listesi için yeni bir ayar bölümü açılmadı; faturaların kullandığı `Smtp:Recipients`
   aynen kullanıldı. Farklı alıcı gerekirse `?to=` parametresi var.
 - Mail butonu tüm sekmeler için genelleştirilmedi; sadece istenen rapor için eklendi.
+
+### 3. win-x64 yayın paketi
+- **Neden:** Değişiklikleri sunucuya atmak için self-contained x64 çıktı istendi.
+- **Komut:**
+  ```bash
+  dotnet publish src/Warehouse/Warehouse.csproj -c Release -r win-x64 \
+      --self-contained true -p:PublishProfile=FolderProfile
+  ```
+- **Sonuç:** Çıktı `src/Warehouse/bin/Release/net10.0/win-x64/publish/` (400 dosya, ~182 MB,
+  `Warehouse.exe` + `web.config`). i18n.js yeni anahtarları içeriyor, Razor view'lar
+  `Warehouse.dll` içine derlenmiş (`warehouse-receipts` string'i mevcut).
+- **Dikkat:** Profildeki `PublishUrl` (`bin\Release\net10.0\publish\`) klasörü CLI ile
+  publish'te kullanılmıyor; orada 21 Temmuz'dan kalma ESKİ bir çıktı duruyor. Deploy
+  yaparken `win-x64\publish` klasörü alınmalı, diğeri yanıltıcı.
