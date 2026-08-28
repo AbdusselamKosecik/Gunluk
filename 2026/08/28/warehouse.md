@@ -84,3 +84,33 @@ yıl–hafta–iş emri kırılımında gösteren yeni bir rapor istendi.
   İlk denemede `ZipFile::CreateFromDirectory` girdi adlarını ters bölü ile yazdı (Windows
   PowerShell 5.1 davranışı, zip spec'ine aykırı; Linux/unzip ve bazı deploy araçları
   bozuk isim üretebiliyor). Zip, girdi adları `/` ile normalize edilerek yeniden üretildi.
+
+### 4. Depo Girişleri raporuna filtre + gruplama
+- **Neden:** Rapor tüm geçmişi dönüyordu; hafta ve tarih aralığı seçimi ile gruplama istendi.
+- **Ne yapıldı:**
+  - **Filtreler** (hepsi opsiyonel, nullable parametre olarak SQL'e gidiyor — dinamik string
+    birleştirme yok, `(@p IS NULL OR ...)` kalıbı): `startDate`, `endDate` (bitiş tarihi dahil
+    olsun diye `< DATEADD(day,1,@endDate)`), `year`, `week`.
+  - **Gruplama** (`groupBy`): `detail` (varsayılan) | `week` (Yıl-Hafta) | `workorder` |
+    `inventory`. Gruplu sorgular `SUM(iriv.Quantity)` döndürüyor. Kolon sırası her gruplamada
+    aynı tutuldu (9 kolon), kullanılmayanlar `CAST(NULL AS ...)` — böylece tek okuma kodu
+    yetiyor; UI `RECEIPT_COLUMNS` haritasıyla, Excel `columns` dizisiyle o kolonları gizliyor.
+  - SQL, `WarehouseReceiptsFrom` sabiti + `BuildWarehouseReceiptsSql(groupBy)` switch'i olarak
+    yeniden düzenlendi; parametreler `AddReceiptsParameters` ile tek yerden ekleniyor.
+  - Filtre/gruplama JSON, Excel ve **mail** uç noktalarının hepsine uygulanıyor; mail gövdesine
+    seçili filtre özeti (`DescribeReceiptsFilter`) yazılıyor. Excel'e miktar toplamı satırı eklendi.
+  - UI: sekme üstünde filtre kartı (tarih aralığı, yıl, hafta, gruplama seçimi, Filtrele/Temizle).
+    `loadReceipts(force)` — filtre uygulanınca önbelleği atlayıp yeniden çekiyor. Tablo altında
+    filtrelenmiş miktar toplamı gösteriliyor.
+  - `i18n.js` TR+EN: `startDate`, `endDate`, `groupBy`, `groupDetail/Week/WorkOrder/Inventory`,
+    `applyFilter`, `clearFilter`.
+- **Doğrulama:** `dotnet build` 0 error; `node --check` ile hem sayfa script'i hem `i18n.js`
+  sözdizimi doğrulandı; markup div dengesi 76/76. DB'de fiilen sorgu çalıştırılmadı.
+- **Commit:** `fea3adf` — Depo Girisleri raporuna filtre ve gruplama eklendi
+- **Paket:** win-x64 publish + zip yenilendi (`warehouse-win-x64-2026-08-28.zip`, 79.7 MB).
+
+## Açık kalanlar (güncel)
+- `DATEPART(WEEK,...)` SQL Server'ın `DATEFIRST`/dil ayarına bağlı; ISO hafta gerekiyorsa
+  `DATEPART(ISO_WEEK,...)` kullanılmalı. Şu an kullanıcının verdiği orijinal davranış korundu.
+- Rapor hâlâ tüm satırları çekip istemciye gönderiyor (sayfalama yok); tarih filtresi bunu
+  pratikte hafifletiyor ama çok büyük aralıklarda yavaş kalabilir.
