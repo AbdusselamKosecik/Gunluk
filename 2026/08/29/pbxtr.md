@@ -311,3 +311,111 @@ eşitliği** olmasıdır — `monitor.listen` bayiye geri verilirse build kırı
 **Kalan işin şekli:** karar veya ekran eksiği değil, **iki bileşen** — `pbxtr-confd`
 (provisioning ajanı, A-12) ve `pbxtr-edge` (mTLS yan arabası, A-13) hâlâ depoda yok; ayrıca
 `pbxtr-sysagent` bugün **hiç bağlanamıyor** (B-01) ve `SO_PEERCRED` (B-02) onun ön koşulu.
+
+---
+
+## Dördüncü tur — paket çıkarma ve staging yayını (`demo-b4ec1c89b3ca`)
+
+### Bağlam
+İstek: *"dev'e merge eder misin, bir de paket çıkartıp SSH'i günceller misin"*.
+Ölçüm: **pbxtr deposunda `dev` diye bir dal yok** (yalnızca `main` ve tamamen merge edilmiş
+`feat/rol-ekran-matrisi`), CI/deploy hiçbir yerde `dev`'e bakmıyor. Kullanıcı kararı:
+**"dev yoksa main'den devam."**
+
+### 1. CI'nin neden kırmızı olduğu bulundu — kodla ilgisi yok
+Son dört koşu (`b167eafe`, `b38ba3ab`, `62be82d9`, `b4ec1c89`) hep `failure`. İlk iş
+(`Güvenlik kapıları`) **4 saniyede, sıfır adımla** düşüyordu. Annotation:
+
+> *"The job was not started because recent account payments have failed or your spending
+> limit needs to be increased."*
+
+**GitHub Actions faturalama.** Yani ~2026-08-23'ten beri **hiçbir CI kapısı koşmadı** ve
+kırmızılık kod kusuru sanılabilirdi. Ölçen komut:
+
+```bash
+gh api repos/Pbxtr/pbxtr/check-runs/<jobId>/annotations
+```
+
+### 2. Expand-only migration kapısı yerelde koşturuldu (Python yok → konteynerde)
+CI'nin atladığı kapı `deploy/migration-compatibility-guard.py`. Bu makinede Python yok;
+Docker ile koşturuldu:
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm -v "X:/GitHub/Pbxtr/pbxtr:/repo" -w /repo python:3.12-slim \
+  sh -c "apt-get install -y git && git config --global --add safe.directory /repo && \
+         python3 deploy/migration-compatibility-guard-selftest.py && \
+         python3 deploy/migration-compatibility-guard.py"
+```
+
+Self-test **OK**; asıl kapı **RED**: `deploy/migration-expand-legacy.blobs` 91 satır, depoda
+146 migration → **55'i ledger dışı** ve contract/destructive desen taşıyor. Hepsi
+2026-08-23 sonrası, yani **CI'nin öldüğü dönemde birikmiş**; hiçbiri bu turun işi değil.
+
+**Yayın kararını değiştiren ölçüm:** sunucuda `__EFMigrationsHistory` **146 satır**, depoda
+da **146 migration**. Yani yeni imaj **sıfır** yeni migration getiriyor; `migrate` adımı
+no-op ve wrapper'ın uyardığı *"şema ileri, kod geri"* riski **bu yayın için yok**. Karar
+tahminle değil bu sayıyla verildi.
+
+### 3. Paket
+Docker Desktop kullanıcı tarafından açıldı (daemon kapalıydı).
+
+```bash
+docker build --build-arg SOURCE_REVISION=$(git rev-parse HEAD) \
+  -t tekbirsoft/pbxtr:demo -t tekbirsoft/pbxtr:demo-b4ec1c89b3ca .
+docker push tekbirsoft/pbxtr:demo-b4ec1c89b3ca && docker push tekbirsoft/pbxtr:demo
+```
+
+### 4. Yayın — wrapper'ın adım sırası birebir aynalandı
+**Neden `/usr/local/sbin/pbxtr-deploy-artifact` kullanılmadı:** wrapper Ed25519 **imzalı**
+bir artifact bekler; imzalama anahtarı yalnızca GitHub'ın `STAGING_ARTIFACT_SIGNING_KEY`
+secret'ındadır ve CI koşmuyor. İmzasız çalıştırmanın yolu yok.
+
+Bu yüzden `/root/staging-deploy.sh` yazıldı ve wrapper'ın **aynı sırasını** uyguladı:
+yedek → pull → migrate → `.env` atomik etiket → app/nginx recreate → sağlık → başarısızsa
+rollback. `healthy()` ve `write_image()` wrapper'dan birebir alındı.
+
+```
+eski: tekbirsoft/pbxtr:demo-dbd6310d1e9b
+yeni: tekbirsoft/pbxtr:demo-b4ec1c89b3ca
+yedek: /home/vuo/pbxtr-demo/backups/pre-b4ec1c89b3ca.dump (1.927.226 bayt)
+Bekci assert'leri gecti (26/26). migrate tamamlandi.
+staging yayini tamamlandi.
+```
+
+`pbxtr-app` → `Up (healthy)`, imaj `demo-b4ec1c89b3ca`.
+
+### 5. Yayın doğrulaması
+| Ölçüm | Sonuç |
+|---|---|
+| Yeni ekranlar SPA paketinde | `admin-dashboard`, `dealer-dashboard` bundle'da |
+| i18n dilleri paketinde | `Azərbaycanca`, `Български`, `Հայերեն`, `ქართული` — dördü de |
+| Açılış rotaları | superadmin/admin `/admin-dashboard`, bayi `/dealer-dashboard`, sahip `/dashboard` |
+| Duman testi | **45/45 geçti** |
+
+**`--base-url` olmadan koşturmak yanıltıcıdır** (memory'deki uyarı doğrulandı): nginx
+HTTP→HTTPS **301** verdiği için 45 kontrolün 45'i "KALDI" göründü. Doğru adres uygulama
+konteynerinin kendisi: `--base-url http://172.28.0.11:5080`.
+
+### 6. Duman testinin yakaladığı bayat iddia (commit `1ae1146e`)
+İlk doğru koşuda **44/45**. Kalan kırmızı bir ürün kusuru değil, testin kendi bayat
+iddiasıydı: `menu: demo.admin /leaves — beklenen 1, gelen 0`. Matris #50 Agent İzinleri'ni
+yalnızca owner + supervizöre verdi; aynı ekranın **uç** iddiası (403) bu turda
+güncellenmiş ama **menü** iddiası atlanmıştı — yani ekranın iki sınırından biri güncel,
+diğeri bayattı. Menü satırı 0'a çekildi ve aynı rotanın **pozitif** ölçümü supervizörden
+alındı (tek yönlü bırakılsaydı *"/leaves artık hiçbir rolde görünmüyor"* hâli de sessizce
+geçerdi). Sonra **45/45**.
+
+### Kararlar
+- `dev` dalı açılmadı; `main` tek dal olarak sürdürülüyor (kullanıcı kararı).
+- İmzalı artifact yolu kullanılamadığında wrapper'ın **adım sırası** taklit edilir; yedek
+  ve rollback adımları **atlanmaz**.
+- Yayın kararı, kapı kırmızı olduğunda tahminle değil **uygulanmış migration sayısıyla**
+  verilir.
+
+### Açık kalanlar
+1. **GitHub Actions faturalaması** — çözülene kadar hiçbir CI kapısı koşmuyor. En kritik
+   sonucu: expand-only migration kapısı, DB/RLS kapıları ve gitleaks sır taraması **yayın
+   yolunda değil**.
+2. **`deploy/migration-expand-legacy.blobs` 55 migration geride** — ledger bakımı yapılmalı;
+   yapılmadan kapı her koşuda kırmızı kalır ve gerçek bir contract değişikliği fark edilmez.
+3. İmzalama anahtarı yalnızca GitHub secret'ında; CI olmadan **imzalı yayın yolu yok**.
