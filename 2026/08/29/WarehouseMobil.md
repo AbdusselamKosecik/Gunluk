@@ -77,3 +77,78 @@ minSdk 23 ile ilerlendi (Zebra TC/MC el terminalleri bu seviyede).
 - Geçmiş / rapor ekranı, yönetici paneli.
 - `PickEngine` için birim testler (test kaynak seti henüz eklenmedi).
 - Gerçek cihazda (Zebra, Android 6) DataWedge profil oluşturma testi yapılmadı.
+
+---
+
+## Tur 2 — Emülatör doğrulaması + beş akış + MSSQL
+
+### 6. Emülatörde çalıştırma (API 23)
+- **Neden:** İskeletin gerçekten Android 6'da ayağa kalktığını görmek.
+- **Ne yapıldı:** Mevcut `Terminal_API23` AVD'si başlatıldı, APK kuruldu, akış adb `input tap`
+  ile sürüldü ve her adımda `screencap` alındı.
+- **Komutlar:**
+  ```bash
+  emulator -avd Terminal_API23 -no-snapshot-load -no-boot-anim
+  adb install -r app/build/outputs/apk/debug/app-debug.apk
+  adb shell am start -n com.modasima.warehousemobil.debug/...ui.LoginActivity
+  adb shell input tap X Y ; adb shell screencap -p /sdcard/s.png ; adb pull ...
+  ```
+- **Sonuç:** Android 6.0 / API 23'te sorunsuz. Renk kuralları birebir tasarımdaki gibi.
+- **Dikkat:** Emülatörde `com.modasima.elterminali` adlı BAŞKA bir uygulama daha kurulu ve
+  öne gelebiliyor; ekran görüntüsü alırken `dumpsys activity | mFocusedActivity` ile hangi
+  uygulamanın önde olduğu doğrulanmalı. Bir kez yanlış uygulamanın ekranı ölçüldü.
+
+### 7. Emülatörde çıkan iki gerçek hata
+- **MaterialButton renk değiştirmiyordu:** Tema `Theme.MaterialComponents` olduğu için
+  `<Button>` MaterialButton olarak inflate oluyor ve `setBackgroundColor` yok sayılıyor
+  (backgroundTint kullanıyor). RAF OKUT butonu kırmızı olması gerekirken amber kalıyordu.
+  → `androidx.appcompat.widget.AppCompatButton`'a çevrildi. Bu ayrıca inset kaynaklı
+  hizasızlığı da çözdü.
+- **PIN noktaları bitişik/yanlış çiziliyordu:** `ViewGroup.MarginLayoutParams` LinearLayout
+  içinde margin uygulamıyor → `LinearLayout.LayoutParams` + `GradientDrawable` ile düzeltildi.
+
+### 8. Beş akış ekranı
+- **Neden:** İstek: toplama, mal kabul, sayım, transfer, stok sorgu.
+- **Ne yapıldı:** `MenuActivity` (5 kutulu ana menü) + ortak `ScanActivity` tabanı
+  (tarayıcı bağlama, manuel giriş, miktar sorma, ses/titreşim). Akışlar tek bir
+  `activity_flow.xml` üzerinde: başlık, adım afişi (hangi barkod bekleniyor), bilgi paneli,
+  liste, alt buton çubuğu.
+- **Dokunulan dosyalar:** `ui/MenuActivity.kt`, `ui/ScanActivity.kt`, `ui/ReceiveActivity.kt`,
+  `ui/CountActivity.kt`, `ui/TransferActivity.kt`, `ui/StockQueryActivity.kt`,
+  `ui/SimpleAdapter.kt`, `res/layout/activity_menu.xml`, `activity_flow.xml`, `item_simple.xml`
+- **Sonuç:** Beşi de emülatörde uçtan uca test edildi (mal kabul: ürün→miktar→raf kaydı;
+  sayım: raf→beklenen liste→sayım farkı; transfer: kaynak→ürün→miktar→hedef; stok sorgu:
+  toplam + raf kırılımı).
+
+### 9. MSSQL — doğrudan stored procedure
+- **Neden:** Kullanıcı kararı: "mssql den çalışacağız direkt sp'ler".
+- **Ne yapıldı:** `data/db/Db.kt` (jTDS 1.3.1 ile bağlantı; Microsoft mssql-jdbc Android'de
+  çalışmıyor) + `data/db/SpRepo.kt` (tüm SP çağrıları ve dönüş modelleri).
+  Her çağrı kendi bağlantısını açıp kapatıyor (el terminali Wi-Fi'sinde uzun ömürlü socket
+  güvenilmez), `Dispatchers.IO` üzerinde.
+- **SP adları** tek yerde: `SpRepo.kt → object Sp`. Kolonlar **isimle** okunuyor, sıra önemsiz.
+- **Doldurulacak iskeletler:** `docs/mssql-sp-sozlesmesi.sql` — 9 SP:
+  Login, PickList, PickScan, ReceiptItem, ReceiptPost, CountShelf, CountPost,
+  TransferPost, StockQuery (bu sonuncusu 2 sonuç kümesi döner).
+- **Demo modu** (`Prefs.demoMode`, varsayılan açık): SQL olmadan tüm ekranlar örnek veriyle
+  çalışır. Ayarlarda kapatılıp SQL bilgileri girilir, "BAĞLANTIYI TEST ET" ile doğrulanır.
+
+- **Commit:** `bbff649` — Bes akis ekrani + MSSQL SP katmani, demo modu ile calisir durumda
+
+## Kararlar (tur 2)
+
+- MaterialComponents teması kalsın ama butonlar AppCompatButton olsun — renk kodla
+  değiştirilebilsin diye.
+- jTDS seçildi; mssql-jdbc Android'de javax.naming vb. yüzünden çalışmıyor.
+  Riski: TLS zorunlu kılınmış yeni SQL Server'larda jTDS takılabilir — sahada test edilmeli.
+- Cihaz doğrudan DB'ye bağlandığı için SQL login'i sadece SP EXECUTE yetkili olmalı.
+  README ve SP dosyasına not düşüldü.
+- Sayımda BİTİR artık özet + onay diyaloğu gösteriyor (yanlışlıkla basıp listeyi silmeyi
+  önlemek için).
+
+## Açık kalanlar (tur 2)
+
+- SP gövdeleri müşteri şemasına göre doldurulacak (kullanıcı dolduracak).
+- Geçmiş / rapor ekranı, yönetici paneli.
+- `PickEngine` birim testleri.
+- Gerçek Zebra cihazda DataWedge profil testi + jTDS'in gerçek SQL Server'a bağlanma testi.
