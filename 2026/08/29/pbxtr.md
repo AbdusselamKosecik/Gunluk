@@ -282,3 +282,32 @@ cd src/Pbxtr.Web && npm run screens:gen && npx tsc -b && npm test -- --run
    `Accept-Language` + kullanıcı dil tercihi. İstemci ayağı hazır: `negotiateLocale()`
    `ka-GE;q=0.9` biçimini kabul eder ve testi vardır.
 5. Gürcüce/Ermenice/Kiril/Arap yazıları için **font kapsamı doğrulanmadı**.
+
+---
+
+## Ek — açık kalan işin ölçümü (aynı gün, `b4ec1c89`)
+
+"Neler kaldı" sorusu ölçülerek cevaplandı; ölçüm sırasında **A1 maddesinin kapanmış olduğu**
+ortaya çıktı ve kayda geçirildi.
+
+### A1 kapandı (KVKK)
+`yonetim/acik-kararlar.md` A1: *"bayi, müşteri tenant'ının canlı çağrısını dinleyebiliyor"*.
+Rol–ekran matrisi bayiden `bundle.live`'ı **toptan** aldı. Ölçüm: `dealer`ın tek paketi
+`bundle.apikey`, etkin küme **8 kod** (önce 28), `monitor.listen`/`monitor.whisper`/
+`live.agent.read` **false**. Madde 🔵 → 🟢, taşınan sayım `0/9` → `1 🟢 · 8 🔵`.
+`deploy/acik-karar-bayatlik-kontrol.sh` yeniden koşuldu: TAMAM.
+
+Kapanışı ölçülen kısıt yapan şey `DealerPermissionBoundaryTests` altın listesinin **küme
+eşitliği** olmasıdır — `monitor.listen` bayiye geri verilirse build kırılır.
+
+### Ölçülen genel durum
+| Boyut | Ölçüm |
+|---|---|
+| Ekran envanteri | **68/68 `active`** — `planned` ekran kalmadı |
+| Prototip↔ürün farkları | 163 **BİLİNÇLİ**, 6 **BORÇ KAPANDI**, açık BORÇ satırı **yok** |
+| Açık kararlar | 26 numaralı: 19 🟢 · 7 🔵 · **0 🟡 · 0 🔴** · taşınan: 1 🟢 · 8 🔵 |
+| ClickUp | **24 açık kart**, hepsi `backlog` — A-00…A-14 (gerçek Asterisk bağlantısı) ve B-01…B-09 (`pbxtr-sysagent` + katalog konsolu) |
+
+**Kalan işin şekli:** karar veya ekran eksiği değil, **iki bileşen** — `pbxtr-confd`
+(provisioning ajanı, A-12) ve `pbxtr-edge` (mTLS yan arabası, A-13) hâlâ depoda yok; ayrıca
+`pbxtr-sysagent` bugün **hiç bağlanamıyor** (B-01) ve `SO_PEERCRED` (B-02) onun ön koşulu.
