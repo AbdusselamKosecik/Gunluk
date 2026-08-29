@@ -220,3 +220,66 @@ minSdk 23 ile ilerlendi (Zebra TC/MC el terminalleri bu seviyede).
   sözleşmesini de genişletmeyi gerektirir.
 - Referans sayım ekranında satır seçip −/+ ile miktar düzeltme var; bizde her okutma +1.
 - Referans transferde bekleyen hareket kuyruğu var; bizde anlık kayıt.
+
+---
+
+## Tur 4 — Kalan üç model farkının kapatılması
+
+Tur 3'te "birebir olmayan üç yer" olarak bırakılan farklar kapatıldı.
+
+### 13. Mal kabul → irsaliye bazlı
+- **Neden:** Referans uygulamada mal kabul tek tek ürün→raf değil, bir irsaliyenin
+  karşılanması. Sahada gelen mal irsaliyeyle geliyor; eksik/fazla tespiti orada oluyor.
+- **Ne yapıldı:** Bekleyen irsaliyeler `sp_WM_ReceiptOpen` ile gelir (tek ise otomatik açılır,
+  çoksa seçim listesi). Satırlar `sp_WM_ReceiptLines`. Her okutma satırın "okutulan"ını
+  1 artırır; durum uygulamada hesaplanır:
+  `0 → BEKLİYOR`, `= beklenen → TAM`, `< → EKSİK`, `> → FAZLA`.
+  Üstte künye (İRSALİYE / TARİH / KALEM), ilerleme çubuğu ve durum sayaçları.
+  Satıra dokununca miktar elle düzeltilir (`sp_WM_ReceiptScan` mutlak değer yazar).
+  Tüm satırlar okutulunca ana buton "İRSALİYEYİ KAPAT"a döner; raf okutulup
+  `sp_WM_ReceiptClose` çağrılır — böylece orijinal "mal kabul → raf ata" isteği de korunmuş oldu.
+- **Dokunulan dosyalar:** `ui/ReceiveActivity.kt`, `ui/ReceiptAdapter.kt`,
+  `res/layout/activity_receive.xml`, `item_receipt_line.xml`, `data/db/SpRepo.kt`
+- **SP değişikliği:** `ReceiptItem` / `ReceiptPost` kaldırıldı; yerine
+  `ReceiptOpen` / `ReceiptLines` / `ReceiptScan` / `ReceiptClose`.
+
+### 14. Sayımda satır seçip miktar düzeltme
+- **Neden:** Paketli üründe 28 adet için 28 kez okutmak saçma; referansta −/+ var.
+- **Ne yapıldı:** Liste artık tablo: `ÜRÜN | SİSTEM | SAYILAN | FARK`. Satıra dokununca
+  seçilir (amber çerçeve), altta "SEÇİLİ SATIR" paneli açılır: `− <miktar> +`.
+  Miktarın üstüne dokununca klavyeden girilir. Okutma da satırı seçili yapıyor,
+  böylece okut→düzelt akışı kesintisiz.
+  Sistemde olmayan ürün okutulursa `SİSTEMDE YOK` rozetiyle 0 beklenenle ekleniyor.
+- **Dokunulan dosyalar:** `ui/CountActivity.kt`, `ui/CountAdapter.kt`,
+  `res/layout/activity_count.xml`, `item_count_row.xml`
+
+### 15. Transferde kuyruk
+- **Neden:** Her hareket için SQL'e gidip beklemek koridorda yavaş; referansta kuyruk var.
+- **Ne yapıldı:** Kaynak raf → ürün (+miktar) → hedef raf okutulunca hareket **kuyruğa**
+  giriyor ve akış aynı kaynak rafla ürün adımından devam ediyor (seri çıkış için).
+  İkincil buton `GÖNDER (n)` olup kuyruğu tek seferde iletiyor; başarısız hareket
+  kuyrukta kalıp tekrar denenebiliyor.
+- **Dokunulan dosyalar:** `ui/TransferActivity.kt`, `res/layout/activity_transfer.xml`
+
+### Teknik not — ViewBinding + `<merge>`
+`view_qty_pad.xml`'i `<include>` ile eklemek işe yaramadı: ViewBinding, kökü `<merge>` olan
+include edilen layout'un id'leri için alan üretmiyor. Panel doğrudan `activity_count.xml`
+içine gömüldü. (`view_flow_header` / `view_scan_bar` sorun çıkarmıyor çünkü onlara
+`FlowChrome` findViewById ile erişiyor.)
+
+- **Commit:** `ec00023` — Mal kabul irsaliye bazli, sayimda miktar duzeltme, transferde kuyruk
+
+## Kararlar (tur 4)
+
+- `sp_WM_ReceiptScan` ve `sp_WM_CountPost` **mutlak miktar** alır (topla değil, üzerine yaz).
+  Elle düzeltme bu şekilde tek çağrıyla ifade ediliyor.
+- İrsaliye kapanışında eksik/fazla varsa reddetme kararı SP'ye bırakıldı (`Ok = 0` + `Mesaj`).
+- Transfer kuyruğu bellekte; uygulama kapanırsa kaybolur. "Hep online" kararı gereği
+  kalıcı kuyruk yazılmadı — gönderim anlık.
+
+## Açık kalanlar (tur 4)
+
+- SP gövdeleri hâlâ boş, kullanıcı dolduracak (11 SP).
+- Geçmiş / rapor ekranı, yönetici paneli.
+- `PickEngine` birim testleri.
+- Gerçek Zebra cihazda DataWedge + jTDS testi.
