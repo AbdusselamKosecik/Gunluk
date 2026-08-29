@@ -1,62 +1,79 @@
 # WarehouseMobil — 2026-08-29
 
 ## Bağlam
-`X:\Gitlab\Modasima` altında yeni bir proje istendi: **WarehouseMobil** (mobil depo / el
-terminali uygulaması). Gün başında böyle bir klasör veya GitLab reposu yoktu. Hedef: boş bir
-iskelet repo kurup GitLab'daki `modasima` grubuna private olarak eklemek.
+
+Depo el terminali uygulaması için tasarım turu bitti: `tema/Depo Terminali v3.dc.html` (rugged
+amber, 1c yönü) onaylandı. Repoda sadece README + .gitignore vardı, kod yoktu. İstek: projeyi
+"Android 6.1"e göre kurmak. Android 6.1 diye bir sürüm yok — 6.0 ve 6.0.1 ikisi de **API 23**;
+minSdk 23 ile ilerlendi (Zebra TC/MC el terminalleri bu seviyede).
 
 ## Yapılanlar
 
-### 1. Teknoloji kararı için soru soruldu
-- **Neden:** "WarehouseMobil" adı dışında teknoloji/hedef platform belirtilmemişti; yanlış
-  iskelet kurmak sonradan silinecek iş demek.
-- **Ne yapıldı:** Kullanıcıya iki soru soruldu — teknoloji (.NET MAUI / Flutter / React Native /
-  boş repo) ve görünürlük (private / internal / public).
-- **Sonuç:** Kullanıcı **"sadece boş repo"** ve **private** seçti. Kod sonra eklenecek.
+### 1. Gradle projesi kuruldu (API 23 hedefli)
+- **Neden:** Kod iskeleti yoktu; hedef donanım eski Android 6 el terminali.
+- **Ne yapıldı:** Gradle 8.12 (wrapper başka bir projeden kopyalandı), AGP 8.7.3, Kotlin 2.0.21,
+  version catalog (`gradle/libs.versions.toml`). `minSdk 23`, `targetSdk/compileSdk 34`,
+  Java 17, `isCoreLibraryDesugaringEnabled = true` (java.time için), ViewBinding.
+  `resourceConfigurations += ["tr","en"]` ile APK küçültüldü.
+- **Dokunulan dosyalar:** `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts`,
+  `gradle/libs.versions.toml`, `gradle.properties`, `local.properties` (gitignore'da)
+- **Sonuç:** `:app:assembleDebug` BUILD SUCCESSFUL, `:app:lintDebug` temiz (NewApi hatası yok).
 
-### 2. Yerel iskelet oluşturuldu
-- **Neden:** Repo'nun ilk commit'i boş olmasın; .gitignore baştan doğru olsun ki bin/obj,
-  node_modules, .env gibi şeyler hiç girmesin.
-- **Ne yapıldı:** `X:\Gitlab\Modasima\WarehouseMobil` klasörü açıldı, içine `README.md`
-  (proje adı + "iskelet, kod eklenmedi" notu) ve teknoloji-agnostik bir `.gitignore`
-  (.NET bin/obj/*.user, Node node_modules, IDE .vs/.vscode/.idea, OS Thumbs.db, ve
-  `*.local.json` / `.env` gibi sır dosyaları) yazıldı.
-- **Dokunulan dosyalar:** `WarehouseMobil/README.md`, `WarehouseMobil/.gitignore`
-- **Komutlar:**
-  ```bash
-  cd X:/Gitlab/Modasima/WarehouseMobil
-  git init -b main
-  git add README.md .gitignore
-  git commit -m "İlk commit: WarehouseMobil proje iskeleti (README + .gitignore)"
-  git remote add origin git@gitlab.com:modasima/warehousemobil.git
-  ```
-- **Sonuç / doğrulama:** 2 dosya, 40 satır.
-- **Commit:** `35d8ba7` — İlk commit: WarehouseMobil proje iskeleti (README + .gitignore)
+### 2. Compose değil klasik View kararı
+- **Neden:** Günde 3000 okutma hedefi + 1–2 GB RAM'li, zayıf GPU'lu API 23 terminaller.
+  Compose bu cihazlarda ilk çizim ve bellek açısından pahalı.
+- **Ne yapıldı:** ViewBinding + RecyclerView. `setHasFixedSize`, `itemViewCacheSize=20`,
+  `recycledViewPool` 24 — bind maliyetini düşürmek için.
 
-### 3. GitLab projesi push-to-create ile oluşturuldu
-- **Neden:** Makinede `glab` CLI kurulu değil (PATH'te yok), yani API'den proje açmak için
-  hazır araç yoktu. GitLab'ın **push-to-create** özelliği bunu tek komutta hallediyor:
-  var olmayan bir yola push edilince projeyi kendisi açıyor.
-- **Ne yapıldı:** Remote adı, gruptaki diğer projelerin adlandırmasına uyularak küçük harf
-  seçildi (`uzmanprintmanager`, `modasimaislemler`, `sentezservis` gibi →
-  `warehousemobil`). Görünürlük push option'ı ile private'a sabitlendi.
-- **Komutlar:**
-  ```bash
-  git -C "X:/Gitlab/Modasima/WarehouseMobil" push -u origin main -o visibility=private
-  ```
-- **Sonuç / doğrulama:** Sunucu yanıtı: "The private project modasima/warehousemobil was
-  successfully created." `main` branch push edildi ve upstream'e bağlandı.
-  URL: <https://gitlab.com/modasima/warehousemobil>
+### 3. Toplama motoru (UI'dan ayrı)
+- **Neden:** Renk/akış kuralları test edilebilir olsun, UI thread'de karar hesabı olmasın.
+- **Ne yapıldı:** `data/PickEngine.kt` — sıradaki satırda önce raf barkodu beklenir (rozet
+  kırmızı), doğru okutulunca aynı raftaki tüm bekleyen satırlar `shelfOk` olur (raf tekrar
+  sorulmaz); sonra ürün barkodu. Yanlış barkod satırı ilerletmez. Sipariş bitince
+  `markExploding` → animasyon → `removeOrder`.
+- **Dokunulan dosyalar:** `data/PickEngine.kt`, `data/Models.kt`, `data/DemoData.kt`,
+  `ui/PickActivity.kt`, `ui/PickAdapter.kt`
+
+### 4. Barkod okuma köprüsü
+- **Neden:** Zebra terminallerde DataWedge standart yol, ama her müşteri profili aynı
+  kurmuyor; klavye-wedge yedeği şart.
+- **Ne yapıldı:** `scan/ScannerBridge.kt` — açılışta DataWedge'e `SET_CONFIG` broadcast'i ile
+  `CREATE_IF_NOT_EXIST` profili gönderir (intent output açık, keystroke kapalı), action
+  ayarlardan değişebilir (varsayılan `com.modasima.warehousemobil.SCAN`). Ayrıca
+  `dispatchKeyEvent` ile tuş vuruşu barkodlarını ENTER/TAB'a kadar biriktirir.
+  `registerReceiver` API 33+ için `RECEIVER_EXPORTED` ile ayrıldı.
+- **Geri bildirim:** `scan/Feedback.kt` — ToneGenerator bip + Vibrator; API 26 altı için
+  `vibrate(pattern, -1)` yolu korundu.
+
+### 5. Ekranlar
+- Giriş: operatör listesi + 4 haneli PIN (keypad kodla üretiliyor).
+- Toplama listesi: sipariş renk şeritleri, lejant, ilerleme çubuğu, MANUEL + RAF/ÜRÜN OKUT
+  butonu (raf adımında kırmızı, ürün adımında amber).
+- Ayarlar: sunucu adresi, depo kodu, DataWedge action, ses/titreşim, cihaz bilgisi.
+
+### Komutlar
+```bash
+./gradlew :app:assembleDebug   # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:lintDebug
+```
+
+- **Commit:** `19fafa3` — Android 6 (API 23) hedefli proje iskeleti + toplama akisi
+  (push edildi: `git@gitlab.com:modasima/warehousemobil.git` main)
 
 ## Kararlar
-- **Boş iskelet, framework yok.** Kullanıcı teknolojiyi henüz seçmedi; erken .NET MAUI /
-  Flutter iskeleti kurmak yerine .gitignore'u her ikisini de kapsayacak şekilde geniş yazdım.
-- **Proje adı diskte `WarehouseMobil`, GitLab'da `warehousemobil`.** Gruptaki mevcut 4
-  projenin tamamı küçük harf slug kullanıyor, tutarlılık için aynısı yapıldı.
-- **`glab` kurmak yerine push-to-create.** Tek seferlik iş için CLI kurup auth akışı
-  yaşamaya gerek yoktu; SSH anahtarı zaten çalışıyor.
+
+- minSdk 23 / targetSdk 34. "Android 6.1" isteği API 23 olarak yorumlandı.
+- Compose kullanılmayacak (eski terminal performansı).
+- "Hep online" çalışacağı için offline kuyruk/senkron katmanı yazılmadı; OkHttp timeout'ları
+  kısa tutuldu (connect 5s, read/write 10s).
+- Ürün görselleri için Coil bağlandı; `imageUrl` sunucudan gelene kadar gri placeholder.
+- Şifreli SharedPreferences kullanılmadı (API 23'te gereksiz yük; saklanan veri hassas değil).
 
 ## Açık kalanlar / sonraki adım
-- Teknoloji seçimi bekliyor (.NET MAUI en muhtemel — mevcut projeler C#/WPF).
-- Hedef platform netleşmeli: Android el terminali mi, Windows da mı?
-- `glab` kurmak ileride işe yarayabilir (issue/MR yönetimi için).
+
+- Sunucu bağlantısı: `ApiFactory` + `WarehouseApi` hazır, `PickActivity` hâlâ `DemoData` ile
+  çalışıyor. Gerçek endpoint sözleşmesi netleşince bağlanacak.
+- Mal kabul, sayım, sevkiyat kontrol akışları.
+- Geçmiş / rapor ekranı, yönetici paneli.
+- `PickEngine` için birim testler (test kaynak seti henüz eklenmedi).
+- Gerçek cihazda (Zebra, Android 6) DataWedge profil oluşturma testi yapılmadı.
