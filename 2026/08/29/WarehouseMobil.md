@@ -283,3 +283,26 @@ içine gömüldü. (`view_flow_header` / `view_scan_bar` sorun çıkarmıyor ç�
 - Geçmiş / rapor ekranı, yönetici paneli.
 - `PickEngine` birim testleri.
 - Gerçek Zebra cihazda DataWedge + jTDS testi.
+
+---
+
+## Tur 5 — Sürüm numarası
+
+### 16. Sürüm ekranda
+- **Neden:** Sahada hangi APK'nın yüklü olduğunu telefona bakmadan görebilmek gerekiyor.
+- **Ne yapıldı:** `BuildConfig.VERSION_NAME` üç yerde:
+  - **Giriş**: alt başlıkta zaten vardı — `DEMO · MERKEZ DEPO · v0.1.0`
+  - **Ana menü**: üst bardaki operatör satırı — `AHMET K. · MERKEZ · v0.1.0`
+  - **Ayarlar**: cihaz bilgisi bloğunun ilk satırı — `Sürüm: v0.1.0 (build 1)`
+- **Not:** `buildConfig = true` gerekti (AGP 8'de BuildConfig üretimi varsayılan kapalı).
+- **Denenip vazgeçilen:** Sürümü alt durum şeridine "SUNUCU · v0.1.0" olarak koymak —
+  sütun dar, iki satıra sarıyordu. Operatör satırı 11sp + letterSpacing 0 ile tek satırda
+  rahat sığdı.
+
+### 17. Ayarlar ekranında Türkçe karakter düzeltmesi
+- **Neden:** Etiketler layout içine düz metin yazılmıştı ve Türkçesiz kalmıştı:
+  "VERITABANI", "SIFRE", "Sesli uyari", "Titresim", "Demo modu (SQL'siz calis)".
+- **Ne yapıldı:** Hepsi `strings.xml`'e taşındı ve düzgün yazıldı.
+- **Dokunulan dosyalar:** `res/layout/activity_settings.xml`, `res/values/strings.xml`
+
+- **Commit:** `a942668` — Surum numarasi ekrana eklendi + ayarlarda Turkce karakter duzeltmesi
