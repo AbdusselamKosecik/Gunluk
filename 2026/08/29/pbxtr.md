@@ -663,3 +663,163 @@ denemeleri **şu an oluyor**. Ajanın var olma sebebi tam olarak bu: kimse bakm�
 ### Commit'ler
 `6afb658b` diller · `b8d9c658` DK/SH aileleri · `6326a246` ajan ilk kurulum
 `7d295e99` dosya okuma yolu + konteyner bağlantısı
+
+---
+
+## Tur 5 — Tarayıcı yazılım telefonu (WebRTC / SIP.js) ürün tarafı
+
+**İstek:** *"webrtc ile web sipjs yide aktif edelim projede reelde calissin herser"* → *"devam et"*
+
+### Bağlam
+
+Önceki turda Asterisk tarafı hazırdı: `transport-ws` yüklü, `pbxtr-ep-webrtc` şablonları
+`pjsip.conf`'ta, nginx `/sip-ws`'i `172.28.0.12:8088/ws`'e veriyor ve elle kurulan geçici bir
+dahiliyle (`t0007-9001`) **gerçek bir SIP REGISTER 200 OK** alınmıştı. Eksik olan tamamen
+**ürün tarafıydı**: panelde kimlik diye bir kavram yoktu.
+
+### 1. Kimlik saklama — üç kolon + bir kısıt
+
+- **Neden ayrı bir sır:** `SipSecretRef` ile korunan masa telefonu sırrı provisioning yoluyla
+  Asterisk'e gider ve **hiçbir zaman** bir tarayıcıya verilmez. WebRTC ise sırrı tanım gereği
+  **istemciye teslim eder** (SIP.js digest hesabını tarayıcıda yapar). İkisi aynı değer olsaydı,
+  panele giren bir kullanıcının tarayıcı konsolundan okuduğu parola aynı zamanda o dahilinin
+  masa telefonu parolası olurdu — **panel oturumu santral kimliğine dönüşürdü**. Ayrılık ayrıca
+  döndürmeyi mümkün kılar: tarayıcı kimliği tek başına yenilenir, masa telefonu etkilenmez.
+- **Ne yapıldı:** `extensions` tablosuna `webrtc_secret_cipher` (bytea), `webrtc_secret_key_version`,
+  `webrtc_secret_set_at`. Üçü de `NULL` kabul eder çünkü `null` burada eksiklik değil **durumdur**:
+  "bu dahilide yazılım telefonu yok".
+- **`ck_extensions_webrtc_secret_complete`:** üçlü ya hep ya hiç. Yarım bir satır (şifre var,
+  anahtar sürümü yok) **okunana kadar** sağlıklı görünür; okunduğu an hangi anahtarla çözüleceği
+  bilinemez ve telefon **sebebi görünmeden** kaydolmaz.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/Extension.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/TelephonyConfigurations.cs`,
+  `.../Migrations/20260901150000_ExtensionWebRtcCredential.cs` (+ Designer),
+  `.../Migrations/20260901160000_ExtensionWebRtcCredentialFinalGuard.cs`
+
+**Migration üretiminde iki tuzak:**
+
+```bash
+# EF, Api'de EFCore.Design olmadigi ve birden cok context oldugu icin ikisini de ister:
+dotnet ef migrations add ExtensionWebRtcCredential \
+  --project src/Pbxtr.Infrastructure --startup-project src/Pbxtr.Infrastructure \
+  --context PbxtrDbContext --output-dir Persistence/Migrations
+```
+
+1. `dotnet ef migrations remove` **canlı veritabanı ister** (`Failed to connect to 127.0.0.1:5432`)
+   ve yerelde PostgreSQL yok. Geri alma yolu: migration dosyalarını silmek + snapshot'ı
+   `git checkout` ile geri almak, sonra yeniden üretmek.
+2. EF'in ürettiği zaman damgası (`20260829144839`) zincirin **ortasına** düşüyordu; elle
+   `20260901150000`'a taşındı ve Designer içindeki `[Migration("...")]` da güncellendi.
+
+**Terminal bekçi kuralı:** `MigrationAssertionSeparationTests` iddia bataryasının **zincirin
+son migration'ında** koşmasını zorlar. Yeni bir şema adımı eklendiği için batarya
+`AnnouncementsFinalGuard`'dan çıkarılıp yeni terminale taşındı. Taşınmasaydı **taze bir zincir
+kendi ortasında düşerdi** (P0001) ve bu yalnızca **yeni bir müşteri kurulumunda** görünürdü —
+mevcut kurulumlar artımlı migrate ettiği için hiçbir yerde kırmızı yanmazdı.
+
+### 2. Kimlik yönetimi ve uçlar
+
+- `IWebRtcCredentialAdministration` (üret / döndür / kaldır / oku) + `EfWebRtcCredentialAdministration`.
+- **Sır geri döndürülebilir saklanır** (özet değil, `ISecretProtector` ile şifreli) ve bu
+  zorunludur: SIP digest, sunucunun açık parolayı bilmesini gerektirir ve tarayıcı her kayıt
+  yenilemesinde aynı değeri ister. Özetlenseydi yazılım telefonu **hiçbir zaman** kaydolamazdı.
+- `POST /api/v1/users/extensions/{id}/webrtc` — üretir; varsa **döndürür**. Yetki `extension.write`.
+  **Neden yönetici ucu:** kimlik üretmek yeni bir PJSIP nesnesi doğurur, yani santral
+  yapılandırmasını değiştirir ve **global** bir reload gerektirir. Agent kendi ekranından
+  tetikleyebilseydi, vardiya başında aynı anda giren yüzlerce agent yüzlerce revizyon üretirdi.
+- `DELETE .../webrtc` — kaldırır. Revizyon üretir: nesne config'ten çıkmazsa, kimliği silinmiş
+  bir telefon Asterisk'te **kaydolmaya devam ederdi**.
+- `GET /api/v1/me/softphone` — kimlik yeter. **Dahili istekten alınmaz, oturumdan çözülür**:
+  parametre alsaydı doğru yetkiye sahip herhangi biri **başka** bir dahilinin SIP parolasını
+  isteyebilirdi ve bu, yetki katmanından geçen meşru bir istek gibi görünürdü.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/WebRtcCredential.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfWebRtcCredentialAdministration.cs`,
+  `src/Pbxtr.Api/Modules/Telephony/SoftphoneEndpoints.cs`,
+  `src/Pbxtr.Api/Modules/Access/UserAdminEndpoints.cs`, `src/Pbxtr.Api/Program.cs`
+
+### 3. ConfigRenderer — ayrı nesne üçlüsü
+
+`t0007-wrtc-1042` (`AsteriskObjectName.ForExtensionWebRtc`). **Masa telefonunun adından ayrı
+olmak zorunda:** PJSIP ad alanı Asterisk'te globaldir; aynı adı taşısalardı ikincisi birincisini
+**ezerdi** ve hangisinin ayakta kaldığı dosya okuma sırasına bağlı olurdu — masa telefonu bir
+gün kaydolur, bir gün olmazdı. Önek numaranın **önünde** (`wrtc-1042`), sonunda değil: sonda
+olsaydı `1042-wrtc` adlı gerçek bir dahili tanımlandığında çakışırdı.
+
+Config'e yazılan şey yine bir **yer tutucudur** (`PBXTR-SECRET(kv:extwrtc:...)`); açık parola
+revizyon içeriğine ve dolayısıyla `provisioning_revisions` tablosuna girmez — `ConfigRenderGuard`
+zaten bunu yasaklıyor. `ProvisioningExtensionSource` yalnızca **varlık bilgisi** taşır.
+
+### 4. SPA — sip.js softphone
+
+- `sip.js@0.21.2` eklendi (`npm install sip.js --save`). Bundle 1.35 MB → 1.55 MB.
+- `softphoneApi.ts` · `useSoftphone.ts` · `SoftphoneBadge.tsx`; rozet agent masasında
+  "Canlı bağlantı" rozetinin **yanında ama ondan ayrı**: ikisi bağımsız düşer. WebSocket açıkken
+  SIP kaydı düşmüş olabilir ve o an ekran çağrıyı **görür**, telefon **çalmaz**; tek rozet bu
+  hâli "her şey yolunda" gösterirdi.
+- **Arayan numarası SIP `From` başlığından OKUNMAZ.** `SimpleUser.session` zaten `private`;
+  ama asıl sebep o değil: ham başlığı ekrana yazmak **numara maskelemesini tamamen atlamak**
+  olurdu (CLAUDE.md §5 — maskeleme sunucu taraflıdır). Maskeli görmesi gereken bir agent,
+  yazılım telefonuna geçince aynı numarayı açık görürdü. Çağrı bilgisi asıl yoldan
+  (`IncomingCallModal`, sunucunun `AgentConnect` tüketicisi) gelir.
+- Temizlikte **sıra önemli**: önce `unregister()`, sonra `disconnect()`. Ters sırada Asterisk
+  kaydı `qualify` zaman aşımına kadar ayakta sanar ve o süre boyunca gelen çağrıları ölmeyen bir
+  contact'a gönderir — agent'ın telefonu **sessizce çalmaz**.
+
+### 5. Yayın koşusunda çıkan ALTI gerçek kusur
+
+Hepsi **önceki turlardan** kalmıştı; bu turda görünür oldular.
+
+| # | Kapı / test | Bulgu |
+|---|---|---|
+| 1 | `env-esleme-kontrol.sh` | 5 ayar tek tarafta: `PBXTR_ASTERISK_CONF_DIR/_EXTERNAL_IP/SYSAGENT_GID` compose-seviyesi (muafiyet gerekçesiyle işaretlendi), `PBXTR_SystemAgent__SocketPath/TokenPath` şablonda **hiç yoktu** — bare-metal operatör ajanın yollarını göremezdi |
+| 2 | `migration-compatibility-guard.py` | `AnnouncementsFinalGuard` blob'u değişti + yeni terminal bekçi ham SQL taşıdığı için tabana girmeden reddediliyordu |
+| 3 | `ScreenWritePathEvidenceTests` | Kanıt tablosu 159 → 161 yazma ucu (türetilmiş belge; elle yazılmaz) |
+| 4 | `SystemOpsReaderTests` | Katalog 44 → 53 exec, 14 → 16 dosya okuması, 9 → 13 dışarıda; **#37 (Disk) ilk kez satır sahibi oldu** (7 ekran → 8). ADR-014 §2.10 zaten güncellenmişti, **test bayattı** |
+| 5 | `yerel-yayin.sh` | `api-tests.list` / `api.runsettings` depo köküne yazılıyor ve silinmiyordu → **başarılı bir koşu bir sonrakini bozuyordu** ("çalışma ağacı kirli"). `artifacts/` altına alındı |
+| 6 | `CallbackLedgerEndpointTests` | Ham gövdede `"c-3"` aranıyordu; yanıttaki rastgele bir Guid (`a040583c-3694-...`) o parçayı taşıdı. **Arada bir çıkan, yeniden üretilemeyen** bir kırmızı — göreni "yeniden çalıştır"a iten tür. Kontrol `items[].callId` alanına taşındı |
+
+### 6. Kendi hatam — iki yayın koşusunu üst üste bindirdim
+
+`git push && bash deploy/yerel-yayin.sh` zincirini, **önceki koşu hâlâ sürerken** başlattım.
+İkisi de aynı `/tmp/pbxtr-yayin.log` dosyasına yazdı ve aynı `artifacts/test-results/`'a
+şard sonucu bıraktı; sonuç, hangi kırmızının hangi koşuya ait olduğunun okunamamasıydı.
+Üstelik bu, defterde zaten yazılı olan **"test koşarken build sessizce atlanır"** tuzağının
+tam olarak kurulduğu durumdur: bir koşunun testhost'u Release DLL'ini kilitliyorken diğerinin
+`dotnet build`'i sessizce atlar ve ölçüm **eski ikiliye** gider. Koşu durduruldu, tek ve temiz
+bir koşu başlatıldı.
+
+### 7. Uçtan uca ölçüm betiği
+
+`deploy/webrtc-uctan-uca-olcum.sh` — staging host'unda koşar:
+
+1. Yönetici panelden kimlik **üretir**
+2. Agent kendi kimliğini **okur** (`/me/softphone`)
+3. İki değerin **aynı** olduğu doğrulanır ← ayrı bir ölçüm, bilerek: iki uç sırrı iki farklı
+   yoldan üretir (`Protect` / `Unprotect`). Ayrışmaları hâlinde panel "üretildi" der, telefon
+   "parola yanlış" alır ve **iki taraf da kendi açısından doğru görünür**
+4. PJSIP nesnesi Asterisk'e yüklenir → `module reload res_pjsip.so` (**`pjsip reload` değil** —
+   ölçüldü, hiçbir şey yapmıyor)
+5. **Gerçek SIP REGISTER** 200 OK
+
+**4. adım bugün ELLE.** `pbxtr-confd` (pull ajanı) henüz yok; betik bu boşluğu **kapatmaz,
+görünür kılar** — her çalışmada ekrana yazar. Sessizce yazıp "otomatik çalışıyor" izlenimi
+vermek, ölçümü bir gösteriye çevirirdi.
+
+### Kararlar (bu tur)
+- Tarayıcı sırrı masa telefonu sırrından **ayrıdır**; bu bir tercih değil, panel oturumunun
+  santral kimliğine dönüşmesini engelleyen sınırdır.
+- Kimlik **üretmek** yönetici eylemi, **okumak** kullanıcı eylemidir. Üretim PJSIP nesnesi
+  doğurur ve global reload gerektirir.
+- SIP başlıklarından **hiçbir numara** ekrana çizilmez; maskeleme sunucu taraflıdır.
+
+### Açık kalanlar
+1. **Teslim otomasyonu (`pbxtr-confd`)** — üretilen revizyon Asterisk'e kendiliğinden gitmiyor.
+2. Geçici ölçüm dahilisi `t0007-9001` gerçek provisioning gelince **kaldırılmalı**.
+3. **TEST-INT-01** — entegrasyon takımı bu yayında da `PBXTR_ENTEGRASYON=0` ile atlandı.
+4. Sunucuda SSH parola girişi hâlâ açık (Tur 4'ten devam).
+
+### Commit'ler
+`b79c72d6` WebRTC kimliği + `/me/softphone` + sip.js masası
+`4c139230` env eşlemesi + migration blob tabanı + uçtan uca ölçüm betiği
+`(docs)` ekran yazma yolları tablosu · `(test)` komut katalogu sayımları
+`(fix)` şard ara çıktıları `artifacts/` altına · `(test)` geri arama tahtası flake'i
