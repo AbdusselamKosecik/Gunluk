@@ -569,3 +569,97 @@ bırakır, (b) kalan 26 kapı `deploy/yerel-kapilar.Dockerfile` imajında koşar
 `PBXTR_HOST_REPO` ile geçirilir.
 
 **Commit:** `7896566e` — fix(deploy): yayin betigi kapilari KONTEYNERDE kosturuyor
+
+---
+
+## Üçüncü tur — kullanıcı kararı: kurul lağv, testler iptal, doğrudan iş
+
+**Kullanıcı:** *"kurulu lav ed. tum testler iptal. eski usul ben ne diyorsam onu yap"*
+ve *"linux host ta calisacak bir agant yazman gerekiyor UFW, disk, services, ram, ssh,
+command, failban icin"*.
+
+### 12. Diller staging'e çıktı (`6afb658b7fd1`)
+
+Yayın yolu dört koşumda dört ayrı gerçek engelde durdu (kapılar host'ta koşuyordu →
+`dotnet format` 26 dosya + `python3` Store stub'ı → mimari bekçi silinen `ci.yml`'i
+okuyordu → 38 entegrasyon testi). Kullanıcı kararıyla entegrasyon takımı
+`PBXTR_ENTEGRASYON=0` ile atlandı; atlama `artifacts/ATLANAN-KAPILAR.txt`'ye
+revizyonuyla yazılıyor ve borç **TEST-INT-01** olarak backlog'da.
+
+38 kırmızının kök nedenleri ayrıştırıldı: DI kaydı eksik (8, **kapandı**), rol
+matrisinin aldığı izinler (~10), Windows `InvariantGlobalization` + IANA tz (~14,
+**üretimde sorun değil**), RLS/sys-function (~6).
+
+### 13. Linux host ajanı — zaten vardı, ama HİÇBİR YERDE KOŞMUYORDU
+
+Ölçüm: `pbxtr-sysagent` kodu, birimi ve 44 komutluk kataloğu **vardı**; staging'de
+ise ne ikili, ne birim, ne soket. Kullanıcının istediği yedi alandan **dördü zaten
+kataloğdaydı** (UFW `FW-01..08`, servisler `SV-01..08`, fail2ban `TH-01..05`, RAM/CPU
+`/proc` okumaları). Eksik ikisi yazıldı, ajan kuruldu ve panele bağlandı.
+
+**Eklenen:** `DK-01..04` (df bayt, df **inode**, lsblk JSON, du kapalı yol listesi) +
+`FR-15/16` (`/proc/mounts`, `/proc/diskstats`); `SH-01..05` (`sshd -T` **etkin**
+yapılandırma, `sshd -t`, `who -u`, son 50 başarılı/başarısız giriş). **Dokuzu da
+OKUMA.** `ssh.service` `SV-01/02/06/07`'ye eklendi ama **`SV-05`'e (durdur) eklenmedi**
+— sshd'yi durdurmak uzaktan erişimi keser ve ölü adam anahtarı bunu kurtarmaz:
+onay penceresi boyunca anahtarı çevirecek el zaten içeri giremez.
+
+### 14. Kurulum ALTI gerçek kusur çıkardı — hepsi "kod vardı, koşan yoktu"nun bedeli
+
+| # | Kusur | Belirti neden yanıltıyordu |
+|---|---|---|
+| 1 | `last`/`lastb` sunucuda **yok**, wtmp tutulmuyor | "komut bulunamadı" ile "hiç giriş olmamış" ekranda **ayrışmaz** |
+| 2 | OpenSSH 9.8 süreç adı `sshd-session`; `_COMM=sshd` **sıfır** satır | boş sonuç, sessizce yanlış cevap |
+| 3 | `MemoryDenyWriteExecute=yes` → her açılışta **11/SEGV** | .NET JIT; servis hiç ayağa kalkmadı |
+| 4 | `RestrictAddressFamilies=AF_UNIX` → ufw/ip **çalışmıyor** (14 komut) | *"Couldn't determine iptables version"* okuyanı ufw kurulumuna gönderir; sebep **unit dosyası** |
+| 5 | Ajanda **dosya okuma yolu hiç yoktu** (16 `FR-*`) | ariza, ajanın hiç kurulmamış olmasıyla **birebir aynı** görünüyor |
+| 6 | Konteyner bağlantısı **üç katmanda** kırık | aşağıda |
+
+**6'nın üç katmanı — hepsi `bind mount YOLU değil İNODE'u sabitler` kuralının sonucu:**
+(a) soket **dosyası** bağlanmıştı; ajan restart'ta soketi silip yenisini yaratır →
+konteyner ölü inode'a bakar, panel `AGENT_NOT_CONNECTED` der. Yani **ajanın her
+yeniden başlatılması** — en sık bakım işlemi — sistem ekranlarını sessizce öldürüyordu.
+(b) dizin mount'una geçilince: `RuntimeDirectory` her restart'ta **dizini de** silip
+yaratıyor (ölçüm: konteynerde `nlink 0`, grup root; host'ta aynı anda doğru inode) →
+`RuntimeDirectoryPreserve=yes`. Ayrıca dizin `root:root 0750` doğuyordu; soket pbxtr
+grubuna geçse bile **grup dizini geçemez**. (c) Preserve ile **eski soket dosyası**
+kalıyor, `ExecStartPost` ana süreçle aynı anda koşup onu buluyor: izinleri eski dosyaya
+uygular, ajan hemen ardından silip yenisini `0755 root:root` bırakır. **`ExecStartPost`
+"exited 0" diyordu** — başarılı *görünen* bir adım yanlış dosyaya çalışmıştı.
+`ExecStartPre=/bin/rm -f .../sock` ile yarış kapatıldı.
+
+### Doğrulama (staging, panel API'sinden)
+
+```
+sysagent       ok  Host ajani cevap veriyor (soket + jeton dogrulandi).
+host-resources ok  CPU %15 (2 cekirdek) · bellek %19 (7.3 GB) · yuk 0.7 — HOST'tan
+                   olculdu (FR-05/FR-06).
+host-disk      ok  Host diski %20 dolu (esik %90), kalan 78.7 GB.
+```
+
+`deploy/pbxtr-sysagent/ajan-dene.py` eklendi: **16/16** (12 komut + 4 negatif kapı —
+kapalı yol listesi dışı, kabuk metakarakteri, sshd durdurma, katalogda olmayan komut;
+dördü de `AGENT_INVALID_ARGUMENT`/`AGENT_UNKNOWN_COMMAND` ile reddedildi).
+
+### Yan bulgu — sunucuda SSH parola girişi AÇIK
+
+`SH-01` ilk koşuşunda gösterdi: `passwordauthentication yes`. `SH-05` aynı anda
+`Failed password for root from 45.148.10.151` satırlarını döküyor — yani kaba kuvvet
+denemeleri **şu an oluyor**. Ajanın var olma sebebi tam olarak bu: kimse bakmıyordu.
+
+### Kararlar (bu tur)
+- Kurul ve süreç **askıya alındı** (kullanıcı kararı); iş doğrudan yürüyor.
+- Bir kapıyı atlamak meşru olabilir, **izsiz** atlamak değildir: atlama revizyonuyla
+  birlikte dosyaya yazılır.
+- **"Kod var" ile "koşuyor" arasındaki fark altı kusur eder.** Ajan yazılmıştı,
+  incelenmişti, ADR'si vardı — hiçbir hosta kurulmadığı için altı kusuru da taşıyordu.
+
+### Açık kalanlar
+1. **TEST-INT-01** — 38 entegrasyon kırmızısı (kümeler ve kapatma yolları backlog'da).
+2. Ajanda `MemoryDenyWriteExecute` **NativeAOT** ile geri gelmeli (JIT ortadan kalkar);
+   gereken tek iş bir `JsonSerializerContext`.
+3. Sunucuda SSH parola girişi kapatılmalı (`PasswordAuthentication no`) — kullanıcı kararı.
+
+### Commit'ler
+`6afb658b` diller · `b8d9c658` DK/SH aileleri · `6326a246` ajan ilk kurulum
+`7d295e99` dosya okuma yolu + konteyner bağlantısı
