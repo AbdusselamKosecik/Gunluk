@@ -306,3 +306,68 @@ içine gömüldü. (`view_flow_header` / `view_scan_bar` sorun çıkarmıyor ç�
 - **Dokunulan dosyalar:** `res/layout/activity_settings.xml`, `res/values/strings.xml`
 
 - **Commit:** `a942668` — Surum numarasi ekrana eklendi + ayarlarda Turkce karakter duzeltmesi
+
+---
+
+## Tur 6 — SP gövdeleri yazıldı
+
+**Not:** Bu tur 30 Ağustos sabahına sarktı, aynı dosyada tutuldu.
+
+### 18. Örnek şema + 11 SP'nin dolu gövdesi
+- **Neden:** Kullanıcı "gövdelerini ben yazayım" seçeneğini seçti — kendi şemasına
+  uyarlayabileceği çalışan bir referans istedi.
+- **Ne yapıldı:** `docs/mssql-sp-sozlesmesi.sql` → `docs/mssql/` klasörüne taşındı ve genişletildi:
+  - `00-sozlesme.sql` — imzalar + dönen kolon adları (gövdesiz referans, eski dosya)
+  - `01-sema.sql` — örnek şema: `WM_Kullanici`, `WM_Depo`, `WM_Raf`, `WM_Stok`, `WM_Barkod`,
+    `WM_StokRaf`, `WM_Siparis(+Satir)`, `WM_Irsaliye(+Satir)`, `WM_Sayim`, `WM_Hareket`
+  - `02-ornek-veri.sql` — uygulamanın demo verisiyle **birebir aynı** kayıtlar; böylece demo
+    modu kapatılınca ekranda aynı ürünler görünüyor, "SQL'e geçince ne değişti" sorusu netleşiyor.
+    PIN'ler: AK 1234, MT 2345, SD 3456
+  - `03-sp.sql` — 11 SP'nin dolu gövdesi + `depo_mobil` login'ine sadece EXECUTE yetkisi
+  - `04-test.sql` — duman testi; her SP'nin hem başarılı hem hatalı yolunu deniyor
+- **SP'lerdeki iş kuralları:**
+  - `PickScan`: barkod ürüne ait mi + sipariş miktarı aşılıyor mu kontrolü, stok raftan
+    düşülür, sipariş bitince `TOPLANDI`
+  - `ReceiptClose`: okutulanlar hedef rafa işlenir, irsaliye kapanır
+  - `CountPost`: sayım kaydı + stok sayılan değere çekilir + fark hareket defterine
+  - `TransferPost`: kaynak rafta yeterli stok yoksa `Ok = 0` + mesaj
+  - Her okutma `WM_Hareket`'e yazılıyor (izlenebilirlik)
+
+### 19. Yazarken yakalanan iki tuzak
+- **`UPDATE ... FROM` çoklu eşleşme:** İrsaliyede aynı ürün iki satırdaysa `UPDATE sr ... FROM
+  WM_StokRaf sr JOIN WM_IrsaliyeSatir` sessizce **tek satırı** alır, diğerini yutardı.
+  Önce `@Gelen` tablo değişkeninde `GROUP BY StokKodu` ile toplanıp öyle işleniyor.
+- **`CREATE OR ALTER` sürüm gereksinimi:** SQL Server 2016 SP1 ile geldi. jTDS kullandığımıza
+  göre eski sunucu ihtimali yüksek; "önce `sys.procedures`'tan `sp_WM_%` olanları düşür,
+  sonra `CREATE PROCEDURE`" desenine çevrildi (2008+ çalışır).
+
+### 20. Uygulama tarafında sözleşme uyumsuzluğu düzeltildi
+- **Neden:** `docs`'ta "ReceiptScan mutlak miktar alır" yazıyordu ama `ReceiveActivity.postScan`
+  her çağrıda `1.0` gönderiyordu. SP üzerine yazdığı için okutulan hep 1'de kalırdı —
+  elle miktar düzeltmesi de SQL'e hiç gitmezdi.
+- **Ne yapıldı:** `line.received` (satırın yeni toplamı) gönderiliyor.
+- **Dokunulan dosya:** `ui/ReceiveActivity.kt`
+
+### 21. README perl kazası
+`perl -0pi -e 's|...|...|'` ile README güncellerken **desenin içinde `|` karakteri** vardı
+(markdown tablo satırı) ve `|` aynı zamanda ayraçtı — ilk satır bozuldu, başlığın önüne
+tablo satırı yapıştı. Düzeltildi. Ders: markdown tablosu değiştirirken perl ayracı olarak
+`|` kullanma.
+
+- **Commit:** `6902dbd` — SP govdeleri ornek sema uzerinde yazildi (11 SP calisir halde)
+
+## Kararlar (tur 6)
+
+- Örnek şema, gerçek ERP şeması yerine **referans** olarak konumlandırıldı: müşteri şemasına
+  geçerken sadece `03-sp.sql` gövdeleri değişecek, imzalar ve kolon adları sabit.
+- Barkod ayrı tabloda (`WM_Barkod`, `Katsayi` ile) — bir ürünün koli/adet barkodu ayrı olabilir.
+  Örnek veride barkod = stok kodu, uygulamanın demo verisiyle uyuşsun diye.
+- Stok hareketleri tek bir `WM_Hareket` defterinde toplandı (tip alanıyla ayrılıyor).
+
+## Açık kalanlar (tur 6)
+
+- **SQL hiç çalıştırılmadı** — ortamda SQL Server yok. Sözdizimi gözle kontrol edildi,
+  gerçek sunucuda `01→02→03→04` sırasıyla denenmeli.
+- Geçmiş / rapor ekranı, yönetici paneli.
+- `PickEngine` birim testleri.
+- Gerçek Zebra cihazda DataWedge + jTDS testi.
