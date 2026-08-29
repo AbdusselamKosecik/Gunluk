@@ -823,3 +823,74 @@ vermek, ölçümü bir gösteriye çevirirdi.
 `4c139230` env eşlemesi + migration blob tabanı + uçtan uca ölçüm betiği
 `(docs)` ekran yazma yolları tablosu · `(test)` komut katalogu sayımları
 `(fix)` şard ara çıktıları `artifacts/` altına · `(test)` geri arama tahtası flake'i
+
+### 8. Tur 5 kapanışı — yayın ve uçtan uca ölçüm
+
+**Yayın:** `tekbirsoft/pbxtr:demo-f44c10ef8b82` staging'de. Migration koştu, bekçi
+assert'leri **26/26** geçti, app + nginx yeniden ayağa kalktı. Testler: **3778/3778**
+(4 shard), 27/27 kapı. Atlananlar iz bıraktı: entegrasyon takımı ve DB kapıları
+(`artifacts/ATLANAN-KAPILAR.txt`).
+
+**Yayın yolunda iki kusur daha (toplam 9):**
+
+**8. Shard döngüsü sıfır tabanlı değildi** — bu turun en ağır bulgusu.
+`api-test-shards.py` shard numarasını `0 <= shard < count` ister; döngü `1 2 3 4`
+diyordu. İki katlı ve ikisi de sessiz:
+- **Shard 0 hiç koşmadı** (~940 test). Kalan üç shard yeşil yandığı için ekran
+  "her şey geçti" diyordu.
+- Dördüncü tur `--shard 4` ile çağırdı, araç aralık dışı bulup reddetti ve `set -e`
+  oradan aşağısını kesti: **frontend, DB kapıları, imaj ve staging yayını adımlarına
+  hiç gelinmiyordu.**
+
+Yani `--yayinla`, GitHub Actions kaldırıldığından beri **fiilen hiç yayın yapmamış**.
+Belirti "yayın başarısız" değil, "bir yerlerde durdu" idi.
+
+**9. DB kapıları adımı ham `psql: command not found` ile düşüyordu.** Shard düzeltilince
+ilk kez buraya gelinebildi. Araç eksikliği ile kapı kırmızısı aynı görüntüyü üretiyordu
+ve `PBXTR_DB_KAPILARI=0` atlaması **izsizdi**. İkisi de onarıldı (açık cümle + exit 69;
+atlama artık entegrasyonla aynı disiplinle `ATLANAN-KAPILAR.txt`'ye `>>` ile yazılıyor —
+`>` olsaydı ikinci atlama birincinin notunu ezerdi).
+
+**Bir de geçici bir CLR çökmesi:** shard 1'de `Internal CLR error (0x80131506)`,
+`RequestDelegateFactory` içinde. Test hatası değil, runtime çökmesi. Tek başına yeniden
+koşturuldu → 945/945; sonraki yayın koşusunda da tekrarlamadı. Kayda geçirildi,
+kovalanmadı.
+
+#### Uçtan uca ölçüm — İKİ deneme
+
+**Birinci deneme 401 verdi ve sebep parola DEĞİLDİ.** İki kusur birden:
+
+1. **`docker cp` dosyayı `root:root` bırakır.** Asterisk konteyner içinde `asterisk`
+   kullanıcısı olarak koşar (`-U asterisk`) ve `0640 root:root` bir dosyayı **okuyamaz**.
+   Belirti **tamamen sessizdi**: dosya diskte duruyordu, `module reload` hatasız döndü,
+   konteyner sağlıklı kaldı. "Teslim edildi" ile "yüklendi" arasındaki fark hiçbir hata
+   satırında görünmedi.
+2. **Nesne kontrolü bir çıktıydı, kapı değildi.** Betik `Unable to find object` satırını
+   basıp **devam etti** ve REGISTER'da 401 aldı. İki ayrı sebep (nesne hiç yüklenmedi /
+   parola yanlış) ekranda **aynı** görünüyordu — ölçüm, en çok ayırması gereken yerde
+   ayırmıyordu. Artık `exit 1`.
+
+**İkinci deneme — zincirin tamamı:**
+
+```
+1) demo.sahip giris                       -> jeton
+2) dahili 1042                            -> 11111111-...-1111011f4990
+3) WebRTC kimligi uretildi                -> t0007-wrtc-1042 (rotated: True)
+4) demo.agent kendi kimligini okudu       -> uretilen sir ile okunan sir AYNI
+                                             ws: wss://pbxtr.com/sip-ws
+5) PJSIP nesnesi yuklendi (ELLE)          -> module reload res_pjsip.so
+6) pjsip show endpoint t0007-wrtc-1042    -> VAR
+7) SIP REGISTER (digest, realm=asterisk)  -> 200 OK
+```
+
+**Temizlik:** geçici ölçüm dahilisi `t0007-9001` ve `/root/.webrtc-olcum-sifre` silindi;
+`/etc/asterisk/pbxtr.d/pjsip/` altında yalnızca placeholder, üretilen WS taşıması ve
+ürünün ürettiği `t0007-softphone.conf` kaldı.
+
+### Açık kalanlar (güncel)
+1. **Teslim otomasyonu (`pbxtr-confd`)** — 5. adım hâlâ elle. Ölçüm betiği bunu her
+   çalışmada ekrana yazıyor.
+2. **DB kapıları hiçbir yerde koşmadı.** Konteyner tabanlı bir koşturucu (postgres +
+   `dotnet ef database update` + psql'li imaj) ayrı bir iş.
+3. **TEST-INT-01** — entegrasyon takımı bu yayında da atlandı.
+4. Sunucuda SSH parola girişi hâlâ açık.
