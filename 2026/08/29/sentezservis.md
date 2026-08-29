@@ -131,7 +131,41 @@ gönderme, durum gönderme ve fatura gönderme servisleri. Kısıt: **şirket ko
 - **Arayüz:** hesap formu `PazaryeriSemalari` üzerinden üretilebilir; sır alanları
   maskelenmeli.
 
+### 7. Hesaplar 01 / 03 / 04 şirketleri için ayrıldı (aynı gün, ikinci tur)
+
+- **Neden:** Üç şirketin (01 Modaşima, 03 Viumod Digital, 04 Viuma Digital — CRS
+  bölümündeki kodlarla aynı) pazaryeri bilgileri ayrı ayrı var; tek örnek satır yetmiyor.
+- **Ne yapıldı:** `appsettings.json` → `SentezServis:Pazaryeri:Hesaplar` altına 3 şirket
+  × 5 pazaryeri = **15 hesap satırı**. Her satır kendi anahtarını, uç adresini ve
+  limitlerini taşıyor (Shopify 2 istek/sn, Trendyol/HB 5, Pazarama/Boyner 3). Anahtarı
+  gelmemiş satırlar `"Etkin": false`.
+- **Dokunulan dosyalar:** `src/SentezServis.Host/appsettings.json` (gitignore'da,
+  versiyonlanmıyor), `Pazaryerleri/PazaryeriFabrikasi.cs`,
+  `tests/.../PazaryeriTestleri.cs`, `tests/.../SentezServis.Core.Tests.csproj`
+  (Configuration.Json + Binder), `docs/pazaryeri-entegrasyonu.md`.
+- **Karar:** `PazaryeriFabrikasi.Dogrula()` artık **kapalı hesapları doğrulamıyor.**
+  15 yer tutucu satır her açılışta 15 uyarı bassaydı gerçek eksikler o yığında
+  kaybolurdu. Mükerrer (şirket, pazaryeri) tanımı kapalıyken de raporlanıyor. Kapalı
+  hesap fabrikadan zaten çıkmıyor, yani yarım yapılandırmayla kazara gönderim yok.
+- **Karar:** `appsettings.json` sürüm kontrolüne alınmadığı için biçimi güvenceye alan
+  tek yer test oldu: `Ayarlar_json_uzerinden_baglanir` enum adını ("Shopify"), TimeSpan
+  metnini, `Ek` sözlüğünü ve **yorum satırlarını** bağlayarak doğruluyor
+  (Configuration.Json yorumları ve sondaki virgülü kabul ediyor).
+- **Komutlar:**
+  ```bash
+  node -e "…"                         # 15 hesap / 01,03,04 doğrulaması
+  dotnet build SentezServis.slnx
+  dotnet test tests/SentezServis.Core.Tests/SentezServis.Core.Tests.csproj
+  ```
+- **Sonuç:** 233 test geçti (öncesi 231).
+
 ## Commit
 
-`5243c83` — Pazaryeri entegrasyon katmani: fabrika + 5 saglayici
-(remote: `git@gitlab.com:modasima/sentezservis.git`, push edildi)
+- `5243c83` — Pazaryeri entegrasyon katmani: fabrika + 5 saglayici
+- `b78156c` — Pazaryeri hesaplari 01/03/04 sirketleri icin ayrildi
+
+(remote: `git@gitlab.com:modasima/sentezservis.git`, ikisi de push edildi)
+
+> **Uyarı:** `appsettings.json` gitignore'da. Diskteki hesap satırları uçarsa
+> `docs/pazaryeri-entegrasyonu.md` içindeki alan tablosundan yeniden üretilir; anahtarlar
+> pazaryeri panellerinden yeniden alınmak zorunda.
