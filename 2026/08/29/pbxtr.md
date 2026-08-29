@@ -419,3 +419,153 @@ geçerdi). Sonra **45/45**.
 2. **`deploy/migration-expand-legacy.blobs` 55 migration geride** — ledger bakımı yapılmalı;
    yapılmadan kapı her koşuda kırmızı kalır ve gerçek bir contract değişikliği fark edilmez.
 3. İmzalama anahtarı yalnızca GitHub secret'ında; CI olmadan **imzalı yayın yolu yok**.
+
+---
+
+## İkinci tur — Actions kaldırıldı, 27 kapı depoya taşındı, i18n JSON'a geçti
+
+**Bağlam:** yukarıdaki "açık kalanlar" listesinin 1. ve 2. maddeleri bu turda kapandı.
+Kullanıcı kararı: *"GitHub Actions kullanmayacagiz amk. localde build edip
+gonderecegiz."*
+
+### 7. Kapılar `ci.yml`den depoya taşındı
+
+- **Neden:** Actions ~2026-08-23'ten beri faturalandırma yüzünden **sıfır adımda**
+  düşüyordu. Kapılar kırmızı değil **görünmez** olmuştu — altı gün kimse fark etmedi.
+  Actions'ı kaldırmak o yalanı bitirir; **kapıları** kaldırmak depoyu gerçekten
+  savunmasız bırakırdı ve öyle bir karar verilmedi.
+- **Ne yapıldı:** `ci.yml`den 27 kapı `deploy/yerel-kapilar.sh`e çıkarıldı; sabit bir
+  ortamda (`deploy/yerel-kapilar.Dockerfile` — ubuntu 24.04 + python3/nginx/openssl/
+  git/node/docker CLI + **pinlenmiş gitleaks 8.24.0**) koşuyor.
+  `deploy/yerel-yayin.sh` 7 adımlı yayın yolu: kapılar → backend → 4 API shard →
+  frontend → DB kapıları → imaj → staging. **İmaj, kapılar yeşil olmadan üretilmez.**
+- **Dokunulan dosyalar:** `deploy/yerel-kapilar.sh`, `deploy/yerel-kapilar.Dockerfile`,
+  `deploy/yerel-yayin.sh`, `deploy/staging-yayin.sh`,
+  `deploy/ci/integration-yayin-contract-test.py` (silinen .rb testin portu)
+- **Sonuç:** ilk koşumda **13 kırmızı** → 7 → 3 → **27/27 yeşil**.
+
+### 8. Kapıları koşturunca çıkan ÜÇ GERÇEK KUSUR
+
+Bunlar kapıların bulgusudur; hiçbiri kapı koşmadan görünmüyordu.
+
+**(a) PowerShell ayrıştırma kapısı HİÇBİR ŞEY ölçmüyordu.** Gövde
+`powershell -NoProfile -Command -` stdin'ine heredoc ile veriliyordu; Windows
+PowerShell 5.1 bu kipte çok satırlı `foreach` bloğunu **sessizce yutuyor** — hata yok,
+çıktı yok, çıkış kodu 0. Mutasyonla görüldü: `smoke-demo.ps1` sonuna kapanmamış bir
+`function Bozuk {` eklendi, kapı **yine geçti**.
+
+`-File` ile koşturulunca ikinci kusur çıktı: **`smoke-demo.ps1` gerçekten
+ayrıştırılamıyordu.** Dosyada BOM yoktu; PS 5.1 BOM'suz dosyayı ANSI okuyor ve string
+içindeki em dash (`—`) dizgiyi bozuyor. Yani **sunum smoke betiği Windows'ta
+çalıştırılamaz hâldeydi** ve bunu ancak sunum sabahı görecektik. İki `.ps1` dosyasına
+UTF-8 BOM eklendi.
+
+Konteynerde `pwsh` yok. İki kötü seçenek vardı: imaja ~130 MB pwsh kurmak, ya da
+"pwsh yoksa atla" demek — ki bu kapıyı kaldırmakla aynı şeydir, tek farkı görünür
+olması. **Seçilen üçüncü yol:** kapı host'ta koşar ve `.kapi-pwsh-makbuz` bırakır;
+konteyner tarafı makbuza *güvenmez*, **doğrular** — makbuzdaki `.ps1` özetleri o andaki
+ağaçla birebir tutmazsa kırmızı yanar. **Makbuz bir izin değil, kanıttır.**
+
+**(b) expand-only migration kapısı 55 migration'ı birden reddetti.** Defterin işi
+(kendi tanımı) *"mevcut kurulu taban çizgisini dondurmak"*tır ve bu 55 migration
+staging'de **uygulanmıştır** (`__EFMigrationsHistory` 146 satır = depoda 146
+migration). Uygulanmış bir migration'ı "normal deploy'a kabul edilir mi" diye analiz
+etmenin anlamı yok. Defter gerçeği yansıtmadan kapı **147.** migration'ı da ölçemez.
+Ayrıca `20260823150000_FinalDeliveryTerminalGuard` blob'u bayattı: `e68a713b`
+(Karar #27) **27 FinalGuard dosyasını** düzenlemiş, defterde **yalnızca birini**
+güncellemişti.
+
+**(c) `nginx -t` kapısı docker-in-docker'da boş dizin mount ediyordu.** `mktemp -d`
+konteynerin `/tmp`'sini veriyor, host daemon'ı o yolu bulamıyor ve mount'u boş bir
+dizin olarak yaratıyor. Belirti yanıltıcıydı: *"nginx.conf ... Is a directory"* — sanki
+yapılandırma bozukmuş gibi. Sahne dizini artık depo ağacında açılıyor, mount'a
+`PBXTR_HOST_REPO` ile **host yolu** veriliyor.
+
+- **Dokunulan dosyalar:** `deploy/kapi-pwsh-ayristirma.sh`,
+  `deploy/kapi-pwsh-ayristirma.ps1`, `deploy/demo/{smoke,start}-demo.ps1`,
+  `deploy/migration-expand-legacy.blobs`, `deploy/nginx-dogrula.sh`, `.gitignore`
+
+### 9. Kapılar boşalmadı — hepsi mutasyonla ölçüldü
+
+| Mutasyon | Sonuç |
+|---|---|
+| bozuk `.ps1` (host, pwsh var) | **RED** — `ayristirilamadi` |
+| `.ps1` host koşumundan sonra değişti (`--dogrula`) | **RED** — `makbuz agacla tutmuyor` |
+| makbuz silindi (`--dogrula`) | **RED** — `Kapi ATLANMAZ` |
+| yeni `DropColumn` taşıyan migration | **RED** — `contract/destructive desen` |
+| dondurulmuş `HostMetrics.cs`'e tek satır | **RED** — `blob degistirilemez` |
+
+### 10. i18n — kullanıcının iki geri bildirimi
+
+**(a) *"dil degisimi yok. ust bara eklermisin bayrak ve dil adiyla birlikte"*.**
+Belirti tekti, sebep **ikiydi**:
+1. **Emoji bayraklar Windows'ta hiç çizilmiyordu** — Segoe UI Emoji bölge göstergesi
+   çiftlerini içermez; ekranda iki harf kutusu çıkıyordu. Yazı tipi yüklemek bir dağıtım
+   riskidir → **satır içi SVG** (`Flag.tsx`, 20×14): yazı tipinden, OS'ten ve ağdan
+   bağımsız.
+2. **Kabuk metinleri Türkçe sabitti** — dil değiştirmek `<html lang>`/`dir` değerlerini
+   gerçekten değiştiriyordu ama ekranda **değişen tek kelime yoktu**. `AppHeader`,
+   `IdentityMenu`, `AppSidebar` çevrildi. Seçici artık üst barda, `Popover` ile,
+   **bayrak + dilin kendi adı**. (Menü grubu başlıkları hâlâ tek dil — `titleTr`.)
+
+**(b) *"i18n olarak json olarak yapsana dilleri"*.** Dokuz katalog `.ts` → `.json`.
+Derleme anındaki güvence **kaybolmadı**: `resolveJsonModule` + `MessageCatalog` tam
+kayıt. Mutasyonla ölçüldü — `de.json`'dan `common.save` silindi → **TS2322**. Kazanım
+çevirmen tarafında: Fransızca `l'écran` satırı tam olarak TypeScript tırnak kaçışı
+yüzünden **iki kez** bozulmuştu; JSON'da o tuzak yok.
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/i18n/*` (catalog/format/locales/
+  I18nProvider/LanguagePicker/Flag + 9 `messages/*.json`),
+  `src/Pbxtr.Web/src/app/shell/{AppHeader,AppHeader.module.css,IdentityMenu,AppSidebar}`
+- **Ölçüm:** `npx tsc -b` temiz, `npm test -- --run` **141 dosya / 1 264 test** yeşil.
+
+### Komutlar
+
+```bash
+docker build -f deploy/yerel-kapilar.Dockerfile -t pbxtr-kapi:local deploy
+docker run --rm -e PBXTR_HOST_REPO="X:/GitHub/Pbxtr/pbxtr" \
+  -v "X:/GitHub/Pbxtr/pbxtr:/repo" -v //var/run/docker.sock:/var/run/docker.sock \
+  -w /repo pbxtr-kapi:local bash deploy/yerel-kapilar.sh     # 27/27
+bash deploy/kapi-pwsh-ayristirma.sh          # host: koşar + makbuz yazar
+bash deploy/kapi-pwsh-ayristirma.sh --dogrula # konteyner: makbuzu doğrular
+bash deploy/yerel-yayin.sh --yayinla          # kapılar+test+imaj+staging
+```
+
+### Kararlar (bu tur)
+- **CI'ın düşmesi ile CI'ın yokluğu aynı şey değildir.** Düşen kapı görünür; koşmayan
+  kapı, kaldırılmış kapıyla birebir aynı sonucu verir.
+- **Bir kapının yeşil olması ölçtüğünü göstermez — boş da yeşil görünür.** Her kapı,
+  ölçtüğünü iddia ettiği hatayı gerçekten üreterek doğrulanmalıdır.
+- Ortamı olmayan bir kapı **atlanmaz**: ya ortam kurulur, ya kapı doğrulanabilir bir
+  **kanıt** (makbuz) bırakır.
+
+### Açık kalanlar (güncel)
+1. **DB-MIG-03** — 55 migration kapıdan *geçmedi*, kapının görmediği pencerede doğdu.
+   Geriye dönük contract review borcu. Defter satırları o incelemenin yerine geçmez.
+2. İmzalama anahtarı hâlâ yok → `deploy/staging-yayin.sh` **provenance doğrulaması
+   yapmıyor** (betiğin içinde yazılı sınır). Kapatma yolu: anahtarı yerelde üret,
+   açık anahtarı `/etc/pbxtr/staging-artifact-signing.pub` ile eşle.
+3. i18n borcu duruyor: 2 740 çevrilmemiş dize / 244 dosya, 80 `titleTr`, 233 fiziksel
+   yön kuralı (RTL), sunucu tarafı metinler, font kapsamı (`doc/i18n-durum.md`).
+
+### Commit
+`5bc08dd9` — ci: GitHub Actions kaldirildi, 27 kapi depoya tasindi + i18n JSON'a gecti
+
+### 11. Yayın betiğinin ilk gerçek koşumu bir kusur daha çıkardı (`7896566e`)
+
+`bash deploy/yerel-yayin.sh --yayinla` ilk kez koşturulduğunda **10 kapı kırmızı**
+yandı. Sebep kapıların bulgusu değildi: `deploy/yerel-kapilar.sh` doğrudan **Windows
+host** üzerinde koşuyordu ve orada `python3`, `gitleaks`, `openssl`, `nginx` yok.
+Yani 10 kapı *"araç yok"* diye düştü.
+
+**Bu ayrım önemlidir:** ekranda *"kapı bir hata buldu"* ile *"kapı koşamadı"*
+birbirinin **aynısı** görünüyor. Bir kapının araç yokluğundan düşmesi, o kapının
+ölçtüğü şeyi **hiç ölçmemek**tir — tek farkı görünür olması. (Kapı konteyneri de tam
+bu yüzden `docker.io` + `nodejs` ile yeniden kurulmuştu.)
+
+`set -e` çalıştı, yayın durdu, **imaj üretilmedi** — yani yanlış olan sonuç değil,
+kapıların *nerede koştuğuydu*. Düzeltme: (a) PowerShell kapısı host'ta koşar ve makbuz
+bırakır, (b) kalan 26 kapı `deploy/yerel-kapilar.Dockerfile` imajında koşar, host yolu
+`PBXTR_HOST_REPO` ile geçirilir.
+
+**Commit:** `7896566e` — fix(deploy): yayin betigi kapilari KONTEYNERDE kosturuyor
