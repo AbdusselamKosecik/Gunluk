@@ -152,3 +152,71 @@ minSdk 23 ile ilerlendi (Zebra TC/MC el terminalleri bu seviyede).
 - Geçmiş / rapor ekranı, yönetici paneli.
 - `PickEngine` birim testleri.
 - Gerçek Zebra cihazda DataWedge profil testi + jTDS'in gerçek SQL Server'a bağlanma testi.
+
+---
+
+## Tur 3 — Tasarımı eski uygulamayla eşitleme
+
+### 10. Referans uygulamanın kurtarılması
+- **Neden:** İstek: "daha önce yazdığın uygulama var, tasarımları onunla aynı yap".
+  Kaynak kod HDD ile silinmiş, diskte yok.
+- **Ne yapıldı:** Uygulama emülatörde kurulu olduğu fark edildi
+  (`com.modasima.elterminali.debug`). APK emülatörden çekildi ve açıldı.
+  ```bash
+  adb shell pm path com.modasima.elterminali.debug
+  adb pull /data/app/com.modasima.elterminali.debug-2/base.apk
+  unzip base.apk
+  aapt2 dump resources base.apk
+  ```
+- **Bulgular:** Compose ile yazılmış (12 dex, kendi layout'u yok, renkler kod içinde).
+  `res/font` altında 7 TTF: Barlow Condensed Bold/SemiBold, Barlow Regular/Medium/SemiBold,
+  IBM Plex Mono Medium/SemiBold. **Fontlar bu APK'dan alındı** — tek kalan nüsha buydu.
+- **Ekranları** adb ile sürülüp tek tek screencap alındı: giriş, ana menü (2 sütun modül
+  kartı), toplama listesi, mal kabul (irsaliye + TAM/EKSİK/FAZLA), sayım (sistem/sayılan/fark
+  tablosu), transfer (kaynak→hedef kartları), stok sorgu.
+- **Renkler** ekran görüntülerinden piksel örneklemesiyle çıkarıldı (PowerShell + System.Drawing):
+  bg `#1B1712`, kart `#211D18`, çerçeve `#2A2620`, metin `#F2EDE4`, muted `#9C9384`,
+  amber `#F2B341`, yeşil `#3FD18B`, mor `#C792D6`, mavi `#6BAEDB`, kırmızı `#E5484D`.
+
+### 11. Tasarımın uygulanması
+- **Tipografi:** `values/themes.xml` içinde Text.Display / Title / Item / Body / Mono / Label /
+  Number stilleri. Başlıklar Barlow Condensed Bold, kod-sayı-etiket IBM Plex Mono.
+  AppCompat `android:fontFamily="@font/..."` API 23'te sorunsuz çalıştı.
+- **Giriş:** durum noktası + `DEMO · MERKEZ DEPO · v0.1.0`, amber çerçeveli operatör seçimi,
+  çerçeveli PIN kutuları; PIN dolunca ipucu "GİR TUŞUNA BASIN" ve GİR tuşu amber'e dönüyor.
+- **Ana menü:** iki sütunlu modül kartları — üst vurgu şeridi (modül rengi), ikon, sayaç,
+  ad, alt açıklama. Seçili kart amber çerçeve. Alt: SUNUCU / SON SENK. / BUGÜN şeridi +
+  ÇIKIŞ / "AÇ ▸ MODÜL" butonu. İlk dokunuş seçer, ikinci açar (yanlış modül açmayı zorlaştırır).
+- **Ortak gövde:** `ui/FlowChrome.kt` + `view_flow_header.xml` + `view_scan_bar.xml`.
+  Beş ekran da aynı üst bar (geri kutusu, modül renginde başlık, sağda sayaç) ve aynı alt
+  bar (ikincil aksiyon + barkod ikonlu ana buton) kullanıyor.
+- **Adım kartı** (`activity_flow.xml`): sol vurgu şeridi, üstte küçük etiket, altta büyük mono
+  değer, sağda sayı. Mal kabul/sayım/transfer/stok sorgu bunu kullanıyor.
+- **Toplama listesi:** ürün resmi kaldırıldı (referansta yok), satır yoğunluğu referansa
+  getirildi, lejant çipleri kutulu.
+- **Vektör ikonlar** elle yazıldı: barkod, geri, backspace, toplama, mal kabul, sayım, transfer.
+
+### 12. Emülatörde çıkan düzeltmeler
+- Tuş rakamları soluk kalıyordu → açık renk atandı.
+- Giriş alt başlığı iki satıra taşıyordu → kısaltıldı, tek satır.
+- Kart alt yazıları sarıyordu → `maxLines=1` + harf aralığı düşürüldü.
+- Mor/mavi butonlarda beyaz yazı okunmuyordu → açık zeminlerde koyu yazı
+  (`FlowChrome.primary`: sadece kırmızı üzerinde açık yazı).
+
+- **Commit:** `54cc24e` — Tasarim: referans el terminali uygulamasiyla ayni gorsel dil
+
+## Kararlar (tur 3)
+
+- Referans uygulama Compose, bizimki View kalmaya devam ediyor (API 23 performans kararı
+  değişmedi); eşitlenen şey görsel dil, teknoloji değil.
+- Fontlar APK'dan alındı. Barlow ve IBM Plex Mono ikisi de OFL lisanslı, dağıtımı serbest.
+- Modül renkleri: toplama amber, mal kabul yeşil, sayım mor, transfer/stok sorgu mavi —
+  referanstaki eşleme birebir korundu.
+
+## Açık kalanlar (tur 3)
+
+- Referans mal kabul ekranı **irsaliye bazlı** (İRS no, tarih, kalem, TAM/EKSİK/FAZLA
+  durumları); bizimki hâlâ tek tek ürün→raf. Aynı modele geçmek `sp_WM_Receipt*`
+  sözleşmesini de genişletmeyi gerektirir.
+- Referans sayım ekranında satır seçip −/+ ile miktar düzeltme var; bizde her okutma +1.
+- Referans transferde bekleyen hareket kuyruğu var; bizde anlık kayıt.
