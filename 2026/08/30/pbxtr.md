@@ -136,3 +136,128 @@ Gün bu ikisiyle geçti. i18n taraması **yarım kaldı** (aşağıda "Açık ka
 - **`pbxtr-confd` hâlâ yok.** PJSIP teslimi elle yapılıyor
   (`deploy/demo-softphone-provision.sh`); üretimde bu confd'nin işidir.
 - Bu tur **kapı/test koşturulmadan** yayınlandı (kullanıcı talimatı).
+
+---
+
+## Ek tur — i18n: ayarlar, bayi, tenant, auth (aynı gün, sonraki oturum)
+
+### Bağlam
+
+Hedefin 1. maddesi (`Tüm sayfaları dilden geçir`) sürüyor. Tur başında
+`tara2.mjs src` ölçümü: **199 dosya, 49'u şüpheli.** Bu turda 12 dosya kapandı.
+
+### Yapılanlar
+
+#### 1. #49 Ayarlar ekranı (SettingsScreen 1756 satır + settingsApi + localeCatalog)
+- **Neden:** kalan en büyük dosya; dokuz panel, sekmeler, kota/tenant sütunu ve
+  `HostPanel` tamamen Türkçe sabitti.
+- **Ne yapıldı:** 102 katalog anahtarı (`set.*`), tüm paneller `t()` / `<T>`
+  üzerinden. Modül sabitleri `NUMBER_REQUIRED` / `DAILY_LIMIT_MALFORMED`
+  katalog anahtarlarına taşındı (modül seviyesinde hook çağrılamaz).
+- **İki yapısal düzeltme:**
+  - **Ülke adları artık aktif dilde.** `localeCatalog.ts` sabit
+    `Intl.DisplayNames(['tr'])` kullanıyordu: Almanca seçen kullanıcı ekranın
+    geri kalanını Almanca, ülke listesini **Türkçe** görüyordu. Sıralama da
+    sabit `'tr'` ile yapılıyordu — Bulgarca listede kiril harfleri Türkçe
+    alfabeye göre sıralanıyordu. `countryLabel(locale, code)` /
+    `countryOptions(locale, current)` imzaya `locale` aldı.
+  - **Yüzde işareti katalogdan** (`ph.percent`): işaretin yeri dile bağlıdır
+    (tr `%50`, en `50%`); SLA eşiği `%{deger}` diye sabit yazılıydı.
+- **Commit:** `a0d14e92`
+
+#### 2. #57 Konuşma analizi
+Önceki turdan yarım kalan dosya tamamlandı. `linkedid` / `recording_assets`
+teknik kimliktir, çevrilmez. **Commit:** `cd98f1a1`
+
+#### 3. #56 Bayi paneli + bayi aç/düzenle
+- 60 anahtar (`dlr.*`). `PERIOD_LABELS` → `PERIOD_KEY`,
+  `QUOTA_KIND_LABEL` → `QUOTA_KIND_KEY`.
+- `Quota` ve `DaysLeft` bileşen olduğu için kendi `useT`'sini alır;
+  `periodLabel` / `quotaHint` / `belowUsageMessage` bileşen değildir, `t`'yi
+  **ilk parametre** olarak alır (proje kuralı).
+- **Commit:** `e584a9e1`
+
+#### 4. #53 Tenant yönetimi (5 dosya)
+- 161 anahtar (`tnt.*`). TenantScreen (874), TenantCreateDialog (504),
+  TenantEditDialog (362), TenantDocumentsScreen (323), TenantWizardFields.
+- **`WizardField.label` → `labelKey: MessageKey`.** Alan listesi **modül
+  seviyesinde** duruyor; orada `useT()` çağrılamaz. Aynı liste üç ekranda
+  kullanıldığı için (sihirbaz, tenant düzenleme, ayarlar/firma paneli) tek
+  değişiklik üçünü birden düzeltti; `TenantProfilePane` çağrı yeri de
+  güncellendi.
+- Sihirbazın lisans periyodu tablosu bayi ekranının `dlr.period*`
+  anahtarlarını **paylaşır** — aynı listeyi ikinci kez çevirmek, iki ekranın
+  bir gün aynı koda iki farklı ad vermesi demekti.
+- Sunucudan gelen `kindTitle` **çevrilmez** (kaynak sunucudur).
+- **Commit:** `e83e117d`
+
+#### 5. Giriş / şifremi unuttum + DİL SEÇİCİ GİRİŞ EKRANINA
+- **Neden (gerçek kusur):** dil seçici yalnızca kabuktaki üst bardaydı, yani
+  **ancak giriş yaptıktan sonra** erişilebiliyordu. Tarayıcısı Türkçe olan ama
+  panelini Almanca isteyen kullanıcı, dilini değiştirmek için önce
+  anlamadığı bir dilde giriş yapmak zorundaydı; şifresini unutmuş biri için
+  akışın tamamı erişilemez bir dilde kalıyordu.
+- `AuthLayout`'a `<LanguagePicker>` eklendi (kendi CSS sınıflarıyla; picker'ın
+  tüm className prop'ları opsiyonel). Tercih `localStorage`'a yazıldığı için
+  seçilen dil girişten sonra da geçerli.
+- **Commit:** `9899d191`
+
+#### 6. İki düşen test onarıldı — turun bulgusu
+`src/app/primaryUserActionHttp.test.tsx` ve
+`src/app/screens/deliveryManifest.test.tsx` ekranları çıplak
+`render` ile çiziyordu. Ekranlar dile geçtikçe (DiagnosticsScreen dahil)
+sağlayıcısız `useT()` çağrısı **"I18nProvider dışında çağrıldı"** diye
+atıyordu. İkisi de **kök seviyesinde** durduğu için dizin bazlı koşularda
+görünmüyordu — tur boyunca `vitest run <dizin>` çalıştırıldığı için haftalarca
+sessiz kalabilirdi. Ortak `renderScreen` yardımcısına geçirildi.
+
+### Komutlar
+
+```bash
+cd src/Pbxtr.Web
+node <scratch>/ekle.mjs <scratch>/veri-*.mjs   # 9 dilin hepsi dolu değilse ATAR
+node <scratch>/ed-*.mjs                        # idempotent metin düzenleme
+npx tsc -b --noEmit
+npx vitest run <dizin>
+node <scratch>/tara2.mjs <dizin>
+```
+
+### Sonuç / doğrulama
+
+- `tsc -b --noEmit` temiz.
+- **Tam koşu: 142 dosya / 1267 test yeşil** (dizin bazlı değil, tamamı).
+- `tara2` her kapatılan grupta `şüpheli: 0`.
+
+### Kararlar
+
+- **Modül seviyesindeki her etiket tablosu anahtar tutar, metin tutmaz.**
+  Sebep teknik: hook modül seviyesinde çağrılamaz. Sonuç mimari: metin, onu
+  çizen bileşende çözülür ve tek kaynak katalogdur.
+- **Bileşen olmayan yardımcı `t`'yi ilk parametre alır.** İkinci bir kural
+  (ör. "yardımcı kendi katalogunu okusun") aktif dili yardımcıya taşımanın
+  ikinci bir yolunu açardı.
+- **Sunucudan gelen Türkçe (`*Tr`, `kindTitle`, `reason`) istemcide
+  çevrilmez.** Kaynak sunucudur; istemcide çevirmek iki doğruluk kaynağı
+  yaratırdı.
+- **Tanınmayan sunucu kodu HAM basılır** (`periodLabel`, `kindLabel`): eksik
+  çeviri kendini söyler, `—` ile gizlenmez.
+
+### Açık kalanlar / sonraki adım
+
+- **i18n: 37 dosya kaldı.** ivr (7), `src/ui` (7), dashboards (4), live (3),
+  console (2), security (2), analytics (2), ve tek tek: qa, authz, compliance,
+  network, resultcodes, storage, survey, trunks, realtime/StaleDataBadge,
+  agent/CallTab, AppRoutes.
+- **`src/ui` ayrı bir iştir:** katman kuralı gereği (`mirrorSingleSource.test.ts`)
+  `src/ui`, `src/app`'e bağımlı olamaz — `useT` oraya ithal edilemez. Kendi
+  metin sözleşmesi gerekiyor (`src/ui` içinde Türkçe varsayılanlı bir `UiText`
+  sağlayıcı, katalogdan `src/app` tarafından doldurulur).
+- **Rusça (`ru`) 10. dil olarak sıraya alındı** — sayfalar bitince. Şimdi
+  eklemek her yeni sayfayı iki dilde birden yazdırırdı.
+- **`I18nProvider`'ın `profileLocale` / `onLocaleChange` prop'ları BAĞLANMADI.**
+  `App.tsx` sağlayıcıyı prop'suz kuruyor ve sunucu tarafında kullanıcı diline
+  ait bir alan **yok** (`me` içinde `locale` bulunamadı). Yani "başka bir
+  makineden girince dilini yeniden seçme" yolu yazılmış ama ucu yok; kapanması
+  bir sunucu alanı ister.
+- Sabit `tr-TR` tarih/sayı biçimlendirmesi (~26 yer) hâlâ duruyor; metin turu
+  bitince merkezî tek değişiklik.
