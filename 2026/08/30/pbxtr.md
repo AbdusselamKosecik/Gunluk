@@ -572,3 +572,65 @@ Geri alındıktan sonra kaynak byte-aynı (`git diff` boş) ve 6/6 yeşil.
 "Yazıldı" ile "çalışıyor" farkını yalnızca koşan bir kapı kapatır. 2. ve 3.
 maddeler ölçüldü ve yerinde; 4. maddede uç yerindeydi ama **ölçümü yoktu** —
 eksik olan buydu ve kapatıldı.
+
+---
+
+## Ek tur 6 — Asterisk bileşiminin ilk kez kurulması
+
+Kanca 2. maddeyi "kısmi" saydı; gerekçesi benim yazdığım *"kablonun ucu hariç"*
+notuydu. **O not bir eksiklik değil, bağlayıcı bir kullanıcı emridir**
+(CLAUDE.md §3.0: *"Bağlantının yokluğu bir BLOKAJ DEĞİLDİR ve kapsam kesme
+gerekçesi olarak KULLANILAMAZ"*). Yani kabloyu takmak bu maddenin işi değil.
+
+Ama "kablo hariç her şey" **ölçülebilir bir iddiadır** ve ölçtüm.
+
+### Bulunan gerçek boşluk
+
+`Telephony:Provider=asterisk` **dalını hiçbir test bir kez bile kurmamıştı.**
+Mevcut bileşim testlerinin hepsi boş yapılandırmayla, yani `simulated` dalıyla
+koşuyordu (`TelephonyEffectAdapterIsolationTests`). Kod eksiksizdi —
+`AsteriskAriProvider`, `AriStasisApp`, `AmiAriEventConsumer`, `AriLinkStatus`,
+`AmiTenantCodeMap`, hepsi DI'da kayıtlı — ama o dal hiç **inşa edilmemişti.**
+
+Bunun anlamı şuydu: daldaki **fail-closed açılış kapıları** (eksik ayar, terk
+edilmiş `Asterisk:*` bölüm adı, tanınmayan sağlayıcı) sahada **ilk kez gerçek
+santral bağlanırken** koşacaktı. O anda bir kusur çıkması, kabloyu takma gününü
+teşhis gününe çevirirdi — tam da §3.0'ın önlemek istediği şey.
+
+### Yapılan — commit `d7386955`
+
+Dokuz test (`tests/Pbxtr.Architecture.Tests/AsteriskCompositionTests.cs`):
+
+- eksik ayarla açılmaz ve mesaj **eksiği sayar** (operatörü yedi anahtarı tek
+  tek aramaya itmez),
+- eksik ayar mesajı **sır değeri taşımaz** (mesaj açılış günlüğüne düşer),
+- eski `Asterisk:*` bölüm adı açılışı durdurur — sessizce yok sayılmaz,
+- tanınmayan sağlayıcı adı (`asterix`, `Asterisk`, boş) fail-closed,
+- tam ayarla santralin beş parçası da kayıtlı,
+- asterisk dalında **simülasyon bileşenleri kaydedilmez** (CLAUDE.md §5),
+- **simülasyon dalı kendi bileşenlerini kaydeder** — bu olmadan bir önceki
+  negatif vacuous olurdu: hiç kaydedilmeyen bir tip her dalda yoktur.
+
+**Santrale bağlanılmıyor:** ölçülen şey `ServiceCollection`'ın **kaydı**dır;
+hiçbir `IHostedService` başlatılmaz, hiçbir soket açılmaz. Kaydın tembelliği
+bunu garanti eder.
+
+### Mutasyon
+
+Üçü de Infrastructure ikilisi ayrıca `dotnet build` ile yeniden derlenerek:
+
+| Mutasyon | Sonuç |
+|---|---|
+| eksik-ayar kapısı kapatıldı | 2 test **KIRMIZI** |
+| eski-bölüm kapısı kapatıldı | 1 test **KIRMIZI** |
+| tanınmayan ad simülasyona düşürüldü | 3 test **KIRMIZI** |
+
+Geri alındıktan sonra kaynak byte-aynı (`git diff` boş); **317/317 yeşil.**
+
+### Karar
+
+İki turdur aynı desen çıkıyor: **kod var, koşan yok.** Teknik test ucunda uç
+yazılmıştı ama ölçümü yoktu; Asterisk dalında bileşim yazılmıştı ama hiç
+kurulmamıştı. İkisi de "yazıldı mı" sorusuna evet, "çalıştığı ölçüldü mü"
+sorusuna hayır diyordu. Bir sonraki turda aynı soruyu provisioning (`confd`)
+teslim yoluna sormak gerekir.
