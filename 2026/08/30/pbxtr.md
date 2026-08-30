@@ -351,3 +351,73 @@ En büyükleri: `console/parkErrors.ts` (49), `agent/callControlErrors.ts` (24),
 ### Doğrulama
 
 `tsc -b` temiz; **tam koşu 143 dosya / 1270 test yeşil** (dizin bazlı değil).
+
+---
+
+## Ek tur 3 — hata katmanı (A turu)
+
+### 10. `api/problem.ts` + 18 hata yardımcısı — commit `d94d9814`
+
+**Neden en önce burası:** `problemMessage` **her ekranda** görünen metni
+üretir — kimlik doğrulama, kota, kilit, doğrulama, yetki ve genel ret
+cümleleri. Tamamı Türkçe sabitti.
+
+- `problemMessage(error)` → `problemMessage(t, error)`.
+- **Ölçüm kaskadı kapattı:** 97 çağrı yeri / 53 dosya; bunlardan yalnızca
+  **18'i** `t` taşımayan API modülüydü ve o modüllerin `*ErrorText`
+  yardımcılarına da `t` **ilk parametre** olarak eklendi. Kaskad daha ileri
+  gitmedi.
+- Tip artık tek yerde: **`TranslateFn`** (`i18n/I18nProvider`). Her dosyanın
+  kendi `ReturnType<typeof useT>` takma adını yazması, imzaların bir gün
+  ayrışması demekti (`IvrT` bu şekilde doğmuştu).
+
+**İki yan düzeltme:**
+
+1. **Hesap kilidi saati sabit `tr-TR` ile biçimleniyordu.** Almanca bir panelde
+   cümlenin gerisi çevrilirken içindeki saat Türkçe biçimde basılıyordu. Etiket
+   artık `I18nProvider`'ın `<html lang>` üzerine yazdığı BCP-47 değerinden
+   okunur; sağlayıcı koşmamışsa tarayıcının kendi dili kullanılır — sabit bir
+   dil **değil**.
+2. `QUOTA_KIND_LABEL` → `QUOTA_KIND_KEY`; kapalı küme (`Record<QuotaKind, …>`)
+   korundu, eksik üye tsc'yi durdurur.
+
+**İki test gerçek bir şey yakaladı:**
+- `WallboardDesignScreen` testi `t` yerine `((key) => key)` saplaması
+  geçiyordu. Katalogtan konuşmaya başlayınca saplama ham anahtarı döndürdü ve
+  test ortak metnin **üretildiğini** artık ölçmüyordu. Gerçek katalogla
+  değiştirildi.
+- `RedialStrip` testi ASCII'ye düşmüş bir yazımı arıyordu ("ulasilamadi");
+  katalogtaki doğru yazımla ("ulaşılamadı") eşleşmedi. Beklenti artık
+  katalogtan üretiliyor.
+
+### 11. #02 kullanıcı red gerekçeleri — commit `6e29dbc9`
+
+`RULE_TEXT` → `RULE_KEY` (17 gerekçe). Bunlar sunucunun `meta.rule` kapalı
+kümesinin ekran karşılığıdır ve 403'leri birbirinden ayırır. Tanınmayan gerekçe
+yine genel metne düşer.
+
+### Ölçüm
+
+`son-tara`: **329 → 310 satır.** `problem.ts` temizlendi ve asıl kazanç
+görünmeyen kısımda: 18 API modülü artık `t` taşıyor, yani kendi metinleri
+**ikinci bir imza değişikliği olmadan** çevrilebilir.
+
+### Kalan (ölçülmüş, yanlış pozitifler düşülmüş)
+
+- **Dört hata modülü — 118 satır:** `console/parkErrors.ts` (49),
+  `agent/callControlErrors.ts` (24), `live/monitorErrors.ts` (23),
+  `live/interventionErrors.ts` (22). Uzun, çok cümleli metinler; her biri
+  "ne oldu + ne yapmalı" yazım kuralına uyuyor ve dokuz dile bu kuralla
+  çevrilmeli.
+- **Küçük API/yardımcı kuyruğu — ~62 satır:** objectionApi (7),
+  complianceApi (7), resourceState (6), apiKeysApi (6), auditApi (5),
+  recordingApi (5), slaWindow (5), RealtimeProvider (5), useCallControl (3),
+  cdrApi (2), breakAllowance (2), licenseRestriction (2), settingsApi (2),
+  contact/updatesApi/systemCommandApi/extensionsApi/useUnsavedChangesGuard (1'er).
+- **Bileşen kuyruğu — ~34 satır:** `ui/CallTimeline` (13),
+  `sim/RewindControl` (9), `agent/missedCall.ts` (9), `AuditScreen` (2),
+  `WorkingHoursScreen` (1).
+- **Yanlış pozitifler (dokunulmayacak):** `screens.generated.ts` (üretilmiş
+  `titleTr` başlıkları + geliştiriciye atılan `Error` metinleri),
+  `i18n/locales.ts` (dillerin kendi adları), `UiTextProvider` (kasıtlı Türkçe
+  varsayılanlar), `agent/CallTab.tsx` (sunucuya giden etiket **değerleri**).
