@@ -508,3 +508,67 @@ Her turda: `npx tsc -b --noEmit` temiz, tam koşu **1272 test / 143 dosya yeşil
   `localeCatalog.ts`'te ikisi düzeltildi; geri kalanı tek turda merkezî olarak.
 - **`LiveFailureMessageSurfaces` bekçisini koşturan bir `[Fact]` yok** —
   koşmayan kapı, kapı değildir.
+
+---
+
+## Ek tur 5 — hedefin 2/3/4 maddeleri: doğrulama + bulunan boşluk
+
+Stop kancası "yalnızca 1. madde yapıldı" dedi. Kanca önceki oturumları
+göremiyor; iddia etmek yerine **depoda ölçtüm.**
+
+### Madde 3 — kuyruk/dahili aramalarında İYS ve kontroller
+
+**Uygulanmış.** `src/Pbxtr.Api/Modules/Telephony/CallPermissionEndpoints.cs:245`
+— "SANTRAL İÇİ HEDEF MUAFİYETİ (kullanıcı kararı, **2026-08-30**)". Zincir
+`UnresolvableNumber` ile döndüğünde ve hedef bir dahili ise karar `Allow`'a
+çevriliyor. Muafiyet **ikinci kapıda da** (dialplan yolu) var; olmasaydı agent
+panelden 1043'ü arayabilir ama SIP telefonundan aynı dahiliyi çevirdiğinde
+fail-closed reddedilirdi — ve bu fark hiçbir ekranda görünmezdi.
+
+**Sıra da karar:** zincir ÖNCE koşar, muafiyet SONRA ve yalnızca çözülemeyen
+numarada sorulur; böylece sıcak yola (dialplan her aramada burayı çağırır) ek
+sorgu eklenmiyor.
+
+### Madde 2 — Asterisk entegrasyonu
+
+**Yazılmış** (CLAUDE.md §3.0 gereği kablonun ucu hariç):
+`Infrastructure/Telephony/Asterisk/` altında `AmiConnection`,
+`AmiCommandChannel`, `AmiEventMapper`, `AmiAriEventConsumer`, `AriClient`,
+`AriStasisApp`, `AsteriskAriProvider`, `AriLinkStatus`, `AmiTenantCodeMap`.
+Sınıf B uçlarının hepsi `Program.cs`'te kayıtlı (894-897) + provisioning (922).
+`deploy/asterisk-lab`, `pbxtr-confd-cek.sh`, `telefon-kanali-kontrol.sh` yerinde.
+
+### Madde 4 — teknik test → **GERÇEK BOŞLUK BULUNDU**
+
+`GET /api/v1/me/tech-check` yazılmıştı, `Program.cs:807`'de kayıtlıydı, istemci
+(`TechTestPanel.tsx`) onu çağırıyordu — **ama hiçbir sunucu testi koşmuyordu.**
+Bu tam olarak "kod var, koşan yok" deseni.
+
+Altı test yazıldı (`tests/.../Telephony/TechCheckEndpointTests.cs`, commit
+`8a836529`):
+
+- kimliksiz istek 401,
+- bağlantı açıkken üç bileşen de ölçülür, **sıra** korunur,
+- **KOPUK (`false` → down) ile ÖLÇÜLEMEDİ (`null` → unknown) ayrı hâllerdir**,
+- Redis erişilemezken uç 500 vermez; bileşen `down` olur, diğerleri ölçülmeye
+  devam eder,
+- uç sağlayıcıya **hiç dokunmaz** (bağlantı durumu istek başına tek kez okunur).
+
+Üçüncü madde bu ucun varlık sebebi: ikisi tek renge düşseydi Asterisk'e fiilen
+bağlanmayan bir kurulum her açılışta **sahte bir kırmızı** üretirdi.
+
+**Mutasyonla doğrulandı** (ikisi de ikili yeniden derlenerek — `dotnet build`
+ayrı çalıştırıldı, test koşusunun build'i sessizce atlaması ihtimaline karşı):
+
+| Mutasyon | Sonuç |
+|---|---|
+| `null => Unknown` yerine `Down` | `Kopuk_ile_olculemedi_ayri_hallerdir` **KIRMIZI** |
+| istisna yutulmayıp yukarı bırakılınca | `Onbellek_erisilemezken_panel_ayakta_kalir` **KIRMIZI** |
+
+Geri alındıktan sonra kaynak byte-aynı (`git diff` boş) ve 6/6 yeşil.
+
+### Karar
+
+"Yazıldı" ile "çalışıyor" farkını yalnızca koşan bir kapı kapatır. 2. ve 3.
+maddeler ölçüldü ve yerinde; 4. maddede uç yerindeydi ama **ölçümü yoktu** —
+eksik olan buydu ve kapatıldı.
