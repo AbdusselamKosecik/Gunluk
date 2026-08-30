@@ -191,3 +191,72 @@ eş zamanlılık için; tekrar okutma için `RunBarcode` seviyesindeki 5 sn'lik
 - `SetTransectionFromDevice` SP'sinin aynı parametrelerle 100 ms arayla farklı
   `SeriIslenenAdet` döndürmesi (13/13 → 0/0 → 13/13) hâlâ incelenmedi.
 - Hiçbir düzeltme sahada cihazla doğrulanmadı; sadece `dotnet build` (0 hata).
+
+---
+
+# Üçüncü tur — sistematik eksik taraması
+
+## Yöntem
+Repo (X) ile decompile çıktısı (Y) dosya dosya, üç ayrı eksende karşılaştırıldı:
+
+1. **Çağrılan metot kümeleri** — her dosyadan `\b\w+\s*\(` çekilip decompiler
+   gürültüsü (`op_*`, `AppendInterpolatedStringHandler`, `u002Ector`, `Convert`,
+   `ToString`, LINQ yardımcıları …) filtrelenip `diff` ile karşılaştırıldı.
+   Sadece `>` yönü (Y'de var, X'te yok) incelendi.
+2. **SQL metinleri** — `select|update|insert|delete|exec` ile başlayan tüm
+   literaller normalize edilip (whitespace tek boşluk, küçük harf) diff'lendi.
+3. **Sayısal sabitler** — 2+ haneli tüm literaller (timeout, retry, eşik, TTL)
+   dosya bazında karşılaştırıldı.
+
+Sonuç: tüm farklar decompiler artefaktı çıktı, **beş tanesi hariç.**
+
+## Bulunan gerçek eksikler ve düzeltmeleri (commit `0eefe3a`)
+
+### 1. `ErrorHandler.HandleError` boş bir stub'a dönüşmüş
+```csharp
+// repodaki hali:
+var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+var message = error?.Message ?? "[EXCEPTION NOT FOUND]";
+return;          // <-- hiçbir şey yapmıyor
+```
+`Startup.cs:39` bunu `UseExceptionHandler`'a bağlıyor. Yani **yakalanmamış her
+HTTP hatası sessizce yutulup istemciye boş 200 dönülüyordu.** Decompile'daki hali
+geri getirildi: korelasyon id'si, istek satırı + header dökümü (Authorization ve
+Cookie hariç), `LogHelper.Describe` ile tam exception zinciri, istemciye 500 JSON.
+
+### 2. Kart sorgusunda index seek'i engelleyen `UPPER()` — ÖLÇÜLMÜŞ
+Decompile'daki sorgunun içinde şu yorum duruyordu:
+```
+-- CAST sart: Cards.Code varchar(50) ama .NET string parametreyi nvarchar gonderiyor.
+-- CAST olmadan SQL Server KOLONU nvarchar'a cevirir, IX_Cards_Code seek edilemez
+-- ve index taranir: 1799 logical read yerine 3. (olcum 2026-08-26)
+```
+Repodaki hali `where UPPER(Code)=UPPER(@Code)` — hem nvarchar dönüşümü hem kolon
+üzerinde fonksiyon; ikisi de seek'i öldürüyor. `where Code=CAST(@Code AS varchar(50))`
+yapıldı. Collation zaten case-insensitive olduğu için `UPPER` gereksizdi.
+**Bu sorgu her kart okutmasında çalışıyor.**
+
+### 3. `WorkerLoopAsync` log zenginliği
+Paket/cihaz/IP artık `LogContext.PushProperty` ile log context'ine giriyor —
+o paket işlenirken düşen tüm loglar hangi pakete ait olduğunu taşıyor. Hata logu
+`LogHelper.Describe` ile detaylandırıldı. Worker'ın ölmesi `Log.Error` değil
+`Log.Fatal` (worker sayısı azalıyor, sessiz kalmamalı).
+
+### 4. `GetEmployeeCurrentQuantity` catch'i sessiz
+```csharp
+catch (Exception ex) { return new EmployeeCurrentQuantity() { Counter = 0 }; }
+```
+Sayaç düzeltmesi tam bu değere bakıyor; sessiz başarısızlık cihaz sayacını
+bozabilir. `Log.Error` eklendi.
+
+### 5. Eksik `WITH (NOLOCK)`
+`Repair` (3 sorgu), `Transections` toplamı, `CurrentDeviceList` tekil okumaları
+(`CurrentDeviceListManager` + `EmployeeManager`), `GetDevicelistForBand`.
+
+## Eksik OLMADIĞI doğrulananlar
+- `Startup.cs` — birebir aynı (Cors/Swagger/ExceptionHandler dahil).
+- `Program.cs`, `MainProcess.cs`, `Service.cs`, `DeviceLogger.cs`,
+  `StringHelper.cs`, `SqlRetry.cs`, `LogHelper.cs` — X, Y'nin süperseti.
+- `ParsedRequest`, `Extension`, tüm `Server/Model/*`, tüm `Controllers/*` — aynı.
+- Sayısal sabitlerde (timeout, retry, eşik, TTL) hiçbir fark yok. Y'deki `2937`
+  her dosyada görünüyor çünkü decompiler MVID başlığının parçası.
