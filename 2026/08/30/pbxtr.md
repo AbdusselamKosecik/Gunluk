@@ -261,3 +261,93 @@ node <scratch>/tara2.mjs <dizin>
   bir sunucu alanı ister.
 - Sabit `tr-TR` tarih/sayı biçimlendirmesi (~26 yer) hâlâ duruyor; metin turu
   bitince merkezî tek değişiklik.
+
+---
+
+## Ek tur 2 — ivr, kalıntı, `src/ui` + **ölçüm düzeltmesi**
+
+### Yapılanlar
+
+#### 7. #26 IVR akış tasarımı (7 dosya) — commit `685b220c`
+113 anahtar. Üç etiket tablosu anahtara döndü (`IVR_NODE_TYPE_LABEL`,
+`IVR_FLOW_STATUS_LABEL`, `publishViolationText`'in switch'i). `IvrT` tipi
+`ivrApi`den dışa açıldı; bileşen olmayan dört yardımcı `t`'yi ilk parametre
+alır. Lisans periyodu tablosu bayi ekranının `dlr.period*` anahtarlarını
+**paylaşır**. SurveyScreen aynı tabloyu kullanıyordu; tek kaynak korundu.
+
+**Bir test biçimlendirmeyi yakaladı:** karakter sayısı `t()`'den geçince
+Türkçede binlik ayıracıyla `1.201` yazılıyor. Bu **doğrudur** (miktar, PID gibi
+kimlik değil); beklenti katalogdan üretilecek şekilde düzeltildi.
+
+#### 8. Kalıntı üç metin — commit `d7322d3e`
+- `AppRoutes` açılış ekranı ("Oturum hazırlanıyor…").
+- `StaleDataBadge` — 16 çağrı yeri `subject`'i **zaten** katalogdan geçiriyordu;
+  cümlenin gövdesi Türkçe sabitti. Yetki listesini birleştiren `" veya "` de
+  anahtar oldu: bağlaç dile bağlıdır.
+- `ApiKeysScreen` — dört kural etiketinden üçü katalogdan geliyordu,
+  `rotasyon` atlanmıştı.
+
+#### 9. `src/ui` — kendi metin sözleşmesiyle — commit `4eb436a1`
+`src/ui` katman kuralı gereği `src/app`'e bağımlı olamaz, yani `useT()`
+çağıramaz. Kural delinip `useT` ithal edilseydi bedel görünmez olurdu: `useT`
+`I18nProvider` dışında **atar** — kütüphaneyi sağlayıcısız çizen bir yer
+(vitrin, birim testi, ileride bir hata sınır bileşeni) o gün ekranı komple
+düşürürdü.
+
+Çözüm: kütüphane **kendi** sözleşmesini taşır (`ui/text/UiTextProvider`),
+sağlayıcısız Türkçe varsayılanla doğru çalışır; uygulama katmanı
+`app/i18n/AppUiText` köprüsüyle katalogdan doldurur. Bağımlılık oku tek yönlü
+kalır.
+
+`TreeView`'ın üç prop varsayılanı (`recentLabel`, `emptyText`,
+`truncatedHint`) da sözleşmeye taşındı: imzada Türkçe sabitlerdi ve prop
+geçmeyen çağrı yeri (CallTab) — `truncatedHint` agent ekranında derinlik sınırı
+yüzünden **gerçekten çizilir** — ekranın geri kalanı çevrilmişken Türkçe
+gösterirdi.
+
+**Kapı:** `appUiText.test.tsx` — (1) sağlayıcısız Türkçe varsayılan, (2)
+sağlayıcıyla Almanca katalog değeri, (3) ikisinin **farklı** olması (aksi halde
+2. şart vacuous olurdu), (4) köprünün `App` kökünde `I18nProvider` **içinde**
+bağlı olduğu. İki mutasyonla doğrulandı (anahtarı kaldır; köprüyü ağaçtan
+çıkar) — ikisi de kırmızı verdi.
+
+### ÖLÇÜM DÜZELTMESİ — tarayıcı eksik sayıyordu
+
+Turun sonunda **ikinci ve bağımsız bir tarama** yazıldı (`son-tara.mjs`:
+yorum blokları ve katalog dışında kalan, Türkçeye özgü harf taşıyan her satır).
+
+`tara2.mjs` **biçim tabanlıydı** — JSX metni ve belirli nitelikleri arıyordu.
+Bu yüzden **hiç bakmadığı** bir sınıf vardı: `*Api.ts` / `*Errors.ts`
+modüllerindeki **kullanıcıya görünen hata ve bilgi metinleri**.
+
+- `tara2` → "32 dosya şüpheli, çoğu yanlış pozitif, iş bitti".
+- `son-tara` → **46 dosyada 329 satır**; yanlış pozitifler (üretilmiş
+  `screens.generated.ts` başlıkları, `locales.ts` içindeki dil adları,
+  `UiTextProvider`'ın kasıtlı Türkçe varsayılanları, satır sonu yorumları)
+  düşülünce **~240 gerçek satır.**
+
+Yani "sayfalar bitti" doğru, **"ürün 9 dilde" değil**: sayfaların görünen
+kabuğu çevrildi, **mesaj/hata katmanı çevrilmedi.**
+
+En büyükleri: `console/parkErrors.ts` (49), `agent/callControlErrors.ts` (24),
+`live/monitorErrors.ts` (23), `live/interventionErrors.ts` (22),
+`api/problem.ts` (19), `users/usersApi.ts` (16), `ui/CallTimeline` (13),
+`sim/RewindControl` (9), `agent/missedCall.ts` (9).
+
+### Sonraki adım — üç tur olarak planlandı
+
+- **A. `api/problem.ts` + ona bağlı 11 API modülü.** `problemMessage(error)`
+  97 çağrı yerinde kullanılıyor; imzaya `t` eklenecek. Ölçüldü: çağrı
+  yerlerinin yalnızca **11 dosyası** `t` taşımıyor ve o 11'in çoğu (usersApi,
+  objectionApi, auditApi, recordingApi, resourceState, settingsApi) **zaten**
+  kendi Türkçe metnini taşıdığı için nasılsa dokunulacak — kaskad kapanıyor.
+- **B. Dört hata modülü** (park / çağrı kontrolü / dinleme / müdahale). Çağrı
+  yerleri az (2-4) ve hepsi `t` taşıyan bileşen ya da kanca; kaskad küçük.
+- **C. Kuyruk:** `CallTimeline`, `RewindControl`, `missedCall`,
+  `RealtimeProvider` kopma sebepleri, `licenseRestriction`,
+  `useUnsavedChangesGuard`, `SlaRing`/`SidebarNav`/`Lightbox` prop
+  varsayılanları, `shared/` yardımcıları.
+
+### Doğrulama
+
+`tsc -b` temiz; **tam koşu 143 dosya / 1270 test yeşil** (dizin bazlı değil).
