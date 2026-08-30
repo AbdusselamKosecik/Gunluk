@@ -260,3 +260,41 @@ bozabilir. `Log.Error` eklendi.
 - `ParsedRequest`, `Extension`, tüm `Server/Model/*`, tüm `Controllers/*` — aynı.
 - Sayısal sabitlerde (timeout, retry, eşik, TTL) hiçbir fark yok. Y'deki `2937`
   her dosyada görünüyor çünkü decompiler MVID başlığının parçası.
+
+---
+
+# Dördüncü tur — IP'nin yönü
+
+## 9. `SetCommand` cache'teki canlı IP'yi DB'deki eski değerle eziyordu
+- **Neden:** "IP'yi her seferinde cache'e alması, DB'den almaması" gerekiyor.
+- **Bulgu:** `SetCommand` (`CurrentDeviceListManager.cs`), `SetDeviceValue` SP'sini
+  çalıştırdıktan sonra `CurrentDeviceList` satırını geri okuyup **koşulsuz**
+  `device.IpAddress = data.IpAddress` yapıyordu. `SetEmployee`, `SetOrder`,
+  `SetOperation`, `SetModel`, `SetLostTimes`, `SetCreateCommand` — hepsi
+  `SetCommand`'a düşüyor. Yani **her kart okutmasında** bellekteki canlı IP,
+  DB'deki (muhtemelen eski) değerle eziliyordu.
+- **Doğru kaynak bellektir:** cihazın gerçek IP'si gelen UDP paketinden geliyor.
+  DB satırı eski kalabiliyor (başka bir süreç yazmış, `SetDeviceValue` IpAddress'i
+  persist etmemiş, vs).
+- **Ne yapıldı:** Yön tersine çevrildi — decompile'daki hali:
+  ```csharp
+  if (device.IpAddress != data.IpAddress)
+  {
+      if (!string.IsNullOrEmpty(device.IpAddress))
+          SetIpAddress(device, device.IpAddress);   // cache kazanir, DB'ye yazilir
+      else
+          device.IpAddress = data.IpAddress;        // sadece cache bossa DB'den al
+  }
+  ```
+- **Commit:** `f215cf6`
+
+## Kontrol edilen, sorun çıkmayanlar
+- `FillAllList`'teki aynı atama zaten `connectionType == 1` (RF433) ile sınırlı.
+  Wifi cihazların canlı IP'sine dokunmuyor — doğru davranış, dokunulmadı.
+- `GetDatas.GetDeviceCode` zaten cache-first: önce `CacheManager.Device`'a bakıyor,
+  yoksa DB'den çekip cache'e ekliyor. Paket başına DB'ye gitmiyor.
+- `GetOrCreate` (paket başına çalışan yol) sadece cihaz yeni oluşturulduğunda veya
+  IP boşken `SetCreateCommand` çağırıyor; IP değişiminde artık tek bir UPDATE
+  (`SetIpAddress`) atıyor, SP+SELECT değil.
+- `GetOrCreateByIp` her çağrıda koşulsuz `SetCreateCommand` (SP + SELECT = 2 round
+  trip) yapıyor — ama **ölü kod**, hiçbir yerden çağrılmıyor. Dokunulmadı.
