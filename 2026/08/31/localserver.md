@@ -117,3 +117,77 @@ git push origin FiredEric
 - `SetTransectionFromDevice` SP'sinin aynı parametrelerle 100 ms arayla farklı
   `SeriIslenenAdet` döndürmesi (13/13 → 0/0 → 13/13) incelenmedi.
 - Düzeltmeler sahada cihazla doğrulanmalı.
+
+---
+
+# İkinci tur — repo ↔ decompile farkının çıkarılması
+
+## 5. DÜZELTME: "repoda eksik dosyalar" iddiası yanlıştı
+İlk turda eksik diye listelenen `DeviceConnections.cs`, `Entity.cs`,
+`CurrentDevicesData.cs`, `IdDetailCache.cs`, `IDeviceProcess.cs`, `Device.cs`,
+`LockDevice.cs`, `SenderModel.cs` **eksik değil.** dotPeek her tipi ayrı dosyaya
+yazıyor; bu tiplerin hepsi repoda başka dosyaların içinde tanımlı
+(ör. `Entity` → `WifiServer.cs:719`). Aynı şekilde `checksum` repoda local
+function; `SendDisplay` / `GetPureData` / `SendOk(IPEndPoint...)` ise `Extension`
+sınıfında. CRC kontrolü, `YS:` PIC hata kodları ve `IsInFlight` ingress dedup'ı da
+repoda zaten var.
+
+Karşılaştırma yöntemi: her dosya için metot imzası listeleri ve 18+ karakterlik
+string literal kümeleri `comm` ile diff'lendi. Decompiler artefaktları
+(`str2`, `num5`, `op_Equality`, `(object)` cast'leri) filtrelendi.
+
+**Gerçekten eksik olup taşınan davranışlar:**
+1. `RunSp` DBNull/null ReturnValue durumunda `-10` yerine `-20` dönüyor.
+2. `RunCounter` için `-20` dalı (SUNUCU HATASI / KAYIT YAZILAMADI).
+3. `RunCounter` InOut dalında cihaza yanıt dönülmesi.
+4. `CurrentDeviceListManager.SetIpAddress` + IP değişikliğinin işlenmesi.
+5. `SendOk` ve `RunCounter` default dalında alan bazlı gönderim.
+
+**Repoya bilerek TAŞINMAYAN:** Y'deki `case -20: case -10:` geri-tarihleme dalı.
+Sonsuz `İLK ÇALIŞMA` döngüsünün kaynağı oydu.
+
+## 6. `-20` ayrı kod + sistemdeki değerin cihaza basılması
+- **Neden:** `RunSp`, SP hiç çalışmadığında `-10` dönüyordu. `-10` SP'nin kendi
+  döndürdüğü "ILLEGAL OKUTMA" kodu; iki durum ayırt edilemiyor, cihaza yanlış
+  mesaj basılıyordu. Ayrıca kayıt yazılamadığında cihaza sadece hata basmak
+  yetmiyor — cihaz kendi (yanlış) sayacıyla devam ediyor.
+- **Ne yapıldı:**
+  - `RunSp` artık `-20` dönüyor (`CurrentDeviceListManager.cs`).
+  - `RunCounter` `-20` dalı: cihazın sayacı reddediliyor, sistemdeki son geçerli
+    değer (`device.CurrentQuantity`) hedefle birlikte cihaza geri basılıyor,
+    ekranda SUNUCU HATASI / KAYIT YAZILAMADI.
+  - `RunBarcode` ilk çalışma `-20` dalı: aynı şekilde sunucu sayacı basılıyor,
+    **LastReciveDate geriye atılmıyor.**
+- **Ek koruma:** `GetEmployeeCurrentQuantity` hata durumunda `Counter = -1`
+  dönüyor. Sayaç düzeltme bloğundan `Counter > 10` guard'ı kaldırıldığı için bu
+  değer sızabiliyordu; `Counter >= 0` kontrolü eklendi. Aksi halde geçici bir SQL
+  hatasında cihaz sayacı sıfırlanacaktı.
+- **Commit:** `92e6552`
+
+## 7. Alan bazlı gönderim (hedef / standart zaman / makas sayısı)
+- **Neden:** Kullanıcı isteği — "hangisi farklıysa farklılıkları göndereceğiz".
+  Decompile çıktısında vardı, repoda yoktu.
+- **Ne yapıldı:** `SendOk` ve `RunCounter` default dalı tek bir "değişti" bayrağı
+  kullanıp üç alanı birlikte basıyordu. Artık her alan tek tek karşılaştırılıp
+  sadece farklı olan gönderiliyor; diğerleri pakette `????` olarak gidiyor ve
+  cihaz o alanlara dokunmuyor.
+- `RunCounter`'da hedef karşılaştırması cihazın bildirdiği hedefi de dikkate
+  alıyor: `|cihazTarget - ortP| > 5 || |eskiHesaplananHedef - yeni| > 5`.
+- **Yan düzeltme:** `SendOk`'un "Değişiklik Olmadığından Veri Gönderilmedi" logu
+  `t!.Target` kullanıyordu → istek çözülemediğinde NullReferenceException.
+  `t?.Target` yapıldı. `RunCounter`'daki `device.Order.Code` için de null guard.
+- **Commit:** `29ec598`
+
+## 8. IsInFlight neden mükerrer okutmayı engellemedi
+`WorkerLoopAsync`'in `finally` bloğu `_inFlight.TryRemove(packet.Data)` yapıyor.
+Yani kayıt sadece **işlenirken** tutuluyor (adı üstünde "in flight"); işlem bitince
+(~100-400 ms) aynı paketin retransmit'i yeni paket sayılıyor. Log'daki
+08:00:00.019 / .490 / 08:00:01.009 tam bu yüzden üç kez işlendi. Ingress dedup'ı
+eş zamanlılık için; tekrar okutma için `RunBarcode` seviyesindeki 5 sn'lik
+`LastBarcode` kontrolü eklendi (madde 3).
+
+## Açık kalanlar (güncel)
+- Repo ↔ decompile farkı çıkarıldı; bilinen tek fark bilinçli (madde 5 sonu).
+- `SetTransectionFromDevice` SP'sinin aynı parametrelerle 100 ms arayla farklı
+  `SeriIslenenAdet` döndürmesi (13/13 → 0/0 → 13/13) hâlâ incelenmedi.
+- Hiçbir düzeltme sahada cihazla doğrulanmadı; sadece `dotnet build` (0 hata).
