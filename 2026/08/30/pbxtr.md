@@ -421,3 +421,90 @@ görünmeyen kısımda: 18 API modülü artık `t` taşıyor, yani kendi metinle
   `titleTr` başlıkları + geliştiriciye atılan `Error` metinleri),
   `i18n/locales.ts` (dillerin kendi adları), `UiTextProvider` (kasıtlı Türkçe
   varsayılanlar), `agent/CallTab.tsx` (sunucuya giden etiket **değerleri**).
+
+---
+
+## Ek tur 4 — hata katmanı A/B/C tamamlandı
+
+### 12. Küçük API/yardımcı kuyruğu — commit `c979043f`
+
+12 modül (itiraz aç/kapat, İYS senkron cümlesi, üç ayrı kutu metni, API
+anahtarı ölçüm metinleri, denetim temizliği, kayıt dinleme, CDR kayıt ucu, SLA
+pencere/gün görünümü, çağrı kontrolü emir kayıtları, ayar kaydetme, cari
+eşleşmesi, dahili yönlendirme). 45 anahtar × 9 dil.
+
+**GERÇEK KUSUR — `resourceState.ts`.** Ekrana özel yedek cümle **yalnızca
+Türkçede** görünüyordu. Dal, `problemMessage`'in genel cümlesini **sabit Türkçe
+metinle** karşılaştırıyordu:
+
+```ts
+return message === 'İşlem tamamlanamadı. Lütfen tekrar deneyin.' ? fallback : message;
+```
+
+`problem.ts` katalogtan konuşmaya başlayınca (tur 3) bu eşitlik Almanca/Arapça
+panelde **hiç tutmuyor**; "Cari havuzu okunamadı." gibi ekrana özel cümle
+sessizce düşüyordu. Yani bir tur önce yapılan doğru iş, bir sonraki dosyada
+sessiz bir kusur üretmişti. Karşılaştırma artık `t('prb.generic')`.
+
+İkinci bulgu: `slaDailyView` ölçülemedi hâlinde `SLA_NOT_MEASURED_LABEL`
+(src/ui'daki sabit Türkçe prop varsayılanı) okuyordu.
+
+### 13. Dört hata modülü — commit `8b2cbd86`
+
+park (#16, 49 satır), çağrı kontrolü (24), dinleme (#28, 23), müdahale (22).
+54 anahtar × 9 dil.
+
+- **Yazım kuralı çeviriye taşındı:** "TEKRAR DENEMEYİN" uyarıları
+  (`TELEPHONY_INDETERMINATE`, `LIVE_EVENT_REJECTED`, `SPY_TENANT_MISMATCH`)
+  her dilde aynı kesinlikte durdu. Bu bir biçim tercihi değil — o cümlelerin
+  tek işi **ikinci kez uygulanacak bir müdahaleyi önlemek**.
+- **Slot adı taşıyan üç ret iki ayrı anahtarla** çevrildi, tek anahtar + boş
+  yer tutucu değil: "tut3 DOLU" ile "Seçtiğiniz slot dolu" aynı cümlenin iki
+  hâli değildir.
+- Kapalı küme tipleri korundu; C# bekçisinin (`LiveFailureMessageSurfaces`)
+  regex okuyucusu kör kalmadı (anahtarlar düz harf dizisi, tip ifadesinde `=` yok).
+
+> **Not:** o C# bekçisini çağıran hiçbir `[Fact]` yok — dosyanın kendi
+> başlığında yazılı (FE-67, 2026-08-17). Yani kapı **koşmuyor**. Bu turda
+> kapsam dışı bırakıldı, açık kalem olarak duruyor.
+
+### 14. Son kuyruk + `src/ui` prop varsayılanları — commit `fd79e15c`
+
+53 anahtar × 9 dil. Uygulama tarafı: kaydedilmemiş değişiklik uyarısı,
+WebSocket iptal sebepleri, kaçan çağrı şeridi, mola hakkı a11y cümlesi, komut
+çıktısı kırpma satırı, damgalanmamış sürüm, çalışma saatleri, lisans kısıtı,
+sunum kumandası.
+
+`src/ui` tarafında prop varsayılanlarındaki Türkçe dizeler **metin
+sözleşmesine** taşındı (`UiTextProvider`) ve `AppUiText` köprüsünden katalogtan
+doluyor. Katman kuralı delinmedi: `src/ui` hâlâ `src/app`'i tanımıyor ve
+sağlayıcısız Türkçe varsayılanla tek başına çalışıyor.
+
+**İki yeni kapı** — ikisi de mutasyonla doğrulandı:
+
+1. **Sözleşmenin her alanı köprüde doldurulmalı.** `Partial<UiText>` eksik
+   alanı **susarak** geçirir; sonuç o metnin bütün dillerde Türkçe görünmesidir
+   ve bunu hiçbir davranış testi görmez. Alan listesi sözleşme kaynağından
+   okunup köprüde aranıyor. (`sidebarLabel` silindi → kırmızı.)
+2. **Çizelge adım başlıkları katalogdan gelmeli.** 16 üyeli tek nesnede bir
+   üyenin unutulması yalnızca **o satırı** Türkçe bırakırdı. (`hangup`
+   sabitlendi → kırmızı.)
+
+### Ölçüm
+
+`son-tara`: **310 → 244 → 126 → 93 satır.** Kalan 93 satırın **tamamı
+bilinçli**: üretilmiş `screens.generated.ts` (46), dillerin kendi adları (2),
+`UiTextProvider`'ın kasıtlı Türkçe varsayılanları (~30), sunucuya giden etiket
+**değerleri** (2) ve geliştiriciye atılan `Error` metinleri (7) + Türkçe kod
+yorumları. **Ekranlarda çevrilmemiş kullanıcı metni kalmadı.**
+
+Her turda: `npx tsc -b --noEmit` temiz, tam koşu **1272 test / 143 dosya yeşil**.
+
+## Sonraki adım
+
+- **Rusça (`ru`) 10. dil** — kullanıcı istedi, metinler bittiği için artık
+  sırası geldi.
+- **~25 sabit `tr-TR` tarih/sayı biçimleme yeri** — `problem.ts` ve
+  `localeCatalog.ts`'te ikisi düzeltildi; geri kalanı tek turda merkezî olarak.
+- **`LiveFailureMessageSurfaces` bekçisini koşturan bir `[Fact]` yok** —
+  koşmayan kapı, kapı değildir.
