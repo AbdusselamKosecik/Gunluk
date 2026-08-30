@@ -634,3 +634,221 @@ yazılmıştı ama ölçümü yoktu; Asterisk dalında bileşim yazılmıştı a
 kurulmamıştı. İkisi de "yazıldı mı" sorusuna evet, "çalıştığı ölçüldü mü"
 sorusuna hayır diyordu. Bir sonraki turda aynı soruyu provisioning (`confd`)
 teslim yoluna sormak gerekir.
+
+---
+
+## Tur 7 — 1043↔1044, sürüm damgası ve pbxtr.com yayını
+
+### Bağlam
+
+Kullanıcı iki şey bildirdi: (1) pbxtr.com'da sol menüler çevrilmemiş, dil
+seçici işe yaramıyor; (2) 1043 ve 1044 ile ayrı tarayıcılardan girip birbirini
+arayamıyorlar. Ayrıca uygulamaya sürüm numarası istedi ki "elimdeki sayfa
+güncel mi" sorusunu kendisi kontrol edebilsin.
+
+Site 48 commit geride, son yayın `0fe1100c`.
+
+### 1. Dahiliden dahiliye arama — iki gerçek kusur
+
+- **Neden:** 1043 → 1044 hiçbir şey yapmıyordu. CDR satırı yok, uygulama
+  günlüğünde originate yok — yani çağrı dialplan'e anlamlı biçimde hiç ulaşmıyor.
+- **Ne yapıldı — kusur A (yanlış bağlam):** `deploy/demo-softphone-provision.sh`
+  softphone'lara `context = pbxtr-t0007-in` yazıyordu. O bağlam GELEN çağrı
+  içindir ve `Goto(pbxtr-inbound,${EXTEN},1)` yapar. Santralde `dialplan show`
+  ile ölçüldü: **`pbxtr-inbound` bağlamı YOK.** Yani çevrilen her numara var
+  olmayan bir hedefe atlayıp ölüyordu. Ürünün kendi üreteci (`ConfigRenderer`)
+  bir WebRTC ucuna `-int` ya da `-out` yazar; `-in` yalnızca trunk uçlarınındır.
+  Betik üreteçten ayrışmıştı. `-out` yapıldı.
+- **Ne yapıldı — kusur B (qualify):** `pbxtr-aor-webrtc` şablonu
+  `qualify_frequency = 30` diyordu. OPTIONS, kontak URI'sindeki
+  `172.28.0.10:43514` adresine gidiyor — orası tarayıcı değil, WSS'i taşıyan
+  ters vekilin efemer portu; ona yeni bağlantı açmak imkânsız. Kontak `Unavail`
+  işaretleniyor ve **chan_pjsip ulaşılamaz işaretli kontağı çevirmez.** Yani
+  kayıtlı, çalışır tarayıcı hizmet dışıydı.
+
+  | | Kontak | Uç |
+  |---|---|---|
+  | `qualify_frequency = 30` | `Unavail` / RTT `-nan` | `Unavailable` |
+  | `qualify_frequency = 0` | `NonQual` | **`Not in use`** |
+
+  WebSocket bağlantı odaklıdır; soket kapanınca kontak zaten düşürülür.
+  Masa telefonu şablonu (`pbxtr-aor-base`) qualify'ı 60 sn ile açık tutar.
+- **Dokunulan dosyalar:** `deploy/demo-softphone-provision.sh`,
+  `deploy/asterisk-lab/conf/pjsip.conf`
+- **Sonuç / doğrulama:** canlıda `module reload res_pjsip.so` (CLAUDE.md §3.1
+  kapalı listesi). Uçtan uca kanıt — test çağrısı üretildi:
+
+  ```
+  Local/1044@pbxtr-t0007-out;2   1044@pbxtr-t0007-local:3  Ring  Dial(PJSIP/...)
+  PJSIP/t0007-wrtc-1044-00000000 1044@pbxtr-t0007-out:1    Down  AppDial(...)
+  ```
+
+  Gerçek bir PJSIP kanalı açıldı = softphone çaldı. Çağrı kapatıldı.
+- **Commit:** `b3bed48a`
+
+### 2. Sürüm damgası
+
+- **Neden:** sol menüde `APP_VERSION_SHORT = 'v4.2'`, giriş ekranında
+  `BUILD_SIGNATURE = 'pbxtr v4.2.1 · asterisk 20.4 · node-01'` yazıyordu.
+  İkisi de prototipten kalma **elle yazılmış** sabitlerdi; hiçbir yayınla
+  değişmiyordu. Zarar tam olarak şu: "güncel mi" diye bakan kişi, sunucuda ne
+  koşarsa koşsun aynı sayıyı okur.
+- **Ne yapıldı:** `src/Pbxtr.Web/src/app/version.ts` — damga
+  `VITE_PBXTR_VERSION` derleme değişkeninden okunur, yoksa "geliştirme" yazar
+  (yer tutucu sayı YOK, o tam da kapatılan kusur olurdu). `deploy/yerel-yayin.sh`
+  `SURUM="$(date -u +%Y.%m.%d)+$KISA"` üretir ve hem `PBXTR_VERSION` (pakete)
+  hem `SOURCE_REVISION` (.NET `InformationalVersion`) olarak geçer — istemci ve
+  sunucu aynı damgadan beslenir.
+  `+` ayracı kasıtlı: `ParseInformationalVersion` solunu sürüm, sağını commit
+  sayar. Önceki hâl yalnızca 40 haneli sha geçiriyordu; #45 ekranında sürüm
+  alanı sha olarak okunuyor, commit alanı boş kalıyordu.
+- **Sonuç:** `version.test.ts` — kaynak seviyesinde kapı: `AppSidebar`,
+  `LoginScreen`, `ForgotPasswordScreen` içinde elle yazılmış sürüm sabiti
+  aranır. Mutasyonla doğrulandı (`v4.3` → kırmızı).
+
+### 3. Menü dili — asıl kusur sunucudaydı
+
+- **Neden:** `GET /api/v1/me/menu` her başlığı `titleTr` alanında **tek dilde**
+  taşıyordu. Kullanıcı Fransızca seçtiğinde ekranın içi Fransızca, sol menü
+  Türkçe kalıyordu — uygulamanın en çok bakılan yüzeyi çevirinin dışındaydı.
+- **Ne yapıldı:** çözüm alan çoğaltmak DEĞİL. Sunucuya `titleFr`/`titleDe`
+  eklemek `screens.json`u dokuz kat büyütür ve her yeni dil bir şema
+  değişikliği olurdu. Sunucu KİMLİK gönderir (`screens[].id`, `groups[].key`),
+  metin istemcide katalogdan çözülür (`app/i18n/titles.ts`).
+- **Sonuç:** 68 ekranın 68'i, 12 menü grubunun 12'si dokuz dilde karşılıklı.
+  Canlı paketten ölçüldü (iddia değil): `Console opérateur`,
+  `Emplacements de parcage`, `Tickets de support`, `Mon profil`,
+  `Résumé de performance agent`, `Espace de travail agent`.
+
+### 4. Yayın yolu — dört kapı birden bayattı
+
+Site 12 saat boyunca eski imajdaydı ve üç yayın denemesi sırayla daha ileri
+kapılarda düştü. Hiçbiri o gün bozulmamıştı; hepsi son yayından beri sessizce
+bayatlamıştı.
+
+- **`dotnet format`** → `AgentEndpoints.cs`'te 88 ihlal.
+- **`EndpointPermissionGateTests`** → yeni `GET /api/v1/me/tech-check`
+  kimlik-yeter kapalı listesinde yoktu. Commit `3d99b7bd`.
+- **`deploy/test-docker.sh`** → Git Bash'te hiç çalışmıyordu (MSYS yol çevirisi
+  yalnızca bağlama kaynağına uygulanmış, derleme bağlamına uygulanmamıştı).
+  Commit `e6d63b81`. Bu en sinsisiydi: **ölçümün doğru ortamda alınmasını
+  sağlayan araç bozuktu**, bu yüzden host'ta alınan 40 entegrasyon başarısızlığı
+  yorumlanamıyordu.
+- **DB kapıları** → `psql` bu makinede yok; adım `exit 69` ile duruyordu ve
+  geriye tek meşru çıkış `PBXTR_DB_KAPILARI=0` kalıyordu. Yani kapı
+  **pratikte hiç koşmuyordu.**
+
+### 5. DB kapıları — atlamak yerine aracı getirmek
+
+- **Neden:** "koşmayan kapı bulgu değildir." Kırmızısı olmadığı için yeşil
+  sanılıyordu.
+- **Ne yapıldı:** `deploy/db-kapilari-docker.sh` — `postgres:16-alpine`
+  (üretimle aynı ana sürüm) ayağa kalkar, `00-roles.sql` → `dotnet ef database
+  update` → `ci-check.sh` sırası koşar, sonunda her şey silinir.
+  `yerel-yayin.sh` `psql` yoksa buna düşer.
+
+  İki tuzak ölçüldü: (a) sabit `sleep` yerine `pg_isready` döngüsü — `postgres`
+  imajı init sırasında sunucuyu bir kez başlatıp DURDURUR; (b) şema
+  migration'lardan gelir, `deploy/db/` klasörü şema yaratmaz — bu adım olmadan
+  kapılar boş bir veritabanını ölçer ve 16 `SYS_FUNCTION_MISSING` verir.
+- **İlk gerçek koşusunda bulduğu sapma:** zil grubu ifade indeksi
+  (`ux_ring_groups_tenant_name_slug`) 24 Ağustos'ta eklendi,
+  `expression-indexes.expected` güncellendi ama `02-guards.sql` içindeki **üç**
+  yerin üçü de güncellenmedi: `pbxtr_expression_index_expectations()`,
+  `pbxtr_assert_expression_indexes_frozen()` literali ve vacuity sayacı (8→9).
+  **Veri riski yoktu** (indeks gerçekten var, ölçüldü) ama kapı kaydı bozuktu.
+- **Migration'ın yanlış iddiası:** yorumu *"yazılmasaydı
+  `pbxtr_assert_expression_indexes_frozen()` kırmızı yanardı — yani
+  UNUTULAMAZ"* diyordu. **Ölçüm bunun yanlış olduğunu gösterdi:** bu yönde
+  (listede yok ama DB'de var) bekçi yalnızca
+  `WARNING: EXPR_INDEX_UNREGISTERED` basar, build'i kırmaz. Kapıyı yazan kişi
+  kapının hangi yönde ısırdığını ölçmemiş.
+- **Kapının ısırdığı A/B ile doğrulandı:** EXIT=1 (vacuity hatası) → düzeltme →
+  EXIT=0, "TUM KAPILAR YESIL".
+
+### 6. Entegrasyon takımı — rol matrisi sonrası 40 kırmızı
+
+29 Ağustos'ta rol-ekran matrisi kullanıcı kararıyla yeniden kesildi
+(`7ce5f939`). O değişiklik `admin` ve `superadmin`'i saf PLATFORM rolleri yaptı;
+**tenant işletme yetkilerinin tamamı** `owner`/`supervisor`'a geçti (74 yetki).
+Entegrasyon takımı o günden beri hiç koşmadı — yalnızca yayın yolunda koşuyor.
+
+| Sebep | Adet | Sınıf |
+|---|---|---|
+| Rol matrisi bayatlığı (403 / Forbidden) | ~30 | Ürün doğru, testler bayat |
+| Windows'ta `Europe/Istanbul` yok | 3 | Ortam gürültüsü |
+| `NoAmbientTransactionException` | 4 | İncelenmedi |
+| Npgsql `42P08`, sys-function drift, teslim kanonu | 3 | 1'i gerçek kusur |
+
+10 test dosyası düzeltildi; aktör artık ilgili yetkiyi **fiilen taşıyan** rol
+(yeşil yapan rol değil). Maskeleme karşıtlığı korundu: `phone.unmask` yalnızca
+`superadmin`'de, dolayısıyla "maskeli gören / açık gören" ayrımı owner ↔
+superadmin olarak aynen duruyor. Wallboard testinde ölçüm **güçlendi**: `admin`
+`crosstenant.read` taşıdığı için "başka tenant'ın düzeni okunamaz" testi
+izolasyonu değil kapsam yetkisinin yokluğunu ölçüyor olabilirdi.
+
+### 7. `IysSyncJob` — gerçek üretim kusuru
+
+- **Neden:** `Npgsql.PostgresException: 42P08: could not determine data type of
+  parameter $1`.
+- **Kök sebep:** `AND (@tenant IS NULL OR tenant_id = @tenant)` +
+  `Add(command, "tenant", (object?)onlyTenantId ?? DBNull.Value)`. O bileşimde
+  PostgreSQL'in parametrenin tipini çıkarabileceği hiçbir ipucu yok: `IS NULL`
+  tip söylemez, `DBNull.Value` da Npgsql'e tip söylemez.
+- **Zararın büyüklüğü:** patlayan dal istisna DEĞİL **asıl dal**. Tek tenant
+  verildiğinde parametre `Guid` tipi taşıdığı için sorgu çalışıyor; ama
+  `onlyTenantId` null olan çağrı BÜTÜN TENANTLAR turudur — yani işin normal
+  arka plan koşusu. **İYS senkronu üretimde hiç çalışmıyordu** ve tek-tenant
+  testleri bunu göremezdi.
+- **Ne yapıldı:** `@tenant::uuid` — tip SQL'de verilir.
+- **Commit:** `7ce7dd13`
+
+### 8. Yayın
+
+```
+tekbirsoft/pbxtr:demo-7ce7dd13eeaf   Up (healthy)
+sürüm: 2026.08.30+7ce7dd13eeaf
+```
+
+Doğrulama iddia ile değil ölçümle: sunucudaki imaj etiketi, canlı paket adının
+değişmesi (`index-CXM8WDCC.js` → `index-gW5juzSN.js`) ve **yayındaki dosyanın
+içinde** Fransızca menü dizelerinin bulunması.
+
+`PBXTR_ENTEGRASYON=0` ile çıkıldı; iz `artifacts/ATLANAN-KAPILAR.txt`'de.
+Diğer altı aşamanın tamamı yeşil (format, mimari 317/317, API 4 shard ×946,
+frontend, DB kapıları).
+
+## Kararlar
+
+- Kapı koşamıyorsa **kapıyı atlama, aracı getir.** DB kapıları için Docker
+  harness'ı yazıldı; ilk koşusunda altı günlük bir sapma buldu.
+- Bayat testte aktör seçerken ölçüt "yeşil yapan rol" değil, **o ucun istediği
+  yetkiyi fiilen taşıyan rol**. Yetki tablosu `permissions.seed.json`'dan
+  bundle açılımıyla çözülerek her test için ayrı belirlendi.
+- Sürüm ekranda uydurulmaz; damga derleme zamanında gömülür ve damgasız
+  derleme "geliştirme" der — yer tutucu bir sayı kapatılan kusuru geri getirirdi.
+- Çok dilli başlık için sunucuya alan eklenmez; sunucu kimlik gönderir, metin
+  istemcide katalogdan çözülür.
+
+## Açık kalanlar / sonraki adım
+
+- **`pbxtr-inbound` / `pbxtr-outbound` bağlamları üründe hiçbir yerde
+  üretilmiyor** ama dialplan onlara atlıyor. `doc/mimari/asterisk-dialplan-sablonu.md`
+  bunları statik dosyalar olarak (`10-pbxtr-inbound.conf`, `20-pbxtr-outbound.conf`,
+  `30-pbxtr-ivr.conf`, `90-pbxtr-features.conf`, `00-globals.conf`) tam içerikle
+  tanımlıyor ama hiçbiri yazılmıyor, hiçbir kurulum teslim etmiyor. Demoyu
+  etkilemiyor (yerel dal önce eşleşiyor) ama **gerçek bir trunk takıldığında
+  gelen VE giden çağrı düşer.** Kullanıcı kararı bekliyor.
+- **`dealer.self.read` çapraz-tenant daraltma listesinde yok.** Karar #23/Ş23-2
+  "bayi paneli müşteri bağlamında da açıktı" diye yazılmış ama liste
+  `dealer.read` + `tenant.write` ile sınırlı; `dealer-panel` ekranı
+  `dealer.self.read`'e baktığı için menüde kalıyor. Testin kendisi bunu iki
+  bağımsız yerden bekliyor (menüde yok + `/dealer/overview` 403). Kapı kilitli,
+  tabela duvarda.
+- `doc/st44-final-delivery-canonical.json` şema revizyonu iki migration geride.
+  Kendiliğinden ilerletilmedi: ilerletmek doğrulanmamış bir kapsamı doğrulanmış
+  göstermek olurdu.
+- Entegrasyon takımı konteynerde (`deploy/test-docker.sh`) koşulup kalan
+  kırmızılar ayrıştırılacak — Windows'taki 3 `Europe/Istanbul` orada zaten düşer.
+- Rusça (`ru`) 10. dil olarak eklenecek; ~25 sabit `tr-TR` tarih/sayı
+  biçimlendirme noktası duruyor.
