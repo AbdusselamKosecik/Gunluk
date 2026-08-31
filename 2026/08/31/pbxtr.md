@@ -318,3 +318,202 @@ Kullanıcı `pbxtr i guncellermisin` dedi. Yukarıdaki turun çıktısı diskte 
 - Devam edenler: `pbxtr-inbound`/`pbxtr-outbound` statik context'leri dialplan'de
   referanslı ama üretilmiyor; Rusça (`ru`) yerel yok; ~25 sabit `tr-TR` biçimlendirme
   yeri.
+
+
+---
+
+# İkinci tur — rol hiyerarşisi, yerel geliştirme (VPN)
+
+## Bağlam
+
+Tur, `068ab0cd` (duman testi bileşime duyarlı yapıldı) sonrasında devam etti.
+Kullanıcının açık istekleri: (a) "pbxtr Sistem" kullanıcısı listeden kalksın,
+(b) rol hiyerarşisi — kimse kendi üstündeki rolü görmesin/atayamasın,
+(c) dashboard açıklama metinleri dil katmanından geçsin, (d) "bu kullanıcı olarak
+devam et" hata veriyor, (e) **bitti demeden önce paket çıkıp güncellensin.**
+Turun sonunda yeni bir istek geldi: **UI + backend yerelde, altyapı sunucuda,
+aradaki bağ VPN.**
+
+## Yapılanlar
+
+### 6. "pbxtr Sistem" listeden kalktı + altı açıklama dile alındı
+
+- **Neden:** Süper admin zaten en üst yönetici; sistem aktörü kullanıcı listesinde
+  görünüp kafa karıştırıyordu. Ayrıca admin dashboard'daki altı açıklama metni
+  sunucuda **düz Türkçe dize** olarak üretiliyordu — dokuz dilli panelde bunlar
+  hiç çevrilmiyordu.
+- **Ne yapıldı:** `EfUserAdministration` listeye `user.Id != SystemActors.SystemUserId`
+  filtresi koydu — **satır silinmedi, yalnızca listelenmedi**; filtre `ReadableUsers()`'a
+  değil yalnızca listeye kondu ki tekil okuma ve FK'ler bozulmasın.
+  `PlatformOverviewEndpoints`'te altı sabit **anahtara** çevrildi
+  (`adm.note.counter`, `adm.note.quota`, `adm.note.droppedEvent`,
+  `adm.note.ticket`, `adm.note.payloadRejected`, `adm.note.licenseDue`);
+  DTO alanları `*NoteKey` oldu ve istemcide `serverNoteText()` `isMessageKey()`
+  ile doğrulayıp çeviriyor.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Identity/EfUserAdministration.cs`,
+  `src/Pbxtr.Api/Modules/SystemAdmin/PlatformOverviewEndpoints.cs`,
+  `src/Pbxtr.Web/src/app/screens/system/platformApi.ts`, 9 yerel dosyası
+- **Sonuç:** Yeni test `Sistem_aktoru_listede_gorunmez_ama_satiri_durur` —
+  platform tenant'ında ölçülüyor ve **vacuity kapısı** taşıyor (ilk yazışta
+  `ON CONFLICT DO NOTHING` satırı sessizce atlamıştı, iddia boşa düşüyordu).
+- **Commit:** `f0e0c18f`
+
+### 7. Yapamayacağın işlem artık gösterilmiyor
+
+- **Neden:** Taklit ("bu kullanıcı olarak devam et") düğmesi her satırda
+  görünüyordu ama sunucu çoğunu reddediyordu; rol seçicide atanamayan roller
+  seçilebilir duruyordu. Kullanıcının gördüğü şey "hata alıyorum"du.
+- **Ne yapıldı:** `UserDto`'ya `Impersonable` alanı eklendi ve **sunucudaki
+  gerçek kural** (`ImpersonationRules.Check`) satır satır çalıştırılıyor —
+  istemci kuralı yeniden yazmıyor. `RolePicker` atanamayan rolü gizliyor, ama
+  hedefte **zaten varsa** görünür bırakıyor (yoksa mevcut rol sessizce silinirdi).
+  `UserAdminRow` `Scope` taşımaya başladı; kapsam kapısı olmadan bayrak yanlış
+  yeşil verirdi.
+- **Commit:** `fcae8656`
+
+### 8. Taklit şeridi GUID yazıyordu
+
+- **Neden:** Şeritte "başlatan" olarak kullanıcı adı yerine GUID görünüyordu.
+- **Kök sebep:** `NameClaimType = PbxtrClaimNames.UserId` olduğu için
+  `Identity.Name` **kullanıcı kimliğini** döndürüyor. Ad ayrı claim'de.
+- **Ne yapıldı:** `context.User.FindFirst(JwtRegisteredClaimNames.Name)`. Ayrıca
+  şerit metni dokuz dile alındı (`imp.bannerText`, `imp.leave`, `imp.leaving`) —
+  şerit bir **güvenlik uyarısıdır**, okunamayan uyarı olmayan uyarıdır.
+- **Commit:** `7966bba1`
+
+### 9. Rol atama kapısı — ölçülen kusur ve dar muafiyet
+
+- **Neden:** Kullanıcı "rolleri gen set edemiyorum" dedi. Ölçüldü: **superadmin
+  `admin` rolünde kullanıcı açamıyordu.**
+- **Kök sebep (hata değil, yazılı bir ayrımın yan etkisi):** admin
+  `recording.listen.self` taşır; superadmin onu **taşıyamaz** —
+  `recording.objection.manage` ile `exclusiveWith` kilitlidir (Karar #13: kipi
+  AÇAN ile kaydı DİNLEYEN aynı el olamaz). 4. kapı "rolün hassas yetkilerinin
+  TAMAMI aktörde olmalı" dediği için superadmin kendi altındaki rolü dağıtamıyordu.
+- **Ne yapıldı:** Önce `role.write` eksikliği kapatıldı (`00a627d0`). Sonra yeni
+  yetki `role.assign.system.any`: 4. kapıyı **yalnızca `isSystem: true` roller
+  için** gevşetir. O kümeler katalogda sabittir ve kullanıcı düzenleyemez —
+  "kendi yazdığın role istediğin yetkiyi koyup dağıt" yolu açılmaz. Yetki hiçbir
+  pakette değil, `globalScopeOnly` ve yalnızca superadmin'de.
+  Bayiye `role.write` verildi: bayi kendi açtığı tenant'ın **sahibini**
+  atayamıyordu, kurduğu tenant'ı sahipsiz bırakıyordu.
+- **Ölçülen matris:**
+  ```
+  superadmin ATAR: superadmin admin dealer owner supervisor agent wallboard
+  admin      ATAR: admin dealer owner supervisor agent wallboard  RED: superadmin
+  dealer     ATAR: owner supervisor agent wallboard  RED: superadmin admin dealer
+  owner      ATAR: owner supervisor agent wallboard  RED: superadmin admin dealer
+  ```
+- **Mutasyon (iki yönde):** `role.IsSystem` şartı kaldırıldı → özel rol testi
+  KIRMIZI (muafiyet sızmıyor). Muafiyet tamamen kapatıldı → sistem rolü testi
+  KIRMIZI (kapı vacuous değil).
+- **Commit:** `6f3fd7b3`, `b0e41b70`
+
+### 10. İki kapı beni durdurdu — ikisi de haklıydı
+
+1. **`PermissionManifestStartupCheck`** yeni yetkiyi "hiçbir uca/ekrana bağlı
+   değil" diye reddetti ve **uygulamayı açtırmadı**. Haklıydı: bu bir uç değil,
+   mevcut bir kapının genişliği. `crosstenant.read` ile aynı sınıfa gerekçesiyle
+   eklendi.
+2. **`DealerPermissionBoundaryTests` (Karar #23/Ş23-1 altın listesi)** yayının
+   3/7'sinde düştü: "EKLENEN: [role.write]". Altın liste genişlemeyi yasaklamıyor,
+   **gerekçesinin yazılmasını** şart koşuyor. Yazıldı; ayrıca genişlemenin üç sınırı
+   ölçüldü (özel rol yazamaz, üst rolleri atayamaz, rol ekranı açılmaz) ve
+   **kalan kısıt** kaydedildi: bayide `user.read`/`user.write` yok, yani bu yetki
+   kapıyı açar, yüzeyi açmaz.
+- **Yeni test:** `Kimse_kendi_ustundeki_rolu_ATAYAMAZ` (7 satır) + vacuity ikizi
+  `Kendi_altindaki_rolu_ATAYABILIR` (5 satır). Hiyerarşi artık dağıtık değil.
+- **Mutasyon:** bayinin `assignableRoles`'una `admin` eklendi → KIRMIZI.
+
+### 11. Yayın — üç koşu, ikisi kapıda düştü
+
+| Koşu | Nerede | Sebep |
+|---|---|---|
+| 8 | 1/7 | `system-roles.generated.ts` bayat (jeneratör yetkiler eklenmeden koşmuş) |
+| 9 | 3/7 | bayi altın listesi (yukarıda) |
+| 10 | — | **geçti** → `tekbirsoft/pbxtr:demo-b0e41b709fae` |
+
+- **Kendi hatam:** koşu 8'in çıkış kodunu `| tail -60` ile boruya soktuğum için
+  `exit 0` gördüm; oysa kod `tail`'inki idi. Yayın aslında düşmüştü. Sonraki
+  koşular log dosyasına yazıp çıkış kodu maskesiz alındı.
+- **İkinci hatam:** Api takımını `--filter` ile daralttığım için bayi altın listesi
+  hiç koşmadı ve kusur yayında ortaya çıktı. **Değişen yetki seed'i = tüm Api
+  takımı**, filtre değil.
+- **Not:** Api takımı **tek proseste** koşturulunca 137 kırmızı verdi
+  (`ResponseBodyReaderStream` iptalleri, bellek). Aynı ikili 4 shard'da 956/956.
+  Ürün kusuru değil, koşturma biçimi.
+
+### 12. Yerel geliştirme — UI+backend yerelde, altyapı sunucuda (VPN)
+
+- **Neden:** Kullanıcı sunucu ile makinesi arasına Tailscale kurdu ve panel
+  geliştirmeyi yerelde yapmak istiyor.
+- **Ölçülen engel:** VPN tek başına yetmiyordu. Sunucunun compose dosyasında
+  `postgres`, `redis`, `minio`, `asterisk` **host'a hiçbir port yayınlamıyor** —
+  yalnızca iç docker ağında konuşuyorlar. Yayınlanmayan porta VPN'den de
+  ulaşılamaz.
+- **Ne yapıldı:**
+  1. `pbxtr-demo/docker-compose.vpn.yml` — beş servisi **yalnızca** Tailscale
+     arayüzüne yayınlar. SIP sinyali (5060) bilerek yayınlanmaz.
+  2. `deploy/staging-yayin.sh` — katmanı **varsa** `-f` ile ekler. Yayın yolu
+     compose dosyalarını açıkça sayıyor, `docker-compose.override.yml` otomatik
+     yüklenmiyor; yazılmasaydı VPN yayınları ilk deploy'da sessizce kaybolurdu.
+  3. `deploy/yerel-gelistirme.sh` — beş portu tek tek ölçer, sunucunun `.env`'ini
+     SSH ile çeker (`.yerel/`, gitignore), adresleri VPN'e çevirip `dotnet run` eder.
+- **Ölçüm (yerel makineden):**
+  ```
+  PostgreSQL 5432  psql ile giriş -> pbxtr_app olarak sorgu döndü
+  Redis      6379  PONG
+  MinIO      9000  /minio/health/live 200
+  Asterisk   5038  "Asterisk Call Manager/11.0.0"
+             8088  ARI 401 (kimlik istiyor = ayakta)
+  backend    5080  health/live 200 · health/ready 200 · demo.sahip girişi OK
+  SPA        5173  200 · /api vekili 401 (backend'e ulaşıyor)
+  ```
+- **Commit:** `b7021766`
+
+### 13. Kendi açtığım 0.0.0.0 deliği — yayın logu yakaladı
+
+- **Neden:** `docker-compose.vpn.yml`'in ilk hâli yalnızca `${PBXTR_VPN_BIND}`
+  yazıyor, yanına "varsayılan koymayın" diye bir **yorum** düşüyordu. Yayın
+  koşusu gerçeği bastı:
+  ```
+  warning: The "PBXTR_VPN_BIND" variable is not set. Defaulting to a blank string.
+  ```
+- **Neden tehlikeli:** compose tanımsız değişkeni hata saymaz, **boş dizeye**
+  çevirir; yayın `:5432:5432` olur ve bu **0.0.0.0** demektir. O koşuda delik
+  açılmadı çünkü yayın yolu yalnızca `app` ve `nginx`'i yeniden yaratıyor
+  (`--no-deps`); ama tam bir `up -d` yapan herkes açardı ve geriye ekrandaki bir
+  uyarıdan başka iz kalmazdı.
+- **Ne yapıldı:** her yayın `${PBXTR_VPN_BIND:?...}` oldu; sunucunun `.env`'ine
+  `PBXTR_VPN_BIND=100.106.82.119` yazıldı.
+- **Mutasyon (sunucuda, GERÇEK .env ile, yalnızca bu değişken boş):**
+  `config` → `EXIT=1`, "required variable PBXTR_VPN_BIND is missing a value".
+- **Pozitif:** `compose config` beşinde de `host_ip: 100.106.82.119`.
+  Kamu IP'de (`176.88.41.220`) beş port da **kapalı** ölçümü tekrarlandı.
+- **Commit:** `d5a794bd`
+
+## Kararlar
+
+1. **Rol hiyerarşisi `assignableRoles` beyanıyla kurulur, ayrı bir "rank" alanıyla
+   değil.** Beyan zaten role bağlı ve denetlenebilir; ikinci bir sıralama alanı
+   iki doğruluk kaynağı üretirdi.
+2. **Muafiyet yalnızca `isSystem` rollere.** Özel rollerde 4. kapı aynen durur;
+   aksi hâlde "kendi rolünü yaz, istediğin yetkiyi koy, dağıt" yolu açılırdı.
+3. **Bayiye `user.read`/`user.write` KENDILIGINDEN eklenmedi.** Kullanıcı
+   yalnızca `role.write` dedi; yüzeyi de açmak ayrı bir karar ve altın liste
+   yeniden büyür. Kısıt teste yazıldı ki unutulmasın.
+4. **Yorum kapı değildir.** `0.0.0.0` tuzağının tek gerçek koruması `:?`'dir;
+   bunu yayın logu öğretti.
+
+## Açık kalanlar / sonraki adım
+
+- **Bayi gerçekten kullanıcı yönetemiyor:** `role.write` var ama
+  `user.read`/`user.write` yok. Kullanıcı kararı bekliyor.
+- `doc/prototip-urun-farklari.md`'de **#62 (Platform Destek Kutusu)** ve
+  **#63 (Asterisk Konsolu)** kaydı yok; **#56.1** kaydı bayat (`dealer.read`+
+  `ticket.read` yazıyor, gerçek `dealer.self.read`+`ticket.inbox.dealer`).
+  Kayıt defteri kapsamını zorlayan bir kapı **yok**.
+- Api takımı tek proseste koşamıyor (137 sahte kırmızı); shard zorunlu.
+- Gerçek Asterisk'e karşı hâlâ doğrulanmadı (CLAUDE.md §3.0).
+- `pbxtr-inbound`/`pbxtr-outbound` static context'leri üretilmiyor; Rusça (`ru`)
+  yok; ~25 sabit `tr-TR` biçimlendirme yeri duruyor.
