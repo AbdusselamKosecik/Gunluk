@@ -207,3 +207,114 @@ Beşi de bu gün kapatıldı.
   dialplan'de referanslı ama üretilmiyor; `dealer.self.read` `crossTenantDeny`'de yok;
   `doc/st44-final-delivery-canonical.json` bayat; entegrasyon paketi konteyner koşusu
   istiyor; Rusça (`ru`) yerel yok; ~25 sabit `tr-TR` biçimlendirme yeri.
+
+---
+
+# İkinci tur — yayın (2026-08-31)
+
+## Bağlam
+
+Kullanıcı `pbxtr i guncellermisin` dedi. Yukarıdaki turun çıktısı diskte duruyordu ve
+"canlıya dağıtılmadı" diye kapanmıştı. Bu turun tek hedefi o kapanışı gerçek bir yayına
+çevirmekti. Yayın **üç koşuda** tamamlandı; her koşu bir sonraki katmanın hiç
+ölçülmemiş olduğunu gösterdi.
+
+## Yapılanlar
+
+### 1. Koşu #1 — 1/7'de üç bayat türev
+
+- **Neden:** `deploy/yerel-yayin.sh --yayinla` kapı adımında `exit 1`.
+- **Ne yapıldı:** Üçü de aynı sınıftı — kaynak değişti, **türevleri değişmedi**:
+  `pbxtr-demo/smoke.sh` kaynaktan 87 satır geride (sunucuya giden kopya buydu);
+  `system-roles.generated.ts` `user.impersonate` eklenince yeniden üretilmemiş;
+  runbook/ADR-003/`screens.json` yorumu #63 ile 68→69 olan envanterde 68'de kalmış.
+- **Dokunulan dosyalar:** `pbxtr-demo/smoke.sh`, `src/Pbxtr.Web/src/app/screens/system-roles.generated.ts`,
+  `yonetim/demo-runbook.md`, `doc/mimari/ADR-003-*.md`, `src/Pbxtr.Api/Platform/Screens/screens.json`
+- **Sonuç:** 27/27 kapı yeşil. **Commit:** `36680b2c`
+
+### 2. Koşu #2 — 2/7'de entegrasyon paketi 17/595 kırmızı
+
+- **Neden:** Paket bu makinede uzun süredir koşmamıştı. 17 kırmızı **altı ayrı
+  sınıftan** geliyordu; asıl iş hangisinin **ürün** kusuru olduğunu ayırmaktı.
+- **İki gerçek kusur:**
+  1. **Bayi, müşteri tenant'ında bayi panelini görüyordu.** `crossTenantDeny` listesinde
+     `dealer.read` vardı; #55/#55.1 ekranları sonradan `dealer.self.read`'e çekildi ve
+     **liste peşlerinden gitmedi**. Yani kısıtın kapatmak için yazıldığı sızıntı açıktı.
+     Kilitlenme riski yok: `ScreenLanding.Resolve` inişi etkin yetkiden çözüyor.
+  2. **Uç, kendi tanımladığı kullanıcıya kapalıydı.** `synthetic-lifecycle` iç kapısı
+     "superadmin VEYA owner" derken dış kapı owner'dan alınan `tenant.read`'i istiyordu.
+     Dış kapı `tenant.self.read`'e çekildi — iki kapı hizalandı, kimse genişlemedi.
+- **Bayat iddialar:** maske sondası/St44 seeder `admin` ile kara liste okuyordu (matris
+  onu tenant operasyonu yaptı → sonda seed'den rol okuyor, maske override'ı **özel rol**
+  yoluyla ölçülüyor); kuyruk üye adresi üründe bilerek `Local/…@-local/n` oldu (eski
+  `PJSIP/…` yalnız masa telefonunu gösteriyordu, tarayıcı agent'ı çağrı almıyordu);
+  manifest'te dört tablo yanlış RLS kipinde; st44 kanonik revizyon iki migration geride.
+- **Test ikizi üretimden müsamahakârdı:** `InTenantScopeAsync` transaction açmıyordu;
+  `ILiveOperationsView` DB'ye taşınınca dört test `NoAmbientTransactionException` aldı.
+  `InTenantTransactionAsync` eklendi.
+- **Sıra bağımlılığı + konak artefaktı:** `ProvisioningRevisionTests` boş tablo
+  varsayıyordu (zemin artık kuruluyor); `SysFunctionGuardTests` ara hedefi sabitti
+  (türetiliyor); üç `ReportTenantLeak` Windows'ta `Europe/Istanbul` çözemiyordu —
+  `InvariantGlobalization` Linux'ta zoneinfo okur, Windows'ta ICU ister. Atlamak yanlış
+  cevap olurdu; **test süreci** Linux'la aynı yeteneğe kavuşturuldu.
+- **Komutlar:**
+  ```bash
+  PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test tests/Pbxtr.Integration.Tests -c Release
+  PBXTR_WRITE_DOCS=1 dotnet test ... --filter Canonical_report_documents_URET
+  ```
+- **Sonuç:** 595/595. **Commit:** `acb1f5e3`
+
+### 3. Koşu #2 — 5/7 DB kapısı: hazırlık sinyali yanlış yolu ölçüyordu
+
+- **Neden:** Sağlık "healthy" dedi, hemen ardından `00-roles.sql` TCP'de
+  `Connection refused` aldı.
+- **Ne yapıldı:** `-h` verilmeyen `pg_isready` **unix soketine** sorar; `postgres`
+  imajı initdb sırasında sunucuyu **yalnızca sokette** başlatır. Yani bekleyen taraf
+  istemcilerin kullandığından **başka bir yolu** ölçüyordu. `-h 127.0.0.1` eklendi.
+  Süreyi büyütmek yine yanlış tedavi olurdu — betikte zaten yazılı "sabit sleep"
+  tuzağının aynı sınıfı.
+- **Sonuç:** `bash deploy/db-kapilari-docker.sh` tek başına exit 0. **Commit:** `da1cc6fd`
+
+### 4. Koşu #3 — 7/7 tamam, yayın gerçekleşti
+
+- **Sonuç / doğrulama:**
+  - `YAYIN_EXIT=0`, imaj `tekbirsoft/pbxtr:demo-da1cc6fdee18`
+  - eski: `demo-3aa72af8f44c` → yeni: `demo-da1cc6fdee18`
+  - yedek: `/home/vuo/pbxtr-demo/backups/pre-da1cc6fdee18.dump`
+  - `pbxtr-app` çalışıyor, `/health` 200, panel 200
+  - migrate: bekçi assert'leri 26/26
+
+### 5. Duman testi + tek kırmızının gerçek sebebi
+
+- **Neden:** İlk duman koşusu 1 kırmızı verdi: "SİMÜLASYON şeridi boş".
+- **Ne yapıldı:** Ürün kusuru değildi. `/api/v1/sim/scenario` **yalnızca**
+  `Telephony:Provider=simulated` bileşiminde map edilir; staging `asterisk` koşuyor
+  (`/me.telephonyMode=live`) ve uç **404** veriyor — yani kontrol, "sim kumandası ürün
+  yüzeyi değildir" kararının **gereğini ihlal sayıyordu**. Kontrol bileşime duyarlı
+  yapıldı: `live` → sim ucu 404 olmalı, `simulated` → şerit dolu olmalı.
+- **Sonuç / doğrulama:** duman exit 0, 35 kontrol geçti. **Mutasyon:** 404
+  karşılaştırması ters çevrildi → KIRMIZI, yani kapı vacuous değil. **Commit:** `068ab0cd`
+- Canlıda doğrulananlar: `#63` konsol matrisi (superadmin/admin 200, bayi/sahip/
+  süpervizör 403), taklit yazma matrisi (superadmin 400 = kapıdan geçti, diğerleri 403),
+  rol matrisi 20 açık + 22 kapalı kapı, maskeleme, WebSocket 101.
+
+## Kararlar
+
+1. **Aynı anda iki yayın koşusu başlatılmadı.** Kullanıcı "tekrar günceller misin"
+   dediğinde koşu zaten canlıydı; ikinci koşu aynı log ve `artifacts/`'e yazar ve
+   kırmızının sahibi okunamaz hale gelirdi.
+2. **Windows tz kırmızısı atlanarak değil, ortam düzeltilerek kapatıldı.** Atlanan kapı
+   kapı değildir; Linux'ta iki ayar da aynı sonucu verdiği için üretimde görünebilecek
+   hiçbir hata biçimi gizlenmiyor.
+3. **Commit mesajındaki "595/595" iddiası, yazıldığı anda ölçülmemişti.** Push'tan önce
+   tam paket koşuldu ve iddia gerçek yapıldı.
+
+## Açık kalanlar / sonraki adım
+
+- **Gerçek Asterisk'e karşı hâlâ doğrulanmadı** (CLAUDE.md §3.0). `#8` telefon yolu
+  envanterindeki üç `unverifiedClaims` maddesi duruyor.
+- Bu turda kapandı: `dealer.self.read` `crossTenantDeny` boşluğu, bayat
+  `st44-final-delivery-canonical.json`, entegrasyon paketinin hiç koşmamış olması.
+- Devam edenler: `pbxtr-inbound`/`pbxtr-outbound` statik context'leri dialplan'de
+  referanslı ama üretilmiyor; Rusça (`ru`) yerel yok; ~25 sabit `tr-TR` biçimlendirme
+  yeri.
