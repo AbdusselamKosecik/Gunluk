@@ -59,3 +59,46 @@ Docker üretimi.
 - Flutter SDK kurulunca (stable, Dart ≥3.11.1) mobil sürüm bump + APK üretimi
   gerekirse yapılacak. Şablon: `deploy/build-apk-1.0.4.75.ps1`.
 - İstenirse PDF'teki TR karşılığı da "Kontrol Edilen Adet" olarak hizalanabilir.
+
+---
+
+## Ek tur (aynı gün) — terim düzeltmesi + Flutter kurulumu
+
+### 4. Flutter SDK kuruldu
+- **Neden:** Makinede Flutter yoktu, APK üretilemiyordu.
+- **Ne yapıldı:** `flutter_windows_3.47.2-stable.zip` (1840.9 MB) indirildi,
+  SHA256 doğrulandı (`37934f21…8409d`), `C:\flutter` altına açıldı.
+  Flutter 3.47.2 stable • Dart 3.13.2 (proje `sdk: ^3.11.1` istiyordu).
+- **Ortam:** Android SDK `C:\Users\abdus\AppData\Local\Android\Sdk`,
+  JDK `C:\Program Files\Android\openjdk\jdk-21.0.8`.
+  `android/local.properties` bu yollara göre güncellendi (ileri eğik çizgi ile,
+  `sdk.dir=C:/Users/abdus/AppData/Local/Android/Sdk`, `flutter.sdk=C:/flutter`).
+  Build sırasında Gradle eksik SDK parçalarını (platform 35, CMake 3.22.1)
+  kendisi indirdi.
+- **Uyarı:** `local.properties` git'te yok (ignored) — HDD giderse elle yazılacak.
+
+### 5. Terim "Units Reviewed" değil "Units Inspected" oldu
+- **Neden:** Müşteri nihai terimi UNITS INSPECTED.
+- **Dokunulan dosyalar:** 1. maddedeki aynı 4 dosya
+  (`LevisAuditDocument.cs`, `OrderQaDocument.cs`, `InditexInspectionDocument.cs`
+  → "Inspected", `Selvedge.Web/src/i18n/en.json`).
+- **Sonuç:** `grep` ile doğrulandı; İngilizce görünen metinlerde artık
+  "Units Inspected" / tablo başlığı "Inspected".
+
+### 6. Docker 1.0.4.78
+- **Komut:** `BuildDocker_1.0.4.78.bat`
+- **Sonuç:** push tamam —
+  `tekbirsoft/selvedge-api:1.0.4.78-dev` + `:latest` (`sha256:9ad766d1…`),
+  `tekbirsoft/selvedge-web:1.0.4.78-dev` + `:latest` (`sha256:f29b46b0…`)
+
+### 7. APK 1.0.4.77
+- **Ne yapıldı:** `deploy/build-apk-1.0.4.77.ps1` ile üretildi
+  (`selvedge-1.0.4.77.apk`, 74.9 MB). Mobil kodda görünen değişiklik yok,
+  sadece sürüm bump.
+- **Not:** Kullanıcı sonradan "APK çıkarma, sadece website" dedi — bundan
+  sonraki turlarda sadece Docker/web üretilecek.
+- **Commit:** `989de66`
+
+## Kararlar (ek)
+- Terim son hali: **Units Inspected** (Reviewed ara adımdı, kalmadı).
+- Bundan sonra bu iş için APK üretilmeyecek; sadece web/API imajları.
