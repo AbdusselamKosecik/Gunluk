@@ -165,6 +165,75 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
 4. **Bir uç için ikinci bir çağrı yolu bırakılmaz.** Manifest bağlantısı varken
    çıplak `apiFetch` kopyası durursa, kapı ölçtüğünü sanır ve ölçmez.
 
+### 8. #26 IVR, #27 Dahili, #39 Medya platform rollerinden kaldırıldı
+
+- **Neden:** Kullanıcı: *"/telephony/ivr, /telephony/extensions, /maintenance/media
+  bunlari kaldirimisin admin ve super adminden ve bayiden"*.
+- **Ölçüm önce:** **Bayide zaten yoktu.** `dealer` rolü bu kodların hiçbirini
+  taşımıyordu; ekranlar yalnızca `superadmin` ve `admin`'de vardı ve ikisi de aynı
+  demetten (`bundle.telephony.admin`) alıyordu.
+- **Ne yapıldı:** Demet 9 → 1 koda indi. Çıkanlar: `ivr.read/write`,
+  `extension.read/write`, `media.read/write`, `ringgroup.write`.
+  - `ringgroup.write` **de gitti**: ayrı ekranı yok, #27'nin ikinci yarısıdır.
+    Bırakılsaydı ekranı olmayan bir **yazma** yetkisi kalırdı.
+  - `codec.write` **silinmedi**, `bundle.telephony.tenant.config`'e taşındı: codec
+    ayrı bir nesne değil, trunk'ın gövde alanıdır ve trunk artık yalnızca o pakette.
+    Yerinde kalsaydı süper adminde yüzeyi olmayan bir yazma yetkisi olurdu;
+    silinseydi `admin` trunk düzenlerken codec alanını kaybederdi.
+- **Doğrulama (canlı):** superadmin jetonuyla `GET /api/v1/me/menu` → üç rota da
+  **YOK**, `/analytics/network` **VAR**, toplam **23 ekran** (matris belgesiyle birebir).
+- **Commit:** `20b11667`
+
+### 9. **Dünkü kendi hatam ortaya çıktı: kırmızı bir kapı** (gerçek kusur)
+
+- **Nasıl bulundu:** Seed değiştiği için Api takımının **tamamı** koşturuldu ve
+  `NetworkQualityPermissionPairingTests` kırmızı yandı.
+- **Kapı ne diyordu:** #25 Ağ Kalitesi yanıtında trunk'ın **yapılandırılmış peer
+  adresini** taşır; bu bilgi normalde `trunk.read` ile görülür. Dolayısıyla
+  `network.quality.read` taşıyan her rol `trunk.read` de taşımalıydı. Kapı
+  **25 Ağustos'tan** beri vardı (`d771da57`).
+- **Kim kırdı:** Dün `88d6a046` ile trunk'ı süper adminden kaldırdığımda çiftleme
+  koptu ve **fark etmedim** — o commit'te Api takımını tam koşturmamışım. Sonuç:
+  trunk okuması elinden alınmış bir rol, trunk topolojisini #25 üzerinden görmeye
+  devam ediyordu. **Hiçbir hata üretmeden.**
+- **Neden çiftleme geri kurulmadı:** İki yolu vardı ve ikisi de bir kullanıcı
+  kararını çiğnerdi — süper admine `trunk.read`'i geri vermek (#04 menüye dönerdi)
+  ya da ondan `network.quality.read`'i almak (#25 istenmediği hâlde kalkardı).
+- **Ne yapıldı:** Testin **kendi reçetesi** uygulandı (metninde yazılıydı:
+  *"ayrışırlarsa peerHost alanı kendi kapısına bağlanır"*). `peerHost` artık
+  `trunk.read` ister; yetkisi olmayana `null` gider. **403 değil alan düşürme:**
+  ölçümler (jitter/kayıp/RTT/MOS) trunk okuması gerektirmez; ucu kapatmak yetkisi
+  olan bilgiyi de götürürdü. Kapı **sunucudadır** (CLAUDE.md §5).
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/NetworkQuality/NetworkQualityEndpoints.cs`
+
+### 10. İlk test takımım üçüncü mutasyonu **kaçırdı**
+
+- **Ölçüm:** Eşleyiciyi (`From(snapshot, peerHostVisible)`) doğrudan çağıran testler
+  iki mutasyonu yakaladı (alanı hep gönder / hep düşür) ama üçüncüsünü **yakalamadı**:
+  `PeerHostPermission` sabitini `trunk.read` yerine `network.quality.read` yapmak
+  hiçbir testi kırmıyordu — ve o mutasyonla kapı **fiilen kalkar**, çünkü ucun kapısı
+  zaten o yetkidir.
+- **Sebep:** Eşleyici testleri `bool`'u kendileri verir; kararı **kimin** verdiğini
+  hiç koşturmazlar.
+- **Ne yapıldı:** Ucu gerçekten koşturan ikinci bir dosya yazıldı
+  (`NetworkQualityPeerHostEndpointTests`) — handler çalışır ve kararı
+  `ITenantContext.Permissions`'tan okur. Üç mutasyon da artık yakalanıyor.
+  Yetkilendirme middleware'i **her policy'yi geçiren** bir sağlayıcıyla kurulur:
+  gerçek sağlayıcı, ucun kapısını alan kapısının **önüne** koyar ve ölçülmek istenen
+  ayrım hiç görünmezdi.
+- **Eski çiftleme dosyası silinmedi, tersine çevrildi:** artık alanın kapısını ölçüyor
+  ve üçüncü iddiası *"kapı üretimde fiilen kapanıyor mu"* diye soruyor — kapanmasa
+  kod yolu hiç koşmaz ve bozulduğunda kimse görmez.
+
+### 11. Girişteki 500 — benim bıraktığım kapalı backend
+
+- Kullanıcı: *"loginde hata veriyor 500"*. Sebep: Api testlerinin build'i için DLL
+  kilidini açmak üzere `Pbxtr.Api`'yi durdurmuş, geri başlatmamıştım. Vite (5173)
+  ayaktaydı, arkasında kimse yoktu ve proxy 500 dönüyordu.
+- Backend `deploy/yerel-gelistirme.sh` ile geri başlatıldı (5080); giriş **200**.
+- **Ders:** `dotnet test` çalışan bir dev backend varken Debug DLL'lerini kilitler ve
+  build hiç yapılmaz. Durdurmak zorunludur ama **geri başlatmak da işin parçasıdır**.
+
 ## Açık kalanlar / sonraki adım
 
 - **`switchTenant` mekanizmasının artık hiçbir çağıranı yok.** Kod
@@ -172,8 +241,8 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
   iştir ve `stopImpersonation` ile aynı kimlik yenileme yolunu paylaştığı için
   dikkat ister. **Açık borç olarak yazıldı.**
 - **`b0e41b70`'ten beri pbxtr.com'a yayın yapılmadı.** `88d6a046`, `b640077d`,
-  `740984ee`, `9b0b078b`, `019bcc8c`, `512d5867` yalnızca depoda. Yayın için
-  kullanıcının "çık" demesi bekleniyor.
+  `740984ee`, `9b0b078b`, `019bcc8c`, `512d5867`, `20b11667` yalnızca depoda.
+  Yayın için kullanıcının "çık" demesi bekleniyor.
 - Bayi hâlâ kullanıcı yönetemiyor: `role.write` var, `user.read`/`user.write` yok.
 - Bayi gelen kutusu (#56.1) kapalı talebe cevap yazmayı hâlâ engelliyor; platform
   kutusuna eklenen durum ucunun karşılığı orada yok.
@@ -181,3 +250,11 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
 - `/goal`'un 1, 2, 6, 8, 9. maddeleri açık (Asterisk yönetimi, bayi yönetimi,
   güvenlik duvarı API'leri, hazır Asterisk komutları, süper admin kullanıcı CRUD).
 - Gerçek Asterisk'e karşı hâlâ doğrulanmadı (CLAUDE.md §3.0).
+- **Seed değişen her commit'te Api takımının TAMAMI koşmalıdır.** `88d6a046` bunu
+  atladı ve bir güvenlik kapısını sessizce kırmızıya çevirdi; bir gün sonra bulundu.
+- `bundle.telephony.admin` tek kod taşıyor ve adı içeriğini anlatmıyor. Kodu
+  değiştirmek rol tanımlarını ve üretilmiş dosyaları etkiler — **açık borç.**
+- Bu makinede **python3 yok**; `deploy/yerel-yayin.sh` bunu konteynerle çözüyor ama
+  betiğin dışında elle shard koşturulacaksa `deploy/ci/api-test-shards.py` çalışmaz
+  (ölçüldü: bayat bir `api.runsettings` sessizce kullanılır ve "shard 0 geçti" yalan
+  olur).
