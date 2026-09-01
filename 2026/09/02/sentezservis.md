@@ -115,3 +115,58 @@ Karar: **önce elimizdekini bağla, sonra büyüt.** Yeni sağlayıcı (N11) vey
 - Doğrulanan şey **kimlik ve taban adres**. Sipariş/fiyat/stok uçlarının gövde eşlemesi
   hâlâ gerçek veriyle sınanmadı. ERP eşlemesi ve işler de hâlâ yok.
 - Dünden devreden: CRS fatura modülü canlı doğrulanmadı (giriş bilgisi yok).
+
+---
+
+## Ek tur — gerçek siparişlerin çekilmesi
+
+### 5. Sipariş sondası
+
+- **Neden:** Kimlik doğrulandı ama sipariş **eşlemesi** hiç sınanmamıştı. ERP'ye yazan iş
+  yazmadan önce alanların doğru dolduğunu görmek gerekiyordu.
+- **Ne yapıldı:** Scratchpad'deki koşturucu genişletildi: her etkin hesaptan son 7 günün
+  siparişleri çekiliyor, örnek sipariş açılıyor ve **alan kapsamı** ölçülüyor — bir alanın
+  kaç siparişte dolu olduğu. Aranan şey tek sipariş değil; **%0 dolu bir alan**, tek kayda
+  bakarak görülemeyecek bir eşleme hatasıdır. Ayrıca tutar denetimi:
+  kalemler + kargo − indirim = başlık tutarı.
+- **Sonuç:** 193 sipariş, 316 kalem. **Tutar denetimi hepsinde kuruşu kuruşuna tuttu.**
+  Trendyol'da kalem alanlarının (barkod, stok kodu, adet, fiyat, KDV oranı, kalem no)
+  tamamı %100 dolu.
+
+### 6. Yanlış alarm — "tarih filtresi tutmuyor"
+
+- Sonda önce **29/43 sipariş aralık dışı** dedi ve bunu hata olarak işaretledi.
+- **Sondanın hatasıydı, kodun değil.** Filtre son değişiklik tarihine göre çalışıyor; ben
+  oluşturma tarihiyle karşılaştırmıştım. Nisan'da açılıp dün durumu değişen bir sipariş,
+  dünkü pencereye düşer — doğru davranış budur.
+- Ham API ile kanıtlandı: 1 saatlik pencere `totalElements: 0`, 2020 penceresi `0`,
+  1 günlük pencere `1671`. Filtre çalışıyor.
+
+### 7. Trendyol'un gerçek davranışı (belgeye yazıldı)
+
+- **`orderByField` yalnızca sıralar, filtrelemez.** Aynı pencerede `CreatedDate` ve
+  `PackageLastModifiedDate` birebir aynı sonucu (1671, aynı ilk kayıt) döndürdü. Yani
+  `SiparisSorgusu.DegisiklikTarihiyle` bir sıralama tercihi; "oluşturma tarihine göre çek"
+  diye okunmamalı.
+- **Geniş pencerede `totalElements` güvenilmez.** 7 günlük pencere filtresiz sorguyla aynı
+  sayıyı bildirdi (2858 ve 7117); 1 günlük pencere 1671'e düştü. Tek güvenilir işaret
+  `SayfaliSonuc.Kesildi`.
+- **Commit:** `e911293`
+
+### 8. Veri bulguları (kod değil, mağaza tarafı)
+
+- **01 Trendyol'da satıcı stok kodu yok:** `merchantSku` 55 kalemin 55'inde de düz metin
+  `"merchantSku"` dönüyor. 03'te 37, 04'te 16 farklı değer var. **ERP eşlemesi barkoda
+  dayanmalı** — barkod üç mağazada da %100 dolu.
+- Trendyol alıcı telefonunu vermiyor (maskeli); bireysel siparişlerde VKN/TCKN yok.
+- Shopify sipariş kaleminde `barcode` alanı hiç yok; barkod `sku` içinden geliyor
+  (`StokKodu`). Kargo firması/takip no ancak fulfillment açılınca doluyor.
+- Shopify adres eşlemesi doğru (`province` → `Il`); örnek siparişte il boş çünkü mağazanın
+  verisinde boş.
+- **Hepsiburada'nın iki hesabında da son 7 günde sipariş yok** → sipariş eşlemesi orada
+  hâlâ doğrulanmadı.
+
+## Ek — açık kalanlar
+
+- Hepsiburada sipariş eşlemesi doğrulanmayı bekliyor (sipariş gelince).
+- ERP eşlemesi ve işler hâlâ yazılmadı. Eşleme anahtarı **barkod** olacak.
