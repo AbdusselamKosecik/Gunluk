@@ -234,6 +234,102 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
 - **Ders:** `dotnet test` çalışan bir dev backend varken Debug DLL'lerini kilitler ve
   build hiç yapılmaz. Durdurmak zorunludur ama **geri başlatmak da işin parçasıdır**.
 
+### 12. #61 — bayinin kullanıcıları görülür ve bürünülebilir
+
+- **Neden:** Kullanıcı: *"bayilerin de tenant gibi davranip kullanicilari gorup
+  kullanicilarina burunmemiz lazim"*.
+- **Akış:** #61 satırında **Kullanıcılar** → #02 açılır, şerit *"şu bayinin
+  kullanıcıları"* der, **Bu kullanıcı olarak çalış** ile bayiye bürünülür.
+- **Doğrulama (tarayıcı, gerçek veri):** Anadolu İletişim Bayii → Gökhan Serttaş
+  (`demo.bayi`) → Bayi Dashboard, bayinin kendi menüsü (Bayi Paneli, Tenant
+  Yönetimi, API Anahtarları); "Kendi hesabıma dön" → Süper Admin / pbxtr Platform.
+- **Commit:** `b6fac60d`
+
+### 13. Bürünme kuralı: *"hedef Single olmalı"* → *"kapsamlı hedef DAHA GENİŞ aktör ister"*
+
+- **Engel:** Kural bayiyi **adıyla** yasaklıyordu: *"Kapsamlı hesap (platform
+  yöneticisi ya da bayi) taklit edilemez."*
+- **Ama yazılı gerekçesi bayiyi kapsamıyordu:** *"başka bir platform yöneticisi
+  olarak çalışmak o kişinin adına denetim satırı üretir — ve superadmin'de
+  `audit.purge` gibi geri alınamaz yetkiler vardır."* Süper adminin (global) bir
+  bayiye (dealer) bürünmesi tam olarak **daralmadır** ve bayide `audit.purge` yok.
+- **Ne yapıldı:** Kural silinmedi, yeniden yazıldı. Korunan kusur aynen duruyor:
+  `global → global` ve `dealer → dealer` reddedilir.
+- **İlk yazdığım hâl fazla katıydı** ve **istenmemiş bir daraltma** getiriyordu:
+  şart her hedefe uygulanınca `Single → Single` de kapanıyordu (tenant yöneticisinin
+  kendi agent'ıyla çalışması — **eskiden serbestti**). Bunu `UserAdminEndpointTests`
+  kırmızısı gösterdi; şart yalnızca **kapsamlı** hedefe uygulanacak şekilde düzeltildi.
+- **Genişlik sıralaması enum'un sayısal değerine yaslanmaz:** `TenantScopeKind` bugün
+  tesadüfen genişlik sırasında; enum yeniden sıralanırsa kural **sessizce tersine
+  dönerdi**. Sıralama açıkça yazıldı ve teste pinlendi.
+- **Tanınmayan kapsam her iki tarafta reddedilir.** İlk hâlim sayısal bir "en geniş"
+  (`int.MaxValue`) dönüyordu: hedef tarafında doğru çalışır ama **aktör tarafında
+  arka kapı açardı** — tanınmayan kapsamlı bir aktör herkesten geniş sayılıp her şeyi
+  taklit edebilirdi. `null` iki yönü birden kapatır.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Platform/Identity/ImpersonationRules.cs`,
+  `src/Pbxtr.Api/Platform/Identity/ImpersonationEndpoints.cs`,
+  `src/Pbxtr.Api/Modules/Access/UserAdminEndpoints.cs`
+
+### 14. Çapraz-tenant okumanın **ilk çağıranı** yazıldı
+
+- **Neden:** Bir bayinin kullanıcıları **tek tenant'ta durmaz**. RLS:
+  `home_tenant_id = app_current_tenant() OR app_is_cross_tenant()`.
+- **Bulgu:** Sunucudaki `X-Cross-Tenant` mekanizması vardı ama **hiç çağıranı yoktu**
+  (kod var, koşan yok). RLS'i gevşetmek yerine onun ilk çağıranı yazıldı; her çapraz
+  istek **örneklemesiz** denetlenir.
+- **Ölçüldü:** başlık olmadan liste **0 satır**, bürünme **403** — yani başlık
+  gerçekten iş yapıyor, süs değil.
+- **`?dealerId=` kendi kapısına bağlandı** (`dealer.read`, #61 ekranıyla aynı).
+  Kapısız bırakılsaydı `user.read` taşıyan her rol `dealerId`'yi değiştirip dönen
+  sayıya bakarak bir bayi kimliğini **tarayabilirdi**. Boş GUID **400**'dür,
+  sessizce "filtre yok"a düşmez.
+- **İstemci yüzeyi bekçiye bağlandı:** `crossTenant` için ayrı bir izinli-dosya
+  listesi eklendi ve `targetTenantId` listesinden **dar** olması ayrıca ölçülüyor —
+  daraltmayı **kaldıran** seçenek, taşıyandan daha geniş bir yüzeye yayılamaz.
+
+### 15. **Çapraz okumada roller boş geliyordu** (gerçek kusur)
+
+- **Ölçüm (canlı):** kendi tenant'ında `["dealer"]`, çapraz okumada `[]`.
+- **Sebep:** `users` global bir tablodur ve EF query filter **taşımaz** (daraltması
+  `ScopedUsers()` + RLS); ama `user_roles` ve `extensions` `ITenantOwned`'dır ve
+  global filtre onları aktif tenant'a daraltır. Ana sorgu çapraz okurken yan
+  sorgular okumuyordu.
+- **Neden tehlikeli:** Ekran "bu kullanıcının rolü yok" der. **"Rol yok" ile "rol
+  okunamadı" aynı görüntüyü verir** ve yetki denetimi için açılan bir ekran, tam da
+  ölçmek istediğin şeyi boş gösterir.
+- **Ne yapıldı:** Yan sorgular ana sorguyla hizalandı. **Muafiyet koşulludur**
+  (`IsCrossTenantRead`): koşulsuz olsaydı sıradan tenant okumalarında da uygulama
+  katmanı daraltması kalkar ve CLAUDE.md §4'ün iki katmanlı izolasyonu tek katmana
+  inerdi. `IgnoreQueryFilters` allowlist'ine gerekçesiyle yazıldı (bekçi ayrıca
+  gerekçenin **kaynakta** da yazılı olmasını istiyor).
+
+### 16. **Rota durumu beyaz listesi** (gerçek kusur, tarayıcıda yakalandı)
+
+- **Belirti:** Drill-in çalışmıyordu — ekran platform tenant'ının kullanıcılarını
+  gösteriyordu. `history.state` tarayıcıda **doğru görünüyordu**.
+- **Sebep:** `NavigationState` bir arayüzdür ama `currentState()` ondan **beyaz liste**
+  ile okur. `dealerId` arayüze eklendi, `navigate` yazdı, ama beyaz listeye
+  eklenmediği için ekran onu **hiç görmedi**.
+- **Neden sinsi:** Hata yok, kırmızı yok. Yalnızca **yanlış ama makul görünen** bir
+  liste. TypeScript de yardım etmez: fazladan bir alanı okumamak tip hatası değildir.
+- **İkinci kusur aynı değişiklikte:** `statesEqual` `dealerId`'yi karşılaştırmıyordu,
+  dolayısıyla aynı rotada bir bayiden diğerine geçmek "state eşit" sayılıp **hiç
+  yönlendirme yapmıyordu**. `tenantId` için bu tuzağa bir kez düşülmüş ve kodda notu
+  bırakılmıştı; ikinci kez düşüldü.
+- **Ne yapıldı:** İkisi de kapatıldı ve boşluğu ölçen `history.test.ts` yazıldı.
+  Testler alan alan değil **tur (round-trip)** ölçer: yazılan her alan geri
+  okunabilmeli. İki mutasyon da yakalanıyor.
+
+### 17. Bayi görünümünde yazma kapalı (bilinçli)
+
+- `users_tenant_isolation`'ın `WITH CHECK` dalı `home_tenant_id = app_current_tenant()`
+  der; başka bir tenant'ın kullanıcısına yazmak **zaten** reddedilir. Alanları açık
+  bırakmak, çalışmayacağı kesin olan bir formu teklif etmek olurdu.
+- **Bürünme açık kalır** — istenen odur. Düzenleme, o kullanıcı olarak çalışırken ya da
+  doğru tenant'ın kendi listesinden yapılır.
+
+**Ölçüldü:** Api **3847/3847** (4 shard), Architecture **337/337**, web **1314/1314**,
+`tsc -b` temiz. Yeni kapıların hepsi mutasyonla **iki yönde** doğrulandı.
 ## Açık kalanlar / sonraki adım
 
 - **`switchTenant` mekanizmasının artık hiçbir çağıranı yok.** Kod
@@ -241,7 +337,7 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
   iştir ve `stopImpersonation` ile aynı kimlik yenileme yolunu paylaştığı için
   dikkat ister. **Açık borç olarak yazıldı.**
 - **`b0e41b70`'ten beri pbxtr.com'a yayın yapılmadı.** `88d6a046`, `b640077d`,
-  `740984ee`, `9b0b078b`, `019bcc8c`, `512d5867`, `20b11667` yalnızca depoda.
+  `740984ee`, `9b0b078b`, `019bcc8c`, `512d5867`, `20b11667`, `b6fac60d` yalnızca depoda.
   Yayın için kullanıcının "çık" demesi bekleniyor.
 - Bayi hâlâ kullanıcı yönetemiyor: `role.write` var, `user.read`/`user.write` yok.
 - Bayi gelen kutusu (#56.1) kapalı talebe cevap yazmayı hâlâ engelliyor; platform
@@ -258,3 +354,8 @@ dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
   betiğin dışında elle shard koşturulacaksa `deploy/ci/api-test-shards.py` çalışmaz
   (ölçüldü: bayat bir `api.runsettings` sessizce kullanılır ve "shard 0 geçti" yalan
   olur).
+- **Bir arayüze alan eklemek yetmez.** `currentState()` beyaz listesi ve `statesEqual`
+  elle tutulan iki süzgeçtir; yeni bir `NavigationState` alanı ikisine de yazılmalıdır.
+  Artık `history.test.ts` bunu zorluyor.
+- Bayi görünümünde **düzenleme yok** (RLS zaten reddederdi). Gerçekten gerekirse ayrı
+  bir karar: ya çapraz yazma açılır ya da ekran doğru tenant'a yönlendirir.
