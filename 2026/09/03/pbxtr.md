@@ -101,6 +101,73 @@ döndür) — üçü de kırmızı. web **1315/1315**, Architecture **338/338**,
 
 **Commit:** `2334f101`
 
+### 5. Admin Dashboard'da çalışmayan satırlar — 12 bileşenin 10'u yeşil
+
+- **Kullanıcı:** *"calismayan yerleri calistirabilirmisn. Host ayni sekilde linux
+  sunucu bu bilgisayar degil."*
+- **Başlangıç:** 5 bileşen ölçülemiyordu — `tls-certificate`, `storage`, `host-disk`,
+  `host-resources`, `asterisk` (+ `provisioning-pull` **down**).
+
+#### 5.1 Host diski artık **ajandan** okunuyor (`DK-01`)
+
+- **Bulgu:** Disk yalnızca `DriveInfo` ile okunuyordu — yani **uygulamanın gördüğü**
+  dosya sistemi. Windows'ta host'un diski oradan görülmez ve satır susuyordu.
+  **`DK-01` katalogda 2026-08-29'dan beri duruyordu ama hiçbir yer çağırmıyordu**
+  (yine *kod var, koşan yok*).
+- **Sıra bilinçli:** yapılandırılmış yol (üretimdeki `/host-fs` bind mount) **kazanır**;
+  ajan yalnızca yol yazılmamışsa devreye girer. Ajan önce denenseydi çalışan bir üretim
+  yolu sessizce değişirdi, üstelik ajan düştüğünde okuma da düşerdi — oysa mount ayakta.
+- **İlk satır değil `/` seçilir.** `df` çıktısında onlarca satır var (udev, tmpfs,
+  overlay); ilkini almak, hangi diski gösterdiği **çekirdek sıralamasına bağlı** bir
+  sayı üretirdi — her açılışta değişebilen ve hiçbir testin yakalayamayacağı bir yanlış.
+- `IHostDiskProbe` asenkron oldu; rollup işinde okuma **döngüden önce ve bir kez**.
+- **Ölçüldü:** PC'den %21 dolu / 77.4 GB — sunucunun kendi değeriyle aynı.
+
+#### 5.2 Ek deposu gerçekten yoklanıyor
+
+- **Satır sabitti** ve daima *"yoklama ucu yok"* diyordu — yani hiçbir şey ölçmüyordu.
+  **Sabit bir satır arıza anında da aynı cümleyi basar:** depo tamamen düşse ekran
+  hiçbir şey söylemezdi.
+- `IAttachmentStoreProbe` eklendi; MinIO ve yerel disk uygulamalarının ikisi de yoklanır.
+- **Nesne YAZILMAZ** (sağlık ekranı her açılışta kovaya çöp üretirdi ve yetim tarayıcı
+  onları silmeye çalışırdı) ve **LİSTELENMEZ** — `IObjectStoreInventory` kendi belgesinde
+  *"hiçbir istek yolunun kova listeleme yetkisi olmamalıdır"* der ve `GET /system/health`
+  bir istek yoludur.
+- **Yoklama aynı örneği paylaşır**; ayrı kaydedilseydi ikinci bir S3 istemcisi doğar ve
+  sağlık ekranı **başka bir yapılandırmayı** ölçebilirdi — "yeşil ama çalışmıyor" tam
+  böyle üretilir.
+- **Ölçüldü:** 8 ms, `pbxtr-attachments` erişilebilir.
+
+#### 5.3 Panel TLS sertifikası yerelde de ölçülüyor
+
+- Üretimde zaten çalışıyordu (5453 gün); yerelde `Tls:CertificatePath` boştu.
+- Dosya sunucudan `.yerel/panel-tls.pem` içine çekiliyor (jetonla aynı desen).
+- **Yalnızca `BEGIN CERTIFICATE` taşır**; özel anahtar ayrı dosyada (`0600`) ve betik
+  `PRIVATE KEY` görürse kopyayı **siler** — sessizce PC'ye özel anahtar indirmek,
+  kolaylığın en pahalı biçimi olurdu.
+- **Kataloğa `FR-*` eklenmedi:** katalog yolları **sistem** yollarıdır;
+  `/home/vuo/pbxtr-demo/...` bir dağıtım ayrıntısıdır ve oraya gömülseydi katalog tek
+  bir kurulumun klasör düzenine bağlanırdı.
+
+#### 5.4 Kalan ikisi bilinçli
+
+- `asterisk` — CLAUDE.md §3.0: fiilen bağlanılmıyor.
+- `provisioning-pull` — **down**, ama bu bir **ölçüm**: config Asterisk'e gitmiyor.
+
+#### Ölçüm
+
+11 yeni test. Mutasyonla doğrulandı: ilk satırı seç / yapılandırılmış yolu atla /
+çıkış kodunu yoksay / yanlış katalog kimliği / arızayı ok say / arızayı ölçülemedi say
+— hepsi kırmızı.
+
+**Bir mutasyon önce hayatta kaldı** (çıkış kodu dalı): fikstürde boş `stdout` vardı,
+dolayısıyla çıktı zaten ayrıştırılamıyordu ve test **başka bir yoldan** yeşil kalıyordu —
+dal hiç koşmuyordu. Geçerli bir `df` satırıyla yeniden yazıldı; artık kontrolü kaldırmak
+bir **ölçüm** üretiyor ve test kırılıyor.
+
+Api **403/403**, Architecture **338/338**, `dotnet format` temiz.
+
+**Commit:** `c106318e`
 ## Açık kalanlar / sonraki adım
 
 - **Bu değişiklikler pbxtr.com'a YAYINLANMADI** — yalnızca depoda ve yerel yığında.
@@ -110,5 +177,12 @@ döndür) — üçü de kırmızı. web **1315/1315**, Architecture **338/338**,
   geçmiş görünüyordu. Backend durdurulup tekrarlandı. *(Bilinen tuzak; deseni
   `error` olarak genişlettim.)*
 - Geliştirme köprüsü hâlâ **açık**: `systemctl stop pbxtr-sysagent-kopru`.
-- Hâlâ ölçülemeyen: **yedekleme durumu**, **host diski** (yerelde, ajandan
-  okunmuyor), **fail2ban kural listesi**.
+- Hâlâ ölçülemeyen: **yedekleme durumu** ve **fail2ban kural listesi**.
+  *(Host diski çözüldü — bkz. §5.1.)*
+- **Sabit bir sağlık satırı, ölçüm değildir.** "Yoklama ucu yok" cümlesi arıza anında
+  da aynı kalır; yani o bileşen çöktüğünde ekran sessiz kalır. Sabit satır = gizli
+  kör nokta.
+- **Mutasyonun hayatta kalması fikstürü sorgulatır.** Bu turda tam olarak bu oldu:
+  kod doğruydu, testin verisi dalı hiç koşturmuyordu.
+- Bu değişiklikler **pbxtr.com'a yayınlanmadı**. Sunucuda üretimde `storage` hâlâ
+  eski "yoklama ucu yok" cümlesini basıyor.
