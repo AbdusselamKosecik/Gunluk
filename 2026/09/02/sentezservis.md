@@ -243,3 +243,109 @@ geçilmedi — 90 günlük çekim yoğun mağazalarda 45 dakikalık iş zaman a�
   doğrulandı, iş ve depo doğrudan koşturuldu; ama "Çek"e basılıp canlı log akışı görülmedi.
 - Yazma hızı için toplu yazma (TVP) düşünülebilir.
 - Hepsiburada'da hâlâ sipariş yok; o pazaryeri için eşleme doğrulanamadı.
+
+---
+
+# 4. tur — gecelik uzlaştırma
+
+## Bağlam
+
+3. tur sonunda ekran ve iş hazırdı ama **zamanlaması yoktu**: aralık hep kullanıcıdan
+geliyordu. Soru şuydu — iptal ve iade geç geldiğine göre (müşteri üç gün sonra iptal eder,
+kargo bir hafta sonra iade döner), bir kez çekilen sipariş hiçbir zaman "bitmiş" değildir.
+Hedef: geceleri kayan pencereyle (son 30 gün) otomatik uzlaştırma.
+
+## Yapılanlar
+
+### 1. Kayan pencere + kapsam parametreleri
+
+- **Neden:** Zamanlanmış çalıştırmaya parametre verilemez. `ParametreDogrulayici.Dogrula`,
+  boş gelen değerin yerine alanın `DefaultValue`'sunu koyar — **zamanlanmış turun tek
+  ayar mekanizması budur.** Bu yüzden varsayılanlar ekranın değil, gecelik turun ihtiyacına
+  göre ayarlanmalıydı.
+- **Ne yapıldı:**
+  - `DefaultCron = "0 3 * * *"`.
+  - `baslangic`/`bitis` → `Required = false`. İkisi de boşsa kayan pencereye düşülür.
+    **Yalnızca biri** verilirse doğrulama reddeder (kullanıcı aralık istemiş, yarısını yazmayı
+    unutmuştur — sessizce 30 güne düşmek yanlış olurdu).
+  - Yeni `sonGun` (Number, varsayılan **30**, 1–90).
+  - Yeni `kapsam` (Select, varsayılan **`iptalIade`**): `iptalIade` → `Durumlar` süzgeci
+    `[IptalEdildi, Iade]`; `hepsi` → süzgeç yok.
+  - Ekrandaki **Çek** düğmesi `kapsam: TUM_KAPSAM` (`'hepsi'`) göndererek varsayılanı
+    açıkça ezer — ekrandan yapılan çekim tam olmalı.
+- **Karar — neden gecelik tur tam çekim değil:** 30 günlük tam pencere yoğun mağazalarda on
+  binlerce sipariş demek ve 45 dakikalık iş zaman aşımına yaklaşır. Ölçüldü: Trendyol 04,
+  14 gün → **tüm durumlar 3.656, iptal/iade 139** (26 kat).
+- **Uyarı (belgeye de yazıldı):** durum süzgecini sunucu tarafında **yalnızca Trendyol**
+  uygular. Diğerleri `Durumlar`'ı yok sayıp penceredeki her siparişi getirir. Veri açısından
+  zarar yok (yazma idempotent) ama gecelik turun süresi onların hacmine bağlı kalıyor —
+  Shopify 03 tek başına 30 günde 2.298 sipariş döndürüyor.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Pazaryerleri/Siparisler/PazaryeriSiparisCekJob.cs`,
+  `web/src/api/pazaryeriSiparis.ts`, `web/src/pages/PazaryeriSiparisleriSayfasi.tsx`
+
+### 2. Gecelik tur GERÇEK olarak koşturuldu
+
+- **Neden:** "Varsayılanlar doğru mu" sorusu ancak parametresiz koşarak cevaplanır.
+- **Ne yapıldı:** Sonda programı (`scratchpad/baglantidene`) `ParametreDogrulayici.Dogrula`'yı
+  **boş sözlükle** çağırıp sonucu işe veriyor — zamanlanmış çalıştırmanın birebir kendisi.
+- **Sonuç:**
+
+  | Tur | Sonuç | Süre |
+  | --- | --- | --- |
+  | 1. | 3.389 sipariş: 2.886 yeni, 493 değişmedi, 10 durum değişti | 7,4 dk |
+  | 2. | 3.392 sipariş: **2 yeni**, 3.194 değişmedi, 196 durum değişti (1 iptal, 195 iade) | 5,6 dk |
+
+  7/7 etkin hesap bağlandı, hiçbiri hata vermedi. Mükerrer parmak izi **0**.
+
+### 3. Trendyol `UnDeliveredAndReturned` eşlenmemiş — canlı veride bulundu
+
+- **Neden bulunabildi:** Çekimden sonra `durum = 'Bilinmiyor'` satırlarının `ham_durum`
+  dağılımı sorgulandı. Bu hata **hiçbir istisna fırlatmıyor**; sipariş kaydediliyor ama
+  iptal/iade sayacına girmiyor. Yani ekranın varlık sebebini deliyor ve ancak veriye bakınca
+  görülüyor.
+- **Bulgu:** `UnDeliveredAndReturned` → **195 sipariş** `Bilinmiyor` durumundaydı. Bunlar
+  gerçek iadeler. Dahası bu ad **süzgeç listesinde de yoktu**, yani gecelik tur onları
+  sunucudan hiç istemiyordu. Ayrıca `Approved` (1 sipariş).
+- **Ne yapıldı:** `DurumCevir`'e `"UNDELIVEREDANDRETURNED" => Iade` ve `"APPROVED" => Onaylandi`;
+  `TrendyolDurumlari`'na `Iade => ["Returned", "UnDelivered", "UnDeliveredAndReturned"]` ve
+  `Onaylandi => ["Created", "Approved"]`.
+- **Doğrulama:** Düzeltmeden sonraki turda 195'i de yerine oturdu — 04/Trendyol iade
+  **59 → 229**, 03/Trendyol **18 → 44**. Kalan tek `Bilinmiyor` o `Approved` siparişi; gecelik
+  tur yalnızca iptal/iade istediği için bu turda kapsam dışıydı, ilk tam çekimde düzelecek.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Pazaryerleri/Saglayicilar/TrendyolSaglayici.cs`
+
+### 4. Testler
+
+- `tests/SentezServis.Core.Tests/PazaryeriSiparisCekJobTestleri.cs` (9 test) — **varsayılanları**
+  doğruluyor, yalnızca doğrulama kurallarını değil. Varsayılan bozulursa gecelik tur sessizce
+  yanlış pencereyi koşar ve kimse fark etmez.
+- `tests/SentezServis.Core.Tests/TrendyolDurumEslemeTestleri.cs` (14 test) — canlı veride
+  görülmüş her durum adının eşlendiğini kaynak taramasıyla doğruluyor (`DurumCevir` private).
+- **Sonuç:** `dotnet build` 0 uyarı/0 hata, **289 C# testi**, **40 arayüz testi**, lint temiz.
+- **Commit:** `7f0211d` — Gecelik uzlastirma turu: kayan 30 gunluk pencere + iptal/iade kapsami
+
+## Hesap hesap durum (soru: "hangilerinde sorunsuz çektik")
+
+| Şirket / pazaryeri | Sonuç |
+| --- | --- |
+| 01 / Trendyol, 01 / Shopify | ✅ sorunsuz |
+| 03 / Trendyol, 03 / Shopify, 03 / Hepsiburada | ✅ sorunsuz |
+| 04 / Trendyol, 04 / Hepsiburada | ✅ sorunsuz |
+| Boyner ×3 | ⛔ kapalı — uç adresi yok |
+| Pazarama ×2 | ⛔ kapalı — anahtar yok |
+| N11 | ⛔ sağlayıcı hiç yazılmadı |
+
+Hiçbir etkin hesap hata vermedi. Sipariş dönen yalnızca Trendyol ve Shopify;
+**Hepsiburada bağlanıyor ama 30 günde tek siparişi yok — eşlemesi hâlâ doğrulanmadı.**
+
+## Yerel adres
+
+`appsettings.json` → Kestrel `http://0.0.0.0:81`. Ekran:
+**`http://localhost:81/pazaryeri-siparisleri`** (giriş gerekiyor).
+
+## Açık kalanlar
+
+- Ekran hâlâ tarayıcıda açılmadı — giriş bilgisi yok.
+- Hepsiburada sipariş eşlemesi doğrulanmadı (veri yok).
+- Boyner uç adresi, Pazarama anahtarları, N11 sağlayıcısı.
+- Gecelik turun süresi Shopify'ın hacmine bağlı; Shopify tarafında durum süzgeci uygulanmıyor.
