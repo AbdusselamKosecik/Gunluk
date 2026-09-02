@@ -98,6 +98,61 @@ ve 1 Eylül'de düzeltilen "çapraz okumada roller boş geliyor" kusuru canlıda
 - Yayın betiği `python3` yokluğunu Docker içinde python koşarak **kendisi çözüyor**;
   elle shard bölmeye gerek kalmadı.
 
+### 6. #58 Admin Dashboard — "sunucu durumu görünmüyor" (gerçek kusur)
+
+- **Kullanıcı:** *"admin-dashboard daki sunucu durumu gosterilmiyor sorunu
+  giderelim, birde kartlar arasi biraz bosluk verelim olmuyor boyle"*.
+- **Ölçüm:** Uç zaten sağlamdı — `GET /api/v1/system/health` **200** ve 12 bileşen
+  dönüyordu. Panel de çiziliyordu. Sorun **sunum**du.
+- **Ne yanlıştı:** #58 aynı veriyi #37'den **ayrı**, kendi yazdığı bir `<ul>` ile
+  çiziyordu:
+  - durum ham İngilizce (`ok` / `down` / `unmeasurable`),
+  - bileşen adı ham anahtar (`phone-masking`),
+  - **`detail` alanı hiç yoktu.**
+  Yani ekranda *"Config Teslimi: down"* yazıyor ama **neden** down olduğu —
+  "4 aktif anahtardan 2 tanesi HİÇ bundle teslim almadı…" cümlesi, arızayı arayan
+  kişiyi doğru yere gönderen tek şey — görünmüyordu.
+- **Ne yapıldı:** Satırlar `HealthComponentList` bileşenine çıkarıldı; #37 ve #58
+  artık **aynı görünümü** kullanıyor (LED + çevrilmiş ad + çevrilmiş durum +
+  gecikme + gerekçe). #58'e ayrı bir görünüm yazmak, aynı veriyi iki ekranda iki
+  ayrı dilde anlatmak olurdu.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/system/HealthComponentList.tsx`
+  (+ `.module.css`), `PlatformHealthScreen.tsx` (+ `.module.css`), `platformApi.ts`,
+  `dashboards/AdminDashboardScreen.tsx` (+ `AdminDashboard.module.css`)
+
+### 7. Eksik etiket: `phone-masking` — ve **sınıfını kapatan kapı**
+
+- **Bulgu:** `HealthComponentKeys.PhoneMasking` sunucuya eklenmiş, istemcideki
+  `HEALTH_COMPONENT_KEY` haritası **elle** tutulduğu için geride kalmıştı.
+- **Neden sessizdi:** `componentLabel` bilinmeyen anahtarda **anahtarın kendisini**
+  döndürür. Bu fail-soft doğrudur (yeni bileşen ekranda **kaybolmaktansa** çirkin
+  görünmeli) ama sessizdir — ekrana bakan biri olmadan görülmez.
+- **Kapı:** `tests/Pbxtr.Architecture.Tests/HealthComponentLabelPairingTests.cs`
+  sunucunun sabitleri ile istemcinin haritasını **birebir** eşleştirir ve etiketin
+  **dokuz dilde** var olmasını ister. Yön tek taraflı değil: fazladan bir etiket de
+  kırar (kaldırılmış bileşeni hâlâ varmış gibi gösteren ölü çeviri).
+- **Vacuity kapısı var:** desen bayatlarsa `0 == 0` ile yeşil kalmasın diye
+  `serverKeys.Count >= 10` ayrıca ölçülüyor.
+- **Mutasyonla doğrulandı (üçü de kırmızı):** (1) anahtarı sil, (2) olmayan bir
+  bileşene etiket ekle, (3) `fr.json`'dan çeviriyi sil.
+
+### 8. Kart ızgarası
+
+- #58, satır içi `display:flex; gap:12` kullanan **tek** ekrandı; kartlar içeriğine
+  göre büzüşüyordu (`BAYİ` dar, `DAHİLİ` geniş) ve göz hizalanacak bir kenar
+  bulamıyordu.
+- Ev deseni ızgaraya alındı: `repeat(auto-fit, minmax(190px, 1fr))`, `gap: var(--sp-4)`
+  — ölçü **#37 ile aynı**, iki platform ekranı aynı ritmi tutsun diye.
+- **Uzun lisans gerekçesi kart notundan panel notuna taşındı:** 60 kelimelik cümle
+  kart içindeyken **ızgara satırının tamamını** yükseltiyor, yanındaki "TENANT 3"
+  kartı boş bir dikdörtgene dönüyordu. Kota ve destek panelleri aynı aileden notları
+  (`quotaNoteKey`, `ticketNoteKey`) zaten panel altına yazıyordu; platform paneli
+  **tek istisnaydı**.
+
+**Ölçüldü:** web **1314/1314**, Architecture **338/338**, `tsc -b` temiz, #58 ve #37
+tarayıcıda gerçek veriyle doğrulandı.
+
+- **Commit:** `9bdeebb3`
 ## Açık kalanlar / sonraki adım
 
 - **Yerel geliştirme yığını yayın için durduruldu** (Pbxtr.Api 5080, Vite 5173) —
@@ -112,3 +167,11 @@ ve 1 Eylül'de düzeltilen "çapraz okumada roller boş geliyor" kusuru canlıda
   `bundle.telephony.admin` tek kod taşıyor ve adı artık içeriğini anlatmıyor; bayi
   görünümünde düzenleme yok; `doc/prototip-urun-farklari.md` #62/#63'ü içermiyor.
 - **Gerçek Asterisk'e karşı hiçbir şey doğrulanmadı** (CLAUDE.md §3.0).
+- **Bir "gösterilmiyor" şikâyeti veri sorunu olmak zorunda değil.** Uç 200 dönüyordu,
+  panel çiziliyordu; kayıp olan şey **gerekçe sütunuydu**. Önce uca bakmak doğruydu,
+  ama orada durmak yanlış olurdu.
+- **Elle tutulan iki liste er geç ayrışır.** Sunucu sabitleri ↔ istemci etiket
+  haritası artık bir kapıyla bağlı; aynı desen (fail-soft + elle harita) başka
+  yerlerde de olabilir.
+- Prettier/ESLint bu depoda **kapı değil** (baseline'da 508 dosya uyarıyor, ESLint v9
+  yapılandırması yok). Biçim kapısı `dotnet format` tarafındadır, frontend'de yoktur.
