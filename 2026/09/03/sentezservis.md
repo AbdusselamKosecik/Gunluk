@@ -133,3 +133,113 @@ Sağlayıcı jeton alabiliyordu ama sipariş tarafı hiç sınanmamıştı. Canl
 - Hepsiburada hâlâ sıfır siparişli; eşlemesi doğrulanamıyor.
 - Trendyol/Boyner ortak `sapigw` okuyucusu.
 - Ekran hâlâ tarayıcıda açılmadı (giriş bilgisi yok).
+
+---
+
+# 5. tur — parametre ekranı
+
+## Bağlam
+
+Kullanıcı 04/Pazarama'yı açmamı istedi ("sen aç, parametrik yapacağız zaten ya; ben sabah
+bulur veririm") ve asıl işi tarif etti: **her şirkette tüm entegrasyonlar, aktif/pasif ve
+değerleriyle** düzenlenebilen bir parametre ekranı.
+
+Sorulan üç tasarım sorusu ve cevapları: saklama **veritabanına taşınsın**, ekranda **hesap
+ekle/sil serbest**, sırlar **maskeli ama isteyince gösterilsin**.
+
+## Yapılanlar
+
+### 1. Hesaplar veritabanına taşındı — göç 012
+
+- **Neden:** Hesaplar `appsettings.json`'da duruyordu. Parametreleri girecek kişi sunucudaki
+  bir JSON dosyasını elle düzenlemek zorundaydı ve her değişiklik servisin yeniden
+  başlatılmasını gerektiriyordu. Üç şirket × beş pazaryeri = on bir canlı hesap, her biri
+  4-8 alanlı; ikinci mağazalar eklenince dosya elle sürdürülebilir olmaktan çıktı.
+- **Tablo:** `pazaryeri_hesaplari` — bağlantı alanları sütun, pazaryerine özgü ek alanlar ve
+  ERP eşleme parametreleri `ek` JSON'unda, iz sütunları (kim/ne zaman) ve son bağlantı
+  denemesinin sonucu.
+- **Tekillik `(şirket, pazaryeri, ad)`** — `(şirket, pazaryeri)` tekil olsaydı aynı
+  pazaryerinde ikinci mağaza açılamazdı. N11'in beş ayrı App Key/Secret çifti tam olarak bu
+  ihtiyaçtı. Bu yüzden **hesap adı zorunlu**.
+- **Pazaryeri ADIYLA saklanır**, sayısal enum değeriyle değil: enum'a ortadan bir üye eklemek
+  bütün satırları başka pazaryerlerine kaydırırdı.
+- **Saklama politikası YOK** — hesap satırı yapılandırmadır, olay değil; otomatik silinmesi
+  entegrasyonun sessizce durması demektir.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Data/Migrations/012_pazaryeri_hesaplari.sql`,
+  `src/SentezServis.Core/Pazaryerleri/Hesaplar/` (4 yeni dosya)
+
+### 2. appsettings TOHUM oldu
+
+- **Neden yalnızca boş tabloya:** Her açılışta aktarılsaydı dosyadaki değerler ekrandan
+  yapılan düzeltmelerin üzerine yazardı — kullanıcı bir anahtarı düzeltir, servis yeniden
+  başlar, düzeltme kaybolur ve kimse sebebini anlamaz.
+- **Tohumlama başarısız olursa uygulama DURMAZ:** hesapsız açılmak hiç açılmamaktan iyidir;
+  kullanıcı ekrandan elle girebilir.
+- **Dosyadan okunmaya devam eden tek şey** `SentezServis:Pazaryeri:Etkin` — o hesap değil,
+  **dağıtım** kararıdır (bir kurulumda pazaryeri modülü hiç istenmeyebilir).
+
+### 3. Fabrika artık kaynaktan okuyor
+
+- `PazaryeriFabrikasi` `IOptions<Ayarlar>` yerine **`IPazaryeriAyarKaynagi`** alıyor:
+  uygulamada `VeritabaniAyarKaynagi` (30 sn önbellek + yazma yolundan açık tazeleme),
+  testlerde/sondalarda `DosyaAyarKaynagi`.
+- **Hata hâlinde BOŞ LİSTE DÖNMEZ.** Boş liste "hesap yok" demektir ve iş "sipariş yok" gibi
+  sessizce başarılı biterdi. Son bilinen liste kullanılır ve loglanır; hiç liste yoksa hata
+  yukarı fırlar.
+- `PazaryeriSiparisCekJob` de artık `fabrika.Ayarlar.Hesaplar` okuyor; `IOptions` bağı koptu.
+
+### 4. Sır sözleşmesi
+
+- **Veritabanında açık durur.** Şifreleme anahtarı aynı sunucuda duracağı için gerçek koruma
+  sağlamaz, yalnızca yanlış bir güven duygusu verirdi. Kasa modülündeki uçtan uca şifreleme
+  burada kullanılamaz: sırrı **sunucunun kendisi** kullanacak, kullanıcı değil.
+- **API'den maskeli döner** (`••••••••`, sabit uzunluk — gerçek uzunluk anahtarın kaç karakter
+  olduğunu söylerdi). Açık değer ayrı uçtan ve **ayrı bir denetim kaydı** üreterek alınır:
+  listeyi açan herkes anahtarı görmüş sayılmasın.
+- **Boş sır alanı "sil" demek değildir:** `COALESCE(@ApiGizli, api_gizli)`. Ekran maskeyi geri
+  gönderemeyeceği için sır alanlarını boş bırakır; böylece kullanıcı adını düzeltirken parolayı
+  kaybetmek imkânsız olur. **Bedeli:** anahtarı ekrandan silmek mümkün değil — üzerine yazılır
+  ya da hesap silinir. Bilinçli takas.
+- Sır olmayan alanlar (adres, depo kodu, kullanıcı adı) bu korumanın dışında; onları boşaltmak
+  meşru.
+
+### 5. Ekran — `/pazaryeri-hesaplari`
+
+- **Şirket şirket gruplanır.** Bakan kişi "04'te neler açık" diye bakar. Tanımlı OLMAYAN
+  pazaryerleri de satır olarak görünür — eksik entegrasyon ancak böyle fark edilir.
+- **Form ŞEMADAN üretilir** (`GET /semalar` → `PazaryeriSemalari`). Arayüzde elle alan listesi
+  tutulsaydı iki yer birbirinden sessizce ayrılırdı.
+- Şemada yeri olmayan ama kayıtta duran ek alanlar (ERP eşleme parametreleri) **korunur**:
+  form onları göstermezse kaydetmek silerdi.
+- Satır başına **Dene / Düzenle / Sil / +** (ikinci mağaza). Bağlantı denemesi sipariş çekmez,
+  sonucu satırda kalır.
+- Yalnızca **yönetici** (`YoneticiRotasi` + tüm uçlarda `.YoneticiIster()`).
+- **Dokunulan dosyalar:** `web/src/pages/PazaryeriHesaplariSayfasi.tsx`,
+  `web/src/api/pazaryeriHesap.ts`, `web/src/api/index.ts`, `web/src/App.tsx`,
+  `web/src/components/Layout.tsx`, `src/SentezServis.Host/Api/PazaryeriHesapUclari.cs`
+
+### 6. 04/Pazarama açıldı
+
+Kullanıcının isteğiyle açıldı; anahtarlar **geçici** (03'ünkiyle birebir aynı). Doğru
+anahtarlar gelene kadar iki şirket aynı siparişleri çeker ve aynı ticari belge iki firmaya
+düşer. `appsettings.json`'a bu notu yazdım; doğru anahtarlar girilince silinecek.
+**Bağlantı turu: 11/11.**
+
+### 7. Testler
+
+- `PazaryeriHesapKaydiTestleri` (12) — kayıt ↔ hesap çevriminde alan kaybını yakalar. Kaybolan
+  alan **sessiz** bir hatadır: sağlayıcı "alan tanımlı değil" der, suç yapılandırmaya atılır.
+- `PazaryeriHesapDeposuSinirTestleri` (14) — COALESCE koruması, tekillik, tohumun yalnızca boş
+  tabloya yazması, maskeleme, yönetici zorunluluğu, önbellek tazeleme.
+- **Sonuç:** build 0 uyarı/0 hata, **342 C# testi**, 40 arayüz testi, lint temiz.
+- **Commit:** `f4f1c86` — Pazaryeri hesaplari parametre ekrani; hesaplar veritabanina tasindi
+
+## Açık kalanlar / sonraki adım
+
+- **Göç 012 uygulanmadı, tohumlama koşmadı, ekran tarayıcıda açılmadı** — bu tur boyunca
+  `192.168.1.3` erişilemezdi (ping %100 kayıp, 1433 kapalı). Sunucu döndüğünde ilk iş:
+  servisi açıp göçü uygulatmak, tohumun 11 hesabı aktardığını ve ekranın onları listelediğini
+  görmek.
+- 04'ün gerçek Pazarama anahtarları (kullanıcı sabah verecek).
+- Boyner/Pazarama siparişlerinin veritabanına yazımı hâlâ doğrulanmadı (4. tur açığı).
+- Hepsiburada'da hiç sipariş yok; eşlemesi doğrulanamıyor.
