@@ -153,6 +153,62 @@ ve 1 Eylül'de düzeltilen "çapraz okumada roller boş geliyor" kusuru canlıda
 tarayıcıda gerçek veriyle doğrulandı.
 
 - **Commit:** `9bdeebb3`
+### 9. Host ajanı denetimi — **belge bayattı, ajan çalışıyor**
+
+- **Soru:** *"Hostaki sunucu ajanini kontrol edermisin neden veri alamiyoruz."*
+- **Ölçüm (sunucu, `root@176.88.41.220`):**
+  - `pbxtr-sysagent.service` **active (running)**, 29 Ağustos'tan beri (3 gün).
+  - Soket `srw-rw---- root:pbxtr /run/pbxtr-sysagent/sock`, jeton `/etc/pbxtr/app/sysagent.token`.
+  - Konteynerde ortam değişkenleri, soket ve jeton **hepsi bağlı**.
+  - Canlı sağlık: `sysagent = ok` — *"Host ajani cevap veriyor (soket + jeton dogrulandi)"*.
+- **`deploy/pbxtr-sysagent/README.md` hâlâ "GERÇEK SUNUCUDA HENÜZ KOŞTURULMADI" diyor.**
+  Belge bayat; ajan kurulmuş ve çalışıyor.
+- **İlk okumam yanlıştı.** `NetworkInterfaceReader`/`ThreatMonitorReader` gibi
+  dosyalarda "host ajanı henüz yazılmadı" sabitlerini görüp "hiç sormuyorlar" dedim.
+  O metinler **ölçülemeyen dalın yedek cümleleri**. Canlı ölçüm tersini gösterdi:
+  ağ arayüzleri, tehditler, servisler, paketler, disk, CPU/bellek — hepsi
+  `measured: true`. Kaynağa bakıp karar vermek yerine **ucu çağırmak** doğru olanı
+  gösterdi.
+- **Gerçekten eksik olan:** `system/backup` → `unmeasurable`, ve güvenlik duvarının
+  dört katmanından biri (`fail2ban` kural listesi) okunmuyor — tablo FW-03 ile
+  ölçülüyor ama kurallar nft ruleset ayrıştırması istiyor.
+
+### 10. "PC'de mi Docker'da mı" — uç nokta artık ortamdan çözülüyor
+
+- **Neden:** Kullanıcı: *"benim pc de calistigimi anlayip ona gore uc noktayi
+  ayarlasin, docker de calistigini anlayip ona gore ayarlasin"*.
+- **Asıl kusur bir metindi:** tek bir *"yapılandırılmamış"* cümlesi **üç ayrı gerçeği**
+  aynı gösteriyordu:
+  1. bu makinede ajan **olamaz** (Windows),
+  2. ajan kurulu ama **ayar eksik**,
+  3. ayar var ama **soket ortada yok**.
+  Üçünün müdahalesi apayrı — birincisinde yapacak bir şey yok, ikincisinde ayar
+  yazılır, üçüncüsünde servise bakılır. Aynı metni basmak, geliştiriciye **yanlış iş**
+  yaptırıyordu: olmayan bir ajanı kurmaya çalışmak.
+- **Ne yapıldı:** `SystemAgentPathResolver` — Linux host / konteyner / Linux-dışı ayrımı.
+  - **Açık ayar her ortamda kazanır.** Geliştirici bir tüneli ya da özel yolu bilerek
+    gösterebilir; algılamanın onu ezmesi *"ayarı yazdım ama uygulama dinlemiyor"*
+    sınıfında bir hata olurdu.
+  - **Yarım ayar tamamlanmaz.** Eksik yanı algılamayla doldurmak, operatörün yazdığı
+    yarım ayarı "çalışıyor" göstermek olurdu.
+  - **Yol TAHMİN EDİLMEZ:** standart yol yalnızca **diskte varsa** benimsenir.
+    Tahmin, ajanı hiç kurulmamış bir sunucuda *"bağlanamadım"* (**arıza**) üretirdi;
+    doğru cevap *"kurulu değil"*dir (**kurulum hali**) ve ikisi ayrı ekiplere gider.
+  - **Linux dışı makine bir eksiklik değil, imkânsızlıktır** ve cümle bunu söyler:
+    ajan root koşan bir Linux sürecidir, `AF_UNIX` + `SOCK_SEQPACKET` ile konuşur,
+    Windows `SOCK_SEQPACKET` desteklemez. **Bu yüzden yerelden sunucunun ajanına
+    tünelle bağlanmak da mümkün değil:** SSH `-L` bir *stream* soket verir, dinleyici
+    SEQPACKET'tir ve `connect()` `EPROTOTYPE` ile düşer.
+  - Konteynerde eksik yol **bind mount'a**, host'ta **README'ye** gönderir.
+- **Çözümleme ajan olmasa da kaydedilir** — yalnızca ajan varken kaydedilseydi, tam da
+  cümleye ihtiyaç duyulan hâlde kayıt olmaz ve yoklama eski genel metne düşerdi.
+- **Ölçüldü:** 14 yeni test; **dört mutasyon** (yolu tahmin et / Linux-dışı dalı
+  etkisizleştir / yarım ayarı tamamla / açık ayarı yoksay) — dördü de kırmızı.
+  İlk üç mutasyon denemem **derlenmedi** (uyarı=hata, `CS0162`); derlenen
+  eşdeğerleriyle tekrarlandı — derlenmeyen bir mutasyon doğrulama sayılmaz.
+- **Sunucuda davranış değişmedi:** compose iki yolu da açıkça yazıyor, kaynak
+  `Configuration` kalıyor.
+- **Commit:** `d6994541`
 ## Açık kalanlar / sonraki adım
 
 - **Yerel geliştirme yığını yayın için durduruldu** (Pbxtr.Api 5080, Vite 5173) —
@@ -175,3 +231,9 @@ tarayıcıda gerçek veriyle doğrulandı.
   yerlerde de olabilir.
 - Prettier/ESLint bu depoda **kapı değil** (baseline'da 508 dosya uyarıyor, ESLint v9
   yapılandırması yok). Biçim kapısı `dotnet format` tarafındadır, frontend'de yoktur.
+- **Kaynaktaki cümle, koşan davranış değildir.** "Host ajanı henüz yazılmadı" yazan
+  sabitler ölçülemeyen dalın yedeğiydi; ucu çağırmadan verilen karar yanlıştı.
+- `deploy/pbxtr-sysagent/README.md` **güncellenmeli**: "gerçek sunucuda henüz
+  koşturulmadı" artık doğru değil.
+- Açık kalan gerçek eksikler: **yedekleme durumu** (`unmeasurable`) ve güvenlik
+  duvarında **fail2ban kural listesi** (tablo ölçülüyor, kurallar okunmuyor).
