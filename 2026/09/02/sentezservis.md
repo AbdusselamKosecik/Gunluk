@@ -170,3 +170,76 @@ Karar: **önce elimizdekini bağla, sonra büyüt.** Yeni sağlayıcı (N11) vey
 
 - Hepsiburada sipariş eşlemesi doğrulanmayı bekliyor (sipariş gelince).
 - ERP eşlemesi ve işler hâlâ yazılmadı. Eşleme anahtarı **barkod** olacak.
+
+---
+
+## Üçüncü tur — sipariş deposu ve ekranı
+
+Kullanıcı istedi: seçilen aralıkta **tüm sağlayıcılardan, tüm şirketlerden** siparişleri çekip
+kendi veritabanımızda bir tabloya kaydetmek; ikinci çekimde iptal/iade durumlarını güncellemek.
+
+Mimari iş olarak ele alındı (yeni tablo + kalıcılık + uzlaştırma + ekran). Üç karar kullanıcıya
+soruldu, üçünde de önerilen seçenek onaylandı: ekran + arkada iş, durum değişikliği geçmişi
+tablosu, kalemler + ham JSON.
+
+### 9. Şema — `011_pazaryeri_siparisleri.sql`
+
+- **Parmak izi (şirket, pazaryeri, PAKET NO).** Sipariş numarası değil: Trendyol'da bir sipariş
+  çok pakete bölünür, paketler ayrı kargolanır ve **durum paket üzerinden yürür**. Sipariş no
+  anahtar olsaydı bir paketi teslim diğeri iptal olan sipariş tek satırda ezişirdi.
+- **Kalemler her çekimde silinip yeniden yazılır** — kısmi iptalde kalem düşer; upsert düşen
+  kalemi bırakır ve sipariş toplamı kalem toplamını tutmaz.
+- **Durum geçmişi yalnızca gerçek değişimde yazılır.** Her çekimde yazılsaydı tablo aynı durumun
+  kopyalarıyla dolar, "ne zaman iptal oldu" yine cevapsız kalırdı.
+- **Saklama politikasına bilerek eklenmedi**: ticari kayıt, otomatik silinmemeli.
+
+### 10. Depo, iş ve ekran
+
+- `SiparisUzlastirma` saf mantık (12 test), `SiparisDeposu` Dapper deposu,
+  `PazaryeriSiparisCekJob` iş, `PazaryeriSiparisUclari` API, `PazaryeriSiparisleriSayfasi` ekran.
+- Ekran işi kuyruğa atar ve **canlı log** akıtır (mevcut `useJobLogStream` + `LogPaneli`).
+  Senkron çekim tarayıcıyı zaman aşımına sokardı.
+- `SiparisDeposuSinirTestleri`: ERP bağlantısının açılmadığı ve pazaryerine gönderim
+  yapılmadığı **kaynak taramasıyla** korunuyor (EksiStokTestleri'nin deseni).
+
+### 11. Canlı doğrulama ve çıkan üç hata
+
+**5.879 sipariş / 8.286 kalem** gerçek hesaplardan yazıldı.
+
+- Aynı aralık ikinci kez çekildiğinde **hiçbir satır çoğalmadı** (0 yeni, mükerrer parmak izi 0).
+- Bir siparişin durumu elle bozulup yeniden çekildi: değişim görüldü, geçmişe **tam bir** satır
+  yazıldı, `durum_degisiklik_zamani` ilerledi, satır gerçek duruma döndü.
+- Kapalı pazaryeri (Boyner) seçildiğinde iş "sipariş yok" demedi, "etkin hesap yok" dedi.
+
+Yolda üç hata çıktı, üçü de ancak gerçek veriyle görülebilirdi:
+
+1. **Trendyol `totalElements` her sayfada toplanıyordu.** 2.066 siparişlik çekim "22.726 kayıt
+   bildirildi" diye görünüyordu — liste eksik sanılırdı. Pencere başına bir kez alınacak şekilde
+   düzeltildi. (Liste aslında tamdı: 2066 × 11 sayfa = 22726.)
+2. **İsteğe bağlı parametreler `GetString` ile okunuyordu.** `sirket`/`pazaryeri` boş
+   bırakıldığında — yani "tüm şirketler", asıl kullanım — iş `JobParameterException` ile
+   patlıyordu. `GetStringOrDefault`'a çevrildi.
+3. **Trendyol `ReadyToShip` durumu eşlenmemişti**, `Bilinmiyor` düşüyordu. `Hazirlaniyor`'a
+   eşlendi.
+
+Ayrıca projedeki `TurkceHarmanlamaParametreTestleri` koruması kodumu yakaladı ama **yanlış
+alarmdı**: `eski.Id` bir çağrı argümanıydı, anonim nesne üyesi değil; dedektörün regex'i ikisini
+ayıramıyor. Kod yine de daha temiz hâle getirildi (metoda çıplak `long` yerine satırın kendisi
+veriliyor).
+
+### 12. Yazma hızı
+
+İlk ölçüm **~8,75 sipariş/sn** — sipariş başına ayrı transaction. Öbekli işleme geçildi
+(100 sipariş/transaction) → **~12/sn**. Beklenenden az iyileşme: darboğaz commit değil, sipariş
+başına dört ağ turu ve uzak veritabanı gecikmesi. Toplu yazmaya (TVP / `SqlBulkCopy`)
+geçilmedi — 90 günlük çekim yoğun mağazalarda 45 dakikalık iş zaman aşımına yaklaşabilir.
+
+- **Doğrulama:** `dotnet build` 0 uyarı/0 hata, **260 C# testi**, **40 arayüz testi**, lint temiz.
+- **Commit:** `f850746` — Pazaryeri siparisleri: cekme isi, depo ve ekran
+
+## Ek — açık kalanlar (3. tur)
+
+- **Ekran tarayıcıda hiç açılmadı**: giriş bilgisi yok. Uçlar 401/404 ile kayıtlı olduğu
+  doğrulandı, iş ve depo doğrudan koşturuldu; ama "Çek"e basılıp canlı log akışı görülmedi.
+- Yazma hızı için toplu yazma (TVP) düşünülebilir.
+- Hepsiburada'da hâlâ sipariş yok; o pazaryeri için eşleme doğrulanamadı.
