@@ -209,6 +209,73 @@ tarayıcıda gerçek veriyle doğrulandı.
 - **Sunucuda davranış değişmedi:** compose iki yolu da açıkça yazıyor, kaynak
   `Configuration` kalıyor.
 - **Commit:** `d6994541`
+### 11. Geliştirme köprüsü — PC'den sunucudaki host ajanına
+
+- **Kullanıcı:** *"benim pc de calisiyorsa linux sunucuya baglansin dedim ya hacim"*.
+  Ben önce "mümkün değil" demiştim; kullanıcı isteği yineledi ve **doğru olan yapmaktı** —
+  imkânsız olan *doğrudan* bağlantıydı, aradaki dönüştürücü değil.
+- **Neden doğrudan olmuyor (üçü de denenmeden elenir):**
+
+  | Deneme | Neden olmaz |
+  |---|---|
+  | Doğrudan bağlantı | Taşıma `AF_UNIX` + `SOCK_SEQPACKET`; Windows `SOCK_SEQPACKET` desteklemez. |
+  | `ssh -L port:/run/…/sock` | SSH bir **stream** soket verir; SEQPACKET dinleyiciye `connect()` **`EPROTOTYPE`** ile düşer. |
+  | `socat` / byte yönlendirici | Byte'ları olduğu gibi aktarır. TCP parçalanmasında JSON **birden çok pakete** bölünür, ajan yalnızca ilkini görür. Belirti sinsi: **küçük istekler çalışır, büyükler rastgele düşer.** |
+
+- **Bu yüzden köprü bir yönlendirici değil, ÇERÇEVE DÖNÜŞTÜRÜCÜSÜ:** sınır yarım
+  kapatma ile taşınır — `yaz → shutdown(SEND) → EOF'a kadar oku → TEK send()`.
+- **Dokunulan dosyalar:** `deploy/pbxtr-sysagent/kopru.py`,
+  `pbxtr-sysagent-kopru.service`, `deploy/yerel-gelistirme.sh`,
+  `UnixSocketSystemAgent.cs`, `SystemAgentPathResolver.cs`, `SystemAgentResolution.cs`
+- **Komutlar:**
+  ```bash
+  install -m 0755 deploy/pbxtr-sysagent/kopru.py /usr/local/lib/pbxtr/kopru.py
+  install -m 0644 deploy/pbxtr-sysagent/pbxtr-sysagent-kopru.service /etc/systemd/system/
+  systemctl daemon-reload && systemctl start pbxtr-sysagent-kopru
+  ```
+
+#### Bilinçli taviz ve onu çevreleyen sınırlar
+
+Köprü, host'ta **root komut çalıştıran bir ucu ağa açar.** Bu bir tavizdir ve
+yazılı olarak çevrelendi:
+
+- Üretim deploy'una **girmez**; `[Install]` var ama `enable` **bilinçli yazılmadı** —
+  yeniden başlatmada kendiliğinden açılması, geçici bir kapıyı kalıcı yapardı.
+- **`0.0.0.0` reddedilir** (`EX_USAGE`). Ayrıcalıklı bir ucu genel ağa açmak, tek bir
+  eksik parametreyle olabilecek en pahalı hatadır.
+- Köprü **root koşmaz**: `User=nobody`, `Group=pbxtr` (soket `0660 root:pbxtr`).
+- **Jeton kalkmaz.** Köprü bir yetki değil bir biçim dönüştürücüsüdür; ajanın iki
+  kapısı olduğu gibi durur.
+- İstemci tarafı **asla algılamaz**: `SystemAgent:TcpEndpoint` yalnızca elle yazılır.
+  Algılanabilir olsaydı bir gün **üretimde kendiliğinden** devreye girerdi.
+
+#### Yol boyunca bulunan kusur
+
+`new Socket(AddressFamily.Unspecified, …)` **Windows'ta soketi hiç oluşturmuyor.**
+Hata `ConnectAsync` yerine kurucudan geliyordu ve ekranda **`AGENT_NOT_CONNECTED`**
+("ajan cevap vermiyor") diye görünüyordu — yani belirti **yanlış yeri işaret
+ediyordu**: ajan çalışıyordu, istemci soketi açamıyordu. Çift yığınlı kurucuya
+(`new Socket(SocketType.Stream, ProtocolType.Tcp)`) geçildi.
+
+#### Ölçüm (PC → sunucu, gerçek istek)
+
+| | |
+|---|---|
+| `sysagent` | **ok** — *"soket + jeton doğrulandı"* |
+| ağ arayüzleri · servisler · paketler · tehditler | `measured: true` |
+| CPU/bellek | **ok** — %4 CPU, %24 bellek (bir örnekleyici turu gerekiyor) |
+| host diski | **ölçülemedi** — aşağıya bakın |
+
+**Host diski köprüden okunamaz** ve bu bilinçlidir: `Health:HostDiskPath` ajandan
+değil **doğrudan dosya sisteminden** (`DriveInfo`) okunur. Windows'taki bir sürücüyü
+yol olarak yazmak çözüm değildir — o zaman **PC'nin diski "host diski" diye**
+gösterilirdi; yanlış bir diski doğru bir sayıymış gibi göstermek, hiç ölçmemekten
+kötüdür (kodun kendi gerekçesi).
+
+**Ölçüldü:** 17 test (3 yeni), Architecture **338/338**, Api Health+SystemOps
+**324/324**, `dotnet format` temiz.
+
+- **Commit:** `62501dd8`
 ## Açık kalanlar / sonraki adım
 
 - **Yerel geliştirme yığını yayın için durduruldu** (Pbxtr.Api 5080, Vite 5173) —
@@ -237,3 +304,10 @@ tarayıcıda gerçek veriyle doğrulandı.
   koşturulmadı" artık doğru değil.
 - Açık kalan gerçek eksikler: **yedekleme durumu** (`unmeasurable`) ve güvenlik
   duvarında **fail2ban kural listesi** (tablo ölçülüyor, kurallar okunmuyor).
+- **"Mümkün değil" derken neyin mümkün olmadığını ayır.** Doğrudan bağlantı gerçekten
+  imkânsızdı; **aradaki dönüştürücü** değildi. İlk cevabım bu ayrımı yapmadığı için
+  yapılabilir bir işi yapılamaz göstermişti.
+- **Köprü açıkken kapatmayı unutma:** `systemctl stop pbxtr-sysagent-kopru`.
+  Şu an **açık** ve yeniden başlatmada kendiliğinden açılmaz.
+- Host diski yerelde ölçülemez (ajandan değil, dosya sisteminden okunuyor). Gerekirse
+  ayrı bir karar: diski de bir `FR-*` okuması hâline getirmek.
