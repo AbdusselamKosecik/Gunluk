@@ -259,3 +259,103 @@ de kırmızı. Api **1034/1034**, Architecture **338/338**, web **1315/1315**,
   `doc/prototip-urun-farklari.md` (birkaç satır). Kod ve ekran temiz, doküman değil.
 - `Config Teslimi (confd)` **down** kalmaya devam ediyor: `pbxtr-confd` düğümleri
   bundle çekmiyor. Artık bağlantı açıldığına göre bu iş yapılabilir hâle geldi.
+
+---
+
+### 8. #63 Asterisk Konsolu — 12 komutun 12'si çalışmıyordu (sessizce)
+
+- **Neden:** Ekranlardan devam ederken #63 açıldı; "Kuyruk listesi" → "Çalıştır"
+  çıktısı **`Permission denied`**. Ekran bunu **arıza olarak göstermiyordu**: uç
+  `200` ve `connected: true` dönüyor, reddi yalnızca çıktı metni taşıyordu.
+
+- **Ölçüm (önce):**
+  ```
+  POST /api/v1/telephony/console/run {"commandId":"AST-05"}
+    -> 200 {"connected":true,"output":"Permission denied"}
+
+  /etc/asterisk/pbxtr.d/credentials/ami.conf
+    write = call,agent,originate          # `command` YOK
+  ```
+  AMI'nin `Command` eylemi `command` yazma yetkisi ister.
+
+- **Karar:** **AMI'ye `command` verilmedi.** Vermek, AMI'ye erişen herkese keyfi bir
+  Asterisk CLI'si açardı — CLAUDE.md §3.1'in `asterisk -rx` tuzağı başlığı altında
+  açıkça yasakladığı şey. *Yol değiştirildi, kapı genişletilmedi.* Kullanıcı bu yolu
+  zaten önceden yetkilendirmişti: *"daha da bağlanacaksak host ajanı üstünden
+  Docker'dan çalıştıracağız."*
+
+- **Ne yapıldı:** Katalog, yetki, tenant kuyruk çözümü ve denetim **aynen kaldı**;
+  yalnızca **taşıma katmanı** değişti.
+  - `system-commands.json` → `AST-CLI`, screenCode 63,
+    argv `/usr/bin/docker exec pbxtr-asterisk /usr/sbin/asterisk -rx <cli>`.
+  - `cli` **kapalı bir `enum`**; değerleri `AsteriskCommandCatalog`'un ta kendisi.
+  - `AsteriskCliRunner` — ajan varsa ajan, yoksa AMI (fallback silinmedi).
+  - `AsteriskQueueBlock` — AST-06'nın blok ayırıcısı.
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Platform/SystemOps/system-commands.json`,
+  `src/Pbxtr.Infrastructure/Telephony/Asterisk/{AsteriskCliRunner,AsteriskQueueBlock,
+  AsteriskCommandCatalog,AmiAsteriskConsole}.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/TelephonyServiceCollectionExtensions.cs`,
+  `tests/Pbxtr.Architecture.Tests/{AsteriskConsoleTransportTests,AsteriskCommandCatalogTests}.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/AsteriskQueueBlockTests.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/SystemAdmin/SystemOpsReaderTests.cs`,
+  `CLAUDE.md` §3.1, `doc/mimari/ADR-014` §2.10.2.
+
+- **Komutlar:**
+  ```bash
+  dotnet publish src/Pbxtr.SysAgent/Pbxtr.SysAgent.csproj -c Release -r linux-x64 \
+    --self-contained true -p:PublishSingleFile=true -o <cikti>
+  scp <cikti>/pbxtr-sysagent root@176.88.41.220:/usr/local/lib/pbxtr/pbxtr-sysagent.yeni
+  ssh root@176.88.41.220 'cd /usr/local/lib/pbxtr && cp -a pbxtr-sysagent pbxtr-sysagent.onceki \
+    && chmod 755 pbxtr-sysagent.yeni && mv pbxtr-sysagent.yeni pbxtr-sysagent \
+    && systemctl restart pbxtr-sysagent'
+  ```
+
+- **Sonuç / doğrulama:** Uçtan uca (yerel panel → Tailscale → ajan → konteyner)
+  **12 komutun 12'si gerçek çıktı** dönüyor: `core show version` → *Asterisk 22.10.1*,
+  `queue show` → 3 tenant kuyruğu, `core show channels`, `dialplan show`, `core show calls`.
+  AST-06 iki meşru kuyrukta doğru bloğu, kapsam dışı adda **404** döndü.
+  Testler: Architecture 342/342, Api.Tests Telephony 686/686, SystemAdmin 307/307,
+  `dotnet format` temiz.
+
+- **Commit:** `043cad5e` — fix(telephony): #63 konsol komutlari GERCEKTEN kosuyor
+
+#### 8.1 Ölçülen teknik ayrıntılar (bir daha aramamak için)
+
+- **Bölünmüş argv ÇALIŞMIYOR.** `asterisk -rx queue show` (tırnaksız, iki argv öğesi)
+  yalnızca ilk belirteci komut sayar: `No such command 'queue'` — ve **çıkış kodu 0**
+  döner, yani hatayı yutar. `-rx` tek dizeli argüman ister.
+- **Boşluklu `enum` değeri güvenlidir.** Ajan parametreyi `argv`'ye **tek öğe** olarak
+  ekler (`ProcessStartInfo.ArgumentList`), kabuk yoktur, yeniden ayrıştırma yapılmaz.
+  Bu, kapalı listeyi bozmadan `"queue show"` gibi çok kelimeli bir komut geçirmenin
+  tek yoludur.
+- **AST-06'nın kuyruk adı `enum`'a giremez** (tenant'a özgü, derleme zamanında bilinmez)
+  ve `enumFromProbe` boşluk kabul etmez. Bu yüzden komut `queue show`dur ve blok
+  **çıktıdan ayrılır**.
+- **Katalog sayısı 3 yerde çivili:** `SystemOpsReaderTests` (iki kez), ADR-014 §2.10
+  tablosu, `$comment`. 53 → 54, okuma 36 → 37.
+
+### 9. Kararlar
+
+- **Yetkiyi genişletmek yerine yolu değiştir.** `command` yetkisi bir okuma kolaylığı
+  için verilecek en pahalı tavizdi: geri alınması zor, etkisi AMI'nin tamamı.
+- **Ajan sözleşmesine "serbest metin" parametre tipi eklenmedi.** AST-06 için cazipti;
+  eklemek kapalı listeyi fiilen kaldırırdı. Bir satır ayrıştırma daha ucuz.
+- **AMI fallback silinmedi.** `command` verilmiş bir kurulumda çalışır ve ajanı olmayan
+  bir kurulumun tek yoludur; ama ajan bağlıyken AMI'ye **düşülmez** — ölçülmüş şekilde
+  `Permission denied` dönen bir yolu ikinci kez koşturup o metni santralin cevabı gibi
+  göstermek olurdu.
+
+### 10. Açık kalanlar
+
+- **Ölçüm hatası kaydı:** katalog ucunun anahtarı `items`, `commands` değil. İlk
+  ölçümde "0 komut görünüyor" sonucuna vardım; yanlıştı — 12 komut dönüyordu.
+  *Önce yanıtın ham hâline bak, sonra ayrıştır.*
+- `$comment`'teki **"BU DALGADA HİÇBİRİ ÇALIŞTIRILMAZ / sysagent bu sunucuda yok"**
+  satırları bayattı (ajan kurulu ve etkin) — düzeltildi. *Bayat beyan, yanlış beyandır.*
+- Geliştirme köprüsü hâlâ **açık** (yerel geliştirme buna bağlı):
+  `systemctl stop pbxtr-sysagent-kopru`.
+- Bu değişiklikler **pbxtr.com'a yayınlanmadı**; sunucuda yalnızca **ajan ikilisi**
+  güncellendi (yedek: `/usr/local/lib/pbxtr/pbxtr-sysagent.onceki`).
+- Hâlâ ölçülemeyen: yedekleme durumu, fail2ban kural listesi. `Config Teslimi (confd)`
+  hâlâ **down**.
