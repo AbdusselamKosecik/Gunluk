@@ -359,3 +359,142 @@ de kırmızı. Api **1034/1034**, Architecture **338/338**, web **1315/1315**,
   güncellendi (yedek: `/usr/local/lib/pbxtr/pbxtr-sysagent.onceki`).
 - Hâlâ ölçülemeyen: yedekleme durumu, fail2ban kural listesi. `Config Teslimi (confd)`
   hâlâ **down**.
+
+---
+
+### 11. #36 Saldırı İzleme — 48 saatlik geçmiş günlükten okunuyor (TH-06)
+
+- **Neden:** Kullanıcı: *"48 saatlik saldırı geçmişi logdan okusun versin agent."*
+  Ekran o güne kadar **"üretilemez"** diyordu ve gerekçe olarak *"kalıcı bir güvenlik
+  olay tablosu + log alma işi gerekir, o ayrı bir kurul kartıdır"* yazıyordu.
+
+- **Ölçüm önce:** `/var/log/fail2ban.log` → **671 ban satırı**, rotasyon işaretleriyle
+  **23 Ağustos'tan** beri duruyor. Yani tablo gerekmiyordu; eksik olan **logu okuyan
+  komuttu**. *Bir "üretilemez" cümlesi, yazıldığı gün doğru olsa bile, ne zaman yeniden
+  ölçüleceğini söylemediği sürece kalıcı hâle geliyor.*
+
+- **Ne yapıldı:**
+  - `TH-06` — `grep -hE` ile ban satırları **ve** `rollover` satırları, **iki dosyadan**
+    (`fail2ban.log.1` + `fail2ban.log`).
+  - `Fail2banBanHistory` — saatlik kovalar + kapsam + jail kırılımı.
+  - `ThreatMonitorReader` seriyi ve tür kırılımını artık dolduruyor.
+  - Ekran çubuk grafiği çiziyor; `series48h === null` dalı aynen duruyor.
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Platform/SystemOps/Fail2banBanHistory.cs`,
+  `.../ThreatMonitorReader.cs`, `.../system-commands.json`,
+  `src/Pbxtr.Domain/Platform/SystemOps/IThreatInventory.cs`,
+  `src/Pbxtr.Web/src/app/screens/system/{ThreatsScreen.tsx,threatsApi.ts,*.module.css}`
+
+- **Sonuç / doğrulama:** **48 kova, 271 ban**, tür kırılımı dolu. Bağımsız `awk` sayımıyla
+  aynı pencere için **birebir** tuttu (o andaki ölçümde 253/253).
+
+#### 11.1 Bunu yapmadan önce ajanın **sessiz kırpması** düzeltilmek zorundaydı
+
+- Ajan çıktıyı **256 KB'de kesiyor ve bunu hiç söylemiyordu**.
+- **Kırpma baştan tutar**, yani kaybedilen kısım çıktının **sonudur** — en yeni satırlar.
+  48 saatlik bir seri için bu, tam da bakılan pencerenin kaybolması demek.
+- `AgentResponse` / `SystemAgentResult` / `SystemCommandOutcome` artık `Truncated` taşıyor
+  ve **kırpılmış çıktı bir ölçüm sayılmıyor**.
+- *Ders: bir üst sınır, aşıldığını söylemiyorsa sınır değil, sessiz bir veri kaybıdır.*
+
+### 12. #35 Güvenlik Duvarı — fail2ban katmanı artık zincirini okuyor (FW-09)
+
+- **Neden:** Kullanıcı: *"Linux ajandan almamız lazım tüm komutları ve durumları."*
+- **Ölçüm:** Üç katman **zaten** ajandan okunuyordu (belge bayattı: "o komutu çalıştıracak
+  ajan yoktur" yazıyordu). Eksik olan tek katman **fail2ban**'dı: `measured: false`.
+  Okunan tek şey "tablo var mı" (`FW-03`) idi.
+- **Neden yetmiyor:** Tablo **VAR** olup zinciri **BOŞ** olabilir ya da yanlış hook'ta
+  durabilir — her iki hâlde de servis çalışır, günlüğe yazar ve **hiçbir şeyi düşürmez**.
+- **Neden `FW-04` (tüm ruleset) değil:** ruleset staging'de **193 KB** ölçüldü ve 256 KB
+  sınırına yakın; sınıra dayandığı gün f2b tablosu **sessizce** kaybolurdu.
+- **Sonuç:** dört katmanın dördü de ölçülüyor —
+  `fail2ban measured=true kural=1` → `f2b-chain deny tcp 22 @addr-set-sshd (reject)`.
+- **Banlı adresler burada sayılmıyor** (#35/5). İki kaynak bugün zaten ayrışıyor:
+  nft setinde **5** adres, fail2ban'in bildirdiği **1**.
+
+### 13. #02 — bayinin kullanıcıları hiç gelmiyordu
+
+- **Ölçüm:** `GET /users?dealerId=<bayi>` → **`total: 0`**, oysa bayinin 2 tenant'ı ve
+  13 kullanıcısı var.
+- **Sebep:** filtre `user.DealerId == dealerId` idi — yani **bayinin kendi personeli**.
+  Doğru cevap iki kümenin **birleşimi**: bayinin personeli **VE** bayinin tenant'larına
+  ait kullanıcılar (`tenants.dealer_id`).
+- **Kusur neden görünmüyordu:** `UserListDealerFilterTests` `IUserAdministration`'ın
+  **taklidini** kullanıyor — `dealerId`'nin porta *ulaştığını* ölçüyor, filtrenin **ne
+  seçtiğini** hiç sormuyor. *Defterdeki "test ikizi üretimden müsamahakâr" dersinin başka
+  bir yüzü: ikiz burada doğrulayıcıyı değil, sorgunun kendisini atlıyordu.*
+- **Ne yapıldı:** yüklem `DealerUserScope`'a taşındı (üretim de onu çağırıyor), 5 test,
+  iki mutasyon (eski yüklemi geri koymak → 3 kırmızı; bayi koşulunu düşürmek → 4 kırmızı).
+- **Sonuç:** 13 kullanıcı (t0007'nin 10'u + t0012'nin 3'ü).
+- **Ölçüm hatası kaydı:** ilk denememde `X-Cross-Tenant: true` gönderdim; başlığın değeri
+  **`on`**. Yani ilk "0" sonucunun bir kısmı benim ölçümümdü. *Başlığın adını doğrulamak
+  yetmiyor, değerini de doğrulamak gerekiyor.*
+
+### 14. #02'nin adı: "Agent Yönetimi" → "Kullanıcı Yönetimi"
+
+- Tek kaynak `src/Pbxtr.Api/Platform/Screens/screens.json` (`titleTr`); istemci karşılığı
+  `npm run screens:gen` ile üretildi.
+- Ekran içi metinler **9 dilde 7 anahtar = 63/63** yerde güncellendi.
+- **Yarım kalmayı bir ölçüm yakaladı:** az/hy/ka farklı varyantlar kullanıyordu
+  (`Agent İdarəsi`, `Գործակալների կառավարում`, `აგენტების მართვა`), ka ayrıca **genitiv**
+  biçim taşıyordu (`მართვის` ≠ `მართვა`). Körü körüne tek dize değiştirseydim ekran yarı
+  yeniden adlandırılmış kalırdı. *Yeniden adlandırmadan sonra "kaç yerde eski ad kaldı"
+  ayrı bir ölçümdür.*
+- **Rota değişmedi** (`/agents`): rota ekran kayıt defterinin kimliğidir, yer imlerinde ve
+  denetim kayıtlarında durur. Ad değiştirmek etiket işi, rota değiştirmek göç işidir.
+- Bilinçli sapma `doc/prototip-urun-farklari.md` §15'e yazıldı. Üretilen iki doküman
+  (`ekran-yazma-yollari.md`, `rol-ekran-matrisi.md`) `PBXTR_WRITE_DOCS=1` ile yenilendi.
+
+### 15. Config Teslimi (confd) — teslim eden düğüm artık VAR
+
+- **Ölçüm:** sunucuda `pbxtr-confd` diye bir şey **yoktu** — ne birim, ne ikili, ne
+  zamanlayıcı. Panelde ise 4 aktif anahtar birikmişti.
+- **Sebep:** `deploy/pbxtr-confd-cek.sh` **elle koşan** bir betikti ve **her koşuda yeni
+  anahtar** üretiyordu. Yani her çalıştırma bir anahtar biriktiriyor, hiçbiri sürekli
+  çekmiyordu. *"Kod var, koşan yok"un tam hâli: teslim yolunun kodu tamdı, teslim eden
+  yoktu. Sağlık satırı "Arızalı" derken doğru söylüyordu.*
+- **Ne yapıldı:**
+  - Betik anahtarı saklıyor: `/etc/pbxtr/confd/anahtar`, `0600 root:root`, dizin `0700`.
+    **`install -m 0600` ile**, `echo > dosya` ile değil: yönlendirme dosyayı önce umask
+    izniyle açar ve `chmod` **aradan sonra** gelir — o aralıkta sır herkese okunabilir.
+  - `deploy/pbxtr-confd/pbxtr-confd.service` (oneshot) + `.timer` (5 dk).
+  - **Aralık üründeki eşikten türetildi, seçilmedi:** `ProvisioningPullFreshness.StaleAfter`
+    = 15 dk. Üç koşuluk pay, tek bir başarısız çekimin alarm üretmemesini sağlar.
+- **Komutlar:**
+  ```bash
+  scp deploy/pbxtr-confd-cek.sh root@176.88.41.220:/usr/local/lib/pbxtr/
+  scp deploy/pbxtr-confd/pbxtr-confd.service root@176.88.41.220:/etc/systemd/system/
+  scp deploy/pbxtr-confd/pbxtr-confd.timer   root@176.88.41.220:/etc/systemd/system/
+  ssh root@176.88.41.220 'systemctl daemon-reload && systemctl enable --now pbxtr-confd.timer'
+  ```
+- **Sonuç / doğrulama:** dialplan/moh/parking/queues **teslim edildi**, üç bağlamın üçü de
+  **YÜKLÜ** doğrulandı, **ikinci koşu mevcut anahtarı kullandı** (anahtar birikmesi durdu).
+- **Commit:** `b91f4bae`
+
+### 16. Kararlar
+
+- **Yetkiyi/kümeyi genişletmek yerine yolu değiştir** (bir önceki turdaki AMI kararının
+  aynısı): ajan sözleşmesine "serbest metin" parametre tipi eklenmedi; `AST-06` ve `TH-06`
+  ikisi de kapalı kümeyle çözüldü.
+- **Kırpılmış çıktı ölçüm değildir.** "Elimizdeki kadarını gösterelim" demek, eksik bir
+  grafiği tam bir grafik gibi çizmektir.
+- **Kapsanmayan saat sıfır çizilmez.** Rotasyondan hemen sonra düz bir sıfır çizgisi
+  "48 saattir sunucuya dokunan olmadı" diye okunur.
+- **Ölü anahtarları kendiliğinden iptal etme.** Credential değişikliği kullanıcı onayı
+  ister; duran kural bu.
+
+### 17. Açık kalanlar / sonraki adım
+
+- **`provisioning-pull` satırı hâlâ `down` ve öyle kalacak:** 2026-08-30'dan kalan **4 ölü
+  anahtar** (`lastUsedAt` 30 Ağustos) "hiç teslim almadı / bayat" diye sayılıyor. Yeni
+  anahtar (`2ac724c3`) 15:43'te iki kez teslim aldı. **Ölü anahtarların iptali bir
+  credential değişikliğidir ve kullanıcı onayı bekliyor.**
+- **`pjsip` hâlâ servis edilmiyor** ve bu ayrı bir iştir: **`extensions` tablosunda SIP
+  sırrı için şifreli kolon YOK** (yalnızca `webrtc_secret_cipher` var). Yani
+  `PBXTR-SECRET(...)` çözülemiyor çünkü **çözülecek sır hiç saklanmıyor**. Gereken:
+  migration (`sip_secret_cipher` / `key_version` / `set_at` + CHECK) → oluşturmada üretim →
+  teslim anında çözümleyici. Trunk tarafında sır **zaten var** (`Trunk.SecretCipher`), yani
+  çözümleyici trunk ve WebRTC referanslarını bugün de çözebilir.
+- Bu değişiklikler **pbxtr.com'a yayınlanmadı**; sunucuda **ajan ikilisi** ve **confd
+  birimi** güncellendi.
+- Geliştirme köprüsü hâlâ açık: `systemctl stop pbxtr-sysagent-kopru`.
