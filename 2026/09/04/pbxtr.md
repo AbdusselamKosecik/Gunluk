@@ -119,3 +119,43 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - Bu değişiklikler **pbxtr.com'a yayınlanmadı**; sunucuda yalnızca **ajan ikilisi**
   güncellendi (katalog ikilinin içinde gömülü).
 - Geliştirme köprüsü hâlâ açık: `systemctl stop pbxtr-sysagent-kopru`.
+
+### 5. Sunucu güncellendi — `demo-1d60d2340e25` yayında
+
+- **Neden:** Kullanıcı: *"paket cikartip sunucuyu guncellermisin"*, ardından
+  *"testleri calistirmadan direk build ediver acelemiz var"*.
+
+- **KAPILAR VE TESTLER KOŞMADI — kullanıcının açık isteğiyle.** `deploy/yerel-yayin.sh`
+  normalde 7 adımdır (güvenlik kapıları → backend → API shard'ları → frontend → DB
+  kapıları → imaj → yayın); betiğin "testleri atla" bayrağı **yoktur**, bu yüzden 6. ve
+  7. adımlar betiğin dışında **birebir aynı komutlarla** elle koşturuldu.
+  - Sürüm damgası aynı formülle üretildi: `2026.09.04+1d60d2340e25`.
+  - **Bunun izi betiğin `artifacts/ATLANAN-KAPILAR.txt` dosyasına DÜŞMEDİ**, çünkü betik
+    hiç çalışmadı. Kayıt burasıdır: *bu imajda 27 güvenlik kapısı, backend/API/frontend
+    takımları ve DB kapıları ÖLÇÜLMEMİŞTİR.* Ölçülen tek şey, aynı commit'te bugün
+    yapılan hedefli koşulardır (Architecture 342/342, SystemAdmin 325/325, frontend
+    system+i18n 169/169).
+
+- **Komutlar:**
+  ```bash
+  docker build --build-arg SOURCE_REVISION=$SURUM --build-arg PBXTR_VERSION=$SURUM \
+    -t tekbirsoft/pbxtr:demo -t tekbirsoft/pbxtr:demo-1d60d2340e25 .
+  docker push tekbirsoft/pbxtr:demo-1d60d2340e25 && docker push tekbirsoft/pbxtr:demo
+  scp deploy/staging-yayin.sh root@176.88.41.220:/root/staging-yayin.sh
+  ssh root@176.88.41.220 '/root/staging-yayin.sh 1d60d2340e25'
+  ```
+
+- **Sonuç / doğrulama (canlı, pbxtr.com):**
+  - Önceki imaj `demo-e688099f04e1` → yeni `demo-1d60d2340e25`; yedek alındı
+    (`backups/pre-1d60d2340e25.dump`, 3,96 MB).
+  - Migrate bekçileri **26/26** geçti, örnek veri seed'i tamamlandı.
+  - `pbxtr-app` ve `pbxtr-nginx` yeniden yaratıldı; altı konteynerin altısı `running`.
+  - `https://pbxtr.com` → login **200**, ve **bugünkü üç değişikliğin üçü de canlıda
+    doğrulandı**: #46'da 6 satır `docker` kaynaklı ve sağlıklı, #35'te katmanlar
+    `ufw | fail2ban | docker` (nftables alanı yok), #47'de `TLSv1.2` + HSTS ölçülü.
+
+- **Gözlem (arıza değil, gürültü):** migrate çıktısında
+  `Cannot load library libgssapi_krb5.so.2` satırı var. Npgsql açılışta GSSAPI/Kerberos
+  kütüphanesini yoklar, çalışma imajında yok ve **parola kimlik doğrulaması kullanıldığı
+  için işlemi durdurmuyor** — migration ve seed tamamlandı. Yine de bir gün gerçek bir
+  hatayı maskeleyebilecek türden bir satır; ayrı bir iş olarak not edildi.
