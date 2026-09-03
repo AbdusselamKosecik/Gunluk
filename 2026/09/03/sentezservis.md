@@ -243,3 +243,84 @@ düşer. `appsettings.json`'a bu notu yazdım; doğru anahtarlar girilince silin
 - 04'ün gerçek Pazarama anahtarları (kullanıcı sabah verecek).
 - Boyner/Pazarama siparişlerinin veritabanına yazımı hâlâ doğrulanmadı (4. tur açığı).
 - Hepsiburada'da hiç sipariş yok; eşlemesi doğrulanamıyor.
+
+---
+
+# 6. tur — veritabanı geri geldi, açıklar kapatıldı
+
+## Bağlam
+
+4. ve 5. tur boyunca `192.168.1.3` erişilemezdi; iki büyük doğrulama açıkta kalmıştı:
+Boyner/Pazarama siparişlerinin depoya yazımı ve göç 012 + tohumlama + parametre ekranının
+uçları. Sunucu dönünce ikisi de koşturuldu.
+
+## Yapılanlar
+
+### 1. Göç 012 ve tohumlama
+
+Servis `127.0.0.1:81`'de açıldı. Log:
+
+```
+Migrasyon uygulanıyor: 012 — pazaryeri hesaplari
+Pazaryeri hesapları appsettings.json'dan veritabanına aktarıldı (11 hesap).
+```
+
+Tabloda 11 satır: hepsi etkin, hepsinde sır dolu, `ek` sözlüğü (ERP eşleme parametreleri)
+korunmuş, `olusturan = tohum`. Pazarama'nın iki satırında `ek` boş — zaten muhasebe kodu
+verilmemişti.
+
+Sonda programı da veritabanı kaynağına çevrildi (`VeritabaniAyarKaynagi`) ve **11/11 hesap**
+bağlandı: yani fabrika artık hesapları gerçekten veritabanından okuyor.
+
+### 2. Depo kuralları gerçek veritabanında sınandı
+
+Ekranın dayandığı yazma kurallarının hepsi tek tek koşturuldu (sonda satırları sonra silindi):
+
+| Kural | Sonuç |
+| --- | --- |
+| Sır alanı boş gönderilince mevcut değer korunur | ✓ `anahtar-1` ve `gizli-1` yerinde |
+| Sır olmayan alan güncellenir | ✓ satıcı kimliği `sonda-1` → `sonda-2` |
+| Sır olmayan alan boşaltılabilir | ✓ adres `null` |
+| Aynı (şirket, pazaryeri, ad) reddedilir | ✓ açıklayıcı hata |
+| Farklı adla ikinci mağaza kabul edilir | ✓ |
+| Deneme sonucu satıra yazılır | ✓ |
+| Önbellek tazelenince kapalı→etkin görünür | ✓ 0 → 1 |
+
+Uçların yetkilendirmesi: oturumsuz istek `/api/pazaryeri/hesaplar`, `/semalar` ve
+`/{id}/sir/{alan}` için **401**; `/pazaryeri-hesaplari` sayfası 200.
+
+### 3. Boyner ve Pazarama depoya yazıldı — 4. turun en büyük açığı
+
+Gecelik tur (parametresiz, 11 hesap) koştu: **3.450 sipariş, 149 yeni, 109 durum değişti**,
+7,4 dk. Pazarama iki şirkette de 14'er sipariş yazdı.
+
+**Boyner gecelik turda sıfır döndü.** Sebep hata değil: tur yalnızca iptal/iade istiyor ve
+Boyner'in 30 günlük penceresinde o durumlarda sipariş yok. 90 günlük **tam** çekim ayrıca
+koşturuldu → 03/Boyner 14, 04/Boyner 9.
+
+| Hesap | Yazılan | Dağılım |
+| --- | --- | --- |
+| 03 / Boyner | 14 | 13 teslim, 1 iade |
+| 04 / Boyner | 9 | 9 teslim |
+| 03 / Pazarama | 14 | 11 teslim, 3 kargoda |
+| 04 / Pazarama | 14 | 11 teslim, 3 kargoda |
+
+Alan kapsamı SQL ile ölçüldü: **51 siparişin tamamında** müşteri adı, teslimat ili, tutar,
+sipariş tarihi ve kalemler dolu; boş alan **0**. Eşlenemeyen durum yok, mükerrer parmak izi 0.
+
+03 ve 04 Pazarama'nın aynı 14 siparişi yazması beklenen davranış — iki hesap aynı anahtarları
+paylaşıyor. Satırlar çoğalmadı (parmak izi şirket kodunu içeriyor) ama aynı ticari belge iki
+firmaya düştü. 04'ün kendi anahtarları girilince düzelecek.
+
+Toplam depo: **8.940 sipariş · 14.601 kalem · 9.255 geçmiş**, mükerrer 0.
+
+- **Commit:** `c47098c` — Goc 012, tohumlama, depo kurallari ve Boyner/Pazarama yazimi canli dogrulandi
+
+## Açık kalanlar
+
+- **Ekran hâlâ tarayıcıda açılmadı** — yönetici giriş bilgisi yok. Uçlar, depo ve göç canlı
+  doğrulandı; arayüzün kendisi (form akışı, maskeleme görünümü, "kayıtlı değeri göster")
+  gözle görülmedi. Bu, projede sürekli açık kalan tek doğrulama.
+- 04'ün gerçek Pazarama anahtarları.
+- Hepsiburada'da hiç sipariş yok; eşlemesi doğrulanamıyor.
+- Trendyol'da kalan tek `Approved` siparişi ilk tam çekimde düzelecek.
