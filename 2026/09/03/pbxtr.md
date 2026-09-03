@@ -471,7 +471,57 @@ de kırmızı. Api **1034/1034**, Architecture **338/338**, web **1315/1315**,
   **YÜKLÜ** doğrulandı, **ikinci koşu mevcut anahtarı kullandı** (anahtar birikmesi durdu).
 - **Commit:** `b91f4bae`
 
-### 16. Kararlar
+
+### 16. #35 "Bu ekranda fake değer var mı?" — denetim ve tek gerçek bulgu
+
+- **Neden:** Kullanıcı: *"http://localhost:5173/system/firewall bu ekranda fake deger varmi"*
+
+- **Ölçüm:** `GET /api/v1/system/firewall/rules` çıktısının **her alanı** host'la
+  karşılaştırıldı (ssh ile `ufw status numbered`, `iptables -L DOCKER-USER`, `docker ps`).
+  - **Uydurulmuş sayı yok.** ufw'nin 9 kuralı host'takiyle **birebir**.
+  - `defaultIncomingPolicy: "deny"` `FW-02`'den, `activeBans` #36'nın okuyucusundan,
+    `openPorts` ufw allow kurallarından **türetiliyor** — hiçbiri sabit değil.
+  - `blockedPackets24h`, `lastChangeAtUtc`, `lastChangeActorUserId` **null** ve üçünün de
+    **ayrı** gerekçesi yazılı. *Null bir eksiklik değil, burada bir cevap.*
+
+- **Ama bir kusur çıktı — sayı değil, SESSİZLİK:**
+  Host'ta `DOCKER-USER` zinciri **gerçekten boş**, `pbxtr-nginx` ise `0.0.0.0:80` ve
+  `0.0.0.0:443`, `pbxtr-asterisk` ise `0.0.0.0:20000-20099/udp` yayınlıyor. Yani
+  **yayınlanan her port hiçbir filtreden geçmiyor** — ufw'deki `deny` kuralları o trafiği
+  zaten görmez (DNAT sonrası FORWARD'a düşer, INPUT'a değil).
+  Ekran bunu **nötr bir boş tablo** olarak çiziyordu.
+
+- **Kendi ölçüm hatam (kayda geçsin):** önce bunu `NotMeasuredReasonTr`'nin sabit olması
+  diye raporladım. `FirewallScreen.tsx`'i okuyunca kendimi düzelttim: o alan **yalnızca
+  `measured === false`** dalında çiziliyor, yani çelişki API gövdesinde kalıyor, ekranda
+  hiç görünmüyordu. *Bir metnin yanlış olması ile o metnin ekranda çizilmesi ayrı iki
+  sorudur; ikincisini sormadan "ekran kusuru" demek erken.*
+
+- **Ne yapıldı:** Bulgu **`NoticeTr`**'ye taşındı — o alan `FirewallScreen.tsx`'te
+  **koşulsuz** çiziliyor (satır 425). Metin `dockerRules is { Count: 0 }` koşuluna bağlı:
+  boş zincirde "DİKKAT: … hiçbir kuraldan geçmiyor … boş tablo 'temiz' DEMEK DEĞİLDİR",
+  dolu zincirde eski nötr metin. `NotMeasuredReasonTr` de üç hâli ayıran bir `switch`
+  oldu (API doğruluğu için; ekranda yalnızca üçüncü hâl çizilir).
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Platform/SystemOps/FirewallLayerReader.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/SystemAdmin/FirewallRuleMeasurementTests.cs`
+
+- **Sonuç / doğrulama:** Ekranda uyarı çiziliyor (`measured: true | kural: 0 | ton: warn`).
+  İki test, **iki yönlü** mutasyon:
+  - koşul → `false` (metin hiç uyarmaz) ⇒ `Olculmus_bos_zincir_SONUCTUR` **kırmızı**
+  - koşul → `true` (metin hep uyarır) ⇒ `Zincir_doluysa_uyari_filtre_yok_DEMEZ` **kırmızı**
+  - geri alınca 6/6 yeşil. `dotnet format` temiz.
+  - *Ters yön testi keyfi değil:* dolu bir zincirde "filtre yok" yazmak, **var olan bir
+    korumayı yokmuş gibi** göstererek operatörü gereksiz kural yazmaya iterdi.
+
+- **Ölçüm hatası #2 (kayda geçsin):** mutasyonları önce
+  `--filter FullyQualifiedName~FirewallRuleMeasurementTests` ile koştum ve **ikisi de yeşil**
+  çıktı. Sebep ürün değildi: docker testleri **başka bir sınıfta**
+  (`DockerUserChainMeasurementTests`) ve filtre onları **hiç çalıştırmıyordu**.
+  *Defterdeki "koşmayan kapı bulgu değildir" dersinin bir başka yüzü: yeşil bir mutasyon,
+  önce testin gerçekten koştuğunu doğrulamadan yorumlanamaz.*
+
+### 17. Kararlar
 
 - **Yetkiyi/kümeyi genişletmek yerine yolu değiştir** (bir önceki turdaki AMI kararının
   aynısı): ajan sözleşmesine "serbest metin" parametre tipi eklenmedi; `AST-06` ve `TH-06`
@@ -483,7 +533,7 @@ de kırmızı. Api **1034/1034**, Architecture **338/338**, web **1315/1315**,
 - **Ölü anahtarları kendiliğinden iptal etme.** Credential değişikliği kullanıcı onayı
   ister; duran kural bu.
 
-### 17. Açık kalanlar / sonraki adım
+### 18. Açık kalanlar / sonraki adım
 
 - **`provisioning-pull` satırı hâlâ `down` ve öyle kalacak:** 2026-08-30'dan kalan **4 ölü
   anahtar** (`lastUsedAt` 30 Ağustos) "hiç teslim almadı / bayat" diye sayılıyor. Yeni
