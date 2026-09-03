@@ -159,3 +159,103 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   kütüphanesini yoklar, çalışma imajında yok ve **parola kimlik doğrulaması kullanıldığı
   için işlemi durdurmuyor** — migration ve seed tamamlandı. Yine de bir gün gerçek bir
   hatayı maskeleyebilecek türden bir satır; ayrı bir iş olarak not edildi.
+
+### 6. Hedef 11 — "adminden giriş yap" (#53 tenant, #61 bayi)
+
+- **Neden:** Kullanıcı (madde 11): *"Bayi ve Super admin ve admine extrada adminden
+  giris yap olacak. ayni sekilde ilk tenant sahibi olarak giris yapacak."*
+
+  Aynı iş bugün de yapılabiliyordu: **Kullanıcılar → listeden seç → "Bu kullanıcı
+  olarak çalış"**. Üç tıklama ve bir arama gerekiyordu ve aranan kişi her seferinde
+  **aynı** kişiydi (tenant sahibi / bayi hesabı). İstenen şey yeni bir kapı değil,
+  o aramanın kısayolu.
+
+- **Ne yapıldı:**
+
+  **Sunucu — "kim" sorusu sunucuda cevaplanır.**
+  Yeni uç: `GET /api/v1/impersonation/primary-user?tenantId=…` **veya** `?dealerId=…`
+  (tam olarak biri; ikisi birden ya da hiçbiri → 400). Yetki `user.impersonate`.
+  Yanıt `found` + kimlik + **tenantId** + rol, bulunamazsa `found: false` + Türkçe sebep.
+
+  - **404 değil, `found: false`.** "Sahibi henüz atanmamış" ile "göremiyorum" aynı
+    satıra düşmemeli; ekran sebebi yazabilmeli.
+  - **Uç yan etkisizdir** (CLAUDE.md §3.2 §Ş6 ile aynı gerekçe): jeton hâlâ
+    `POST /impersonation` ile üretilir ve `ImpersonationRules`'un **dört kapısı**
+    aynen koşar. Bu uç bir kapı değil, bir sorudur.
+  - Port: `IUserAdministration.FindTenantPrimaryUserAsync` / `FindDealerPrimaryUserAsync`.
+    Sıralama **`created_at`**, eşitlik `id` ile kırılır; **pasif hesap elenir**;
+    küme `ReadableUsers()`'tır (görünürlük daraltması aynen geçerli).
+  - **Bayi yolu `DealerUserScope`'u BİLEREK kullanmaz:** orası bayinin *altındaki
+    tenantların* kullanıcılarını da kapsar (#02 drill-in'i için doğru). Kullanılsaydı
+    "bayi olarak giriş yap" düğmesi kullanıcıyı sessizce bir **müşteri** hesabına
+    indirebilirdi. Koşul: `users.dealer_id = <bayi>` **ve** rol `dealer`.
+
+  **İstemci.** Ortak hook `useAdminSignIn`: hedefi sor → bulunamazsa sebebi yaz →
+  bulunduysa bürün → `session.reload()` → köke git. İki ekranda iki kopya yazılsaydı
+  birinin `reload()`'u atlaması yeterdi: jeton değişir ama ekran **eski yetki
+  kümesini** göstermeye devam ederdi — aracın ölçmek istediğinin tam tersi.
+  Düğmeler: #53 satırında "Giriş yap" (tenant sahibi), #61 satırında "Giriş yap"
+  (bayi hesabı). Dokuz dile çeviri eklendi.
+
+  **Yetki — üç aktöre de açıldı.** `user.impersonate` yalnızca `superadmin`'deydi;
+  `admin` ve `dealer` eklendi. Bayinin eklenebilmesi için katalogdaki
+  **`globalScopeOnly` bayrağı kaldırıldı** (bayi rolünün kapsamı `dealer`, açılışta
+  fail-closed patlıyordu).
+
+  > **BAYRAK KALKTI, KAPI KALKMADI.** Gerçek sınır `ImpersonationRules.Check`
+  > içindeki **kapsam genişliği** kuralıdır ve o kural bayrağa değil aktörün kendi
+  > kapsamına bakar: bayi yalnızca **tek-tenant** bir hesaba iner, başka bir bayiye
+  > ya da platform yöneticisine **asla**. `ImpersonationRulesTests` bunu 3×3 matrisle
+  > zaten ölçüyor. Bayrağın tek işlevi yetkinin bir role *yazılmasını* engellemekti.
+  >
+  > **Bedeli yazılı:** bayrak kalkınca yetki artık tenant kapsamlı bir **özel role**
+  > de yazılabilir hâle geldi. O durumda `Single → Single` yolu açılır — ki bu
+  > `ImpersonationRules`'da **zaten bilinçli olarak serbest** ("tenant yöneticisi
+  > kendi agentiyla çalışır") ve RLS ile kendi tenant'ına hapsolur. Yetki hiçbir
+  > pakette değildir, yani toplu seçimle dağıtılamaz.
+
+- **Dokunulan dosyalar:**
+  `src/Pbxtr.Domain/Platform/Identity/IUserAdministration.cs`,
+  `src/Pbxtr.Domain/Platform/Identity/UserAdminRules.cs`,
+  `src/Pbxtr.Infrastructure/Identity/EfUserAdministration.cs`,
+  `src/Pbxtr.Api/Platform/Identity/ImpersonationEndpoints.cs`,
+  `src/Pbxtr.Api/Platform/Authorization/permissions.seed.json`,
+  `src/Pbxtr.Web/src/app/screens/users/impersonationApi.ts`,
+  `src/Pbxtr.Web/src/app/screens/users/useAdminSignIn.ts` (yeni),
+  `src/Pbxtr.Web/src/app/screens/tenant/TenantScreen.tsx`,
+  `src/Pbxtr.Web/src/app/screens/dashboards/DealerAdminScreen.tsx`,
+  `src/Pbxtr.Web/src/app/i18n/messages/*.json` (9 dil),
+  `tests/Pbxtr.Integration.Tests/Tests/PrimaryUserResolutionTests.cs` (yeni),
+  `tests/Pbxtr.Api.Tests/Modules/Access/UserAdminEndpointTests.cs`,
+  `tests/Pbxtr.Api.Tests/Platform/Authorization/PermissionCatalogTests.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Access/UserListDealerFilterTests.cs`,
+  `src/Pbxtr.Web/src/app/screens/tenant/TenantScreen.test.tsx`,
+  `src/Pbxtr.Web/src/app/screens/dashboards/DealerAdmin.test.tsx`
+
+- **Sonuç / doğrulama:**
+  - **Uç testleri (fake port):** `UserAdminEndpointTests` **63/63** (önce 57).
+  - **GERÇEK PostgreSQL:** `PrimaryUserResolutionTests` 2/2. Bu test **gerekliydi**:
+    uç testleri portun *taklidini* kullanıyor ve taklit sıralamayı kendi yapıyor,
+    yani üretimdeki `OrderBy(CreatedAt)` → `OrderBy(DisplayName)` mutasyonu orada
+    **görünmezdi**. Fikstür tuzağı kuruyor (en eski sahibin adı alfabetik olarak
+    sonda) ve mutasyon canlı DB'ye karşı **kırmızı yandı**, geri alınınca yeşil.
+  - **Frontend:** tüm süit **1331/1331** (önce 1325). Üç mutasyon üçü de doğru testi
+    kırdı: hedef tenant'ı `undefined` geçmek, "bulunamadı" dalını kaldırmak,
+    `canSignIn` kapısını kaldırmak.
+  - `dotnet format --verify-no-changes` temiz, `tsc -b` temiz,
+    `Pbxtr.Architecture.Tests` **342/342**, `Platform` 1051/1051, `Access` 123/123.
+  - **Commit:** `e86c42bc` — feat(access): hedef 11 — #53/#61 satirindan "adminden giris yap"
+
+- **Yol boyunca çıkan gerçek bulgu — `role.delete` yazısız girmişti.**
+  Bayinin etkin yetki kümesi bir **altın liste** ile korunuyor
+  (`DealerPermissionBoundaryTests`, Karar #23/Ş23-1). Kapı bu turda iki kez kırmızı
+  yandı: biri beklenen (`user.impersonate`), **öteki beklenmeyen — `role.delete`.**
+
+  O kod aslında **bu turun önceki adımında** (commit `e6247e1a`, hedef 5) seed'e
+  girmişti; o adımda yalnızca `Modules.Access` testleri koşuldu ve altın liste **hiç
+  çalışmadı.** Yani bayinin yetki kümesi bir commit boyunca **yazısız** genişledi.
+  Şimdi gerekçesi listeye yazıldı: bayi `role.write` ile müşterisine özel rol
+  tanımlayabiliyor; silememesi, açtığı rolü hiçbir zaman geri alamaması demekti.
+
+  **Ders (kayda geçti):** yetki seed'ine dokunan bir değişiklikte `Modules.Access`
+  yetmez — `Platform.Authorization` da koşulmalı.
