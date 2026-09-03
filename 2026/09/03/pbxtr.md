@@ -168,6 +168,71 @@ bir **ölçüm** üretiyor ve test kırılıyor.
 Api **403/403**, Architecture **338/338**, `dotnet format` temiz.
 
 **Commit:** `c106318e`
+### 6. CLAUDE.md §3.0 kaldırıldı — **Asterisk'e bağlanıyoruz**
+
+- **Kullanıcı kararı:** *"Asterisk (CLAUDE.md §3.0 — bağlanmıyoruz) u kaldir abim.
+  Sunucuda ami ari den baglanacagiz, daha da baglanacaksak host ajani ustunden
+  dockerden calistiracagiz."*
+
+#### Ölçüm önce: **zaten bağlıydık**
+
+Kuralı değiştirmeden önce ölçtüm ve sonuç şaşırtıcıydı:
+
+```
+dev.log: "ARI Stasis uygulamasi 'pbxtr' acildi."
+AMI     : Asterisk Call Manager/11.0.0   (banner geldi)
+ARI     : HTTP 401 (kimliksiz — beklenen)
+```
+
+**Yani kod bağlanıyor, ekran "bağlanmıyoruz" diyordu.** Sağlayıcı zaten `asterisk`
+modundaydı; sabit olan yalnızca sağlık satırıydı. Kural kaldırılmasaydı bile o cümle
+yanlıştı — *karar yazılmış ama uygulanmamış*ın tersi: **uygulanmış ama karar
+güncellenmemiş.**
+
+#### Kural yeniden yazıldı
+
+- Eski hâl **silinmedi**, `GEÇERSİZDİR` diye işaretlendi ve "artık ne değişti" tablosu
+  ona göre yazıldı — sonraki okuyucu neyin değiştiğini metne bakarak görebilsin.
+- **Değişmeyenler açıkça sayıldı:** Asterisk pbxtr PostgreSQL'ine asla bağlanmaz;
+  Sınıf B uçları kapalı liste; kuyruk üyeliği AMI ile push edilir; nesne adları tenant
+  önekli; reload komutları kapalı liste. Bir kuralı kaldırırken **komşularının da
+  kalktığı** varsayımı en pahalı okuma hatasıdır.
+- Daha derin ihtiyaçta yol **host ajanıdır** ve komut **kapalı katalogdan** seçilir —
+  serbest kabuk yok.
+
+#### Sağlık satırı üç hâl üretiyor
+
+- `ITelephonyLinkStatus`'a bağlandı: **açık / kopuk / ölçülecek bağlantı yok**.
+- **`null` kırmızı değildir.** Simülasyonda hiç kurulmamış bir bağlantıyı "santral
+  kapalı" diye göstermek, var olmayan bir arıza uydurmak olurdu.
+- **Okuma santrale gitmez:** süreç içi bayrak. Sağlık ekranı dakikada bir açılabilir;
+  her açılışta Asterisk'e istek atmak, ölçmek istediğimiz şeye yük bindirirdi.
+
+#### Kuralın bayatlattığı metinler
+
+Kaldırılan kural 6 yerde daha atıf alıyordu ve hepsi artık yanlıştı. Düzeltilenler:
+`SystemHealthProbe`, `ISystemHealthProbe`, `IAgentExtensionDirectory`,
+`ThreatMonitorReader`, `ServicesScreen` ve **#46'nın Asterisk satırı (9 dil)**.
+
+O satır *"Asterisk ayrı bir sunucudadır ve pbxtr ona bağlanmamaktadır"* diyordu —
+**iki iddia da yanlıştı**: Asterisk bu sunucuda bir **konteynerdir** (`pbxtr-asterisk`,
+2 gündür ayakta) ve host systemd birimi yoktur (ölçüldü: `LoadState=not-found`).
+Yeni metin ne olduğunu söylüyor: konteyner, host birimi yok, durumu AMI/ARI ile #37'de
+ölçülür.
+
+#### Ölçüm
+
+**12 bileşenin 11'i yeşil** — `Asterisk → ÇALIŞIYOR`. Kalan tek satır
+`Config Teslimi (confd)` (down; gerçek ölçüm, config Asterisk'e gitmiyor).
+
+5 yeni test; iki mutasyonla doğrulandı (kopuğu `ok` say / `null`'ı kopuk say) — ikisi
+de kırmızı. Api **1034/1034**, Architecture **338/338**, web **1315/1315**,
+`dotnet format` temiz.
+
+> Bir tur `web 3 failed` verdi ve **tekrarında yeşil geldi**: o koşu paralel
+> `dotnet test` yüküyle çakışmıştı. Kararsızlık olarak not edildi, düzeltme yapılmadı.
+
+- **Commit:** `57b39ca6`
 ## Açık kalanlar / sonraki adım
 
 - **Bu değişiklikler pbxtr.com'a YAYINLANMADI** — yalnızca depoda ve yerel yığında.
@@ -186,3 +251,11 @@ Api **403/403**, Architecture **338/338**, `dotnet format` temiz.
   kod doğruydu, testin verisi dalı hiç koşturmuyordu.
 - Bu değişiklikler **pbxtr.com'a yayınlanmadı**. Sunucuda üretimde `storage` hâlâ
   eski "yoklama ucu yok" cümlesini basıyor.
+- **Bir kuralı kaldırmadan önce ölçün: belki zaten uygulanmıyordur.** Burada tam tersi
+  çıktı — kural kâğıtta duruyordu, kod çoktan bağlanıyordu.
+- **Kaldırılan kuralın atıfları da bayatlar.** 6 yerde daha geçiyordu; kuralı silip
+  atıfları bırakmak, ekranı yanlış konuşmaya devam ettirirdi.
+- Hâlâ eski kurala atıf yapan **dokümanlar**: `doc/mimari/ADR-014` §8.2 ve
+  `doc/prototip-urun-farklari.md` (birkaç satır). Kod ve ekran temiz, doküman değil.
+- `Config Teslimi (confd)` **down** kalmaya devam ediyor: `pbxtr-confd` düğümleri
+  bundle çekmiyor. Artık bağlantı açıldığına göre bu iş yapılabilir hâle geldi.
