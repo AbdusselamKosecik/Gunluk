@@ -324,3 +324,54 @@ Toplam depo: **8.940 sipariş · 14.601 kalem · 9.255 geçmiş**, mükerrer 0.
 - 04'ün gerçek Pazarama anahtarları.
 - Hepsiburada'da hiç sipariş yok; eşlemesi doğrulanamıyor.
 - Trendyol'da kalan tek `Approved` siparişi ilk tam çekimde düzelecek.
+
+---
+
+# 7. tur — paket
+
+## Yapılanlar
+
+`deploy/yayinla.ps1` ile paket çıkarıldı: arayüz derlendi → `dotnet publish` → kurulum
+betikleri kopyalandı → doğrulama. Çıktı `SentezServis-2026-09-03-0332.zip`, **70,2 MB**,
+18 dosya (tek dosya kendi kendine yeten `SentezServis.exe` 193 MB açılmış hâlde).
+
+### Paketten appsettings.json çıkarıldı
+
+- **Neden:** Yayım klasöründeki `appsettings.json` canlı veritabanı parolalarını ve **on bir
+  pazaryeri hesabının anahtarlarını** taşıyordu. Paket depoya konuyor, e-postayla
+  gönderiliyor, USB'ye kopyalanıyor — sırlar bu yolların hiçbirinden geçmemeli. Depodaki
+  `src/SentezServis.Host/appsettings.json` zaten tam bu sebeple `.gitignore`'da.
+- **Ne yapıldı:** `yayinla.ps1`'e temizlik adımı eklendi. `ApiAnahtari`, `ApiGizli`, `Jeton`,
+  `Parola` boşaltılıyor, bağlantı cümlelerindeki `Password=` `<DOLDURUN>` oluyor, dosya
+  `appsettings.ornek.json` olarak bırakılıp aslı siliniyor.
+- **Temizlik SONRA doğrulanıyor:** dosyadaki gerçek sır değerleri önce toplanıp temiz metinde
+  tek tek aranıyor; biri bile kalmışsa paket **üretilmiyor**. Elle yazılmış bir regex sessizce
+  bir alanı atlayabilir — bu tam da fark edilmeyecek türden bir hatadır.
+- Bu paket için 25 değer boşaltıldı; zip içinden 21 bilinen sır değeri arandı, **sızıntı yok**.
+
+### servis-kur.cmd düzeltildi
+
+Eskiden ilk kurulumda "appsettings.json kopyalandı" diyordu; paket artık o dosyayı
+taşımadığı için bu mesaj yanıltıcı olurdu (servis ayarsız açılır, sebebi anlaşılmazdı). Artık:
+
+- yükseltmede sunucudaki `appsettings.json` **korunuyor** (davranış değişmedi),
+- ilk kurulumda örnekten oluşturuluyor ve "içi boş, doldurun" uyarısı veriliyor,
+- ikisi de yoksa açıkça hata verip duruyor.
+
+- **Commit:** `ab6ae7c` — Paket artik appsettings.json tasimiyor; yerine bos ornek konuyor
+
+## Bulgu — eski paketlerde sızmış anahtar
+
+Depoda **8 adet eski paket zip'i takipli** (toplam 536 MB) ve içlerindeki `appsettings.json`
+temizlenmemiş. `SentezServis-2026-08-18-1158.zip` içinde FortiGate cihazının API anahtarı
+açık duruyor (`Forti:Cihazlar[0]:ApiAnahtari`) ve üç adet `Password=` içeren bağlantı cümlesi
+var. Git geçmişinde oldukları için silmek yetmez — anahtarın **döndürülmesi** gerekir.
+
+Yeni paket depoya **konulmadı**: hem 70 MB daha bindirmemek için, hem de eski zip'lerin
+durumu netleşmeden aynı deseni sürdürmemek için. Kullanıcıya soruldu.
+
+## Açık kalanlar
+
+- FortiGate API anahtarı ve veritabanı `sa` parolası — eski paketlerde açıkta, döndürülmeli.
+- Eski zip'lerin depodan çıkarılıp çıkarılmayacağı kararı.
+- Ekran hâlâ tarayıcıda açılmadı (yönetici girişi yok).
