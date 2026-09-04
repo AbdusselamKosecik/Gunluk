@@ -557,3 +557,8 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   (`SlaEventOrderingTests`, gerçek PG). `AmiEventMapper` `PBXTR_ORIGIN`/`QUEUE_PRIO` isteğe bağlı.
 - Doğrulama: Api 127 (mapper/SLA filtreli), Architecture 342, Integration 4, format temiz.
 - Kalan: lab D-14 tekrar + D-15 dağılım (ajan yeniden başlatıldı); gerçek santral ölçümleri.
+- **Lab ikinci tur (commit sonrası):** D-14 tekrar 5/5 tuttu (tek beep, boş T0 uyarısı yok,
+  `+905…` eşleşti); D-15: 13 cevaplanan çağrıda `QueueCallerLeave` hep `AgentConnect`'ten
+  önce (−315…−13 µs), eşit damga yok; 3 terkte `Abandon` hep `Leave`'den önce. Sprint-31'in
+  lab tarafı KAPANDI; açık kalan yalnız gerçek santral ölçümleri (D-13, `queue show` penalty,
+  vm dosyası, `manager.conf channelvars` runbook adımı) ve madde 6 SMS kararı.
