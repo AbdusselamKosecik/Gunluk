@@ -97,3 +97,9 @@ Branch: `feat/sentez-planing-ayrimi`.
   ```
 - **Commit:** `3fd79a9` — feat(selvedge): model beden araligi metin oldu + 1.0.4.80
 - **Docker:** `BuildDocker_1.0.4.80.bat` (API + web). Build/push arka planda çalıştırıldı; sonuç aşağıda.
+- **Docker sonucu:** `tekbirsoft/selvedge-api:1.0.4.80-dev` + `:latest` → `sha256:ad35c17a…`;
+  `tekbirsoft/selvedge-web:1.0.4.80-dev` + `:latest` → `sha256:b44a018a…`. Sunucuya dokunulmadı.
+
+## Açık kalanlar / sonraki adım (güncel)
+- Sunucuda `docker compose pull && docker compose up -d` (api + web). API açılışında migration 0026 otomatik koşar.
+- Müşteri: önce 5 model PDF, sonra PO066 + POLEN018. Yanlış oluşmuş `2322/NA` modeli varsa elle sil.
