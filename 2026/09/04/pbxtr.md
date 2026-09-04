@@ -569,3 +569,90 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - **Güvenlik olayı:** ortam değişkeni okurken filtre yetersizdi; AMI sırrı, ARI parolası ve API
   pepper oturum çıktısına düştü (hiçbir dosyaya yazılmadı). Kullanıcıya rotasyon önerildi,
   onaysız döndürülmedi.
+
+### 14. Sprint-32 yürütmesi — zamanlanmış rapor (e-posta) + staging yayın sagası
+
+- **Neden:** Kullanıcı "devam edelim" dedi → Sprint-32 (Karar #29 madde 10) başlatıldı ve
+  Sprint-31 kodunun gerçek santralde ölçülebilmesi için `main` staging'e yayınlanmaya başlandı.
+  Sır rotasyonu **yapılmadı** (kullanıcı "sırları döndür" demeden yapılmaz); SMS sağlayıcısı
+  (madde 6) kullanıcının ticari kararı.
+- **Ne yapıldı (main, sırayla):**
+  - `bca0d0c9` — DB: `report_schedules` + `report_deliveries` (tenant_id + RLS FORCE, `status`
+    CHECK, `UNIQUE(schedule_id, period_start_utc)`, `csv_bytes` yalnız pending/failed'te dolu,
+    sent/dead sonrası NULL); terminal bekçi `20260904180000_Sprint32FinalGuard` (7 assertion,
+    hepsi mutasyonla). Ayrı konteynerde up→down→up + `ci-check.sh` ✓.
+  - `a1db62a9` — Linux: SMTP relay ön koşulu ölçümü **KIRMIZI**. Uygulamada `mail_settings` 0
+    satır; relay `mail-eu.smtp2go.com:587`; gönderici alanı `uzmanadres.com`, SPF relay'i
+    kapsamıyor, DKIM selector bilinmiyor, PTR tamam. Araç `deploy/mail-relay-onkosul-olc.sh`
+    → `/etc/pbxtr/mail-relay-onkosul.json` (`ok=false`); runbook `deploy/mail-relay-runbook.md`.
+    Kota: sistem 10/dk proses içi, tenant 50/gün DB sayımı. Yayın kapısı **eklenmedi** (sunucu
+    DNS'ine yaslanan kapı her gün kırmızıya döner).
+  - `2736101e` — `IMailSender.SendWithAttachmentAsync` → `MailSendResult`; ek ≤ 2 MB zip, aşınca
+    gönderilmez + sahibine bildirim; relay hata metni ≤ 512.
+  - `c0e40989` — Domain + `ReportScheduleJob`: `report_key` `CallReportCatalog` kapalı küme;
+    `next_run_at` tenant duvar saati → UTC (DST ileri: olmayan saat ileri; geri: ilki); claim EF
+    concurrency token ile tek tx, satır başına `SET LOCAL`, taze sahip doğrulaması yoksa
+    `suspended`; CSV `CallReportCsv` **tek yol** (Domain'e taşındı — elle dışa aktarım ile bayt
+    eşit), `PhoneSurfaces.ReportMail` defter yüzeyi. Yan kusur: tr-TR kültürü elle CSV'de 500
+    veriyordu, `InvariantCulture`.
+  - `80131e39` — `ReportDeliveryDrainJob` + `ReportDeliveryDispatcher`: üç faz (claim tx →
+    SMTP **tx dışında** → sonuç tx); ön koşul dosyası fail-closed 6 sebep
+    (`smtp_unconfigured|precondition_missing|_invalid|_stale|_failed|_domain_mismatch`) + kota
+    (`system_rate_limited|tenant_quota_exceeded`); retry 5/15/60/240 dk, 5. denemede `dead` +
+    bildirim + denetim; alıcı adresi gönderim anında `user_id`'den.
+  - `2c822b1b` — uçlar `/api/v1/reports/schedules` (list/create/update/delete/run-now/deliveries),
+    yetki `report.schedule` → `bundle.cdr.export`, manifest `reports.schedule-*`; iki namespace
+    altın listesi yeniden üretildi.
+  - `99d6991c` — #18 "Zamanlanmış" sekmesi: liste (sonraki çalışma sunucudan), form (katalog
+    kapalı, alıcı tenant kullanıcı seçici ≤ 5, saat tenant tz), "şimdi çalıştır", teslim paneli
+    (`dead` rozeti, hata ≤ 512); i18n 80×9.
+  - `36a6b2ee` — QA ORTA düzeltmeleri: (O-1) `SmtpMailSender` relay metnindeki adresler
+    `<gizli>` — maske Truncate'ten ÖNCE, mutasyonla 2 test kırmızı; (O-2)
+    `ReportScheduleOwnerEvaluator` gönderim anında da sahip yetkisi + tenant durumu → düşerse
+    `dead(owner_not_eligible|tenant_inactive)`, deneme sayılmaz; (O-3)
+    `ReportDeliveryRetentionJob` (kilit 30) sent/dead 90 gün + `ObjectRowRetention` kapalı
+    liste; (O-4) drain + retention gerçek PG testleri (Docker, 10); run-now üretimi Failed →
+    409 `SCHEDULE_RUN_FAILED` (`meta.deliveryId`), FE danger.
+  - `40d11a66` — sprint-32 kapanış + backlog: 8 yeni kart (BR-SYS-34 gönderici alanı kararı,
+    BR-SEC-01 sır rotasyonu, BR-AST-14 Stasis boş, BR-AST-15 `CONF_RESET`, BR-DB-15 indeks
+    `sending`, BR-BE-34 `AnalyticsExportCsv` kültür, BR-FE-33 `CallAudioPane`, BR-AST-16 `-int` `+`).
+- **QA (pbxtr-qa):** KRİTİK yok; 4 ORTA → hepsi `36a6b2ee`'de kapandı; 4 mutasyon kırmızı→yeşil.
+- **Test sayıları:** Api filtreli 76 + 32 + 20 + 507 yetki/manifest; Integration 10 + 6 (gerçek
+  PG); Architecture 351; web reports 47 + tsc temiz; format çözüm düzeyinde temiz.
+
+#### Yayın sagası (`deploy/yerel-yayin.sh --yayinla`, 12 koşu)
+
+- **Neden:** Sprint-31 P0 düzeltmeleri (`-out` kalıbı, callback/vm bağlamları) gerçek santralde
+  ancak yayın sonrası ölçülebilir. Depo kapısız (CI yok); tek kapı bu betik.
+- **Nasıl koşuyor:** worktree DEĞİL, gerçek klon `X:/GitHub/Pbxtr/pbxtr-yayin` (docker'a
+  mount edilen `.git` işaretçisi git işlemlerini kırdı). PowerShell'den ayrık:
+  ```powershell
+  Start-Process cmd.exe -ArgumentList '/c "\"C:\Program Files\Git\bin\bash.exe\" -lc \"cd /x/GitHub/Pbxtr/pbxtr-yayin && git pull --ff-only && bash deploy/yerel-yayin.sh --yayinla; echo EXIT=$?\" > <scratch>/yayinN.log 2>&1"'
+  # izleme: until grep -q "^EXIT=" yayinN.log; do sleep 30; done
+  ```
+  `bash` çıplak çağrılınca WSL'e gidiyor; `Start-Process` içindeki yönlendirme sessizce ölüyor
+  → `cmd.exe /c` ile yönlendirme.
+- **Kırmızıdan kırmızıya (her biri ayrı commit):**
+  | Koşu | Kırmızı | Düzeltme |
+  |---|---|---|
+  | 1–3 | expand-only kapısı: ham SQL migration'lar defterde yok | `deploy/migration-expand-legacy.blobs` gerekçeli satırlar (`90cd397f`, `901dfad4`); terminal devir eski FinalGuard blob'unu değiştiriyor → blob güncellendi (`3270c682`) |
+  | 4 | `FinalDeliveryReportTests`: `databaseSchemaRevision` bayat | canonical güncellendi + rapor `PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Integration.Tests --no-build -c Release --filter Canonical_report_documents_URET` (klonda yalnız Release bin var) (`9352fd36`) |
+  | 5 | shard kırmızı: `Spa_yolu_kabugu_alir` ATLANDI (`wwwroot/index.html` yok — ana ağaçta eski wwwroot durduğu için hiç görünmemişti) | frontend adımı API shard'larından ÖNCE (`b4520a72`) |
+  | 6–7 | `dotnet format --verify-no-changes` ana ağaç ↔ klon farklı | klonun biçimlendirdiği dosya alınır (`a9530368`, `da0ffe9e`) |
+  | 8 | CS1729: BE-18 ajanı düzenlerken `ReportScheduleTestSupport.cs` commit'lendi | ajan bitince `2c822b1b`; **ders:** ajanın elindeki dosyayı asla `git add` etme |
+  | 9 | `db-kapilari-docker.sh` `ef --no-build` Debug bin ister | yoksa Infrastructure Debug derle (`465f1f40`) |
+  | 10–11 | `CrmBridgePane.test.tsx` flaky (statik "salt okunur" etiketini bekliyordu) | `waitFor` TEMPLATE + checkbox (`a8f490a0`) |
+  | 12 | `a8f490a0` üzerinde koşuyor (QA düzeltmeleri `36a6b2ee` 13. koşuya girecek) | — |
+- **Ders (hafızaya yazıldı):** yalnız yayın yolunda koşan kapılar yayın yapılmayan her gün
+  bayatlıyor; on bir kırmızının hiçbiri bu turun kodundan değildi.
+- **Güvenlik:** §13'teki sızıntı için rotasyon **yapılmadı**, BR-SEC-01 kartı açıldı;
+  `env-okurken-degeri-kes` hafızası yazıldı (değer sütunu daima kesilir).
+- **Açık kalanlar / sonraki adım:**
+  1. Yayın 12 sonucu → yeşilse `pbxtr.com` doğrula, klonu `pull` edip 13. koşu (QA düzeltmeleri).
+  2. Yayın sonrası gerçek santral salt-okunur tekrar ölçüm: `-out` kalıbı, callback/vm bağlamları
+     (provisioning revizyonu üretilip `pbxtr-confd` çekmeli), `ari show apps` (BR-AST-14).
+     Davranış ölçümleri (originate/penalty/vm/`manager reload`) bakım penceresi + kullanıcı onayı.
+  3. **Kullanıcı kararları:** BR-SYS-34 gönderici alanı (`uzmanadres.com` / `pbxtr.com`) +
+     SPF/DKIM — bu kapanmadan zamanlanmış rapor postası çıkmaz; BR-SEC-01 sır rotasyonu;
+     BR-6 SMS sağlayıcısı.
+  4. Sprint-33 (Scripter 1/2) kullanıcı "başla" demeden açılmaz.
