@@ -490,3 +490,59 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - **Sonraki adım:** kullanıcı **"başla"** der (`/basla pbxtr sprint-31`). Madde 6 (SMS
   sağlayıcısı) kullanıcının ticari kararıdır; kurula gitmedi, backlog'da BR-6 olarak açık.
 
+
+### 13. Sprint-31 yürütmesi — ön şart kartları, C1 CRM köprüsü, lab ölçümleri
+
+- **Neden:** Hedef ("bunları yapalım") kullanıcının doğrudan talimatı sayıldı (CLAUDE.md §7/4);
+  `/basla pbxtr sprint-31` yerine bu varsayımla yürütüldü. **Kullanıcı onaylamadıysa geri
+  alınabilir:** her şey ayrı commit'lerde.
+- **Ne yapıldı (main, sırayla):**
+  - `62dd5de9` — üç migration (`crm_url_template`/`crm_auto_open`, `recording_assets`
+    `UNIQUE(tenant_id,id)`, terminal `Sprint31FinalGuard`), C1 backend (`CrmUrlTemplateValidator`
+    yalnız https + kapalı yer tutucu + `OutboundHostGuard`; `/agent/state` `crmUrl` sunucuda,
+    `phone.unmask` yoksa **null**), kapsam satırları, lab `manager.conf channelvars` + runbook,
+    mimari tasarım `doc/mimari/tasarim/originate-musteri-once.md`.
+  - `e983be27` — frontend: kısayol kapsam katmanı (`shell/hotkeys`, giriş alanında sessiz,
+    modal>script>desk), `CallerFacts` ayrımı, `CrmOpenButton` (null → çizilmez, F8, `noopener`),
+    #49 "CRM köprüsü" sekmesi, i18n ×9.
+  - `8f4fcb09` — P0: `[pbxtr-<t>-callback]` bağlamı **ilk kez üretiliyor** (dispatcher boş hedefe
+    originate ediyordu); müşteri-önce originate (`OriginateRequest.OnAnswerTarget`, numara
+    `FromEndpoint`'e konmaz — etki sayacı ham yazıyordu); `QueuePenaltyAsync` + "Already there"
+    yalnız penalty eşitse başarı; `VoiceMail()` → `Gosub(pbxtr-<t>-vm)` `Record(...,k)` + `UserEvent`.
+  - `a35d90a7` — **dünkü** `ContactNotesFinalGuard` bekçisi gerçek PG'de kırmızıydı
+    (`LIKE '%btrim(body)%'` ↔ `btrim((body)::text)`); regex'e çevrildi. Ölçüm: geçici postgres:16
+    up→down→up ✓, `deploy/db-kapilari-docker.sh` TÜM KAPILAR YEŞİL.
+  - `8bc309f7` — lab D-13/D-14: eski sıra hayalet çağrıyı kanıtladı (`QueueCallerJoin` t+0.001,
+    müşteri t+6'da çevrildi); yeni sıra doğru; **`+90…` `_X.` ile eşleşmiyor** (originate 200, kanal
+    0.3 ms'de düşer — agent originate'i de etkileyen mevcut kusur); `Record()` ara dizinleri açıyor;
+    ARI `recordings/stored` yalnız spool altı, `%2F` kodlamalı.
+  - `46c6f06f` — `-out` `_[+0-9].`; `pbxtr-outbound` hiçbir yerde render edilmiyor (yalnız doküman
+    şablonu, düzeltildi + trunk numara biçimi BORÇ); vm çift beep/boş T0; iki-tenant render negatif
+    testi; `PushPenaltyAsync` deterministik red'de yinelemez; **Chrome ölçümü:** `noopener` ile adlı
+    sekme yeniden kullanılmıyor (3 çağrı = 3 sekme; opener korunursa 1; opener sonradan
+    sıfırlanınca 3) → `noopener` kalır, "aynı sekme" BİLİNÇLİ yok.
+  - `57314966` — QA O-2: unmask denetimi `(user, callId)` başına bir kez (`ITenantCache.TryAddAsync`,
+    cache yoksa yazılır); O-3 cross-tenant Api + Integration (gerçek PG) testleri; CGNAT/IPv6-mapped
+    test vektörleri; CRM yolunda async DNS.
+  - `c098e4f5` — sprint-31/backlog durumları.
+  - **WIP dalı `wip/sprint-31-ast12-13` (`db25e62a`):** `AmiEventMapper` `PBXTR_ORIGIN`/`QUEUE_PRIO`
+    okuma + SLA eşit damga sıralaması — **derlenmedi, test edilmedi**, ajan oturum limitinde kesildi.
+- **QA (pbxtr-qa):** KRİTİK yok; 4 mutasyon kırmızı→yeşil; ORTA/DÜŞÜK bulguların hepsi kapandı.
+- **Test sayıları:** Api parçalı 1058 (P0) + 736 Telephony (BE-02) + 127 CRM/QA; Architecture 342;
+  frontend 320 + 18 + 5 + 9; Integration 2 (gerçek PG); DB kapıları yeşil.
+- **Komutlar:**
+  ```bash
+  bash deploy/db-kapilari-docker.sh                       # 00-roles → ef update → ci-check.sh
+  # up→down→up: scratchpad/updown.sh (gecici postgres:16, port 55433)
+  dotnet test tests/Pbxtr.Api.Tests --no-build --filter "FullyQualifiedName~Modules.Telephony"
+  cd src/Pbxtr.Web && npx tsc -b && npx vitest run src/app/screens/agent src/app/screens/settings src/app/shell
+  ```
+- **Açık kalanlar / sonraki adım:**
+  1. `wip/sprint-31-ast12-13` dalını derle, `AmiEventMapper|Sla` filtreli test + mutasyon, `main`'e al.
+  2. Lab D-14 tekrar ölçümü (yeni vm metni: tek beep, boş T0 uyarısı yok) ve D-15 SLA olay sırası —
+     ilk ölçüm `QueueCallerLeave → AgentConnect` (74 µs) sırasını gösterdi, dağılım alınamadı.
+  3. **Gerçek santralde** (100.106.82.119) D-13, `queue show` penalty, vm dosyası, `manager.conf
+     channelvars` runbook adımı — Sprint-35/37/38 bunlar yeşil olmadan açılmaz.
+  4. Yan bulgular: `PBXTR_ASTERISK_CONF_RESET` compose'a geçirilmiyor; envanter §3 santral satırı
+     bayat; `CallAudioPane` `styles.head` sınıfı CSS'te yok; `-int` bağlamında `+` kararı.
+  5. Kullanıcı kararı: madde 6 SMS sağlayıcısı (BR-6).
