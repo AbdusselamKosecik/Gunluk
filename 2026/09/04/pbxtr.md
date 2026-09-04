@@ -259,3 +259,21 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 
   **Ders (kayda geçti):** yetki seed'ine dokunan bir değişiklikte `Modules.Access`
   yetmez — `Platform.Authorization` da koşulmalı.
+
+### 7. Çağrı merkezi gözüyle boşluk taraması (rapor, kod değişikliği yok)
+
+- **Neden:** Kullanıcı: *"projeyi kontrol edermisin? eksik gordugun olmasa iyi olur
+  diyecegin neler var bir cagri merkezi icin. Mesela scripter ekleyelim mi? veya
+  softphone yi baska nasil yapabiliriz. veya cagri geldiginde bir ekran mi acsak"*
+- **Ne yapıldı:** 69 ekran + 32 domain modülü koddan tarandı; üç soruya ölçülmüş cevap,
+  14 satırlık envanter, 3 bayat gerekçe, önerilen sıra. Rapor:
+  <https://claude.ai/code/artifact/695d8bc9-1641-41b6-b00b-75b5338c081f>
+- **Özet:** Scripter **YOK** → "kampanya scripti + form → sonuç kodu" olarak evet.
+  Softphone **VAR** (sip.js, kabukta, 30 Ağustos'ta gerçek PJSIP kanalıyla çaldı) →
+  değiştirme; mikrofon/ses testi/cihaz/DTMF ekle. Çağrı geldiğinde ekran **KISMEN**
+  (modal doğru) → eksik olan **müşteri kartı** (not + zaman çizelgesi; `contacts`'ta yok).
+- **Bayat gerekçeler:** "panelde ses yolu yok" (§13.1/7, /14), "Contact'ta CampaignId yok"
+  (§13.1/23 — kolon var), "gerçek Asterisk'e karşı doğrulanmadı" (§3.0 değişti, hepsi borç).
+- **Kurula gitmesi gerekenler:** müşteri kartı + softphone kontrolleri + scripter (tek
+  gündem), kuyrukta geri arama IVR düğümü, CRM URL-pop/webhook, omnichannel için
+  "yapmayacağız" kararı. Kullanıcılar arası mesajlaşma yeniden açılmaz (Karar #25/K6).
