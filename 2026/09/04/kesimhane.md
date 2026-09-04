@@ -35,6 +35,16 @@ beklemesin, hızlıca ardı ardına okutulabilsin.
 - DB insert (`Erp_WorkOrderProduction`) yazdırmayı beklemiyor; okutmalar bitince hemen kaydediliyor.
 
 ## Açık kalanlar / sonraki adım
-- Pencere yazdırma bitmeden kapatılırsa kuyruktaki işler yine de arka planda tamamlanır; uygulama
-  tamamen kapatılırsa bekleyen işler kaybolur. Gerekirse kapanışta `_printChain.Wait()` eklenebilir.
 - Yazdırma hataları artık modal olmayan MessageBox ile geç gösterilir; operatör eğitimi gerekebilir.
+
+### 2. Kapanışta bekleyen yazdırma işlerini tamamla
+- **Neden:** Madde 1'de açık kalan konu: uygulama kapatılırsa kuyruktaki kartlar kaybolabiliyordu.
+- **Ne yapıldı:**
+  - Yeni `Services/CardPrintQueue.cs`: uygulama geneli statik sıralı kuyruk (`Enqueue`, `WaitAll(timeout)`,
+    `HasPending`). Adı `PrintQueue` olamadı; `System.Printing.PrintQueue` ile çakışıyor.
+  - `OrderDetailViewModel.EnqueuePrint` artık bu servisi kullanıyor (ViewModel içindeki Task zinciri kaldırıldı).
+  - `App.xaml.cs`: `OnExit` override; bekleyen iş varsa en fazla 2 dk beklenip çıkılıyor.
+- **Dokunulan dosyalar:** `kesimhane/Services/CardPrintQueue.cs`, `kesimhane/App.xaml.cs`,
+  `kesimhane/ViewModels/OrderDetailViewModel.cs`
+- **Sonuç / doğrulama:** `dotnet build` başarılı.
+- **Commit:** `8ea29dd` — Uygulama kapanisinda bekleyen kart yazdirma islerini tamamla
