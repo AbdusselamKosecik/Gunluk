@@ -73,3 +73,27 @@ Branch: `feat/sentez-planing-ayrimi`.
 - **Sonuç:** İki tag da Docker Hub'da, digest `sha256:a7958880...`. Sunucuda `docker compose pull && up -d`
   ile alınacak (compose `:latest`'i kullanıyor).
 - **Commit:** `cdce91e` — chore(selvedge): surum 1.0.4.79
+
+### 4. Model "Beden Başlangıç / Bitiş" alanı INT → metin (XS-XL) — 1.0.4.80
+- **Neden:** Kullanıcı model formunda "Beden Başlangıç (örn. 23)" alanına XS yazıp kaydedemiyordu.
+  Alan uçtan uca tam sayıydı: `sv_Style.SizeRangeStart/End INT`, entity `int?`, DTO'lar, `StylePdfHeader`,
+  web zod `z.coerce.number()` + `type="number"`. Parser da `(\d+)-(\d+)` regex'iyle "XS-XL"i sessizce
+  atıyordu (fixture'ların çoğu XS-XL, hepsinde alan boş kalıyordu).
+- **Ne yapıldı:**
+  - `Selvedge/db/migrations/0026_style_sizerange_text.sql` — koşullu `ALTER COLUMN ... NVARCHAR(16) NULL`
+    (API açılışında `SqlMigrationRunner` otomatik uygular; sayısal değerler metne döner, veri kaybı yok).
+  - `Selvedge.Domain/Entities/Style.cs`, `Dtos/{Create,Update}StyleRequest.cs`, `Dtos/StyleDto.cs` → `string?`.
+  - `StyleConfiguration.cs` → `.HasMaxLength(16)`; `StyleService.cs` → `Trim(r.SizeRange*)`,
+    PDF apply `!string.IsNullOrWhiteSpace`.
+  - `StylePdfParser.cs` → regex `([A-Z0-9]+)\s*-\s*([A-Z0-9]+)`, upper-case.
+  - Web: `StylesPage.tsx` zod `z.string().max(16)`, `type="number"` kaldırıldı, submit `trim() || null`;
+    `api/lookups.ts`, `types/api.ts` → `string`; `i18n/tr.json`, `en.json` etiket "örn. 23 veya XS".
+  - Test: `StylePdfParserSizeRangeTests` (clara XS-XL, winslow 23-34). 33/33.
+- **Komutlar:**
+  ```bash
+  cd Selvedge/tests/Selvedge.PdfImport.Tests && dotnet test
+  cd Selvedge/src/Selvedge.Api && dotnet build -c Release
+  cd Selvedge/src/Selvedge.Web && npx tsc --noEmit -p tsconfig.json
+  ```
+- **Commit:** `3fd79a9` — feat(selvedge): model beden araligi metin oldu + 1.0.4.80
+- **Docker:** `BuildDocker_1.0.4.80.bat` (API + web). Build/push arka planda çalıştırıldı; sonuç aşağıda.
