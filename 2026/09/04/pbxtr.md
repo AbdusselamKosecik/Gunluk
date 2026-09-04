@@ -452,3 +452,41 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   kapalı saatte sessizce kapatılır). İkisi ön şart kartı.
 - **Dokunulan dosya:** `yonetim/kurul-kararlari.md` (Karar #29, 17 Şeytan itirazı cevaplı).
 - **Commit:** `648a50d4`
+
+### 12. Sprint planı — Karar #28/#29 → EPIC V, sprint-31…40
+
+- **Neden:** Kurul iki kararı verdi; CLAUDE.md §7 gereği sıradaki adım `/sprint-planla`.
+  Uygulamaya "başla" denmeden geçilmez.
+- **Ne yapıldı:** Sekiz ajan paralel çalıştı (CEO öncelik/takvim; cm-agent ve supervizor
+  kabul senaryoları + rakam kapıları; backend-lider BE-01..33; frontend-uzmani FE-01..32;
+  db-lider DB-01..15; linux-uzmani SYS-22..35; asterisk-uzmani AST-01..17). Çıktılar
+  `yonetim/backlog.md` EPIC V (15 maddenin her birine karar + sprint satırı) ve
+  `yonetim/sprintler/sprint-31.md` (ayrıntılı) + `sprint-32.md` … `sprint-40.md` (taslak)
+  olarak birleştirildi. Kimlik öneki **`BR-`** — backlog'da `BE-42`, `FE-29` gibi kimlikler
+  zaten kullanılmış, ajanların verdiği `BE-01` çakışacaktı.
+- **Takvim (CEO):** S31 = üç ön şart kartı (`[pbxtr-<t>-callback]` + müşteri-önce originate,
+  AMI `QueuePenalty`, kırık `VoiceMail()` → gosub) + C1 URL-pop + dört kapsam satırı;
+  S32 = zamanlanmış rapor; S33–34 = Scripter (sert tavan); S35–36 = geri arama (+ webhook
+  ADR); S37 = yetenek + WFM borç kartı; S38 = sesli mesaj; S39–40 = webhook (yalnız ödeyen
+  kurumsal talep varsa). **Hiçbir B/7/9 kartı, ön şartı gerçek santralde ölçülmeden açılmaz.**
+- **Kırılımlardan çıkan sapmalar (kurula bilgi):** bağlam adı tenant önekli
+  `[pbxtr-<t>-callback]` (karar metni `pbxtr-callback/<queue>` diyordu); `voicemail_messages`
+  tek `box_ref` yerine üç nullable FK; `tenant_limits` yok → `tenant_licenses`;
+  `webhook_deliveries` UNIQUE'e partition anahtarı; `purge_call_data` allowlist tek
+  migration'da sonda; vm temizlik timer'ı statik unit + imzalı env; `manager.conf`
+  provisioning dışı (runbook); kayıt oynatıcı #22 değil #19.
+- **Bugünkü originate sırası ölçüldü (asterisk-uzmani):** `AsteriskAriProvider.cs:195-208`
+  `endpoint = Local/<kuyruk>@pbxtr-callback` — Local bacağı `Queue()`'ya girer girmez
+  cevaplanır, müşteri o an aranmaya başlar → boş kuyrukta agent'a hayalet çağrı. S31 BR-BE-02
+  bunu müşteri-önce çevirir.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (EPIC V, satır 1441), `yonetim/sprintler/sprint-31.md` … `sprint-40.md`.
+- **Komutlar:**
+  ```bash
+  git add yonetim/backlog.md yonetim/sprintler/sprint-3*.md yonetim/sprintler/sprint-40.md
+  git commit && git push
+  ```
+- **Sonuç / doğrulama:** 11 dosya, LF; push edildi.
+- **Commit:** `3ff48556` — plan(bosluk-raporu): Karar #28/#29 sprint plani — EPIC V, sprint-31..40
+- **Sonraki adım:** kullanıcı **"başla"** der (`/basla pbxtr sprint-31`). Madde 6 (SMS
+  sağlayıcısı) kullanıcının ticari kararıdır; kurula gitmedi, backlog'da BR-6 olarak açık.
+
