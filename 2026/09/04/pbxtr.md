@@ -434,3 +434,21 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - **Commit:** `df8ddc36`
 - **Sonraki adım:** kullanıcı `/sprint-planla pbxtr` çalıştırır; "başla" demeden uygulama yok.
   Madde 6 (SMS sağlayıcı ticari karar; skills routing; zamanlanmış rapor) ayrı kurul.
+
+### 11. Kurul #29 — envanter madde 7–12
+
+- **Neden:** Stop-hook geri bildirimi haklıydı: rapor 15 satır taşıyor, 6–15 açılmamıştı.
+  Madde 6 (SMS sağlayıcı) ticari karar → kullanıcıya; 13/14 değişmez; 7–12 kurula gitti.
+- **Sonuç:** (7) yetenek yönlendirme ŞARTLI ONAY — ayrı küçük varlık, penalty türetilmiş ve
+  materyalize, `queue-rules` ERTELE (depoda sıfır iz, reload kapalı listede yok); (8) WFM
+  ERTELE (tetik: 30+ agent lisanslı 2 ödeyen tenant; borç: çalışma saati dışı otomatik mola);
+  (9) sesli mesaj ŞARTLI ONAY yol a — `Record(...,k)` + UserEvent + mevcut kayıt hattı, ayrı
+  `voicemail_messages`, ayrı `voicemail.read/manage`; (10) zamanlanmış rapor ŞARTLI ONAY —
+  alıcı yalnız tenant kullanıcısı, `report_key` katalog kilidi, sahip yetkisi her koşuda,
+  üretim/gönderim ayrı iş; (11) Scripter faz 2 borcu; (12) RED "yapmayacağız".
+- **Kurulun bulduğu iki mevcut kusur daha:** penalty güncellemesi `QueueAdd` tekrarıyla
+  yapılıyor, Asterisk "Already there" der ve `AmiQueueActionSemantics` bunu başarı sayar;
+  `ProvisioningRevisionService.cs:632-637` mailbox tanımsız `VoiceMail()` üretiyor (arayan
+  kapalı saatte sessizce kapatılır). İkisi ön şart kartı.
+- **Dokunulan dosya:** `yonetim/kurul-kararlari.md` (Karar #29, 17 Şeytan itirazı cevaplı).
+- **Commit:** `648a50d4`
