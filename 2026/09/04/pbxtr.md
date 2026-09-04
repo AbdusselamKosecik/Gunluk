@@ -352,3 +352,59 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
     `dotnet format --verify-no-changes` temiz.
 - **Commit:** `a36aca4e` — feat(agent): musteri karti — cari notu, gecmis ve kampanya rozeti
 
+
+### 9. Boşluk raporu madde 2 — softphone kontrolleri + bayat gerekçe temizliği
+
+- **Neden:** Rapor §7/2. Yazılım telefonu (sip.js) 30 Ağustos'tan beri kabukta ama
+  görüşme kontrolü yoktu: mikrofon kapatılamıyor, tarayıcıdan tuş gönderilemiyor,
+  cihaz seçilemiyor, ses test edilemiyordu. "Panelde ses yolu yok" gerekçesi üç yerde
+  hâlâ duruyordu; "gerçek santralde doğrulanmadı" notları §3.0 (2026-09-03) ile bağlantı
+  gerçek olduktan sonra blokaj notu değil borç olmalıydı.
+- **Ne yapıldı:**
+  - **`useSoftphone.ts`:** `muted` (SIP.js `isMuted()` kaynak, kendi bayrağı değil),
+    `toggleMute`, `sendDtmf` (RFC 4733 — RTP içinde; provisioning `dtmf_mode=rfc4733`
+    ürettiği için SIP INFO **yanlış** olurdu; alfabe `0-9*#A-D`, dışı düşürülür ve hiçbir
+    yere yazılmaz), `devices` + `selectInputDevice` (sonraki görüşme için SIP.js `media
+    .constraints` referans üzerinden güncellenir — tip `boolean` der ama
+    `session-manager.js:727` nesneyi `getUserMedia`'ya olduğu gibi geçirir; süren
+    görüşmede `replaceTrack` + SIP.js `localMediaStream` takası, yoksa `mute()` eski izi
+    kapatırdı) + `selectOutputDevice` (`setSinkId`). Görüşme bitince mikrofon açığa döner.
+    `sendDTMFUsingSessionDescriptionHandler: true`.
+  - **`shell/audioDevices.ts`:** `listAudioDevices` (izin yoksa etiket UYDURULMAZ,
+    `labelsHidden`), `requestMicrophoneAccess` (akışı hemen kapatır), `measureMicrophoneLevel`
+    (AnalyserNode RMS, 10 Hz), `toneWavDataUrl` (1 sn 440 Hz PCM WAV, tarayıcıda üretilir,
+    dosya paketlenmez), `playTestTone`, `readStoredDevices/writeStoredDevices`
+    (`localStorage` — cihaz kimliği tarayıcıya özeldir, sunucuda anlamı yok).
+  - **`shell/SoftphoneSettings.tsx`:** üst barda "Ses" popover'ı — mikrofon/hoparlör
+    seçici (hoparlör yalnız `setSinkId` destekleyen tarayıcıda, yoksa sebebi yazılı),
+    mikrofon testi (5 sn seviye çubuğu → algılandı/algılanmadı), hoparlör testi.
+    **Profil ekranında değil:** ayarlar yalnız softphone tanımlı kullanıcıya anlamlı.
+  - **`HeaderSoftphone.tsx`:** görüşmede "Mikrofonu kapat/aç" (`aria-pressed`) ve
+    "Tuş gönder" (12 tuş; basılan tuş ekrana YAZILMAZ, yalnız sayaç — PCI-DSS).
+    Masadaki komut şeridinde mikrofon yine YOK: şerit sunucu komutudur, mikrofon
+    yereldir; `CallControl.test.tsx` "mikrofon düğmesi yok" testi durur, gerekçesi
+    güncellendi.
+  - **Bayat notlar:** `prototip-urun-farklari.md` §13.1/7 (ses testi → KAPANDI), /14
+    (mikrofon → KAPANDI, yeri farklı), "Ölçemediklerim/1" (bağlanmıyoruz → BORÇ);
+    `AgentEndpoints.cs` AttendedTransfer ve `opsContracts.ts` ×2 "GERCEK SANTRALDE
+    DOGRULANMADI" → "BORÇ — henüz ölçülmedi" (`TransferAsync`/`SendDtmfAsync`
+    `AsteriskAriProvider`'da uygulanmış; eski "bu fazda NotConnected fırlatır" yanlıştı).
+  - i18n ×9 (`softphone.*` 26 anahtar).
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/shell/{audioDevices.ts,audioDevices.test.ts,SoftphoneSettings.tsx,HeaderSoftphone.tsx,HeaderSoftphone.test.tsx,HeaderSoftphone.module.css}`,
+  `src/Pbxtr.Web/src/app/screens/agent/{useSoftphone.ts,CallControl.test.tsx}`,
+  `src/Pbxtr.Web/src/app/api/opsContracts.ts`, `src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs`,
+  `doc/prototip-urun-farklari.md`, i18n ×9.
+- **Komutlar:**
+  ```bash
+  cd src/Pbxtr.Web && npx tsc -b && npx vitest run src/app/shell src/app/screens/agent
+  dotnet build src/Pbxtr.Api && dotnet format src/Pbxtr.Api --verify-no-changes
+  ```
+- **Sonuç / doğrulama:** `HeaderSoftphone.test.tsx` 5 (görüşmesizken düğme yok, görüşmede
+  mute + aria-pressed kaynaktan, DTMF gönderir ve tuşu yazmaz, çalarken Aç/Kapat,
+  disabled'da yüzey yok), `audioDevices.test.ts` 6 (izin yokken etiket uydurulmaz, API
+  yoksa patlamaz, kısıt, kalıcı seçim, WAV başlığı + sessiz değil — ilk yazımda 2000.
+  örnek tam sıfır geçişine denk geldi, pencereyle düzeltildi), shell+agent vitest
+  185/185, `tsc -b` 0, Api build 0/0, format temiz. **Gerçek tarayıcı/santralde
+  ölçülmedi** (cihaz API'leri jsdom'da yok) — sahada ilk görüşmede denenmeli.
+- **Commit:** `d3c67c1a` — feat(softphone): mikrofon, istemci DTMF, cihaz secimi ve ses testi
+
