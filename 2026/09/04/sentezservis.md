@@ -229,6 +229,105 @@ doğru `InventoryVariantId` ile yazıldı.
 
 ## Açık kalanlar (güncel)
 
+---
+
+### 13. Gece mahsubu — `eksi-stok-mahsup`
+
+- **Neden:** Kullanıcı, elle çalıştırdığı bir T-SQL betiğini her gece 00:00'da koşturmak ve
+  "kaç kayıt tamamlandı" bilgisini almak istedi. Betik ana depodaki eksi bakiyeleri bulup
+  her biri için `UZM_MahsubBarcode` çağırıyor.
+- **Ne yapıldı:** `MahsupDeposu` (tarama + yordam çağrısı), `MahsupDefteri` (bizim
+  veritabanımıza sayaç ve satır), `EksiStokMahsupJob` (cron `0 0 * * *`, kuyruk `bakim`,
+  `SingleInstance`, `MaxAttempts=1`).
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Stok/Mahsup*.cs`,
+  `EksiStokMahsupJob.cs`, `Data/Migrations/015_...sql`, `Ayarlar.cs`,
+  `Data/BaglantiFabrikasi.cs`, `Denetim/SaklamaJob.cs`, `Host/Program.cs`
+
+#### Karar: ERP'ye yazma için ÜÇÜNCÜ bir bağlantı
+
+Şart B-10 ERP'yi salt okunur sayar (iki dar istisna: raf adresi, `Meta_ForexRate`). Mahsup
+gerçek stok fişi üretiyor — üçüncü ve en geniş istisna.
+
+`ErpBaglantiCumlesi`'ni yazmaya açmak, bugün onun salt okunurluğuna güvenen **her** modülün
+güvencesini birlikte kaldırırdı. Bu yüzden ayrı alan: `SentezServis:MahsupBaglantiCumlesi`
+(bugün `SentezCore2026`, yani canlı). `EntegrasyonBaglantiCumlesi` de kullanılmadı — o bugün
+`SentezCore2026Test`'i gösteriyor ve karışsalardı mahsup sessizce teste kayardı.
+
+`MahsupDeposu` içinde `ErpAcAsync` hiç geçmez; kaynak taraması bunu koruyor.
+
+#### Betikten bilinçli farklar
+
+1. **Her çağrı kendi işleminde.** Yordam iki fiş üretiyor (şirket 2'den çıkış tip 123, hedefe
+   giriş tip 5) ve içinde `TRAN` yok — kaynağı denetledim. İkincisi patlarsa tek yanlı fiş
+   kalır: mahsup, eksi bakiyeyi kapatmak yerine ikinci şirkette açar.
+2. **Barkodsuz satır atılmıyor.** Betikte `DELETE FROM #Eksikler WHERE Barcode IS NULL`
+   vardı. Sessizce düşen eksi bakiye, kimsenin bakmadığı eksi bakiyedir.
+3. **Barkod `MIN + COUNT`**, skaler alt sorgu değil. Aynı stok+varyant için çok barkodlu
+   kayıtlar var; skaler alt sorgu onlardan biri eksiye düştüğü gün sorguyu komple çökertir.
+   (Aynı hata `EksiStokDeposu`'nda canlıda bulunmuştu.)
+4. **"Patlamadı" başarı değil.** `UZM_MahsubBarcode` hiç `RETURN` kullanmıyor — yani
+   `IF @RC <> 0` pratikte hiç tetiklenmiyor. Tur sonunda **yeniden tarama** yapılıyor ve
+   raporlanan sayı gerçekten eksisi kapanan satırlar (`duzelen`). Defterde `basarili` ile
+   `duzelen` ayrı sütunlar; ikisi arasındaki fark ayrıca uyarı olarak söyleniyor.
+
+#### Doğrulama
+
+```
+KURU  (SentezCore2026, canlı):  315 eksi satır bulundu, hiçbir fiş yazılmadı.
+CANLI (SentezCore2026Test)   :  bulunan=3 basarili=3 duzelen=3 hatali=0 (2,6 sn)
+```
+
+Test kopyasında fişler `1173867` (şirket 2, tip 123, no 00000221) ve `1173868` (şirket 5,
+tip 5, no 00000133), `SpecialCode='Konsinye-36'`, fiş tarihi yordamın kaydırdığı gibi
+2026-09-06. Geçmiş haftaların kayıtlarıyla birebir aynı şekil.
+
+Canlıdaki dağılım: şirket 5 (03) 307 satır, şirket 7 (04) 8 satır — barkodsuz yok.
+
+### 14. E-fatura tetiklemesi — `efatura-tetikle`
+
+- **Neden:** `http://192.168.1.4:3132/EFautra/GetAllCrsInvoice` 30 dakikada bir çağrılmalı,
+  uzun sürüyor, **zaman aşımı konmamalı**; dönüş `success/at/r01/r03/r04` loglanmalı.
+- **Ne yapıldı:** `EfaturaTetikleyici` + `EfaturaTetikleJob` (cron `*/30 * * * *`, yeni
+  `fatura` kuyruğu, `SingleInstance`).
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Fatura/EfaturaTetik*.cs`
+
+#### Karar: zaman aşımı iki katmana ayrıldı
+
+`HttpClient.Timeout = Timeout.InfiniteTimeSpan`. İstemci tarafında kesmek sunucuyu
+durdurmuyor — sonuç, tamamlanmış bir turu "başarısız" diye kaydetmek olurdu ve operasyonun
+rapora güvenmeyi bırakmasının en hızlı yolu budur. Sınır işin kendi `Timeout`'u (6 saat);
+tıkanmış bağlantının iş yuvasını sonsuza kadar tutmasını engelleyen son çare.
+
+#### Karar: tek bir `false` arıza değildir
+
+Bir şirketin o turda bitmemesi normal. Arıza **üst üste** bitmemesi. Bu yüzden yanıt
+kaydediliyor ve özet son 6 turun (≈3 saat) geçmişine bakıyor. Defterde "cevap vermedi",
+"olmadı dedi" ve "oldu dedi" ayrı durumlar; servis bir alanı hiç göndermezse o şirket
+"bitmedi" sayılmıyor.
+
+#### Doğrulama
+
+```
+http=200  sure=110,6 sn  success=True  r01=True r03=True r04=True
+```
+
+Satır `efatura_tetikleri`'ne işlendi (ham gövde dâhil), geçmiş sorgusu çalıştı. İlk ölçüm
+(saf curl) 154 sn'ydi — süre gerçekten değişken.
+
+### 15. Yan değişiklikler
+
+- Göç 015: `mahsup_calistirmalari`, `mahsup_satirlari`, `efatura_tetikleri`.
+- `SaklamaJob`'a iki kural: mahsup 2 yıl, e-fatura tetiği 90 gün. (Politika tablosuna satır
+  yazmak yetmiyor — `SaklamaJob.Kurallar` sabit listesinde de olmalı, yoksa kural hiç
+  uygulanmaz.)
+- `appsettings.json`'a `MahsupBaglantiCumlesi` ve `EfaturaTetik` bölümü, `fatura` kuyruk sınırı.
+- Testler 402 → **422**.
+- Belge: `docs/eksi-stok-mahsubu.md`, `docs/efatura-tetikleme.md`; `api-kontrat.md`'de B-10
+  notu üçüncü istisnayı kapsayacak şekilde güncellendi.
+- **Commit:** `fc4a1fa` — Gece mahsubu ve e-fatura tetiklemesi
+
+## Açık kalanlar (güncel)
+
 1. CRS `FilterEInvoiceUsers` + `GetUserAliasses` — e-fatura/e-arşiv kararı.
 2. Cari ve sipariş aktarımı ekranları + API uçları (depolar hazır, uç/sayfa yok).
 3. Siparişin iç kullanıcıya atanması (kolon var, uç/ekran yok).
@@ -238,3 +337,5 @@ doğru `InventoryVariantId` ile yazıldı.
 7. **Devam eden:** FortiGate API anahtarı ve `sa` parolası eski paket zip'lerinde açıkta —
    döndürülmeli. Eski zip'lerin depodan çıkarılma kararı bekliyor.
 8. Ekran hâlâ tarayıcıda açılmadı (yönetici girişi yok).
+9. Mahsup **canlıda hiç yazmadı** — yalnızca kuru koştu. İlk gerçek tur bu gece 00:00'da
+   `SentezCore2026` üzerinde olacak; sabah `mahsup_calistirmalari` bakılmalı.
