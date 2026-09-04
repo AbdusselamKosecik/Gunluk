@@ -562,3 +562,10 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   önce (−315…−13 µs), eşit damga yok; 3 terkte `Abandon` hep `Leave`'den önce. Sprint-31'in
   lab tarafı KAPANDI; açık kalan yalnız gerçek santral ölçümleri (D-13, `queue show` penalty,
   vm dosyası, `manager.conf channelvars` runbook adımı) ve madde 6 SMS kararı.
+- **Gerçek santral salt-okunur ölçüm (`deploy/OLCULEBILIRLIK-ENVANTERI.md` §11):** aynı Asterisk
+  sürümü (22.10.1) → lab sonuçları geçerli; `-out` kalıbı üretimde hâlâ `_X.` (kusur canlı, yayın
+  bekliyor); callback/vm bağlamları yok (yayın bekliyor); `channelvars` runbook adımı bekliyor;
+  AMI bağlı; **`ari show apps` BOŞ — Stasis uygulaması kayıtlı görünmüyor, ayrı kart.**
+- **Güvenlik olayı:** ortam değişkeni okurken filtre yetersizdi; AMI sırrı, ARI parolası ve API
+  pepper oturum çıktısına düştü (hiçbir dosyaya yazılmadı). Kullanıcıya rotasyon önerildi,
+  onaysız döndürülmedi.
