@@ -56,6 +56,20 @@ Branch: `feat/sentez-planing-ayrimi`.
   eşleşmeyi bozmuyor, dokunulmadı.
 
 ## Açık kalanlar / sonraki adım
-- **API henüz deploy edilmedi.** Düzeltme prod'a çıkması için yeni API imajı (son: BuildDocker_1.0.4.78)
+- API imajı 1.0.4.79 Docker Hub'da; sunucuda pull + up -d yapılmalı (bu turda sunucuya dokunulmadı).
   build + deploy gerekiyor. Sonra müşteri sırayla: önce 5 model PDF, sonra PO066 ve POLEN018.
 - Deploy sonrası `2322/NA` diye yanlış oluşmuş bir model varsa elle silinmeli.
+
+### 3. Docker sürümü 1.0.4.79 (sadece API)
+- **Neden:** Düzeltme yalnızca API tarafında; web imajı değişmedi (1.0.4.78'de kalır).
+- **Ne yapıldı:** `BuildDocker_1.0.4.79.bat` oluşturuldu (1.0.4.78 şablonundan, web adımı çıkarıldı).
+  Build + push arka planda doğrudan docker komutlarıyla yapıldı.
+- **Komutlar:**
+  ```bash
+  docker build . --compress --no-cache -f Selvedge/src/Selvedge.Api/Dockerfile \
+    --tag tekbirsoft/selvedge-api:1.0.4.79-dev --tag tekbirsoft/selvedge-api:latest
+  docker push tekbirsoft/selvedge-api:1.0.4.79-dev && docker push tekbirsoft/selvedge-api:latest
+  ```
+- **Sonuç:** İki tag da Docker Hub'da, digest `sha256:a7958880...`. Sunucuda `docker compose pull && up -d`
+  ile alınacak (compose `:latest`'i kullanıyor).
+- **Commit:** `cdce91e` — chore(selvedge): surum 1.0.4.79
