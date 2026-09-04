@@ -408,3 +408,29 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   ölçülmedi** (cihaz API'leri jsdom'da yok) — sahada ilk görüşmede denenmeli.
 - **Commit:** `d3c67c1a` — feat(softphone): mikrofon, istemci DTMF, cihaz secimi ve ses testi
 
+
+### 10. Kurul #28 — Scripter, kuyrukta geri arama, dış CRM köprüsü
+
+- **Neden:** Boşluk raporu madde 3–5 tasarım kararı istiyordu (veri modeli, maskeleme,
+  sürümleme; Asterisk tarafı; webhook aidiyeti). CLAUDE.md §7: kurul onayı olmadan iş yok.
+- **Ne yapıldı:** `/kurul pbxtr` — 10 üye paralel. Sonuç: (A) Scripter ŞARTLI ONAY (tanım
+  JSONB append-only yayın + cevaplar normalize, yazım anı Luhn reddi, tek transaction, her
+  adım atlanabilir, klavye ön şartı, 2 sprint); (B) Kuyrukta geri arama ŞARTLI ONAY ama
+  **iki VETO ön şartı kapanmadan başlamaz**; (C1) URL-pop ONAY (sunucu `crmUrl` üretir,
+  maskeli kullanıcıda `{phone}` şablonu → düğme yok); (C2) webhook ŞARTLI ONAY, ADR önce,
+  gövdede numara yok, outbox + tenant tenant `SET LOCAL`, nftables §6 egress bu işle kapanır.
+- **Kurulun açığa çıkardığı iki mevcut kusur (Asterisk uzmanı + Şeytan):**
+  1. `[pbxtr-callback]` dialplan bağlamı hiçbir yerde üretilmiyor (`CallbackDispatcher.cs:113`
+     `Local/{queue}@pbxtr-callback`) → bugünkü otomatik geri arama (#31/3) gerçek santralde
+     "no such extension" ile düşer.
+  2. Originate bacak sırası ters (Local/kuyruk önce) → agent, müşteri daha çalarken köprülenir.
+  İkisi bağımsız kart olarak **hemen** açılır; B bunların lab ölçümünden sonra sıraya girer.
+- **Çözülen çelişkiler:** `callback` IVR düğümü değil **kuyruk ayarı**; tuş → pbxtr yolu
+  **`UserEvent`** (yeni Sınıf B ucu açılmaz; `pbxtr-edge` deploy'da yok); sıra koruma
+  `QUEUE_PRIO` + FIFO, "sıranız korunur" denmez; SLA'da yeni sınıf `callback_requested`
+  (tuşlayan bugün `left` kovasında SLA'yı bozuyor).
+- **Sıra:** 0) `pbxtr-callback` düzeltmesi + lab → 1) C1 → 2) A → 3) B → 4) C2.
+- **Dokunulan dosya:** `yonetim/kurul-kararlari.md` (Karar #28, 17 Şeytan itirazı cevaplı).
+- **Commit:** `df8ddc36`
+- **Sonraki adım:** kullanıcı `/sprint-planla pbxtr` çalıştırır; "başla" demeden uygulama yok.
+  Madde 6 (SMS sağlayıcı ticari karar; skills routing; zamanlanmış rapor) ayrı kurul.
