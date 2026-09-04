@@ -546,3 +546,14 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
   4. Yan bulgular: `PBXTR_ASTERISK_CONF_RESET` compose'a geçirilmiyor; envanter §3 santral satırı
      bayat; `CallAudioPane` `styles.head` sınıfı CSS'te yok; `-int` bağlamında `+` kararı.
   5. Kullanıcı kararı: madde 6 SMS sağlayıcısı (BR-6).
+
+#### §13 ek (14:00 sonrası) — AST-12/13 main'e alındı
+
+- `wip/sprint-31-ast12-13` derlendi, test edildi ve `main`'e ff-merge edildi (`25249a17`), dal silindi.
+- **Bulgu:** lab kaydında `QueueCallerLeave`, `AgentConnect`'ten 272 µs ÖNCE geliyor; SLA
+  sorgusunun "girişten sonraki ilk olay" kuralı cevaplanan çağrıyı `left` sayıp paydayı
+  küçültüyordu. Düzeltme: öncelik anahtarı `at`'in önüne (segmentte `AgentConnect` varsa
+  cevaplandı), eşitlikte CASE + `channel`. Mutasyon: eski sıra 1/3 kırmızı → 3/3 yeşil
+  (`SlaEventOrderingTests`, gerçek PG). `AmiEventMapper` `PBXTR_ORIGIN`/`QUEUE_PRIO` isteğe bağlı.
+- Doğrulama: Api 127 (mapper/SLA filtreli), Architecture 342, Integration 4, format temiz.
+- Kalan: lab D-14 tekrar + D-15 dağılım (ajan yeniden başlatıldı); gerçek santral ölçümleri.
