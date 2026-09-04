@@ -656,3 +656,41 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
      SPF/DKIM — bu kapanmadan zamanlanmış rapor postası çıkmaz; BR-SEC-01 sır rotasyonu;
      BR-6 SMS sağlayıcısı.
   4. Sprint-33 (Scripter 1/2) kullanıcı "başla" demeden açılmaz.
+
+#### §14 ek — yayın 12 YEŞİL, gerçek santral tekrar ölçümü, üç yeni P1
+
+- **Yayın 12** (`a8f490a0`, imaj `demo-a8f490a0e65e`): 7/7 yeşil — Architecture 351, Integration
+  609 (gerçek PG, Docker), frontend 1411, API 4 shard 1034/1033/1033/1033 (atlanan 0), DB kapıları,
+  staging teslimi (`pre-a8f490a0e65e.dump` yedeği alındı). `pbxtr-app` `healthy`, `https://pbxtr.com/`
+  200. Yayın 13 (`36a6b2ee` QA düzeltmeleri + `40d11a66` + `b588689b`) hemen ardından başlatıldı.
+- **Kayıtlar:** `36a6b2ee` (QA ORTA düzeltmeleri), `40d11a66` (sprint-32 kapanış + 8 kart),
+  `b588689b` (envanter §11.1 + 3 kart). Günlük §14 (`04c79d5`).
+- **Gerçek santral, yayından hemen sonra:** dialplan **hâlâ eski** (`_X.`, callback/vm yok) — ama
+  `ari show apps` artık `pbxtr` (§11/11 bulgusu kapandı; yeni konteyner WebSocket'i açınca göründü).
+- **Kök neden (BR-BE-35, P1):** `provisioning_revisions`'daki son t0007 dialplan revizyonu 30 Ağustos;
+  render yalnız yönetici mutasyonunda koşuyor, kod değişince kimse çağırmıyor. confd 16:40 ve 16:49'da
+  iki kez eski config'i "teslim edildi" diye raporladı. **Yayın santrali değiştirmiyor.**
+- **Nasıl tetiklendi:** üç deneme, hepsi demo.sahip ile gerçek API yolu (sır yazdırılmadı; istekler
+  `pbxtr-nginx` konteynerindeki curl ile, uygulama portu dışarı kapalı):
+  1. `PUT /queues/{id}` aynı değerler + `If-Match` → 200, revizyon YOK → **BR-BE-36:** kuyruk CUD
+     uçları `RegenerateAsync` çağırmıyor (yalnız MOH).
+  2. `PUT /tenant/settings` aynı değerler → 200, revizyon YOK (bilinçli: yalnız kayıt/otomatik cevap
+     değişince).
+  3. `POST /users/extensions/{1045}/dnd` true→false → rev 3 + rev 4; `systemctl start pbxtr-confd`
+     → 16:51:24 reload; `-out` **`_[+0-9].`**, `pbxtr-t0007-callback` (3 kuyruk) ve `-vm` **yüklü**.
+- **BR-BE-37 (P1):** canlı günlükte her tick `PlatformRollupJob` → `EfLiveAlarmThresholdSource`
+  `NoAmbientTransactionException`; "müsait agent toplamı bu tenant KADAR EKSİK" — Süper Admin
+  dashboard toplamı yanlış. Bu yayınla gelmedi (#49/8'den beri olmalı).
+- **Tuzaklar:** `bash -s` ile gönderilen betikte `docker exec -i` betiğin geri kalanını stdin'den
+  yutuyor → betik `scp` ile kopyalanıp dosyadan koşturuldu. Kuyruk PUT `If-Match` ister (428).
+  `pbxtr_owner` RLS FORCE altında `provisioning_revisions`/`tenants` 0 satır döner; salt-okunur
+  ölçüm `postgres` rolüyle yapıldı.
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 "docker exec pbxtr-asterisk asterisk -rx 'dialplan show pbxtr-t0007-out' | sed -n 2p; docker exec pbxtr-asterisk asterisk -rx 'ari show apps'"
+  ssh root@176.88.41.220 "docker exec pbxtr-postgres psql -U postgres -d pbxtr -Atc \"select kind,revision,created_at from provisioning_revisions where tenant_id='11111111-1111-1111-1111-111111111111' order by created_at desc limit 3\""
+  ssh root@176.88.41.220 "docker logs pbxtr-app --since 10m 2>&1 | grep -c NoAmbientTransactionException"
+  ```
+- **Açık kalanlar:** yayın 13 sonucu; BR-BE-35/36/37 Sprint-33'e aday (kullanıcı "başla" der);
+  davranış ölçümleri (originate, penalty, vm dosyası, `manager reload`) bakım penceresi; BR-SYS-34
+  gönderici alanı, BR-SEC-01 rotasyon, BR-6 SMS — üçü kullanıcı kararı.
