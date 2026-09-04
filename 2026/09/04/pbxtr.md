@@ -694,3 +694,15 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - **Açık kalanlar:** yayın 13 sonucu; BR-BE-35/36/37 Sprint-33'e aday (kullanıcı "başla" der);
   davranış ölçümleri (originate, penalty, vm dosyası, `manager reload`) bakım penceresi; BR-SYS-34
   gönderici alanı, BR-SEC-01 rotasyon, BR-6 SMS — üçü kullanıcı kararı.
+
+#### §14 ek 2 — yayın 13 KIRMIZI (MSB4166), yayın 14 YEŞİL
+
+- **Yayın 13** (`b588689b`): kapılar + backend + entegrasyon 613 + frontend 1412 + 4 shard yeşil;
+  **6/7 imaj** adımında `dotnet publish` içinde `MSB4166: Child node "2" exited prematurely`.
+  Kod hatası değil (aynı kaynak 2/7'de derlenmişti); docker build içindeki MSBuild alt düğümü
+  çökmesi. Docker 31 GB, bellek sınırı değil. Değişiklik yapılmadan tekrar koşuldu.
+- **Yayın 14** (`b588689b`, imaj `demo-b588689b0a8c`): 7/7 yeşil, staging teslim
+  (`pre-b588689b0a8c.dump` yedeği). `pbxtr-app` healthy, `https://pbxtr.com/` 200,
+  `ari show apps` = `pbxtr`, `report_schedules`/`report_deliveries` tabloları var (0 satır).
+  Sprint-32 QA düzeltmeleri artık staging'de.
+- Tekrarlarsa: `deploy/Dockerfile:95` publish satırına `-m:1` (ayrı commit).
