@@ -138,3 +138,103 @@ ve kesin sınır:
 6. **Devam eden:** FortiGate API anahtarı ve `sa` parolası eski paket zip'lerinde açıkta —
    döndürülmeli. Eski zip'lerin depodan çıkarılma kararı bekliyor.
 7. Ekran hâlâ tarayıcıda açılmadı (yönetici girişi yok).
+
+---
+
+## Yapılanlar (ikinci tur) — siparişlerin Sentez'e aktarımı
+
+Kullanıcı: *"Siparişleride ayni pantentle kaydedebilirmisin?"* ve ürün eşleşmesi için
+*"Barkoda gore cozmemiz lazim. ornek sp var"*.
+
+### 8. Şema keşfi ve örnek SP
+
+- **Neden:** Fiş yazmadan önce ERP'nin siparişi nasıl tuttuğunu ve mevcut entegrasyonun ne
+  yazdığını bilmek gerekiyordu; uydurma alan kümesiyle yazılan fiş eskilerden ayırt edilirdi.
+- **Ne yapıldı:** Tablolar `Erp_OrderReceipt` / `Erp_OrderReceiptItem` /
+  `Erp_OrderReceiptItemVariant`. Canlıdan tek bir gerçek Trendyol fişi (RecId 1081657) ve
+  kalemi XML olarak döküldü, alan kümesi birebir ondan alındı.
+- **Kullanıcının işaret ettiği SP bulundu:** `dbo.UZM_FindBarcode`. Kural:
+  `Erp_InventoryBarcode.Barcode = @Barcode`, `Erp_Inventory.CompanyId = @CompanyId`,
+  `ISNULL(InUse,1)=1`; KDV `Erp_Inventory.VatId → Erp_Tax.Rate`, birim
+  `Erp_InventoryUnitItemSize.IsMainUnit=1`. Yazıcı bunu birebir uyguluyor.
+- **Ölçüm:** kayıtlı kalemlerde eşleşme — 04/Trendyol 6507/6507, 03/Trendyol 4420/4420,
+  Boyner 67/67, Pazarama 35/35. **Shopify 0/10.661** çıktı: barkodu `barkod` alanına değil
+  `stok_kodu`na (SKU) koyuyor; oradan bakınca 10.633/10.661. Çözücü iki alanı sırayla deniyor.
+- **Komutlar:**
+  ```bash
+  sqlcmd -d SentezCore2026 -Q "SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.UZM_FindBarcode'))"
+  ```
+
+### 9. Göç 014 + iki iş
+
+- **Ne yapıldı:** `pazaryeri_siparis_aktarimlari` defteri (parmak izi cari tablosuyla aynı
+  üçlü). `pazaryeri-siparis-hazirla` (Sentez'e yazmaz, yalnızca okur) ve
+  `pazaryeri-siparis-aktar` (cron'suz).
+- **Karar:** Fiş numarası **bizim standardımız değil**. Cari kodunda `PRK-` koyabildik ama
+  `Erp_OrderReceipt_IX0` (CompanyId+ReceiptType+ReceiptNo) UNIQUE ve numaralar saf rakam,
+  8 hane. ERP'nin dizisi devam ettiriliyor; `sp_getapplock` kendi turlarımızı sıraya sokuyor,
+  canlıda başka entegrasyon numarayı kaparsa benzersiz indeks yakalıyor ve 5 kez yeniden
+  deneniyor.
+- **Karar:** Fiyat pazaryerinden, **KDV oranı ERP'den**. Fiyat KDV dâhil; matrah bölünerek,
+  KDV toplamdan matrah çıkarılarak bulunuyor ki matrah + KDV daima ödenen tutarı versin.
+- **Karar:** Başlık toplamları **daima satırlardan** toplanıyor, pazaryerinin gönderdiği
+  tutardan değil. Fark varsa bu satırlarda eksik olduğunun işaretidir.
+- **Karar:** `SentezDepoKodu` diye **ayrı** bir parametre anahtarı açıldı. Hesabın mevcut
+  `DepoKodu` alanı Shopify'de mağazanın lokasyon kimliğini (`75108548930`) taşıyor; ERP
+  deposuyla ilgisi yok. Ödeme carisi için zaten var olan `OdemeAracisiCariHesapKodu`
+  kullanıldı — canlı fişlerdeki `PaymentToCurrentAccountId` ile birebir tutuyor.
+- **Dokunulan dosyalar:** `src/.../Pazaryerleri/SiparisAktarimi/` (6 dosya),
+  `Data/Migrations/014_...sql`, `src/SentezServis.Host/Program.cs`
+
+### 10. Yol boyunca çıkan dört gerçek arıza
+
+1. **`The incoming request has too many parameters`** — Dapper `IN` listesini tek tek
+   parametreye açıyor, SQL Server 2.100'de duruyor. 04'ün yedi günlük siparişi bile aşıyordu.
+   → 1.000'lik öbekleme.
+2. **`Kaynak sipariş bulunamadı`** — Dapper snake_case'i `SirketKodu`'na eşlemiyor ve
+   eşleşmeyen kolon **sessizce** null kalıyor; `siparis_id` hiç okunmamıştı. → kolonlara
+   takma ad. (Cari tarafı ara tip + elle çevirici kullandığı için bu tuzağa düşmemişti.)
+3. **`Invalid column name 'UD_KargoTakipNumarasi'`** — `SentezCore2026Test` canlıdaki bu
+   kolonu taşımıyor. Kolonu hiç yazmamak canlıda takip numarasını kaybettirir, koşulsuz yazmak
+   testte her fişi patlatır. → varlığı hedef başına bir kez sorulup INSERT ona göre kuruluyor.
+4. **`... cannot have any enabled triggers if the statement contains an OUTPUT clause without
+   INTO`** — `Erp_OrderReceiptItem` üzerinde tetikleyici var. → `OUTPUT ... INTO @yeni`.
+
+Ayrıca `Erp_Inventory.MarkId` bigint çıktı (modelde int'ti) ve Dapper materyalizasyonu
+patlıyordu; düzeltildi.
+
+### 11. Canlı doğrulama
+
+```
+SIPARIS HAZIRLA (04, son 10 gun)
+  3973 sipariş · 915 barkod adayının 898'i çözüldü
+  63 sipariş aktarıma hazır, 3910 atlandı — sebebi: carisi Sentez'e geçmemiş
+SIPARIS AKTAR (04, en fazla 3)
+  SentezCore2026Test: 3 fiş yazıldı.
+```
+
+Hedefte kontrol edildi: `00441518`–`00441520`, `SpecialCode='Trendyol'`, Tokat Depo, ödeme
+carisi `120.01.015`, e-arşiv alanları, `PRK-` carileri bağlı. **Başlık toplamı = kalem
+toplamı** kuruşuna kadar (795,30/874,82 — 690,84/759,92 — 655,14/720,66); varyant satırları
+doğru `InventoryVariantId` ile yazıldı.
+
+### 12. Testler ve belge
+
+- `SiparisAktarimTestleri` (tutar hesabı + hazırlık kararları) ve `SiparisYaziciSinirTestleri`
+  (kaynak taramalı: `ErpAcAsync` yok, cron yok, tek işlem, öbekleme, takma adlar).
+  372 → **402**, tamamı geçiyor.
+- `docs/pazaryeri-siparis-aktarimi.md` yazıldı; `docs/api-kontrat.md`'deki Şart B-10 notu
+  sipariş yazıcısını da kapsayacak şekilde güncellendi.
+- **Commit:** `0e26f04` — Pazaryeri siparisleri: Senteze fis olarak aktarim
+
+## Açık kalanlar (güncel)
+
+1. CRS `FilterEInvoiceUsers` + `GetUserAliasses` — e-fatura/e-arşiv kararı.
+2. Cari ve sipariş aktarımı ekranları + API uçları (depolar hazır, uç/sayfa yok).
+3. Siparişin iç kullanıcıya atanması (kolon var, uç/ekran yok).
+4. Shopify siparişlerini yeniden çek (il/ilçe düzeltmesi kayıtlı satırlara yansımadı).
+5. Hepsiburada'dan hâlâ sıfır sipariş geliyor; eşleme doğrulanmadı.
+6. Pazarama 04 için gerçek anahtarlar (bugün 03'ünkiler duruyor).
+7. **Devam eden:** FortiGate API anahtarı ve `sa` parolası eski paket zip'lerinde açıkta —
+   döndürülmeli. Eski zip'lerin depodan çıkarılma kararı bekliyor.
+8. Ekran hâlâ tarayıcıda açılmadı (yönetici girişi yok).
