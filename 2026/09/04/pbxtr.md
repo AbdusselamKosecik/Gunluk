@@ -277,3 +277,78 @@ varsayıyordu; bu sunucuda her şey Docker'da koşuyor.**
 - **Kurula gitmesi gerekenler:** müşteri kartı + softphone kontrolleri + scripter (tek
   gündem), kuyrukta geri arama IVR düğümü, CRM URL-pop/webhook, omnichannel için
   "yapmayacağız" kararı. Kullanıcılar arası mesajlaşma yeniden açılmaz (Karar #25/K6).
+
+### 8. Boşluk raporu madde 1 — müşteri kartı (not + zaman çizelgesi + kampanya)
+
+- **Neden:** Kullanıcı: *"bunlari yapalim"* (rapor §7 sırasıyla). İlk madde: çağrı
+  geldiğinde agent'ın önüne **carinin geçmişi** gelmiyordu — modal doğruydu ama altında
+  yalnızca ad/kod/kuyruk/deneme vardı. Cari notu diye bir tablo yoktu; çağrı geçmişi
+  `cdr`'da, randevular `appointments`'ta zaten duruyordu ama kimse bir araya getirmiyordu.
+- **Ne yapıldı:**
+  - **Domain:** `ContactNote` (tenant + cari + yazar + ≤1000 karakter gövde),
+    `ContactNoteEditor.Normalize` (kırpar; Empty/TooLong), `IContactCard` portu
+    (`GetAsync`, `AddNoteAsync`) ve `ContactCard/…Row` kayıtları. Silme/düzenleme ucu
+    **yok** — not bir kayıt defteridir.
+  - **DB:** `contact_notes` tablosu — CHECK `length(btrim(body)) BETWEEN 1 AND 1000`,
+    bileşik FK `(tenant_id, contact_id)`, RLS ENABLE+FORCE + `contact_notes_tenant`
+    policy. Migration `20260904120000_ContactNotes` + terminal
+    `20260904130000_ContactNotesFinalGuard` (assertion pili buraya taşındı;
+    `ExtensionWebRtcCredentialFinalGuard` yalnızca kendi guard'ını tutuyor).
+    Snapshot elle güncellendi (Designer yok).
+  - **Infrastructure:** `EfContactCard` — çağrı geçmişi **numaradan** eşleşir
+    (`caller_number`/`called_number`; CDR cari kimliği taşımaz), `linkedid` ile tek satır
+    (gruplama **kırpmadan önce**, yoksa ikinci bacak slot yakar), sonuç kodu yolu
+    `ResultCodePathResolver`'dan, yazar/agent adı tek `users` sorgusundan.
+    `RedisLiveOperationsView.GetActiveCallAsync` artık kampanya adını da okur
+    (`ActiveCallInfo.CampaignName`).
+  - **API:** `ContactCardEndpoints` — `GET /api/v1/agent/contacts/{id}/card`,
+    `POST /api/v1/agent/contacts/{id}/notes`; ikisi de **`call.handle`** (agent
+    `contact.read` taşımaz ve taşımamalı — "Kuyruklarım" deseni), `PhoneSurfaces.AgentDesk`.
+    Serbest metin (cari notu, çağrı notu, randevu notu) `phone.unmask` yoksa
+    `FreeTextRedactor`'dan geçer. Bilinmeyen/başka tenant carisi **404** (403 varlığı ele
+    verirdi). `ActiveCallDto.Campaign` eklendi. Manifest: `agent-desk.contact-card`,
+    `agent-desk.contact-note` (tablolar **sıralı** olmalı — DM006 ilk koşuda bunu yakaladı).
+  - **Frontend:** `ContactCardPanel.tsx` — aktif çağrı kartının **altında** (ayrı pencere
+    değil: masa üç sütun, pencere değişince kısayollar kaybolur), **yalnızca
+    `contact.contactId` varsa** (bilinmeyen arayanın kartı yoktur). Not eklenince kart
+    **yeniden okunur** (yanıtı listeye elle eklemek maskeden geçmemiş ham metni gösterirdi).
+    Yazma hatası taslağı silmez. `CallerFacts` ve `IncomingCallModal`'da kampanya rozeti.
+    `CallContact` iki alan kazandı: `contactId`, `campaign`. i18n ×9 dil (`ccard.*`,
+    `incoming.campaign`).
+  - **Doküman:** `prototip-urun-farklari.md` §13.1/13 ("Son işlem" → KAPANDI, "Açık
+    kayıt" hâlâ BİLİNÇLİ: `Ticket.ContactId` yok) ve /23 (bayat gerekçe: `CampaignId`
+    `20260824081141_ContactCampaignLink` ile eklenmişti, satır güncellenmemişti).
+    `ekran-yazma-yollari.md` yeniden üretildi (166 → 167 yazma ucu).
+  - **Yan düzeltme:** `TenantScreen.test.tsx` (madde 11'den) `tsc -b`'yi kırıyordu
+    (`...args: unknown[]` spread) — `vi.fn<() => Promise<TenantListResponse>>` ile düzeldi.
+    `system-roles.generated.ts` madde 11'in seed'iyle bayattı, yeniden üretildi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Contacts/{ContactNote,IContactCard}.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfContactCard.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/ContactNoteConfiguration.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260904{120000_ContactNotes,130000_ContactNotesFinalGuard}.cs`,
+  `src/Pbxtr.Api/Modules/AgentDesk/ContactCardEndpoints.cs`,
+  `src/Pbxtr.Api/Platform/Delivery/delivery-manifest.json`,
+  `src/Pbxtr.Web/src/app/screens/agent/{ContactCardPanel.tsx,CallTab.tsx,IncomingCallModal.tsx,agentApi.ts,useCallSession.ts}`,
+  `doc/prototip-urun-farklari.md`, testler aşağıda.
+- **Komutlar:**
+  ```bash
+  cd src/Pbxtr.Web && npm run screens:gen && npx tsc -b && npx vitest run src/app/screens/agent src/app/screens/tenant src/test
+  dotnet test tests/Pbxtr.Api.Tests --filter FullyQualifiedName~Pbxtr.Api.Tests.Modules.AgentDesk
+  dotnet test tests/Pbxtr.Architecture.Tests
+  PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Architecture.Tests --filter ScreenWritePathEvidenceTests
+  dotnet test tests/Pbxtr.Integration.Tests --filter FullyQualifiedName~ContactCardTests
+  ```
+- **Sonuç / doğrulama:**
+  - `ContactCardEndpointTests` (9): şekil, maskeleme (yetkisiz gizli / `phone.unmask` açık),
+    404, 403 ×2 uç, yazma, boş ×3, sınır (1001 red / 1000 kabul). İkiz üretimle aynı
+    `ContactNoteEditor`'ı koşar.
+  - `ContactCardPanel.test.tsx` (6): çizim, boş kart "eşleşme yok" demez, not sonrası
+    yeniden okuma + taslak temizliği, sınır üstü düğme kapalı, hata taslağı silmez, okuma
+    hatası kart uydurmaz.
+  - `ContactCardTests` (4, gerçek DB): numara eşleşmesi + linkedid gruplaması + başka
+    numara dışarıda, not DB'de + yazar adı, geçersiz gövde yazılmaz, **başka tenant null /
+    NotFound**. Docker Desktop kapalıydı, başlatıldı; 4/4 geçti (atlanmadı).
+  - AgentDesk API 216/216, Architecture 342/342, agent+tenant vitest 231/231, `tsc -b` 0,
+    `dotnet format --verify-no-changes` temiz.
+- **Commit:** `a36aca4e` — feat(agent): musteri karti — cari notu, gecmis ve kampanya rozeti
+
