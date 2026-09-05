@@ -143,3 +143,11 @@ ve gönderici alanı yine kullanıcı kararı olarak bekletildi. Günün büyük
   ajanı yalnız `Queues|Rollup` filtresiyle koştu; sözleşme bekçileri `Platform.Privacy`
   altında ve yalnız tam takımda görünür.
 - **Yayın 18** (`640956a6`) koşuda.
+- **Yayın 18**: shard'lar 4/4 tam yeşil; **5/7 DB kapıları** kırmızı — `PBXTR_SYS FUNCTION GUARD`
+  `call_data_retention_plan`/`purge_call_data` md5 farkı: beklenen Sprint-33 gövdeleri, bulunan
+  ESKİ gövdeler. Kök neden: `db-kapilari-docker.sh` Infrastructure Debug'ı yalnız "yoksa" derliyordu;
+  klonda 4 Eylül 19:41 tarihli ikili duruyordu, `ef` onunla `Sprint32FinalGuard`'da durdu
+  ("build sessizce atlanır" sınıfı). Düzeltme: her koşuda derle (`ff3a8c82`); klonda tek başına
+  koşuldu → migration'lar uygulandı, "TÜM KAPILAR YEŞİL".
+- **Yayın 19** (`ff3a8c82`) koşuda. Hafıza: `filtreli-test-kapiyi-gormez.md` (üç ardışık
+  kırmızının ortak dersi).
