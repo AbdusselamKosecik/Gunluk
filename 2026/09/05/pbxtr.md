@@ -126,3 +126,15 @@ ve gönderici alanı yine kullanıcı kararı olarak bekletildi. Günün büyük
    santral davranış ölçümleri için bakım penceresi.
 4. Ölçülmeyenler: gerçek Redis lisans önbelleği düşürme, WS gerçek soket, `phone.unmask` dalı,
    gerçek tarayıcı klavye.
+
+### 6. Yayın 15/16/17
+
+- **Yayın 15** (`8bff66e1`): entegrasyon 629/630 — `FinalDeliveryReportTests` kanonik
+  `databaseSchemaRevision` bayat (yeni terminal migration). Bilinen kapı; kanonik dosya
+  `Sprint33FinalGuard`'a çekildi, rapor klonda `PBXTR_WRITE_DOCS=1 … --filter Canonical_report_documents_URET`
+  ile yeniden üretildi (`aba17131`).
+- **Yayın 16**: frontend 1461/1462 — `viMockTargets` bekçisi: `CallTabScript.test.tsx`'teki
+  `vi.mock` `useSessionOptional`'ı eziyor ama modül grafında kimse ithal etmiyor (ölü mock).
+  Satır silindi (`2e96b2fb`). Ders: QA düzeltme ajanı yalnız kendi filtresini koştu; bu bekçi
+  yalnız tam `vitest run`da görünüyor.
+- **Yayın 17** (`2e96b2fb`) koşuda.
