@@ -138,3 +138,8 @@ ve gönderici alanı yine kullanıcı kararı olarak bekletildi. Günün büyük
   Satır silindi (`2e96b2fb`). Ders: QA düzeltme ajanı yalnız kendi filtresini koştu; bu bekçi
   yalnız tam `vitest run`da görünüyor.
 - **Yayın 17** (`2e96b2fb`) koşuda.
+- **Yayın 17**: API shard 1'de 1066/1067 — `MaskedPhoneContractTests` (ADR-004 §2.7):
+  `RenderedQueue.Number` `string` idi; `DialNumber` tipine çekildi (`640956a6`). Ders: BR-BE-36
+  ajanı yalnız `Queues|Rollup` filtresiyle koştu; sözleşme bekçileri `Platform.Privacy`
+  altında ve yalnız tam takımda görünür.
+- **Yayın 18** (`640956a6`) koşuda.
