@@ -321,3 +321,40 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Commit:** bkz. `git log` "Karar #32" (aşağıdaki push satırı).
 - **Kullanıcıdan istenen:** "Netgsm ve pbxtr.com — onaylıyorum" (ya da alternatif); smtp2go selector + DNS
   kayıtlarını kullanıcı uygular. Kalan iki karar (BR-SEC-01, BR-SEC-02) yalnız kullanıcı emriyle.
+
+### 16. Kullanıcı kararları (dört açık kart kapandı) + Sprint-43 planı
+- **Kullanıcı cevapları (AskUserQuestion):** Karar #32 → **"Netgsm + pbxtr.com"**; BR-SEC-01 → **"Evet, sırları
+  döndür"**; BR-SEC-02 → **"Hayır, 2026-08-29 matrisi kalsın"** (admin `bundle.system`'i taşımaya devam eder;
+  CLAUDE.md §5 "Süper Admin ve Admin" olarak düzeltildi, `935c091d`); sıradaki iş → **"Başla: Sprint-34"**.
+- **Sprint-43 planı (`/sprint-planla`, 7 ajan paralel):** CEO'nun bölmesi kabul edildi: **43-a Posta** hemen ve
+  S34'e paralel (KA-1..KA-4 kullanıcı DNS/selector/dmarc@ adımları, BR-SYS-45/46/47, BR-BE-61/62/63, BR-FE-48);
+  **43-b SMS** S42'den sonra 2 hafta (KA-5/6 Netgsm hesabı + başlık tescili, BR-DB-22..26 `sms_messages`/
+  `sms_provider_accounts`/fonksiyonlar/terminal `Sprint35FinalGuard`, BR-BE-54..60, BR-FE-42..47, BR-SYS-48..51,
+  BR-QA-07); **S44** = BR-BE-53 gerçek İYS + BR-BE-64 kampanya SMS dispatcher. Kod okumasından çıkan düzeltmeler
+  sprint dosyasının başında (tek `sys-health` ekranı, `HoldReason` yok, `SenderTitle` boş, mock İYS reddetmiyor,
+  HMAC `to_hash`, webhook tenant'ı yalnız satırdan).
+- **Dokunulan dosyalar:** `yonetim/sprintler/sprint-43.md` (yeni), `yonetim/backlog.md` (EPIC X, 32 kart; BR-6 →
+  Sprintte S43-b, BR-SYS-34/45 → S43-a, BR-BE-53 → S44).
+- **Doğrulama:** `deploy/acik-karar-bayatlik-kontrol.sh` 0, `deploy/runbook-sayi-kontrol.sh` 0.
+- **Commit:** `a5ce9823` — plan(st43).
+
+### 17. BR-SEC-01 — staging sır döndürme (kullanıcı emri)
+- **Neden:** AMI secret, ARI parolası ve `ApiKeyPepper` 2026-09-04 transkriptine düşmüştü. Bu turda **ikinci
+  sızıntı**: `/etc/pbxtr/confd/anahtar` dosyasında `=` olmadığı için `cut -d= -f1` hiçbir şeyi kesmedi ve confd
+  API anahtarı da transkripte düştü (memory `env-okurken-degeri-kes` genişletildi: içeriği kanıtlanmamış dosya
+  stdout'a getirilmez).
+- **Ne yapıldı (`scratchpad/rotasyon.sh`, `ssh root@176.88.41.220 'bash -s'`):** `.env` yedeklendi; üç değer
+  `openssl rand -base64 48 | tr -d '\n=/+' | cut -c1-40` ile üretildi ve `sed -i "s|^$k=.*|$k=$v|"` ile yerine
+  yazıldı (ad kümesi diff'i boş); `UPDATE api_keys SET revoked_at=now() WHERE revoked_at IS NULL` → 5;
+  `/etc/pbxtr/confd/anahtar` silindi; `docker compose up -d --force-recreate asterisk app` (app sabit IP kontrolü
+  önce — nginx upstream tuzağı); app healthy 12 sn, asterisk healthy; log: "AMI baglandi", "ARI Stasis 'pbxtr'
+  acildi"; `manager show connected` 1 kullanıcı; `systemctl start pbxtr-confd.service` → "anahtar uretildi ve
+  saklandi", t0007 üç bağlam yüklü; `api_keys` aktif/iptal 1/5; nginx→SPA 200, `/auth/login` boş gövde 401.
+  Sunucudaki `.env.bak-*` (ölü sırlar) silindi.
+- **`sifreler` aynası:** `scp` ile `GitHub/Pbxtr/pbxtr/pbxtr-demo/.env` güncellendi, commit `5d67359`, push.
+  **Bulgu:** ayna 27 Ağustos'tan kalmaydı — `SecretProtection` AES anahtarı (kaybolursa trunk sırları çözülemez),
+  MinIO, pepper, AMI/ARI, `PBXTR_VPN_BIND` dahil 30 satır aynada YOKTU. Disk uçsaydı staging trunk sırları
+  gitmişti. Aynanın haftalık kontrolü için kart yok; bir sonraki turda BR-SYS'ye eklenecek.
+- **Hiçbir değer transkripte/günlüğe yazılmadı** (uzunluk 40 dışında).
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (BR-SEC-01 → Bitti), memory `env-okurken-degeri-kes.md`.
+- **Sonraki adım:** `/basla pbxtr sprint-34`.
