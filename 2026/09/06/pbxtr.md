@@ -170,3 +170,12 @@ geride, Sprint-33'ün tamamı yayında değil).
   takımında 2xxx/3xxx sabit numara yok — grep), tohum satırlar yazılmadan önce `_seeds`'e,
   temizlik dahili+kuyruk+`dial_numbers` kalanını sayar. Yerel tam entegrasyon 638/638.
 - **Yayın 23** koşuda.
+
+### 8. Yayın 23 kırmızı → yayın 24
+- **Yayın 23** (`4d3052c3`): entegrasyon 638/638 yeşil; API shard 0'da 1 kırmızı —
+  `LoginEnumerationTests.Unknown_user_and_wrong_password_take_the_same_time`: p95 oranı %48
+  (bilinmeyen 7.26 ms, hatalı parola 15.03 ms). Kimlik kodu bugün değişmedi; yayın yolunda 4
+  shard paralel koşuyor, p95 kuyruk değeri tek seride şişti. Yerelde 3/3 yeşil.
+- **Düzeltme:** oran medyanla (p50) ölçülür, eşik %60 aynı. Mutasyon: `VerifyDummy()`
+  kaldırılınca medyan oranı %0 → kırmızı (gerçek açık hâlâ yakalanıyor). Geri alındı.
+- **Yayın 24** koşuda.
