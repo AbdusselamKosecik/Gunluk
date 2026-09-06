@@ -696,3 +696,79 @@ tasarrufudur, sunucu maliyeti tasarrufu değil).
 - `backend-dev-2`: Karar #33'ün provisioning şartları (304 dalı, doğum payı, 409 kapsamı).
 - BR-FE-60: saklama gecikmesi sağlık ekranı satırı.
 - BR-QA-16: eşzamanlı yarış ölçümü (tarif yazıldı, kod yok).
+
+### 28. İkinci kurul turu — Karar #34, ve brifingimin dört ölçülmemiş cümlesi
+
+- **Neden:** 27. maddede ölçülen iki şey kurula gidiyordu: (1) `RegenerateAsync` tetikleyen 18 ucun
+  8'inde `If-Match` yok, (2) kuyruk nesnesi kaybolduğunda ne yapılacak.
+- **Ne yapıldı:** on üye paralel toplandı, **Karar #34** yazıldı (`yonetim/kurul-kararlari.md`):
+  Ş34-1…Ş34-26 şart, Şeytan'ın **on bir** itirazının hepsine yazılı cevap.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`, `doc/mimari/asterisk-provisioning.md`
+- **Commit:** `68362830`
+
+**Kurula gönderdiğim brifing dört ölçülmemiş cümle taşıyordu. Üçünü üyeler düzeltti, dördüncüyü
+ben yanlış düzelttim.** Bu maddenin asıl konusu budur:
+
+1. *"`LockAndReadVersionAsync` gerçekte kilitlemiyor"* — **YANLIŞ.** Üretim gerçekten
+   `SELECT 1 ... FOR UPDATE` koşuyor. Kilitlemeyen şey kapı değil, **testlerin hepsi**: sekiz test
+   dosyasının tamamı kapıyı sahte ile değiştiriyor (`SabitSurumKapisi`, `FixedResourceVersionGate`).
+   Yani "kapı bozuk" değil, **"kapı hiç ölçülmemiş"**. İki cümle birbirine hiç benzemiyor ve ben
+   ikincisini görüp birincisini yazmışım.
+2. *"8 uç kapılanacak"* — altısı **oylanabilir bile değildi**: ya sürüm kolonu yok ya sunucu ETag'i
+   üretmiyor. Kurul dördünü kapıladı, ikisini önce altyapıya bağladı.
+3. *"`QueuePushReconciliationJob` kapsamıyor, yani bu yeni bir yüzey"* — işin kapsamadığı doğru
+   (CTO haklı) **ama `QueueMembershipSyncJob` kapsıyor.** Ben CTO'nun bulgusunu "yeni yüzey" diye
+   aktarırken **yanlış işe bakıyordum**. Şeytan yakaladı (itiraz 9); db-lideri ve backend-lideri
+   bağımsız doğruladı. Sonuç kararın yönünü değiştirdi: **yeni mutabakat bileşeni YAZILMAYACAK**,
+   mevcut işe üç şey eklenecek.
+4. Dördüncüsü 3'ün kendisi — düzeltirken de yanlış düzelttim.
+
+**Ders (kayda geçti):** *kurul kararının girdisi ölçülmemişse kararın kendisi de ölçülmemiştir.*
+On kişilik bir kurulun tamamı benim yazdığım bir cümleye oy veriyor; o cümle ölçülmemişse üretilen
+şey konsensüs değil, **benim hatamın on imzalı hâlidir**. Bu turda kurulu kurtaran şey Şeytan'ın
+zorunlu olması oldu.
+
+### 29. Karar #34 — kuralın kendisi ölçümle yeniden yazıldı
+
+Kendi commit'lediğim §12.1 sonucu (`6d5f5b40`, sabah) *"eksik kuyruk varsa **rollback** + `QueueAdd`
+resync"* diyordu. Aynı gün akşam kurul bunu **iki yerinden birden** çürüttü ve paragrafı yeniden
+yazdım (`68362830`):
+
+- **"Hiçbir nesne kaybolamaz" kuralı YAZILAMAZ.** linux-uzmani ölçtü: nesnenin kaybolması arıza
+  değil, ürünün **normal** davranışı — kuyruğu pasife almak, kullanıcıyı pasife almak, tenant'ın
+  son zil grubunu silmek. Böyle bir kural bu üç işlemi de bloklardı ve bir hafta içinde kapatılırdı.
+  Doğru kural **"beyan edilmemiş eksilme"**: manifest kaldırmaları açıkça beyan eder
+  (`removed: { queues, endpoints, kinds }`), beyan edilmemiş her kayboluş arızadır.
+- **Kuyruk kaybında ROLLBACK YASAK.** Kuyruğu henüz taşımayan bir revizyona dönmek o kuyruğu bir kez
+  daha yok eder ve üyeliği **ikinci defa** düşürür — tedavi değil, **ikinci bir yıkım olayı**.
+  Sıralama: kanaryada yakala → yayın sonrası kaldıysa `QueueAdd` resync + alarm → config rollback'i
+  yalnızca idempotent türler için (`pjsip`, `dialplan`, `moh`, `parking`).
+- Ayrıca Şeytan itiraz 7: doğrulama **disk farkına bağlanamaz**. Dosya geri konduğunda disk
+  karşılaştırması **yeşil** döner, oysa çalışma zamanı `No Members`'tır. Arızanın kritik yarısı
+  yalnızca `QueueStatus` ile görülür.
+
+**Ölçümle ÇÜRÜTÜLEN itiraz da var:** Şeytan lab tezgâhının statik üye taşıdığını, dolayısıyla
+BR-AST-25 ölçümünün geçersiz olduğunu söyledi. Tezgâh `t0007-p2.conf`'tu, **statik üyesi yoktu** ve
+oluşturmadan önce `No such queue: t0007-p2` kayıtlıydı. İtiraz reddedildi — ama sorulmasaydı ölçüm
+"belki geçersizdi" diye asılı kalırdı.
+
+## Kararlar (bu tur)
+
+- **Kurula giden her cümle ölçülmüş olmalı.** Bu turda dört cümlem ölçülmemişti ve biri kararın
+  yönünü değiştirecekti. Şeytan'ın zorunluluğu bir formalite değil, **tek yakalama mekanizması**.
+- **Bir kuralı yazmadan önce ürünün normal davranışını ölç.** "Hiçbir nesne kaybolamaz" kulağa
+  güvenlik gibi geliyordu; ölçüm üç normal işlemi bloklayacağını gösterdi.
+- **Rollback her zaman tedavi değildir.** Geri dönüşü idempotent olmayan tür için rollback ikinci
+  yıkımdır. Tür bazında ayrıldı.
+
+## Açık kalanlar / sonraki adım
+
+- **Ş34-1 sıra şartı (bağlayıcı):** iki aktörlü `EfResourceVersionGate` ölçümü kapanmadan hiçbir
+  yeni uç kapılanmaz — dört tablo (`queues`, `trunks`, `tenants`, `users`) için dört ayrı ölçüm.
+- **Ş34-8** süper admin tabanı `FOR UPDATE` (If-Match'ten bağımsız, önceliği yüksek).
+- **Ş34-14/18/25/26** `QueueMembershipSyncJob`: eksik kuyruk alarmı, `RunInterval = 60 sn`,
+  koşulsuz denetim satırının kaldırılması, arızayı üreten kapanış testi.
+- **BR-SYS-67:** sunucudaki nginx kopyası ile repo arasındaki sapmayı ölçen kapı **yok** ve
+  yokluğu var olmayan bir "ci.yml kopya-sapma kapısı" atfıyla maskelenmişti (22. madde).
+- Ş34-3 (bekçi çıpası), Ş34-4 (üç kolonlu tablo), Ş34-5 (dört uç), Ş34-6 (`users` izolasyonu —
+  db-lideri veto sınırı) kart olarak açılacak.
