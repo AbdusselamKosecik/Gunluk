@@ -464,3 +464,140 @@ tasarrufudur, sunucu maliyeti tasarrufu değil).
 - **Sonraki adım:** kalan açık kartlar ağırlıklı olarak (a) test yazımı gerektirenler (kullanıcı bu turda
   hariç tuttu), (b) kullanıcı adımına bağlı olanlar (KA-1..KA-6 DNS/Netgsm), (c) kurul kararı isteyenler
   (BR-DB-29/31, BR-BE-65 tavan değeri, BR-BE-72 hacim). S42/S43-b sprint planları hazır ve "başla" bekliyor.
+
+### 20. Kurul turu — Şeytan kendi düzeltmemin içinde kusur buldu
+
+- **Neden:** BR-DB-29/31, BR-BE-65/71/72 kartları karar gerektiriyordu. Kullanıcı karar
+  darboğazı olmak istemediği için kartlar kurula gitti (`/kurul pbxtr …`), kullanıcıya değil.
+- **Ne yapıldı:** 10 üye paralel çalıştırıldı; hepsi oy kullandı.
+- **En ağır bulgu (Şeytan itiraz 2 + CTO ölçümü):** o gün commit ettiğim
+  `20260904196000_CallDataRetentionBranchQuota` yaması partition dalını `EXIT` ile düzeltmişti,
+  ama **satır dalı hâlâ `RETURN` diyordu**. `script_responses` kalan kotayı doldurursa
+  `survey_responses` **hiç planlanmaz**.
+- **DB Lideri ölçümü (200 tenant, 60 simüle gün, fonksiyon gövdesi migration'dan birebir):**
+
+  | 60 gün, günde 1 tick | hizmet gören | **hiç görmeyen** | bekleyen süresi dolmuş satır |
+  |---|---|---|---|
+  | bugünkü kod | 6 / 200 | **194** | **60.140** |
+
+  Kart *"bir tur ~2 ay sürer"* diyordu. **Tur diye bir şey yok, tur hiç dönmüyor.** Mekanizma
+  `c_max` değil, satır dalındaki `ORDER BY x.id`: sabit sıra artı her gün kayan kesim, düşük
+  id'li tenantların defter atlamasını hiç tutturmuyor. Bu bir gecikme değil, **kalıcı açlık**.
+- **Tick sıklığı çözüm değil, ölçüldü:** 4× tick yalnızca 4×6 = 24 tenant'a ulaşıyor; 200 tenant
+  için ~34 tick/gün gerekir ve 201. tenant yine açlığa düşer.
+- **CTO'nun tuzak uyarısı doğrulandı:** `call_data_plan_hash()` `to_ts` taşımıyor. Dönüşümlü
+  sıralamada küme her tick değişir → hash değişir → ≥1 saatlik olgunlaşma her ikinci tick'te
+  kapalı kalır. Ölçüm: 59/60 uygulanan tick yerine 30/60. **Kapı gevşetilmez**, tick aralığı
+  kısaltılarak telafi edilir.
+- **İkinci bağımsız kusur:** `purge_ledger` atlama sorgusu indekssiz `Parallel Seq Scan`.
+  46 MB defterde geç tick **59 ms**, kısmi indeksle **0,3 ms** — ~150×.
+- **Commit:** `fdf72659` (Karar #33, şartlar Ş33-1…Ş33-31)
+
+### 21. Asterisk uzmanının bulgusu — nginx önekleri gerçek rotalarla eşleşmiyordu
+
+- **Ne bulundu:** `deploy/nginx.conf` ve demo profili `location /telephony/` ve
+  `location /provisioning/` yazıyordu. Gerçek rota `/api/v1/telephony/...` ve
+  `/api/v1/provisioning/...`. Önek eşleşmediği için **iki sonuç birden**, ikisi de ters yönde:
+  1. **443 panel portunda** istek `location /api/` bloğunu bulup **proxy'leniyordu** — Sınıf B
+     uçları ve `node-bundle` panelden, **mTLS olmadan** erişilebilirdi. `node-bundle` bir düğüm
+     anahtarıyla **tüm tenantların topolojisini** açar.
+  2. **8443 mTLS dinleyicisinde** `/api/v1/...` iki öneğin de dışında kaldığı için catch-all
+     404'e düşüyordu — kanal **gerçek trafiğe hiç hizmet vermiyordu**; `pbxtr-proxy-mtls.conf`,
+     `X-Client-Cert-*` başlıkları ve Sınıf B için seçilmiş 2 sn'lik zaman aşımları **hiç
+     uygulanmıyordu**.
+  Arıza sessizdi: `nginx -t` yeşil yanar, sözdizimi doğrudur. Yanlış olan **anlam**dı.
+- **Uzmanın önerdiği düzeltme olduğu gibi uygulanmadı.** Blanket `^~ /api/v1/telephony/` öneki
+  panelin **kendi** telefon uçlarını da kapatır (blacklist, extensions, ip-rules, ivr, monitor,
+  console) ve dört ekranı kırardı; SPA'nın o uçları çağırdığı ölçüldü. Kapatılan şey CLAUDE.md
+  §3.2'nin **kapalı listesidir**, tam eşleşme (`location =`) ile; 8443'te aynı beş uç regex
+  location ile servis edilir.
+- **Dokunulan dosyalar:** `deploy/nginx.conf`, `deploy/demo/nginx-demo-cloudflare.conf`,
+  `deploy/nginx-dogrula.sh`, `deploy/telefon-kanali-kontrol.sh`
+- **Komutlar:**
+  ```bash
+  bash deploy/nginx-dogrula.sh          # gercek nginx:1.27-alpine, iki profil
+  ```
+- **Sonuç / doğrulama:** üretim ve demo profilleri ikisi de geçti. Mutasyon (eksik `;`) ile
+  kapının boşa dönmediği kanıtlandı.
+- **Commit:** `5e58b01c`
+
+### 22. Aynı kapı Windows'ta HİÇ koşmuyordu (koşmayan kapı bulgu değildir)
+
+- **Ne bulundu:** `deploy/nginx-dogrula.sh` iki ayrı MSYS yol çevrimi yüzünden Windows'ta hiç
+  çalışmıyordu: (a) Git Bash `-subj "/O=..."` değerini Windows yoluna çevirdiği için openssl test
+  sertifikası üretemiyordu; (b) bind mount kaynağı POSIX yoluydu ve Windows'taki Docker daemon'ı
+  onu çözemiyordu, ayrıca konteyner içi `-c` argümanı da çevriliyordu.
+- **Daha kötüsü:** başarısız koşuda betik **yine de** "nginx'in KENDİ ayrıştırıcısı iki profili de
+  yükledi" kapsam metnini basıyordu. Kırmızı bir kapının üstüne yeşil bir cümle.
+- **Ne yapıldı:** `MSYS2_ARG_CONV_EXCL='/O='` (**dar** dışlama — `'*'` yanlış ve ölçüldü: o zaman
+  `-keyout`/`-out` yolları da çevrilmez ve openssl çıktıyı açamaz), `cygpath -m` ile mount kaynağı,
+  docker çağrısında `MSYS_NO_PATHCONV=1`. Kapsam metni artık yalnızca `RC=0`'da basılır.
+- **Yeni bekçi:** `sinif_b_yuzey_kontrol`. Sınıf B kümesini **addan değil işaretten** türetir:
+  `/api/v1/telephony/` + `AllowAnonymous` (`AsteriskClassBIdempotencyTests.ClassBSurface` ile aynı
+  ölçüt). **Ad listesi yetmedi ve bu ölçüldü:** uç adı değiştiğinde liste kalan uçları bulmaya
+  devam eder, küme boş olmadığı için bekçi yeşil kalır ve yeni ad hiç kontrol edilmez.
+- **Mutasyonlar:** çıplak önek geri kondu → kırmızı; bir sunucudan `call-permission` 404 satırı
+  silindi → kırmızı; 8443 regex'i eski öneğe döndürüldü → kırmızı; kodda uç adı değiştirildi →
+  kırmızı. `AllowAnonymous` kaldırmak yeşil bırakır ve bu **doğrudur**; kümenin tamamen boşalması
+  ayrıca hata sayılır.
+- **Commit:** `5e58b01c`
+
+### 23. Posta ön koşul birimi sunucuda HİÇ çalışmıyordu
+
+- **Üç gerçek kusur:**
+  1. Birim çıkış 3 veriyordu: `chgrp: Operation not permitted`, ölçüm dosyası **hiç
+     üretilmiyordu**. Sebep birimin kendi iç çelişkisi: aynı unit hem çıktıyı `root:pbxtr 0640`
+     istiyor hem o grup değişimini yapacak yeteneği kaldırıyordu (`CapabilityBoundingSet=` boştu).
+     **root olmak yetmez; `CAP_CHOWN` ayrı bir yetenektir.** Önceki hâl daha güvenli **değildi**,
+     yalnızca **çalışmıyordu** — ve fail-closed posta kapısı sürekli kapalı kalırdı; görünürdeki
+     sebep `precondition_missing`, gerçek sebep bir yetenek eksikliği olurdu.
+  2. `/etc/pbxtr` 0700 root:root idi; `pbxtr` grubu geçiş yapamıyordu (`setpriv` ile ölçüldü).
+  3. Konteyner dosyayı göremiyordu: compose `/etc/pbxtr`in tamamını değil yalnızca
+     `/etc/pbxtr/app`i bağlıyor. Kusursuz üretilen bir ölçüm bile uygulamaya görünmezdi.
+- **Alan seçimi:** kanonik `pbxtr.com` yazıldı, ölçülebilen `uzmanadres.com` değil. Kapı ölçülen
+  alanı `mail_settings.from_address` apex'iyle **karşılaştırır**; ölçülebilen alan yazılsaydı doğru
+  yapılandırılmış bir kurulum `precondition_domain_mismatch` ile reddedilirdi — doğru kod, yanlış
+  sebep. Betiğin pozitif DNS yolu `uzmanadres.com` üzerinde bir kez koşturularak ayrıca kanıtlandı.
+- **Ayrıca:** `DeployPrivilegeTests.Onaylananlar` listesindeki gerekçe "CapabilityBoundingSet BOŞ"
+  diyordu ve artık doğru değildi; metin düzeltilip ikinci kayıt gerekçesiyle eklendi.
+- **Commit:** `77ad2b53`
+
+### 24. QA turu — beşinci kırık ekran ve ters yönlü iyimser kilit
+
+- **Bulgu 1 (kritik, canlıda kırık):** `PUT /ivr/flows/{flowId}/nodes/{nodeId}` sunucuda `If-Match`
+  zorunlu, istemci **göndermiyor**. #40 ekranında bir IVR düğümünü düzenleyip Kaydet'e basınca
+  sunucu 428 döner ve düğüm **hiç değişmez**. Aynı dosyadaki `renameIvrFlow` ve `publishIvrFlow`
+  düzeltilmiş, `updateIvrNode` atlanmış. **Sebep ölçüldü:** `fetchIvrFlow` yorumundaki "hangi uçlar
+  If-Match ister" listesi eksikti, kusur ilk turda oradan gözden kaçmıştı.
+- **Bulgu 2:** `POST /ivr/flows/{flowId}/publish` — **istemci başlığı gönderiyor, sunucu
+  istemiyor.** İyimser kilit bir yanılsama. A akışı okur (v1), B düzenler (v2), A "Yayınla"ya
+  basar → **B'nin, A'nın hiç görmediği sürümü santrale gider.** Karşılaştırılabilir kampanya-script
+  yayını bunu yapıyor; IVR yapmıyor.
+- **Bulgu 4 (desen):** modül testlerinin hepsi `If-Match` başlığını `client.DefaultRequestHeaders`
+  ile **her isteğe** koyuyordu; 428/409/joker dallarının **hiçbiri hiç koşmuyordu**.
+- **Düzeltme (bulgu 1):** `updateIvrNode` `queuesApi.ts` kanonik desenini birebir taşıyor; ekranın
+  **zaten var olan** akış damgası geçiliyor, yeni durum icat edilmedi (ön şart düğümün değil
+  **akışın** damgasıdır). vitest 174 dosya / 1554 test yeşil, `tsc -b` temiz, parite bekçisi 4/4.
+  Mutasyon: başlık yayılımı boşaltıldı → tel testi ve parite bekçisi kırmızı; geri konuldu → yeşil.
+
+## Kararlar (bu tur)
+
+- **Bir kurul üyesinin önerdiği düzeltme ölçülmeden uygulanmaz.** Asterisk uzmanının blanket
+  `^~ /api/v1/telephony/` önerisi doğru teşhise dayanıyordu ama uygulansaydı dört panel ekranını
+  kırardı.
+- **Bir bekçi ad listesine değil işarete bağlanır.** Ad listesi, adın kendisi değiştiğinde sessizce
+  kör kalır; bu mutasyonla ölçüldü.
+- **Başarı metni yalnızca başarıda basılır.** Kırmızı bir koşunun üstüne "kapsam geçti" yazmak
+  kapıyı fiilen kaldırır.
+- **`replyToDescription` eklenmez** (Ş33-30). DB Lideri'nin "istemci sürümü eskirse sunucu metni
+  yine anlamlı olur" gerekçesi bu mimaride geçersiz: pbxtr tek uygulamadır, SPA backend tarafından
+  servis edilir ve tek deploy ile gider — istemci sunucuya göre **eskiyemez**.
+
+## Açık kalanlar / sonraki adım
+
+- `db-dev`: saklama satır dalı kalıcı açlık düzeltmesi (Ş33-1…Ş33-8) + plan-hash etkisi ölçümü.
+- `backend-dev-1`: IVR yayın ucuna `If-Match` kapısı (QA bulgu 2).
+- Ş33-11: `ProvisioningPullSqlFormat` doğum payı — bugün **her rotasyon** sağlık ekranında yanlış
+  kırmızı bırakıyor.
+- Ş33-16: `ScriptRules.MaxDefinitionBytes` ile üç nginx `9m` literali arasına bekçi.
+- BR-SYS-66 (Ş33-28): `node-bundle` N=50 ölçümü, Sınıf B yükü altında, üretim öncesi.
