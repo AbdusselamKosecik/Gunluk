@@ -601,3 +601,98 @@ tasarrufudur, sunucu maliyeti tasarrufu değil).
   kırmızı bırakıyor.
 - Ş33-16: `ScriptRules.MaxDefinitionBytes` ile üç nginx `9m` literali arasına bekçi.
 - BR-SYS-66 (Ş33-28): `node-bundle` N=50 ölçümü, Sınıf B yükü altında, üretim öncesi.
+
+### 25. BR-AST-25 ölçüldü — cevap "koruyor", ama asıl risk başka yerdeymiş
+
+- **Neden:** `asterisk-provisioning.md` §12 P2 aylardır "DOĞRULANACAK" diyordu. Korumuyorsa her
+  kuyruk config değişikliği tüm agent'ları kuyruktan düşürürdü; belirti sahada "çağrı gelmiyor"
+  olur ve sebeple bağ görünmezdi.
+- **Ortam:** `deploy/asterisk-lab`, Asterisk 22.10.1. Tezgâh `ConfigRenderer.RenderQueues`
+  çıktısıyla aynı biçimde ve **hiç statik üye taşımıyor** — yani `queue show`'da görünen her üye
+  yalnızca AMI'den gelmiş olabilir.
+- **Sonuç:** `queue reload parameters` ve `queue reload all` **dinamik üyeyi, pause + sebebini,
+  penalty'yi ve bekleyen arayanı koruyor.** İki komut arasında fark yok; §3.1 kapalı listesinde
+  ikisinin de kalması ölçümle uyumlu ve hangisinin kullanılacağı bir **tercih**, doğruluk şartı
+  değil. Pause yaşı iki reload arasında ilerlemedi, `LoginTime` sıfırlanmadı. Koruma
+  `persistentmembers = no` iken elde edildi — **AstDB kalıcılığına bağlı değil.**
+- **İkinci vacuity kapısı kritikti:** her turda `queue show`'da görünen bir parametre
+  (`servicelevel`, `maxlen`) bilerek değiştirilip yeni değer okundu. O kapı olmasaydı "üye durdu"
+  bulgusu, `pjsip reload` gibi **hiçbir şey yapmayan** bir komutla da yeşil çıkardı — §3.1'in
+  kendi dersi tam olarak buydu.
+- **Görev metninde olmayan, daha ciddi bulgu:** asıl risk "reload üyeyi düşürür mü" değil,
+  **"reload kuyruk nesnesini yok eder mi"**. Kuyruğun dosyası kaybolur + reload → `No such queue`,
+  kuyruk **ve üyeleri** yok olur. Dosya geri konunca kuyruk gelir ama **`No Members`**; üyelik
+  hiçbir config'den geri gelmez, yalnızca AMI `QueueAdd` tekrarı getirir. Bu tam olarak §3.1'in
+  **zorunlu kıldığı otomatik rollback** senaryosudur.
+- **Ve arıza AMI'de tamamen sessiz:** olay akışına yalnızca `FullyBooted` düştü,
+  `QueueMemberRemoved` **yok**. Aynı dinleyici kontrol grubunda AMI `QueueRemove`'da olayı **gördü**
+  — yani sessizlik ölçüm aracının değil **santralin**. Olay akışını dinleyen tüketici üyelerin
+  gittiğini **hiç öğrenmez**.
+- **Resync zorunlu mu:** normal turda **hayır** (reload zaten koruyor); zorunlu kılmak ölçülmemiş
+  maliyet olurdu. Yalnızca kuyruk nesnesinin kaybolduğu turda gerekir.
+- **Commit:** `6d5f5b40` + backlog `9d4e8dad` (BR-AST-28 üretim ölçümü, BR-AST-29 sessiz olay)
+
+### 26. Karar #33'ün DB şartları — ajan iki noktada beni düzeltti
+
+- **Ş33-7 defter indeksi, `EXPLAIN` ile:** 50.000 satırlık defterde Seq Scan **14,16 ms**
+  (`Rows Removed by Filter: 49944`, buffers 1667) → Index Scan **0,109 ms** (buffers 58).
+  Üç kolonun üçü de `Index Cond`'a düştü, post-filter değil. ~130×.
+- **Ölçülmüş kör nokta yazıldı:** `pbxtr_normalize_indexdef()` tanımı küçük harfe çevirdiği için
+  dondurulmuş envanter satırı `detail ->> 'toutc'` diyor. Bekçi hâlâ doğru (normalize vs
+  normalize) ama indeksteki `toUtc` → `toutc` mutasyonunu **göremez**.
+- **Ş33-4, iki iddia ayrıldı ve ölçüldü — ikisi de doğru, çelişmiyorlar:** *tick içi* hash
+  değişmiyor (sıralama yalnız enforce satırlarını okur, kuru koşu satırı `call_data` ile yazılır);
+  *tickler arası* hash değişiyor ve bu bir **küme** farkı — sonraki tick tamamen başka altı tenant
+  seçiyor. Yani olgunlaşma kapısı her ikinci tick'te kapalı kalıyor. Tick 1 gün → 6 saat.
+  **Kapı hiçbir şekilde gevşetilmedi.**
+- **Ajanın birinci düzeltmesi:** şartın metni defter ön taramasına 400 günlük sınır istiyordu ve
+  benim commit'lediğim gövde bunu **taşımıyordu**. Ekledi; anlam kayması **adalete doğru** —
+  400 günden eski işlem NULL okunur ve o tenant en öne sıralanır, fail-open değil.
+- **Ajanın ikinci düzeltmesi:** hash konusunda iki ölçümün çeliştiğini sanıyordum; farklı şeyleri
+  ölçtüklerini gösterdi.
+- **Ş33-6:** 200 tenant / 60 tick, **200/200**; mutasyon (eski `x.id` sırası) **6/194** ile kırmızı
+  — DB lideri harness'iyle aynı sayılar. Fikstür yavaş değil: dokuz test 7 sn.
+- **Bir ürün kuralı yüzeye çıktı ve baypas edilmedi:** 200 tenant `DEALER_CHANNEL_QUOTA_EXCEEDED`'a
+  takıldı; fikstür yeterli kota isteyecek şekilde düzeltildi, tetikleyiciye dokunulmadı.
+- **Yarım teslim, ajan kendisi bildirdi:** `call_data_retention_lag()` ve log var, **sağlık ekranı
+  satırı yok** (o dosyalar başka ajanlardaydı). "Bitti" saymadım; BR-FE-60 açıldı. Şartın gerekçesi
+  zaten o sayının **sorulabilir** olmasıydı.
+- **Commit:** `75e7e0c4` + backlog `94e79573`
+
+### 27. Provisioning tetikleyen uçlar — kural ölçüldü ve olduğu gibi UYGULANMADI
+
+- **Neden:** aynı kusur aynı dosyada **üç kez** çıktı (`updateIvrNode` istemci yok,
+  `PublishFlowAsync` sunucu kapısı yok, `RollbackFlowAsync` kapısız). Kökü tek: hangi uçların
+  `If-Match` istediği **elle tutulan bir listeydi** ve o liste hep eksikti. Dördüncüsünü aramak
+  yerine **kümeyi ölçmesini** istedim.
+- **Ölçüm:** `RegenerateAsync` çağıran **18 uç** (IL çağrı ağacından, gerçek route tablosu).
+  Bu turdan önce 4'ü kapılı, 14'ü kapısız.
+- **Kural olduğu gibi yanlış ve bunu ölçüm gösterdi:** 3'ü **oluşturma** ucudur — yeni kaynağın
+  önceki sürümü yoktur, gönderilebilecek tek değer `*` olurdu ve o zaten reddediliyor. 2'si
+  koleksiyona ekleme/silmedir. Geriye **8 gerçek açık borç** kalıyor ve onlar kurula gidiyor.
+- **Bekçi kuruldu ama kural yeniden yazılarak:** "her uç kapılı olmalı" değil, **"her uç için
+  yazılı bir karar olmalı"**. Envanter türetilir; elle tutulan tek şey **karardır**. Üç dişi var:
+  envanter kararla birebir değilse kırmızı, kapılı bir uç kapısını kaybederse kırmızı, ve
+  **açık bir uç kapı kazanırsa** kırmızı — liste büyümeye değil **temizlenmeye** zorlanır.
+- **Yan bulgu (gerçek kusur):** `IvrPublicationHistory.test.tsx`'teki `vi.mock` sarmalayıcısı
+  `rollbackIvrFlow`'u **iki** parametreyle yazmıştı ve üçüncü argümanı **sessizce düşürüyordu**;
+  ekran damgayı doğru gönderdiği hâlde test "gönderilmedi" diyordu. Test ikizinin üretimden
+  ayrışmasının **üçüncü** biçimi: ikiz müsamahakâr olabilir, **dar** olabilir, ya da imzası
+  eskimiş olabilir.
+- **Commit:** `fe9b2124` + backlog `cb898bc5`
+
+## Kararlar (bu tur)
+
+- **Bir kuralı ölçmeden genellemedim.** "Provisioning tetikleyen her uç `If-Match` ister" cümlesi
+  kulağa doğru geliyordu; ölçüm 18 ucun 5'inde yanlış olduğunu gösterdi. Bekçi kurala değil
+  **karara** bağlandı.
+- **Yarım teslim "bitti" sayılmaz.** Gecikme fonksiyonu yazıldı ama ekranda yok; ayrı kart açıldı.
+- **Lab ölçümü üretim ölçümü değildir.** BR-AST-25 "Bitti (lab)" yazıldı, üretim tekrarı ayrı kart.
+
+## Açık kalanlar / sonraki adım
+
+- **Kurula gidecek iki madde:** (1) `RegenerateAsync` tetikleyen 8 kapısız uç, (2) kuyruk nesnesi
+  kaybolduğunda rollback + resync ve sessiz AMI boşluğu.
+- `backend-dev-2`: Karar #33'ün provisioning şartları (304 dalı, doğum payı, 409 kapsamı).
+- BR-FE-60: saklama gecikmesi sağlık ekranı satırı.
+- BR-QA-16: eşzamanlı yarış ölçümü (tarif yazıldı, kod yok).
