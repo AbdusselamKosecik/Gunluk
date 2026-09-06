@@ -254,3 +254,19 @@ geride, Sprint-33'ün tamamı yayında değil).
   arayuzunden cozulur
 - **Yayın 27** (`3a4039ad`) koşuda. Bitince ölçülecek: tick sonrası düşürme uyarısı yok,
   demo.agent `inRoster=true` ve başlık menüsü (Müsait/Mola) çalışıyor.
+
+### 12. Yayın 27 yeşil → staging uçtan uca kadro/mola ölçümü
+- **Yayın 27** (`3a4039ad`): tüm aşamalar yeşil, imaj `demo-3a4039ad57e9`, staging migrate + sağlık
+  geçti. Açılıştan beri "olay DUSURULDU" = **0**.
+- **Ölçüm (staging, gerçek Asterisk):**
+  1. `queue remove member Local/1042@pbxtr-t0007-local/n from t0007-tahsilat` → 5 dk tick'te
+     `QueueMembershipSyncJob` "1 üyelik eklendi", `QueueMemberAdded` işlendi →
+     Redis `pbxtr:{t0007}:live:agent:{userId}` = `{"status":"available","extension":"1042"}`.
+  2. demo.agent girişi: başlık **"Durum: Müsait 00:50 ▾"** (sunucu `sinceAt`), ekranda
+     "Molaya gir" + gerekçe listesi (dün "Kadroda değil / Offline" idi).
+  3. "Molaya gir" → santral: iki kuyrukta `paused:break`, Redis `status=break`, ekran
+     "Molada 00:04". "Moladan dön" → `paused` 0/2, başlık "Müsait 00:01".
+- **Sonuç:** agent kadro → durum → santral eşlemesi uçtan uca gerçek. Kalan tek uyarı
+  t0012 `NO_SUCH_QUEUE` (BR-AST-17, kurul).
+- **Kullanıcı kararı bekleyenler:** BR-SEC-02 (Karar #30/1), BR-SYS-34, BR-SEC-01, BR-6;
+  Sprint-34 "başla" bekliyor.
