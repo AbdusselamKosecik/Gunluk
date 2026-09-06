@@ -141,3 +141,22 @@ geride, Sprint-33'ün tamamı yayında değil).
 3. Sprint-34 "başla" bekliyor; BR-BE-40 (kayıt dinleme bağı) S34'e kondu.
 4. BR-FE-23: zil/modal yalnız #09/#15'te; kabuğa taşıma frontend-uzmani kararı.
 5. BR-AST-15: IVR kart düğümünde `MixMonitor` pause ölçümü (PCI).
+
+### 6. Yayın 21 kırmızı → düzeltme → yayın 22
+- **Yayın 21** (`45852643`): entegrasyon 634/638. (a) `LiveAgentActionHttpTests` 409 — yeni
+  `AGENT_NOT_STAFFED` yolu; fikstür dahili tohumlamıyordu, canlı satırda da yoktu.
+  (b) `AgentMembershipProductPathHttpTests` ×2 + `DeliveryProofHttpRunnerTests.Agents_save`
+  409 — yerelde tek başına 3/3 yeşil; tam takımda **`QueueMembershipSyncJobTests` tohumlarını
+  silmiyordu**, kalan dahililer t0007 `agent_limit=10`'u aşınca `ConfigRenderGuard.AssertAgentQuota`
+  → `PROVISIONING_BLOCKED` 409 (`extensions.count#-:out-of-range`); ilk temizlik denemesi
+  `pbxtr_owner` NOBYPASSRLS olduğu için yalnız `app.tenant_id` ile **sessizce 0 satır** sildi.
+- **Düzeltme (`5b26c85c`):** müdahalede dahili önce canlı satırdan, yoksa mevcut
+  `IAgentExtensionDirectory.ResolveExtensionAsync` (yeni port açılmadı), o da yoksa 409;
+  `LiveAgentActionHttpTests` '7001' tohumlar/siler; sync testleri `ExecuteCrossAsync` ile
+  temizler ve kalan satır ≠ 0 ise fırlatır; tohum 4 haneli. Integration TAM 638/638, Api
+  `Realtime|AgentDesk` 253, Architecture 353, format temiz.
+- **Ders:** paylaşılan fikstür tenant'ında tohum bırakan test, sınıfın kendisinde değil
+  *başka* sınıfta ve yalnız tam takımda kırmızı üretir; RLS altında owner ile silme sessizce
+  sıfır satır siler — temizlik "kalan = 0" ile ölçülmeli. (`LeaveEnforcementJobTests` aynı
+  sınıf, bugün limitin altında — dokunulmadı.)
+- **Yayın 22** (`5b26c85c`) koşuda.
