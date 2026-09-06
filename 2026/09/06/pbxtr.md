@@ -280,3 +280,25 @@ geride, Sprint-33'ün tamamı yayında değil).
   tek-reload vetoları şart oldu. Şeytan'ın 7 itirazı yazılı cevaplandı.
 - **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (Karar #31), `yonetim/backlog.md` (BR-AST-17 P1, kabul ölçümü).
 - **Sonraki adım:** `/sprint-planla pbxtr` (kullanıcı); uygulama "başla" ile.
+
+### 14. Sprint planı — Karar #31 → Sprint-41 / Sprint-42 (EPIC W)
+- **Neden:** Karar #31 ŞARTLI ONAY; planlama kullanıcı girdisi gerektirmeyen `yonetim/` işi. Sprint 34–40 zaten
+  planlı (EPIC V) → yeni numara **41** (+42 artıklar). Yürütme sırası S34 → S41 → S42 → S35.
+- **Ne yapıldı:** 8 ajan paralel (cm-agent, supervizor, ceo, backend-lider, frontend-uzmani, db-lider,
+  asterisk-uzmani, linux-uzmani). CEO MVP sınırı: P1 Ş1–Ş6 çekirdek + Ş8; P2 sığarsa (mezar taşı, #53/#57, agent
+  şeridi, 2-tick alarm); P3 S42 (#12 rozeti, rapor `—`). 7. gün (A) köprü tetiği.
+- **Kod okumasından çıkan düzeltmeler:** sağlık ucu `/api/v1/system/health`; `api_keys`'te tür kolonu yok (node
+  zorunluluğu uygulama katmanında); kısmi unique üç dondurma katmanı + yeni terminal `Sprint34FinalGuard`;
+  `AlarmEvaluator` yalnız `QueueMetrics`'te koşar → alarm sync işinden; confd systemd birimleri depoda var ama
+  hiçbir dağıtım betiği kurmuyor (staging elle).
+- **Birleştirmeler:** BR-AST-19..23 → BR-SYS-36/37/40/42/43; BR-FE-41 → BR-FE-40. Çift `BR-AST-15` (PCI) → BR-AST-24.
+- **Dokunulan dosyalar:** `yonetim/sprintler/sprint-41.md` (yeni), `sprint-42.md` (yeni), `yonetim/backlog.md`
+  (EPIC W, 32 kart; BR-AST-17 → Sprintte S41).
+- **Doğrulama:** `deploy/acik-karar-bayatlik-kontrol.sh` 0, `deploy/runbook-sayi-kontrol.sh` 0.
+- **Commit:** `f799dc84` — plan(sprint): Sprint-41/42
+- **Sonraki adım:** kullanıcı "başla" (`/basla pbxtr sprint-34` sırada; S41 ondan sonra).
+
+## Kullanıcı kararı bekleyenler (bu turda kapatılamaz)
+- BR-6 SMS sağlayıcısı · BR-SYS-34 gönderici alanı (`uzmanadres.com` / `pbxtr.com`) · BR-SEC-01 sır rotasyonu
+  (yalnız kullanıcı emriyle) · BR-SEC-02 Karar #30/1 admin sistem yetkisi daraltması (kullanıcının 2026-08-29
+  matrisini değiştirir).
