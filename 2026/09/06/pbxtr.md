@@ -358,3 +358,49 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Hiçbir değer transkripte/günlüğe yazılmadı** (uzunluk 40 dışında).
 - **Dokunulan dosyalar:** `yonetim/backlog.md` (BR-SEC-01 → Bitti), memory `env-okurken-degeri-kes.md`.
 - **Sonraki adım:** `/basla pbxtr sprint-34`.
+
+### 18. Sprint-34 uygulandı — Scripter faz 1 KAPANDI
+- **Neden:** kullanıcı "Başla: Sprint-34" dedi. Karar #28 (A) ŞARTLI ONAY; 2 sprintlik sert tavanın son sprinti.
+- **Ölçümle çıkan asıl bulgu (liderler, kod yazılmadan önce):** `POST …/script/publish` ucu **fiilen erişilemezdi**
+  — `scripts` satırını yaratan hiçbir yol yoktu (`EfScriptAdministration.cs:111-129` yalnız okuyor), uç kendi
+  hata metninde "önce PUT …/script/draft" diyordu ama o uç hiç yazılmamıştı. Sprint-33 "Bitti" görünüyordu.
+- **Ne yapıldı:**
+  - **BR-BE-12** (`backend-junior`): `GET /campaigns/{id}/script` (satır yoksa 200 + boş, 404 değil),
+    `PUT …/script/draft` (If-Match zorunlu, yapısal doğrulama; graf kuralları yalnız yayında, 422
+    `draft_validation_failed`, 409 `SCRIPT_ALREADY_EXISTS`), `GET …/script/versions/{n}`. Lisans kapısı
+    403'te artık `license.feature.denied` denetim satırı yazıyor.
+  - **BR-BE-13** (`backend-dev-1`): alan raporu ucu (özet + dağılım; `text` alanı DEĞER döndürmez, yalnız
+    sayım), CSV dışa aktarma (denetim dosyadan önce, `no-store`), ortak `CsvCells` formül koruması.
+  - **BR-FE-13/14/15**: gizli rota, istemcide ETag/If-Match altyapısı, editör, #18 "Script alanları" sekmesi, i18n ×9.
+- **Yürütme kararları (sprint dosyası sonunda tablo):** rota `/campaigns/script?campaign=<guid>` (kayıt defteri
+  parametreli rota desteklemiyor, param desteği 6+ yüzeye dokunurdu); manifest tetikleyicisi `user_action`
+  (parametreli şablon duman testinde daima false); `run_id_delete`; retention allowlist S33'te bitmişti
+  (S40'ta ikinci migration `02-guards` md5 bekçisini kırardı); CSV ekran kapısı uçla hizalandı; rapor #18'de.
+- **Kırmızı ve sebebi (defter için önemli):** `CallDataRetentionScripterTests` gerçek PG'de kırmızıydı.
+  Sebep **testte**: `UPDATE public.tenants SET call_data_retention_days = 90` **sahip rolüyle 0 satır
+  etkiliyordu ve hata vermiyordu** — `tenants` üzerinde FORCE RLS açık, sahibe açık tek UPDATE policy'si
+  `tenants_seed_update` ve `dealer_id IS NOT NULL` istiyor; fikstür tenant'ları `dealer_id NULL`. Yazma
+  uygulama rolüne alındı + geri okuma iddiası eklendi. Fonksiyon **doğruydu**; migration yazılmadı.
+  → memory `sahip-rolu-rls-bypass-degil`.
+- **QA (BR-QA-04): KRİTİK yok.** Dört kurul ölçütü mutasyonla doğrulandı. Sprint içinde kapatılanlar:
+  **Y-2** `EfScriptFieldReports` sıfır test kapsamı (mutasyon: sorguya `value_text` sokan değişiklik
+  **18 testin hiçbirini kırmadı**; artık `DbCommandInterceptor` ile portun DB'ye gönderdiği HER komut
+  ölçülüyor), **D-1** CSV seçenek anahtarı redaksiyonsuzdu, **D-4** denetim hedef türü, **D-5** gerçek PG
+  kanıtı, **O-4** ekran yetkisi uçtan katıydı (`permissionsAll` kaldırıldı — kayıt defteri OR desteklemiyor).
+  `backend-dev-2` **D-3'ü gerekçeli reddetti**: `Guid.Empty` FK ihlali vermiyor, `AuditEntryNormalizer`
+  platform tenant'ına çapalıyor ve kanıtı gövdeye yazıyor; satır yazmamak "403 + denetim" kuralını delerdi.
+- **Karta bağlananlar:** **BR-DB-27 (P1, YÜKSEK)** — `call_data_retention_plan()` içinde `c_max = 6`
+  **iki dal arasında paylaşılan tek sayaç**; partition dalı 6 satır üretirse `script_responses`/
+  `survey_responses` dalına hiç girilmez, yani **saklama süresi dolmuş script cevapları sessizce silinmez**
+  (ölçüldü: 6 eski partition → plan 6 partition / 0 satır tablosu). Ayrıca BR-BE-65 (gövde tavanı üç yerde
+  üç değer: uç 2 MB, nginx 1 MB, şema 5,6 MB), BR-BE-66 (chunked gövde 30 MB'a kadar belleğe alınıyor),
+  BR-BE-67, BR-SYS-52 (`api-test-shards.sh` 9 namespace / 182 testi sessizce atlıyor ve "TÜM PARÇALAR
+  YEŞİL" yazıyor), BR-BE-68/69, BR-FE-49 (kuyruk `If-Match` istemcide yok → canlıda 428), BR-FE-50.
+- **Doğrulama:** build 0 hata (ikili tarihi teyit edildi), Api 570, Architecture 353, Integration 92,
+  vitest 1532 — hepsi yeşil. `uretilmis-dosya-kontrol.sh` EXIT=0.
+- **Dokunulan dosyalar:** 71 (backend Scripter uçları + rapor, `src/Pbxtr.Web/src/app/screens/campaigns/*`,
+  `screens/reports/ScriptFields*`, `api/client.ts`, `screens.json`, `delivery-manifest.json`, i18n ×9,
+  `doc/prototip-urun-farklari.md`, `doc/ekran-yazma-yollari.md`, testler).
+- **Commit:** `87662f73` — feat(st34) · push edildi.
+- **Sonraki adım:** kullanıcı "başla" demeden yeni sprint başlamaz. Sıradaki: S43-a (posta, hemen
+  koşabilir) ya da S41 (Karar #31 çekirdeği). BR-DB-27 P1 olduğu için S41'e alınması önerilir.
