@@ -772,3 +772,126 @@ oluşturmadan önce `No such queue: t0007-p2` kayıtlıydı. İtiraz reddedildi 
   yokluğu var olmayan bir "ci.yml kopya-sapma kapısı" atfıyla maskelenmişti (22. madde).
 - Ş34-3 (bekçi çıpası), Ş34-4 (üç kolonlu tablo), Ş34-5 (dört uç), Ş34-6 (`users` izolasyonu —
   db-lideri veto sınırı) kart olarak açılacak.
+
+### 30. Karar #34 uygulandı — ve şartların içinden ALTI yanlış öncül çıktı
+
+Kararı yazdıktan sonra şartları uygulamaya aldım. Ortaya çıkan asıl bulgu teknik değil: **kurula
+sunduğum ve karta yazdığım cümlelerin altısı, ölçüldüğünde yanlış çıktı.** Bu maddenin sırası
+şartlara göre değil, o desene göre yazıldı.
+
+| # | Yazdığım | Ölçülen |
+|---|---|---|
+| 1 | `EfResourceVersionGate` "kilitlemiyor" | Kilitliyor. **Hiç ölçülmemiş** — sekiz test dosyasının hepsi kapıyı sahteyle değiştiriyor |
+| 2 | Süper admin sayımı "kilitsiz" | `pg_advisory_xact_lock` zaten vardı. **Testi yoktu** |
+| 3 | "**Tenant** süper adminsiz kalır" | Yanlış değişmez. Korunan şey **platformda** en az bir süper admin |
+| 4 | "Taban bir istemci başlığına bağlı" | Başlık hiçbir şey değiştirmiyor. Taban **her zaman** aktif tenant'tı — belirti sızıntı değil **yanlış RED** |
+| 5 | BR-BE-86'nın dört ucu | Kurul kararındaki dörtle **hiç örtüşmüyor**; ikisi **hiç var değil**, biri **zaten kapılı** |
+| 6 | "Envanterde gerekçe yok" | 18 satırın 18'inde gerekçe vardı; kartı uygulamadan **önce** yazmışım |
+
+Ortak sebep tek: **kod okumadan ya da kararı ikinci kez okumadan yazmak.** Altısı da "kulağa doğru
+geliyordu". Beşi ajanlar tarafından, biri Şeytan tarafından yakalandı.
+
+**Buna rağmen altısının da altından gerçek kusur çıktı** — ve çoğu benim yazdığımdan **daha kötüydü**:
+kapı doğruydu ama hiç koşmamıştı; kilit vardı ama testi yoktu; taban yanlış RED üretiyordu. Yani
+yanlış öncül "boş alarm" değil, **yanlış teşhisle bulunmuş gerçek hastalık**tı.
+
+### 31. Kapılar ilk kez GERÇEKTEN ölçüldü (Ş34-1/2, BR-QA-18/19)
+
+- `EfResourceVersionGate`'in beş dalı (`queues`, `trunks`, `ivr_flows`, `working_hour_profiles`,
+  `scripts`) iki eşzamanlı aktörle, gerçek PostgreSQL'e karşı ölçüldü.
+- **Yarış tesadüfe bırakılmadı.** `Barrier(2)` tek başına yetmiyor: iki istek ardışık koşarsa test
+  kapıyı değil **sıralamayı** ölçer ve mutasyonda bile yeşil kalır. Yazma yolunun içine, kapıdan
+  **sonra** commit'ten **önce** duran bir pencere kondu. `ivr_flows` için kanca `RegenerateAsync`;
+  diğer ikisinde o **hiç çağrılmıyor** ve orada kurulan pencere **sıfır genişlikte** kalırdı —
+  `IAuditLog` kancası ölçülerek seçildi.
+- **Mutasyon üç farklı belirti üretti:** `ivr_flows`'ta `CONFLICT_VERSION` yerine `DUPLICATE`
+  (kapı yokken ikinci yayıncı **geçiyor**, çarpışmayı UNIQUE indeks yakalıyor — kapının değeri
+  409'un *varlığı* değil **anlamı**); `working_hour_profiles`'ta iki 200 ve `updated_at` farkı
+  **3 µs**; `scripts`'te iki farklı `sha256`.
+- **Vacuity kapısı `ivr_flows`'ta tesadüfen çalışmıyordu:** yayın ucu değişmemiş akışı
+  `409 already_published` ile reddediyor, yani "aynı isteği iki kez gönder" bir vacuity ölçümü
+  **olmazdı**. Her tur gerçek bir değişiklik taşıyacak şekilde yazıldı.
+- **Ş34-2'nin kendisi yanlıştı:** saydığı dört tablodan `tenants` ve `users`
+  `VersionedResource` kümesinde **yok**, yani kapıdan geçmiyorlar. Onlar için yalnızca DB ön kabulü
+  ölçülebildi ve **o testler mutasyonda yeşil kalıyor** — ajan bunu kendisi bildirdi ki "dört tablo
+  yeşil" cümlesi yanlış okunmasın.
+
+### 32. Aynı ölçümün içinden çıkan dört yeni kusur
+
+1. **`PUT /api/v1/ivr/flows/{id}` her başarılı çağrıda 500 dönüyordu** — gövde yazıldıktan *sonra*
+   `ETag` başlığı konmaya çalışılıyordu. İşlem başarılı, veri yazılmış, kullanıcı 500 görüyor;
+   **yeniden denerse ikinci kez yazar.** "Aynı ters sıra hepsinde var" diye aktardım, ölçüm
+   **çürüttü**: arıza 2 uçta, diğer 4'ünde damga **hiç üretilmiyordu**. Kusurun neden hayatta
+   kaldığı da ölçüldü ve bulgudan öğretici: testler rename'in yalnızca **reddedilen** yolunu
+   ölçüyormuş — **başarılı bir rename'i hiçbir test koşturmuyordu.** Kusur kaçmadı, **hiç bakılmadı**.
+2. **Revizyon numarası kilitsiz üretiliyor:** aynı tenant'ta farklı iki kuyruğa eş zamanlı `PUT` →
+   ikinci yazar `23505` alıyor, kullanıcı **gerekçesiz 500** görüyor ve kuyruk yazımı da kayboluyor.
+   If-Match bunu 409'a **çeviremez**: kapı `queues` satırının kilidi, `provisioning_revisions`'ın değil.
+3. **`RingGroupEndpoints` provisioning tetiklemiyor** — bir zil grubu düzenlemesi santrale **hiç
+   gitmiyor**; arka plan işi tetiklenene ya da **başka birinin yaptığı alakasız bir düzenleme**
+   üretim koşturana kadar. Sahada belirti "kaydettim ama çalmıyor".
+4. **Yetki yükselme yüzeyi:** `user.disable` taşıyan bir owner/bayi, kendi tenant'ında barınan bir
+   **platform süper adminini** kapatabiliyordu. Arıza üretildi: 200 döndü. Taban bunu ancak o kişi
+   **son** süper adminse durduruyordu — yani iki süper admin varken koruma **hiç yoktu**.
+
+Dördüncüsünün kapısı yazılırken bir şey daha ölçüldü: mevcut `TargetMorePrivileged` deseni
+(saf yetki alt kümesi) buraya kopyalansaydı **meşru işi kırardı** — süper admin bir owner'ı
+pasifleştiremezdi. Kural kapsam üzerine yazıldı. Ve kapı yazılınca **mevcut bir test kırıldı**;
+sebebi öğretici: o testin aktörü `owner`dı, yani **ölçtüğü senaryo tam da bu açığın kendisiydi**.
+
+### 33. Kuyruk mutabakatı gerçek Asterisk'e karşı kapandı (Ş34-14/18/25/26)
+
+- **Önce ölçüldü, sonra değiştirildi** — ve ölçüm kuruldaki iki üyenin **ikisinin de haklı, farklı
+  dallara baktığını** gösterdi: `QueueStatus` **istisnası** kuyruğun yokluğunu **hiçbir yere**
+  yazmıyordu (Debug'a yutuluyordu); `QueueAdd` `NO_SUCH_QUEUE` dalı ise **tick başına bir `Error`**
+  basıyordu. Yani arıza sessiz değil **gürültülü sessizdi** ve satır "N tick'tir mi yok, yeni mi"
+  sorusunu cevaplamıyordu.
+- Kapanış testi **ikizsiz, gerçek Asterisk'e** koştu: iş üyeyi ekledi → kuyruk dosyası eksiltilip
+  reload edildi (`No such queue`) → dosya geri kondu, üye **gelmedi** → iş bir tick'te üyeliği geri
+  kurdu. Üç vacuity kapısı da iddia ediyor.
+- `RunInterval` **60 sn** yazıldı, 30 değil: `EnsureConfiguredForProduction` tick alt sınırını 1
+  dakikaya çekiyor, yani "30 yazıp 60 koşmak" tam olarak **karar yazılmış ama uygulanmamış** deseni
+  olurdu.
+- **Yan bulgu (BR-AST-34):** keşif `queue_members`'tan yapıldığı için **üyesi olmayan aktif bir
+  kuyruk hiç ölçülmüyor** — yani kapattığım alarm o kuyruklar için **vacuous**.
+
+### 34. nginx: var olmayan bir kapıya atıf, ve elle yamalanmış canlı
+
+- `nginx-dogrula.sh` dört yerde *"ci.yml'deki kopya-sapma kapısı bunu ayrıca zorluyor"* diyordu.
+  Ölçüldü: `.github/workflows` **yok** ve ifade depoda **yalnızca o yorumlarda** geçiyor. **Atıf
+  yapılan kapı hiç var olmadı.** Bu, "koşmayan kapı"dan **daha ağırdır**: koşmayan kapı en azından
+  kırmızı yanabilir; var olmayan kapı hiçbir şey yapmaz ve okuyana **korunuyor olduğunu söyler**.
+- Kapı yazıldı ve **ilk koşusunda gerçek bir sapma buldu**: sunucu `microphone=(self)`, depo
+  `microphone=()`. `git log -S` boş dönüyor — depo o değeri **hiç taşımamış**, sunucu WebRTC işi
+  sırasında **elle yamalanmış**. Üstelik kusur **2026-08-31'de zaten bulunmuş** ve iki dosya
+  düzeltilmiş — ama **fiilen servis edilen** dosya güncellenmemiş. Düzeltme **yanlış kopyaya**
+  uygulanmış; canlıyı ayakta tutan şey elle yapılan yama olmuş.
+- Kartın önerdiği "yayın sırasında sha256 damgası" seçeneği **reddedildi ve gerekçesi ölçüldü**:
+  `staging-yayin.sh` nginx yapılandırmasını sunucuya **hiç göndermiyor**, dolayısıyla o damga
+  yalnızca *"yayın betiği deponun özetini hesapladı"* derdi — **kendi kendini onaylayan bir damga**,
+  yani kartın adını koyduğu hatanın aynısı.
+- Kapı kendi içinde **iki sessiz delik** de buldu: `ssh` `-n` almadığı için STDIN'i tüketip döngüyü
+  **ilk dosyadan sonra** bitiriyordu (kapı "4 mount" diyor, 1 dosya ölçüyordu).
+
+## Kararlar (bu tur)
+
+- **Kurula ve karta giden her cümle ölçülmüş olmalı.** Bu turda altısı değildi. Yanlış öncül boş
+  alarm üretmedi — **yanlış teşhisle bulunmuş gerçek hastalık** üretti, ama teşhis yanlış olduğu
+  için kartın istediği düzeltme de yanlış olurdu.
+- **Ajanın "bu kartın öncülü yanlış" demesi başarıdır, gecikme değil.** Bu turda beş kez oldu ve
+  beşinde de karar yönü değişti.
+- **Yarım teslim yazılmaz.** Sağlık ekranı ajanı, çift yönlü bir kapıyı tek başına kıracağı için
+  sabiti indirmeyi **reddetti** ve yalnızca sessizce güvenli olan parçayı (i18n ×9) indirdi.
+- **Ölçülmemiş kod "kapı" diye sunulmaz.** Süper admin ajanı `FOR UPDATE`'in mutasyonda yeşil
+  kaldığını **kendisi bildirdi** ve savunma amaçlı bıraktığını koda yazdı.
+
+## Açık kalanlar / sonraki adım
+
+- BR-BE-86: kurul kararındaki **gerçek** dört uç (`DELETE /queues/{id}`, `DELETE /trunks/{id}`,
+  `PUT /tenant/settings`, `PUT /users/{id}`). İkisi ön koşullu: `users` izolasyonu (Ş34-6) ve
+  `tenant/settings` için sunucunun ETag'i **hiç üretmemesi**.
+- BR-AST-31/32: kaldırma manifesti ve tür bazında rollback yasağı.
+- BR-FE-62 → BR-FE-61: canlı izlemede kuyruk kümesi Redis indeksinden üretiliyor, **santralde
+  olmayan kuyruk listeden tamamen düşüyor**.
+- BR-SEC-05 kurula: `scope: global` roller yalnızca platform tenant'ında barınabilsin mi?
+- BR-SYS-70 kurula: yayın yolu nginx yapılandırmasını taşımıyor.
