@@ -227,3 +227,30 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Yayın 26** (`6e7aa24f`) koşuda.
 - **Ders (hafızaya yazıldı):** 01/02'de gövde değiştiren her commit yanına refresh migration
   koy; yayından önce "eski gövde → migration → md5" replikasını ölç.
+
+### 11. Yayın 26 yeşil → staging ölçümü → üye olayı tenant çözümü (yayın 27)
+- **Yayın 26** (`6e7aa24f`): 27 kapı, mimari 353/353, entegrasyon 638/638, DB kapıları,
+  imaj `demo-6e7aa24f107a`, **staging migrate geçti** (`20260904195000` + `20260904200000`
+  uygulandı). Staging canlı: `ensure_future_partitions` md5 `3e3a…`, iddia temiz (20 fonksiyon),
+  `call_events_2026_08` açıldı, pbxtr.com 200.
+- **İlk 5 dk tick:** `QueueMembershipSyncJob` t0007 için 9 üyelik ekledi — `queue show`:
+  `t0007-musteri-hizmetleri` 6 üye (1042–1047), `t0007-tahsilat` 3 üye; t0012'nin 3 satırı
+  `NO_SUCH_QUEUE` (staging confd yalnız demo.sahip/t0007 anahtarıyla çekiyor; t0012 santralde
+  hiç yok) → **BR-AST-17** kart (kurul: düğüm başına N anahtar mı, platform paketi mi).
+- **Asıl bulgu:** santralin yolladığı 9 `QueueMemberAdded` olayının 9'u da düşürüldü
+  ("tenant'i cozulemedi, context=(null)"); demo.agent ekranı "Kadroda değil / Offline".
+  Üye olaylarında kanal, bağlam, kanal değişkeni yok; `AmiTenantCode` yalnız o dördünü
+  biliyordu. Birim testleri `Map(frame, tenantId)`'i tenant verilmiş çağırdığı için dalı hiç
+  ölçmemişti.
+- **Ne yapıldı:** kaynak 5 `Queue` öneki `^(t\d{4})-`, kaynak 6 `Interface/StateInterface`
+  `@pbxtr-(t\d{4})-`; oneksiz/lab adları ve `t7-` yine çözülmez (kestirme yasağı). Düşürme
+  uyarısı queue/interface basar. Belge `doc/mimari/asterisk-olay-eslemesi.md` §2.2 satır 5/6.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Telephony/Asterisk/AmiTenantCode.cs`,
+  `…/AmiAriEventConsumer.cs`, `tests/Pbxtr.Api.Tests/Modules/Telephony/AmiEventMappingTests.cs`,
+  `doc/mimari/asterisk-olay-eslemesi.md`, `yonetim/backlog.md` (BR-AST-17)
+- **Doğrulama:** Api.Tests Telephony/Realtime 908/908; mutasyon (dosya stash): 2 pozitif
+  kırmızı, 2 negatif yeşil; `dotnet format --verify-no-changes` temiz.
+- **Commit:** `3a4039ad` — fix(telephony): uye olaylarinin tenant'i kuyruk adindan/uye
+  arayuzunden cozulur
+- **Yayın 27** (`3a4039ad`) koşuda. Bitince ölçülecek: tick sonrası düşürme uyarısı yok,
+  demo.agent `inRoster=true` ve başlık menüsü (Müsait/Mola) çalışıyor.
