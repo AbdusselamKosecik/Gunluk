@@ -404,3 +404,63 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Commit:** `87662f73` — feat(st34) · push edildi.
 - **Sonraki adım:** kullanıcı "başla" demeden yeni sprint başlamaz. Sıradaki: S43-a (posta, hemen
   koşabilir) ya da S41 (Karar #31 çekirdeği). BR-DB-27 P1 olduğu için S41'e alınması önerilir.
+
+### 19. "Açık kalan her şeyi, testler hariç" turu
+- **Neden:** kullanıcı `/goal Acik kalan herseyi, testler haric yaparmisin` dedi. Backlog'da 251 açık satır vardı.
+- **Yöntem:** ajanlara "kartı uygula" değil **"önce ölç, kart metni bayat olabilir"** talimatı verildi. Bu turun
+  değeri kapatılan kartlardan çok, ölçümlerin bulduğu şeyler oldu.
+
+#### Kapatılanlar (26 kart)
+- **BR-DB-27 (P1, SESSİZ VERİ KAYBI):** `call_data_retention_plan()` içinde `c_max = 6` **iki dal arasında
+  paylaşılan tek sayaç**tı; partition dalı önce koşuyor ve 6 satır üretirse `script_responses`/
+  `survey_responses` dalına **hiç girilmiyordu**. Yani saklama süresi dolmuş script cevapları ve anket
+  kağıtları **sessizce silinmiyordu** — hata yok, alarm yok, defterde satır yok. Ölçüm: eski gövde
+  partition=6/satır=0, yeni gövde partition=3/script=1/survey=1. Migration `20260904196000`,
+  `c_max_part=3` + `EXIT part_loop` (fonksiyondan `RETURN` değil). Toplam tavan ve 50 sn deadline korundu.
+- **BR-FE-49/51/52/53 (P1):** kuyruk, IVR (**yayınlama dahil**), çalışma saatleri ve trunk yazma yolları
+  sunucunun zorunlu tuttuğu `If-Match` başlığını **göndermiyordu** — dördü de canlıda 428 dönüyor olmalıydı.
+  Dördü de kapatıldı. **Aynı delikten dört ekran geçmiş**; parite bekçisi yok (BR-QA-08).
+- **BR-SYS-52:** `api-test-shards.sh` elle listeyle **188 metod / 263 test** atlıyor ve yine "TÜM PARÇALAR
+  YEŞİL" yazıyordu. Artık envanterden türüyor + bağımsız kapsam iddiası koşuyor. QA'nın kaçırdığı 6 test de
+  bulundu: `Pbxtr.Api.Tests.Support` — **test ikizlerinin üretime sadakatini ölçen sınıf hiç koşmuyormuş.**
+- **BR-SYS-59:** `ConfigRenderer` 6 tür üretiyor (biri **koşullu**: `ringgroups`), `pbxtr-confd-cek.sh` 5 tür
+  tanıyıp bilinmeyende `throw` ile **tüm teslimi düşürüyordu**. Tek bir tenant'ta zil grubu tanımlamak,
+  düğümdeki **hiçbir tenant'ın** config almamasına yol açıyordu; arıza gecikmeliydi.
+- **BR-DOC-05 + en ciddi bulgu:** `AGENTS.md:86` CLAUDE.md §3.1'in **düzeltilmeden önceki** kapalı listesini
+  taşıyordu — **ajan talimat dosyası, hiçbir şey yapmayan `pjsip reload` komutunu allowlist olarak
+  öğretiyordu.**
+- **BR-DB-18:** `ux_api_keys_tenant_node`; BR-BE-43'ün 409 dalı ölü koddu, artık koşuyor (ölçüldü).
+- **BR-QA-09 (yarı):** denetim ekranı **43 hedef türünden 10'unu** tanıyordu → 43/43, dokuz dilde.
+- **BR-BE-65/66:** gövde tavanı üç yerde üç değerdi (uç 2 MB uydurma, nginx 1m, şema 5,6 MB) ve gövde
+  **sınır kontrolünden önce** tamamen belleğe alınıyordu (chunked'da ilk kapı hiç çalışmıyor, Kestrel
+  varsayılanı 30 MB). Tavan artık şema sabitlerinden türüyor, istek başına sınırlanıyor, sayarak okunuyor.
+- Ayrıca: BR-BE-61/62/63 (posta kimliği, apex + `lookupCount` kapısı, `holdReason`), BR-SYS-45/46 (ön koşul
+  betiği + timer + `kapi_28`), BR-BE-70 (posta ayar DTO'su), BR-FE-48/50/54/56/57, BR-AST-18 (düğüm paketi
+  sözleşmesi), BR-BE-44/45/46/48 (düğüm bazlı provisioning), BR-DB-17/19/20/21, BR-BE-68/69, BR-DOC-05.
+- **Kendi sprintimin iki kırmızısı:** `kapi_22` ekran sayısı (70. ekran eklendi, runbook/ADR-003 69 diyordu)
+  ve `DeployPrivilegeTests` (systemd birimi root; bekçi **doğru** davrandı, gerekçesiyle onaylı listeye eklendi:
+  ölçüm dosyası `root:pbxtr 0640` olmalı, ölçümü uygulama kullanıcısına yaptırmak **fail-closed bir kapının
+  anahtarını kapının arkasındakine vermek** olurdu).
+
+#### Kendi yaptığım regresyon (kayda geçsin)
+`spf.lookupCount` zorunlu olunca `Pbxtr.Api.Tests` fikstürü güncellendi ve o takım yeşil geçti;
+`Pbxtr.Integration.Tests` içindeki **ikinci, bağımsız** fikstür unutuldu → iki test `Held` döndü.
+Bunu iki tur sonra `db-dev` buldu ve `git stash` ile "benim değil" dedi — doğru ama yanıltıcı: kusur
+HEAD'deydi, yani benim commit'imde. Düzeltirken **ikinci hatayı** yaptım: gerekçe notunu JSON ham dizesinin
+**içine** koydum, JSON yorum kabul etmediği için kapı yine kapandı. → memory `zorunlu-alan-iki-fiksturu-birden-kirar`.
+
+#### Açılan kartlar: 45
+Çoğu **kanıt boşluğu** (bu turda test yazılmadı) ve hepsi hangi dalın ölçülmediğini tek tek yazıyor.
+En kritikleri: **BR-AST-25** (`queue reload all` dinamik üyeleri koruyor mu — korumuyorsa her kuyruk config
+değişikliği tüm agent'ları kuyruktan düşürür, belirti "çağrı gelmiyor"), **BR-SYS-55** (posta timer'ı
+sunucuda kurulu değil), **BR-SYS-60/61** (düğüm paketi istemcisi yok; `ringgroups` sınıfını yakalayan kapı
+yok), **BR-DB-31/32** (kısmi tekil indeks kurul kaydı yazılmadı; BR-DB-17 ölçümü sahada koşulmadı),
+**BR-BE-72** (304 dalı denetim satırı ve `last_bundle_served_at` **yazıyor** — `If-None-Match` bant genişliği
+tasarrufudur, sunucu maliyeti tasarrufu değil).
+
+- **Doğrulama:** build 0 hata, Architecture 353/353, `db-kapilari-docker.sh` TÜM KAPILAR YEŞİL,
+  Api 570/416/329, Integration 92 + 2/2, vitest 1532, `kapi_28` 38/38, runbook/env/üretilmiş-dosya kapıları 0.
+- **Commitler:** `bb2dad17`, `22d4c770`, `baf8d3b6`, `6c3c5bef`, `a65845e2`, `7e74128c` — hepsi push edildi.
+- **Sonraki adım:** kalan açık kartlar ağırlıklı olarak (a) test yazımı gerektirenler (kullanıcı bu turda
+  hariç tuttu), (b) kullanıcı adımına bağlı olanlar (KA-1..KA-6 DNS/Netgsm), (c) kurul kararı isteyenler
+  (BR-DB-29/31, BR-BE-65 tavan değeri, BR-BE-72 hacim). S42/S43-b sprint planları hazır ve "başla" bekliyor.
