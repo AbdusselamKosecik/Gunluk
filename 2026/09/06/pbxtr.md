@@ -302,3 +302,22 @@ geride, Sprint-33'ün tamamı yayında değil).
 - BR-6 SMS sağlayıcısı · BR-SYS-34 gönderici alanı (`uzmanadres.com` / `pbxtr.com`) · BR-SEC-01 sır rotasyonu
   (yalnız kullanıcı emriyle) · BR-SEC-02 Karar #30/1 admin sistem yetkisi daraltması (kullanıcının 2026-08-29
   matrisini değiştirir).
+
+### 15. Kurul — Karar #32 (kullanıcıya ÖNERİ: SMS sağlayıcısı + posta gönderici alanı)
+- **Neden:** dört açık kullanıcı kartından ikisi (BR-6, BR-SYS-34) kurul önerisine çevrilebilirdi; kullanıcıya
+  yalnız "evet/hayır" kalsın. (BR-SEC-01 sır rotasyonu emri ve BR-SEC-02 kullanıcı matrisi değişikliği kurulun
+  ezemeyeceği kararlar, dokunulmadı.)
+- **Sonuç:** ŞARTLI ONAY (öneri). **(1) Netgsm**, tek sağlayıcı, tenant başına başlık + isteğe bağlı tenant hesabı;
+  10/10 ŞARTLI. Şeytan'ın kritik bulgusu: **İYS sağlayıcısı da mock** (`IysProviderComposition.cs:49`,
+  `IysVerified` daima false) → gerçek SMS mock İYS altında ticari mesajı reddeder (Ş1-1, fail-closed), gerçek
+  `IIysProvider` BR-BE-53. `sms_messages` + `sms_provider_accounts` kapsamda; DLR pull birincil, webhook tenant'ı
+  satırdan çözer (CTO veto şartı). **(2) `pbxtr.com`**, `raporlar@pbxtr.com`, dönüş yolu `em<N>.pbxtr.com`, selector
+  relay `s<N>` CNAME, DMARC `p=none`→`quarantine`; 8/10 (DB `uzmanadres.com`, Şeytan alt alan). Linux DNS ölçümü:
+  `pbxtr.com` SPF/MX/DMARC yok; `uzmanadres.com` SPF `redirect`+`~all` bozuk; PTR yok. 8 satırlık DNS seti karar
+  kaydında; script `lookupCount`, haftalık timer, staging gerçek-alıcı bekçisi şart (BR-SYS-45), beyaz-etiket
+  `From` BR-SYS-44.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (Karar #32), `yonetim/backlog.md` (BR-6, BR-SYS-34 durumu;
+  BR-BE-53, BR-SYS-44, BR-SYS-45 yeni).
+- **Commit:** bkz. `git log` "Karar #32" (aşağıdaki push satırı).
+- **Kullanıcıdan istenen:** "Netgsm ve pbxtr.com — onaylıyorum" (ya da alternatif); smtp2go selector + DNS
+  kayıtlarını kullanıcı uygular. Kalan iki karar (BR-SEC-01, BR-SEC-02) yalnız kullanıcı emriyle.
