@@ -189,3 +189,41 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Düzeltme:** testte `vi.spyOn(Math,'random').mockReturnValue(1)` (400 ms), sonunda
   `mockRestore`; ürün jitter'ı (K1 şart 9) aynen. 5/5 yeşil, `tsc -b` temiz.
 - **Yayın 25** koşuda.
+
+### 10. Yayın 25 kırmızı (staging migrate) → onarım migration'ı → yayın 26
+- **Yayın 25** (`6d4a7989`): 27 kapı + backend + frontend + 4 API shard + entegrasyon + DB
+  kapıları yeşil, imaj `tekbirsoft/pbxtr:demo-6d4a7989ad82` push edildi; **staging migrate
+  adımı düştü**: `Sprint33FinalGuard` içindeki `pbxtr_assert_sys_function_guard()` iddiası
+  `ensure_future_partitions` için md5 `bec5b0d5…` buldu, kanonik `3e3a3215…`
+  (`deploy/db/sys-functions.expected`). Staging otomatik `demo-b588689b0a8c`'e geri döndü
+  (pbxtr.com 200); migration geçmişi `20260904193000`'a kadar uygulanmış kaldı.
+- **Neden:** `e688099f` (2 Eylül, "partition penceresi bir ay geriye") şablon gövdesini
+  `deploy/db/01-rls-template.sql`'de değiştirdi ama onu yeniden uygulayan migration yazılmadı.
+  Üretim `migrate` yolu (`MaintenanceRunner`: `Database.Migrate()` + iddialar) şablonu
+  kendiliğinden koşmaz; `ci-check.sh`'in "01 her yükseltmede önce koşar" satırı yalnızca yerel
+  taze zincir içindir. Taze zincir (`InitialSchema` güncel şablonu okur) yeni gövdeyi aldı,
+  staging eskisinde kaldı → 4 gün boyunca yerelde yeşil, sahada kırmızı.
+- **Ölçüm:** staging `pg_proc` dökümü (`ssh root@176.88.41.220 docker exec pbxtr-postgres
+  psql … md5(prosrc)`) ↔ fixture join: 22 fonksiyondan **yalnızca** `ensure_future_partitions`
+  sapmış.
+- **Ne yapıldı:** `20260904195000_PartitionWindowTemplateRefresh` — terminalden ÖNCE sıralanır
+  (iddia `20260904200000`'de kalır, Karar #23/Ş23-7); `Up` 01+02'yi yeniden uygular (CREATE OR
+  REPLACE, emsal `HostMetrics` adım 4) ve `ensure_future_partitions(3)` ile ufku hemen kapatır;
+  `Down` e688099f öncesi gövdeyi birebir geri yazar. Expand-only defterine
+  (`deploy/migration-expand-legacy.blobs`) gerekçeli blob satırı; `CrossTenantScopeGuardTests`
+  SECURITY DEFINER envanterine satır (Down'daki eski gövde SECURITY DEFINER).
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Persistence/Migrations/20260904195000_PartitionWindowTemplateRefresh.cs`,
+  `deploy/migration-expand-legacy.blobs`, `tests/Pbxtr.Architecture.Tests/CrossTenantScopeGuardTests.cs`
+- **Komutlar / doğrulama:**
+  ```bash
+  dotnet test tests/Pbxtr.Architecture.Tests --filter "FullyQualifiedName~Migration|FullyQualifiedName~SysFunction|FullyQualifiedName~CrossTenantScope|FullyQualifiedName~FinalDelivery"   # 25/25
+  bash deploy/db-kapilari-docker.sh          # taze zincir + ci-check.sh, EXIT=0
+  # staging replikası (postgres:16-alpine, port 55433): 00-roles → `dotnet ef database update 20260904193000_…`
+  #   → eski gövde psql ile geri yazıldı (md5 bec5… = staging) → `dotnet ef database update`
+  #   → 195000 + 200000 uygulandı, md5 3e3a…, call_events_2026_08 açıldı
+  ```
+- **Commit:** `6e7aa24f` — fix(db): 01-rls-template govde degisikligi mevcut kurulumlara
+  ulasmiyordu — PartitionWindowTemplateRefresh
+- **Yayın 26** (`6e7aa24f`) koşuda.
+- **Ders (hafızaya yazıldı):** 01/02'de gövde değiştiren her commit yanına refresh migration
+  koy; yayından önce "eski gövde → migration → md5" replikasını ölç.
