@@ -179,3 +179,13 @@ geride, Sprint-33'ün tamamı yayında değil).
 - **Düzeltme:** oran medyanla (p50) ölçülür, eşik %60 aynı. Mutasyon: `VerifyDummy()`
   kaldırılınca medyan oranı %0 → kırmızı (gerçek açık hâlâ yakalanıyor). Geri alındı.
 - **Yayın 24** koşuda.
+
+### 9. Yayın 24 kırmızı → yayın 25
+- **Yayın 24** (`06a91fac`): entegrasyon 638/638; frontend 1491/1492 —
+  `SessionProvider.test.tsx` "yetki değişti sinyalinde ÖNCE jeton yenilenir": açılışta
+  beklenen 1 yenileme, gelen 2. Sebep testin kendi yarışı: sinyal sonrası yenileme
+  `Math.random()*400` ms jitter'lı; 0'a yakın düşünce ikinci yenileme ilk iddiadan önce
+  geliyor. Yerelde 5/5 yeşil, yayın 23'te aynı kod yeşildi.
+- **Düzeltme:** testte `vi.spyOn(Math,'random').mockReturnValue(1)` (400 ms), sonunda
+  `mockRestore`; ürün jitter'ı (K1 şart 9) aynen. 5/5 yeşil, `tsc -b` temiz.
+- **Yayın 25** koşuda.
