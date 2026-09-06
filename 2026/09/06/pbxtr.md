@@ -270,3 +270,13 @@ geride, Sprint-33'ün tamamı yayında değil).
   t0012 `NO_SUCH_QUEUE` (BR-AST-17, kurul).
 - **Kullanıcı kararı bekleyenler:** BR-SEC-02 (Karar #30/1), BR-SYS-34, BR-SEC-01, BR-6;
   Sprint-34 "başla" bekliyor.
+
+### 13. Kurul — Karar #31 (BR-AST-17, çok tenant'lı düğüme teslim)
+- **Neden:** staging'de t0012'nin santralde olmaması ürün kapsamı sorusuydu; karar kullanıcıya değil kurula.
+- **Sonuç:** ŞARTLI ONAY — **(B) düğüm paketi**, ama düğüme pinli anahtarla (t0000 değil); tenant kümesi
+  `api_keys.node`'dan, yeni global tablo yok. Oylar B 7 / A 3 / HAYIR 0; (C) oy birliğiyle red.
+- **Vetolar:** DB lideri (B için izolasyon) → düğüm anahtarı + keşif denetimli çapraz-tenant sınıfında + render
+  tenant kapsamında + paket sır taşımaz ile karşılandı, muhalefet kayda geçti. CTO içerik bekçisi ve Asterisk
+  tek-reload vetoları şart oldu. Şeytan'ın 7 itirazı yazılı cevaplandı.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (Karar #31), `yonetim/backlog.md` (BR-AST-17 P1, kabul ölçümü).
+- **Sonraki adım:** `/sprint-planla pbxtr` (kullanıcı); uygulama "başla" ile.
