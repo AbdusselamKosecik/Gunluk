@@ -160,3 +160,13 @@ geride, Sprint-33'ün tamamı yayında değil).
   sıfır satır siler — temizlik "kalan = 0" ile ölçülmeli. (`LeaveEnforcementJobTests` aynı
   sınıf, bugün limitin altında — dokunulmadı.)
 - **Yayın 22** (`5b26c85c`) koşuda.
+
+### 7. Yayın 22 kırmızı → yayın 23
+- **Yayın 22** (`5b26c85c`): entegrasyon 636/638 — `AgentMembershipProductPathHttpTests` ×2,
+  `Reset` içinde `pk_dial_numbers` 23505 ('945x'). Tek rastgele kaynak: sync testlerinin
+  6000–9999 kuyruk numarası (random+4000) sabit '9451/9452'ye denk gelmiş (~%0,5/koşu);
+  belirti yine başka sınıfta. Yerelde tam takım 638/638 yeşildi (rastgele).
+- **Düzeltme:** numaralar sayaçlı blok (dahili 2100–2199, kuyruk 3100–3199; entegrasyon
+  takımında 2xxx/3xxx sabit numara yok — grep), tohum satırlar yazılmadan önce `_seeds`'e,
+  temizlik dahili+kuyruk+`dial_numbers` kalanını sayar. Yerel tam entegrasyon 638/638.
+- **Yayın 23** koşuda.
