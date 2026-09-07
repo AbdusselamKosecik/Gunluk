@@ -1172,3 +1172,143 @@ Bunlar benim yazdığım cümlelerdi ve dördü kararın **yönünü** değişti
 
 **299 kart** (+9: BR-QA-33, BR-SEC-10, BR-SEC-11, BR-SYS-88, BR-AST-43, BR-QA-34 bu turda).
 **Karar bekleyen açık madde: 0.**
+
+---
+
+# Altıncı tur — 2026-09-07 gece geç
+
+## Bağlam
+
+Kurul turu bitti, karar bekleyen madde sıfıra indi. Kullanıcı tarafındaki üç engel (smtp2go,
+BR-SYS-86 onayı, Karar #37'nin uygulanması için "başla") duruyor; onlardan **bağımsız** açık
+kartlara dönüldü. Beş kart paralel ajanla açıldı.
+
+## Yapılanlar
+
+### 22. BR-QA-31 — `ProblemCodes` ↔ belge iki yönlü parite bekçisi
+
+- **Neden:** `api-kontrat-v1.md` §1.5.1 bir ara **45** kod sayarken kod **96** taşıyordu; fark **51**
+  ve hiçbir kapı uyarmadı. Belge elle eşitlendi ama **aynı şekilde tekrar ayrışır**.
+- **Ne yapıldı:** `tests/Pbxtr.Architecture.Tests/ProblemCodeCatalogDocParityTests.cs` — üç test.
+  Kod tarafı **yansımayla** türetiliyor (metin taraması değil), böylece çok satırlı/boşluklu tanım
+  biçimi değişse de kaçırmaz. Vacuity tabanı **90** (96 değil): iki tarafta birden yapılan **meşru
+  silme** bekçiyi kilitlememeli, kilitlenmesi gereken şey ayrıştırıcının çökmesidir — biçim
+  bozulmasında çıkan tipik sayılar (0/5/8/13) 90'ın çok altında kalır.
+- **Ölçüm:** belge 96, kod 96, fark **0**. Yani bekçi bir kusuru değil **bayatlamayı** önlüyor.
+- **İki yön de ölçülüyor.** Tek yön ölçen bekçi bugün bulunan kusurun tersini kaçırırdı — bu hatayı
+  bu depoda bugün bir kez yaptık (BR-SYS-71).
+
+### 23. BR-QA-32 — MAIL uyarı şeridi hiç ölçülmüyordu
+
+- **Öncül üçünde de doğru çıktı.** `MailSettingsPane.test.tsx` `warnings` alanına hiç bakmıyordu;
+  `MailWarningDto.Message` daraltmasının **hiçbir testi kırmamasının** sebebi buydu.
+- **Bilinmeyen kod davranışı DEĞİŞTİRİLMEDİ.** Ölçüldü ve **bilinçli, yazılı gerekçeli** çıktı:
+  ekranın kendi yorumu *"sözlük KAPALI KÜME DEĞİLDİR; bilinmeyeni atmak uyarının kendisini yok
+  ederdi — sunucu 'bu ayarla mail GİTMEZ' derken ekran boş bir şerit çizerdi"* diyor.
+- Yedi test (221→369 satır). Boş-liste ve alan-yok dalları **bilerek ayrı test**: tek test içinde
+  ikinci fikstür hiç fetch edilmezdi (aynı root'a ikinci render **remount değildir**) ve dal
+  **hiç koşmadan** ölçülmüş sayılırdı.
+- 9 dil ölçümü **temiz** (36/36).
+
+### 24. BR-BE-110 — hedef=aktör kapısı, ölçülmüş DAR kısıtla
+
+- **Öncül doğru:** `LiveEndpoints.cs`'in 913 satırının tamamı okundu; `userId` ile
+  `tenantContext.UserId` hiçbir yerde karşılaştırılmıyordu, dosyada `403` hiç geçmiyordu ve
+  diğer katmanlarda da yoktu.
+- **Kaba kısıt konulmadı ve daraltma ölçüldü:** `add_to_queue` → **403**, çünkü agent'ın kendi ucu
+  bu eylemi kapalı kümesinin dışında **bilerek** bırakıyor (*"kuyruk üyeliği kadro kararıdır"*) ve
+  buradan kendini hedeflemek tam olarak o kuralı atlamak. `pause`/`end_break` → **serbest**, çünkü
+  ürün **başka bir yüzeyde açıkça** izin veriyor; kaba kısıt meşru bir akışı sessizce kilitlerdi.
+- **Kapının YERİ de bir karar:** kadro sorgusundan ve gövde doğrulamalarından **önce**. Sonraya
+  bırakılsaydı boş `queueId` ile gelen bir kendini-hedefleme 400 alır ve **denetime hiç yazılmazdı**.
+- **Özel rol ayağı ölçüldü, P düşmedi:** `live.agent.act` katalogda `sensitive` değil,
+  `nonDelegable` değil, ön koşulsuz → bir owner `CustomRolePolicy`'nin **beş kapısının hiçbirine
+  takılmadan** bu yetkiyi bir agent'a atayabilir.
+
+### 25. BR-AST-41 / BR-AST-42 — iki sözleşme sapması: doğru, ama gerekçeleri çürük
+
+Her iki kartın **iddiası doğru**, **"sessiz bedel" gerekçesi yanlış** çıktı:
+
+- **41:** *"istemci bunu okumasaydı"* senaryosu **yaşanmıyor** — `dugum.sh:762-768` üç alanı da
+  diske yazıyor ve `:974-983` kuyruk kaybı kapısının **muafiyetini** oradan okuyor. Bugünkü bedel
+  **sıfır**; **P düştü**. Sapma tek belgeye özeldi (`asterisk-provisioning.md` şemayı zaten yazıyordu).
+- **42:** *"göndermeyen istemci"* **yok** — iki betik de gönderiyor; `selftest.sh:855`'teki
+  "GONDERILMEZ" bir **negatif test senaryosu**, gerçek istemci değil. **Gerçek risk başka yerde:**
+  değer **yerel defterden** türüyor ve **defter yoksa başlık boş gidiyor** — ilk tur, temiz kurulum
+  ve `/var/lib` kaybı hâllerinde sonuç gönderilmemiş hâlle **birebir aynı**. Ayrıca `removedBasis`
+  üç değil **dört** değerli; önceki revizyon hiç yoksa `first_revision` olur, yani kartın
+  *"alt sınıra düşer"* cümlesi **ilk üretimde geçerli değil**.
+- Belge koda uyduruldu (kod değişmedi): §2.1.1 ve §2.6 yeni; §2.2/2.3/2.4/3/4.2/4.3/4.4/5.3/6.1
+  güncellendi. §6.1'e güvenlik notu: **`X-Pbxtr-Have` bir tenant SEÇİCİ hâline getirilmemelidir** —
+  o an bir kimlik iddiasına dönüşür.
+
+### 26. BR-BE-109 — medya ucu, düğümdeki DİĞER tenantların medyasını 404 döndürüyordu
+
+- **Öncül doğru ve sorun hipotetik değil.** Uç `BeginTenantScope(outcome.TenantId)` ile **anahtarın
+  kendi** tenant'ına kapsanıyordu; bir düğüme birden çok tenant pinlenebildiği için
+  (`ux_api_keys_tenant_node`) anahtarın tenant'ı düğümün tenant kümesinin **öz alt kümesiydi**.
+- **İstemci bu ucu fiilen çağırıyor** (`dugum.sh:1110-1127`, tüm tenantlar için aynı anahtarla) ve
+  betik arızayı **zaten adıyla yazmıştı**: *"Bu bir ağ hatası değil, SÖZLEŞME BOŞLUĞUDUR."*
+  Etki *"bir anons eksik"* değildi: §4.3/2d gereği **o tenant'ın revizyonu hiç aktif edilmiyordu**.
+- **İkinci yol icat edilmedi:** `/provisioning/report`'un zaten kullandığı desen birebir kopyalandı
+  → pinli anahtarda küme `ListTenantsForNodeAsync`, yani `/node-bundle` ile **aynı tek kaynak**.
+  Pinsiz (Mod A) dalda **tek satır bile değişmedi**.
+- **Neden izolasyon genişlemedi:** küme aynı anahtarın aynı turda `/node-bundle` ile **zaten aldığı**
+  küme; küme **istekten değil sunucudan** geliyor; yalnız `IsNodePinned` dalında ve `revoked_at`
+  dolu anahtar keşifte görünmüyor; okuma hâlâ tenant başına RLS + query filter altında.
+- **Keşif patlarsa daraltır** (`members = []`) + `LogCritical` — 500 dönmek Mod A'yı da durdururdu;
+  **daraltma da kapamadır**.
+- Üç negatif test, **üçü de önce ÖNCÜLÜ ölçüyor** (yoksa 404 *"dosya zaten yok"* demek olur ve test
+  vacuous kalırdı); tenant başına **farklı baytlar** kullanıldı.
+- **Ben de iki şey düzelttim:** sözleşme §4.3/2d + §4.4 (404'ün anlamı **daraldı**), ve
+  `dugum.sh`'teki *"BILINEN SUNUCU SINIRI"* uyarı bloğu — **benim değişikliğim onu yanlış bilgi
+  hâline getirdi** ve yanlış kalan bir uyarı sonraki operatörü gerçek sebepten uzağa gönderirdi.
+
+## Kararlar
+
+- **Bir kartın iddiası doğru olabilir, gerekçesi yanlış olabilir — ve bu ikisi ayrı ayrı ölçülür.**
+  Bu turda iki kart (BR-AST-41/42) tam olarak bu şekilde kapandı: sapma gerçekti, "bedeli" hayaliydi.
+  Gerekçeyi ölçmeden kapatsaydık P seviyesi yanlış kalırdı.
+- **Kaba kısıt, meşru akışı sessizce öldürür.** BR-BE-110'da doğru cevap "aktör kendini hiçbir
+  eylemle hedefleyemez" değil, tek eyleme bağlı bir kısıttı — ve bunun gerekçesi ürünün **başka bir
+  yüzeyinde yazılı** duruyordu.
+- **Bir kapının YERİ, varlığı kadar önemlidir.** Gövde doğrulamasından sonra konan bir yetki kapısı,
+  reddi denetime **hiç yazdırmayabilir**.
+- **Bir şeyi düzelttiğinde, onun hakkındaki yazıları da bayatlatırsın.** BR-BE-109 düzeltmesi bir
+  betik uyarısını yanlış hâle getirdi; aynı sınıftan ikinci bir bayat blok da bulundu (BR-AST-44).
+
+## Kendi hatalarım
+
+1. **`node -e` içine backtick'li Türkçe metin koydum** — bash yuttu ve betik sözdizimi hatası verdi.
+   Defterde yazılı bir ders (`heredoc-icinde-backtick-yutulur`); bu turda **bir kez daha** yaşandı.
+   Çözüm aynı: betiği Write ile dosyaya yaz.
+2. **Kart metnine düz `|` koydum** (`401|403`) ve markdown hücresini böldüm — BR-AST-41'de yaptığım
+   hatanın aynısı. Kolon sayımıyla yakalandı ve düzeltildi.
+3. **`git status --short --cached`** diye olmayan bir bayrak kullandım; `&&` zinciri koptu ve commit
+   sessizce hiç koşmadı. `git log` ile fark edildi.
+
+## Yanlış alarmlar (değişiklik YAPILMADI)
+
+- **backlog'da 159 satırda hücre içi düz `|` var.** Çıkarıcı bunların **158'ini doğru okuyor** —
+  indeksle değil uçlardan ayrıştırıyor. Sapma sandığım `BR-BE-59 "P1/P2"` de yanlış alarm:
+  `oncelikEsle` `/P1/` ile eşliyor, panoya **P1** gidiyor. Çalışan bir ayrıştırıcıyı "düzeltmek"
+  onu bozacaktı. *(Bu, bugün üçüncü kez: aracın çıktısı beklenmedikse önce aracın kodunu oku.)*
+- **backlog 299 satır ama 296 benzersiz kod** — üç kod iki kez geçiyor (`BR-SYS-45`, `BR-BE-47`,
+  `BR-BE-53`), hepsi **kasıtlı mezar taşı** (*"Yerini satır N aldı"*). Çıkarıcı **sonuncuyu** tutuyor,
+  yani üçünde de **doğru satır** panoya gidiyor.
+- **ClickUp senkronu dört kartta fark üretmedi** (`BR-QA-31`, `BR-AST-41/42`, `BR-BE-109`) — pano o
+  dörtte **defterden öndeydi**, backlog bugün yetişti.
+
+## Açık kalanlar / sonraki adım
+
+- **Karar #37'nin 38 şartı uygulanmadı** — kurul kararı planlamaya kendiliğinden geçmez (skill
+  kuralı). `/sprint-planla pbxtr` + "başla" gerekiyor.
+- **smtp2go** kullanıcıda: DNS kayıtları `pbxtr.com` bölgesinde yok, selector ve gerçek API anahtarı
+  bekleniyor.
+- **BR-SYS-86** yayın onayı kullanıcıda.
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı.
+
+## Bilanço
+
+**300 kart — 192 bitti, 8 karar alındı (planlanmayı bekliyor), 1 kapandı/red, 11 yarım, 88 açık.**
+(Bu turda +9 bitti, +6 yeni kart. ClickUp senkronu **fark 0** ile yakınsadı.)
