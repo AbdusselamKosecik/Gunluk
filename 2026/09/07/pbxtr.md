@@ -1312,3 +1312,131 @@ Her iki kartın **iddiası doğru**, **"sessiz bedel" gerekçesi yanlış** çı
 
 **300 kart — 192 bitti, 8 karar alındı (planlanmayı bekliyor), 1 kapandı/red, 11 yarım, 88 açık.**
 (Bu turda +9 bitti, +6 yeni kart. ClickUp senkronu **fark 0** ile yakınsadı.)
+
+---
+
+# Yedinci ve sekizinci tur — 2026-09-07 gece yarısı sonrası
+
+## Bağlam
+
+Kurul kapandı, karar bekleyen madde sıfır. Kullanıcı tarafındaki üç engel (smtp2go, BR-SYS-86,
+Karar #37'nin uygulanması için "başla") duruyor. Onlardan bağımsız açık kartlarla iki tur daha.
+
+## En önemli bulgu: SONDA YAPACAĞIMIZ BÜYÜK TEST KOŞUSU YALAN SÖYLEYEBİLİR
+
+BR-QA-24 turunda çıktı; **iddialarının hepsini kendim doğruladım.**
+
+- **Api shard'ları ve Integration.Tests tazelik kapısına bağlı değil.** `test-kos.sh` DLL tazeliğini
+  `PBXTR_TESTKOS_MIN_EPOCH` ile ölçüyor ve değişken `yerel-yayin.sh:256`'da **zaten export edilmiş** —
+  ama kapıya bağlı olan yalnız **iki** koşu var (`:301`, `:316`). Shard döngüsü (`:430`) ve
+  Integration (`:351`) **ham `dotnet test --no-build`** ile gidiyor.
+- **Kimlik kapısı bunu kurtarmıyor.** `yerel-yayin.sh:418-424` yorumu kimlik kapısının
+  `test-kos.sh`'tan *"DAHA GÜÇLÜ"* olduğunu söylüyor; **iddia yanlış**: beklenen kimlik listesi de
+  `--no-build` ile **aynı DLL'den** üretiliyor. Derleme sessizce atlanırsa (MSB3027 / "locked by")
+  liste de koşu da **aynı eski ikiliyi** tarif eder, kimlikler **birebir tutar**, dört shard da
+  **yeşil yanar**. Mutasyon, silinmiş test, ters çevrilmiş assert — hiçbiri görünmez.
+- **Bugünkü hâl zaten bozuk:** `shard-0.trx` 4 Eylül, `shard-1/2/3.trx` **2 Eylül** — dördü **aynı
+  koşudan bile değil**. O tarihten beri **132 test .cs dosyası** değişti.
+- **En sert sayı:** kaynakta **3223** test var, son ölçülen listede **2629** metod → **594 test hiç
+  ölçülmemiş.**
+- **Ortam hazır değil:** `python3` **yok**, Docker daemon **kapalı**. `yerel-yayin.sh` `:306`'daki ilk
+  `python3` çağrısında ölür. Integration'ın 673 testinin **480'i** `RequiresDockerFact`: Docker yoksa
+  elle koşu **sessizce atlar, exit 0 döner**.
+
+**Bayatlamayan bir taban bulundu ve gerçek veriyle doğrulandı:** kaynak dosyalardaki `[Fact]/[Theory]`
+öznitelik sayısı, `--list-tests` **metod** sayısına **birebir eşit** (`1d60d234`: 2629 == 2629). Yani
+beklenen sayı depoda tutulan bir listeden değil, **her koşuda kaynaktan** türetilebilir — elle liste
+tutulmadığı için **bayatlayamaz**. Kural fail-closed yönde `liste_metod >= kaynak_öznitelik`.
+
+Ajan **kod yazmadı ve bu doğru karardı**: python3 yok, Docker kapalı, dotnet yasak → yazacağı hiçbir
+kapıyı **koşturamazdı**. *"Koşmayan kapı bulgu değildir."*
+
+Kartlar: **BR-QA-36 (P1)**, **BR-QA-37**, **BR-QA-38**, **BR-SYS-89 (P1)**.
+
+## Diğer kapanan kartlar
+
+### BR-BE-108 — SMS: `ProviderUnavailable` DÖRT hali topluyordu
+
+Öncül doğru ama eksik. Kartın görmediği: `00` **(KABUL)** döndü ama `bulkid` **yok** dalı da aynı
+kovadaydı — yani mesajın **neredeyse kesin gittiği** dal *"hiç olmadı"* diye kaydediliyordu; devre-açık
+(süreçten hiç çıkmadı) aynı kovaya **ters yönden** düşüyordu. Üç dal ayrıldı, **Ş1-2 genişletilmedi**
+(*"reddedilen"* ≠ zaman aşımı). İki sınıflandırma kararı ölçülmüş gerekçeli: devre-açık (a)'ya kondu
+(yoksa her breaker açılışı yığın sahte satır üretirdi), `HttpRequestException` (b)'ye kondu çünkü .NET
+"connection refused" ile soket sıfırlamasını ayırt edemiyor ve **bedeller asimetrik** — fazladan satır
+bir soru sordurur, **eksik satır o soruyu sonsuza kadar engeller**.
+
+`IAuditSink` **seçilmedi**, üç ölçümle: kota/faturalama `segments` toplamından okunuyor ve denetim
+satırı o toplama **görünmez**; `audit_log` **append-only** oysa belirsizliğin **kapatılabilir** olması
+gerek; `ChannelAuditSink` sınırlı bellek içi kanal — *"gitmiş olabilir"* tam da sürecin öldüğü anda
+lazım. `sent` durumunu yeniden kullanmak reddedildi: **aynı eksik ölçümden doğan zıt iddia**.
+Migration yeri seçilmedi, **zorlandı** (terminal bekçi sonuncu olmalı); yalnız şema dosyasını
+düzenlemek kurulu DB'leri eski `CHECK` ile bırakır ve **mesaj gittikten sonra** patlardı.
+
+### BR-BE-42 — itme etkisi SİSTEM tenant'ına yazılıyordu
+
+Kartın *"`BeginTenantScope` açmıyor"* iddiası yanlıştı — ikisi de açıyor, **başka bir bacak için**.
+Gözden kaçan **sağlayıcı bacağıydı**. `MembershipRow` `tenant_id`'yi **hiç taşımıyordu**: itme
+aşamasında *"bu satır kimin"* sorusunun cevabı **kodda yoktu**. İki işe **ayrı karar**:
+`LeaveEnforcementJob` düzeltildi; `TrunkHealthSnapshotJob`'a **dokunulmadı** çünkü sonda **tek turdur**,
+atfedilecek tenant başına çağrı **yoktur** ve satırın parmak izi `count:N` — satır **hiçbir tenant'ın
+verisini taşımıyor**. *Sonda platformun, sonuç tenant'ın.* Test **üç tenant**la yazıldı; iki yetmiyor,
+sistem tenant'ı üçüncü olmazsa "yanlış yer" ile "doğru yer" ayrışamaz.
+
+### BR-SYS-43 — mezar taşının "silme" yarısı ölçümle geçersiz
+
+Silme **bilerek yok**: lab'da ölçülmüş (boş dosya + reload bağlamı **düşürüyor**, dosyaya dokunmadan
+reload **düşürmüyor**) ve `rm` fiili atomik yazım/rollback desenlerine oturmuyor. Üç gerçek boşluk
+bulundu: **yokluk doğrulaması yoktu** (`removed-kinds` **yazılıyor ama hiç okunmuyordu** — ölü meta
+dosyası; üstelik `cek.sh` onu yalnız **muafiyet** olarak okuduğu için **beyanla birlikte doğrulama da
+düşüyordu**); **bekleyen çağrı yanlış eksendeydi** (düğüm geneli kanal eşiği ölçülüyordu, kuyruk başına
+**hiç** — 5 kanallı sessiz bir santralde eşik aşılmaz ve kuyruk **yine boşaltılırdı**); **yabancı dosya
+koruması vacuous doğruydu** (hiçbir şey silinmediği için, ama **üzerine yazmak silmek kadar yıkıcı**).
+Katalog **genişletilmedi**. Selftest 74→**104 iddia**, 24 fikstür / 13 mutasyon; **ben de koşturdum**,
+13/13 yakalandı.
+
+### BR-DB-16 — bu iki turun TEK tutan öncülü
+
+Canlıda tam 63 karakter **3 ad**, 63'ü aşan **0**; `42704` riski bugün gerçekten yok. Kartın
+**söylemediği** kırılganlık: `tenant_ledger_entries` adı zaten **geri kırpılmış**; aynı 62 karakterlik
+öneki paylaşan ikinci bir FK doğarsa EF `~1` üretir, ad **sessizce değişir** ve **42704 o gün doğar**.
+Bekçi genişletmesi bugün **3 ihlal** üretir → zinciri kilitler, yani **regresyon**; kart sırayı doğru
+yazmış. Taslak yazıldı, `Migrations/` altına **konmadı** (rename tek başına **bugün var olmayan**
+hatayı üretirdi + terminal migration testini kırardı).
+
+## Kendi hatalarım (bu iki turda üç tane, ikisi aynı sınıf)
+
+1. **Kart durumunu YANLIŞ SÜTUNA yazdım — ve yanlış-sıfırı kendi hikâyemle örttüm.** Tablo altı
+   sütunlu (`… | Durum | Şart`); ben durumu `p[p.length-2]` ile adresledim, yani **Şart** hücresine.
+   Dokuz satırda Ş-referansı **ezildi** ve durum "Bekliyor" kaldı → **dokuz bitmiş kart panoda açık
+   duruyordu**. ClickUp senkronu *"fark: 0"* dedi, ben bunu *"pano defterden önde"* diye yorumladım ve
+   **kullanıcıya da öyle söyledim**. Uzaktan tek tek okuyunca ortaya çıktı. Onarıldı (Şart değerleri
+   oturum öncesi commit'ten geri alındı) ve **`kapi_41`** ile kilitlendi — üç ölçüm: pozitif yeşil,
+   hatamın aynısı kırmızı, vacuity kırmızı.
+2. **Kart metnine düz `|` yazdım, üç kez.** `401|403`, `(pjsip|queues|…)` — markdown hücresini bölüyor.
+   Üçüncüsünde satır 10 kolona çıktı. Kolon sayımıyla yakalandı.
+3. **`node -e` içine backtick'li Türkçe metin koydum, yine.** Bash yuttu. Defterde yazılı ders; çözüm
+   aynı: betiği Write ile dosyaya yaz.
+
+## Kararlar
+
+- **Bir kapıyı yanlış yerden koşturmak, kapının yanlış olduğunu göstermez.** `kapi_41`'i scratchpad'den
+  koşturunca yanlış kökü taradı — betik kökü `$0`'dan türetiyor. Defterdeki `kapi_27` dersinin aynısı;
+  runner **depo içinde** koşturulmalı.
+- **Bir şeyi düzeltince onun hakkındaki yazılar bayatlar.** Bu iki turda üç kez: `dugum.sh`'in
+  "BILINEN SUNUCU SINIRI" bloğu, `CrossTenantScopeSurfaces.cs`'in gerekçesi, `kapi_38`'in etiketi.
+  Ajanlar dokunma yasağı yüzünden ikisini bırakıp **raporladı** — doğru davranış.
+- **Ajanın "kod yazmadım" demesi bazen doğru cevaptır.** BR-QA-24'te ortam (python3/Docker) olmadığı
+  için yazılacak kapı koşturulamazdı; yazsaydı kapatmaya çalıştığı hata sınıfının kendisini üretirdi.
+
+## Açık kalanlar / sonraki adım
+
+- **BR-SYS-89 kullanıcı adımı olabilir:** büyük koşu için **python3 mu kurulacak, Docker daemon mı
+  ayağa kaldırılacak?** İkisinden biri olmadan koşu hiç başlamaz.
+- **BR-QA-36 (P1)** kapanmadan yapılacak büyük koşunun sonucu **güvenilir değildir**.
+- smtp2go, BR-SYS-86 ve Karar #37'nin uygulanması kullanıcıda.
+- **Testler hâlâ koşulmadı** (confd selftest hariç — o `dotnet` gerektirmiyor).
+
+## Bilanço
+
+**308 kart — 206 bitti, 8 karar alındı, 1 kapandı/red, 11 yarım, 82 açık.**
+(Bu iki turda **+14 bitti, +12 yeni kart**. ClickUp senkronu fark 0 ile yakınsadı.)
