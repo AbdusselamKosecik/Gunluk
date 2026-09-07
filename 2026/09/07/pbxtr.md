@@ -848,3 +848,80 @@ değişkenleri tek tek sayıp `.env`'den `${...}` ile enterpole ediyor. Bu yüzd
 ## Bilanço
 
 **281 kart — 167 bitti.** (Sabah: 280 kart / 148 bitti. Bu turda **+19 bitti, +1 kart**.)
+
+---
+
+# Üçüncü tur — 2026-09-07 akşam
+
+## Yapılanlar
+
+### 10. confd düğüm ajanı indi (BR-SYS-36/37/38/39/41)
+
+- **Neden yeni dosya:** kart `pbxtr-confd-cek.sh`'i işaret ediyordu; sözleşme §4.1 iki ucu
+  **anahtara göre** ayırır — `/bundle` tenant'ı anahtardan çözer ve yanıtta tenant kodu **yoktur**.
+  Yani oradaki `t0007-` sabiti betiğin tembelliği değil, **o ucun kaçınılmaz sonucu.** Dönüştürmek
+  Mod A'nın tek teslim yolunu silerdi.
+- **Bedeli:** iki `DIR` haritası. **Panzehiri:** `kapi_29` artık ikisini hem `ConfigRenderer.Kinds`'e
+  hem **birbirine** karşı kilitliyor (mutasyonla doğrulandı).
+- **Kapı `kapi_38`:** 17 fikstür, 67 iddia, 9 mutasyon — hepsi kırmızı verdi.
+- **Kapı yazılırken bulunan üç gerçek hata:**
+  1. **Kapı sessizce vacuous'tu** — MSYS'te `chmod 0600` tutmadığı için ajan hiç çalışmadı (78) ve
+     *"dosya yazılmadı"* iddialarının **21 tanesi yeşil döndü**. Artık ölçemediğinde **"ÖLÇÜLMEDİ"**
+     yazıyor, yeşil saymıyor.
+  2. `ESKI=$(sed … sha-defteri)` `set -euo pipefail` altında ilk koşuda **tüm ajanı düşürüyordu** —
+     ajan **ilk koşusunda hiçbir zaman çalışmazdı**.
+  3. Kapının kendi `grep`'i birim dosyasındaki **açıklayıcı yorumu** ihlal sandı. Böyle bir kapı
+     doğru davranışı belgeleyeni cezalandırır ve *"gerekçeyi silelim"* ile kapanır.
+- **`PrivateTmp` bir hata ortaya çıkardı:** `docker run -v` yolları **daemon'ın** görüşüne göre
+  çözer; çalışma dizini `/tmp` altında kalsaydı ayrıştırıcı boş dizin görür, ajan `69` döner ve
+  arıza *"sunucu hatası"* gibi görünürdü. Dizin `/var/lib/pbxtr-confd/is`'e alındı.
+- **Commit:** `26f4a2f4`
+
+### 11. BR-BE-39 — kartın yazmadığı ikinci delik
+
+Kart tek dalı (Conflict dışı DB hatası) yazıyordu. Ölçüm ikinciyi gösterdi: `Conflict` dalındaki
+yorum *"iz `IAuditSink` ile kalır"* diyordu ama **o dalda `TryEnqueue` çağrısı yoktu.** Her iki
+dalda da müşteri aranıyor, telefonu çalıyor, denetim günlüğünde **o arama hiç olmamış** görünüyordu.
+İz artık originate kabulünün hemen ardında ve transaction dışında. Yeni eylem kodu üretilmedi
+(`CallOriginated` zaten var). **Commit:** `6ab653a7`
+
+### 12. `backlog.md` satırında zincirleme kendi hatam
+
+`BR-AST-41` açıklamasına düz bir `|` yazdım (`string[]|null`) → markdown tablosunda **kolon
+ayırıcısı**. Sonra "kolon sayısını normalize ederken" **yanlış kolonu düşürdüm** ve **durum
+kolonu gitti**; çıkarıcı son kolonu durum sandı (`durum = "sahibi asterisk-uzmani"`). Satır
+baştan yazıldı, metinde düz `|` hiç kullanılmadı. **Ders:** iki düzeltmeyi üst üste bindirmeden
+önce her birinin sonucunu ayrı ölç.
+
+Aynı turda bir **yanlış alarm** da oldu: kuru koşuda öncelikler "P3/P3/P2/P2" görününce kart
+düzenini bozuk sandım. Değildi — `clickup-olustur.js:47` `oncelikEsle` P1'i ClickUp'ın **2 (High)**
+değerine eşliyor ve `:107` o **sayıyı** basıyor. Koddan doğrulanmadan "düzeltilseydi" çalışan bir
+eşleme bozulacaktı.
+
+## Kararlar
+
+- **Markdown tablo hücresinde düz `|` yazılmaz.** Kaçışlı `\|` de tercih edilmez: bu dosyayı okuyan
+  araçların hepsi onu aynı okumuyor (263 satırın 110'unun kolon sayısı zaten farklı). "veya" yazılır.
+- **Bir aracın çıktısı beklenmedikse önce aracın kodunu oku.** Bugün iki kez, tahminle "düzeltmeye"
+  kalksaydım çalışan bir şeyi bozacaktım.
+
+## Açık kalanlar / sonraki adım
+
+- **BR-SYS-86 (yeni):** `pbxtr-confd-dugum.sh` sunucuda yok ve BR-SYS-80 döngüsü duruyor. Sıra
+  bağlayıcı: (1) `RemovedBasis` taşıyan imaj, (2) **sonra** betikler, (3) elle ilk koşu. Ters sıra
+  düğümü **kalıcı kırmızı** yapar. Yayın kullanıcı onayı ister.
+- **BR-BE-109 (yeni):** `GET /provisioning/media/{id}/content` anahtarın kendi tenant'ına kapsanıyor
+  → düğümdeki diğer tenantların medyası 404 → **medyası olan her ikinci tenant kalıcı olarak
+  atlanıyor.** Sunucu tarafı düzeltme gerekiyor.
+- **BR-AST-41/42 (yeni):** düğüm paketi sözleşmesi iki noktada koddan geride (`Removed`/
+  `RemovedBasis` tenant başına; `X-Pbxtr-Have` başlığı tabloda yok).
+- **Kurulda dört madde:** A10 (`phone.unmask` gereksinimi — `admin` kilitlenir), A11 (serbest metin
+  maskeleme tasarımı), A12 (`NODE_NOT_PINNED`), A13 (`withheld` biçim birleşmesi).
+- **smtp2go:** DNS kayıtları `pbxtr.com` bölgesinde hâlâ yok; selector sayısı ve gerçek API anahtarı
+  bekleniyor.
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı.
+
+## Bilanço
+
+**285 kart — 177 bitti, 10 yarım, 93 açık, 5 kapandı/red.**
+(Sabah 276/122 ile başlandı. Gün boyunca **+55 bitti, +9 yeni kart**.)
