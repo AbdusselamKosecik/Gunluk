@@ -666,3 +666,185 @@ mutasyon. Ajanlar test **dosyası** yazdı ama koşturmadı.
 
 **280 kart — 148 bitti, 9 yarım, 104 bekliyor, 19 diğer.**
 (Sabah: 276 kart / 122 bitti. Bu turda **+26 bitti, +4 yeni kart**.)
+
+---
+
+# İkinci tur — 2026-09-07 öğleden sonra
+
+## Bağlam
+
+Sabah turu 12:20'de kapandı; sunucuya Tailscale ile erişim açıldı ve bekleyen sunucu işleri
+uygulanabilir hâle geldi. Kullanıcı smtp2go'yu kendisi yapılandırmaya başladı. Testler hâlâ
+koşulmuyor (kullanıcının açık talimatı).
+
+## Sabahki günlükte YANLIŞ yazdığım bir cümlenin düzeltmesi
+
+Sabah "Açık kalanlar" bölümüne şunu yazmıştım:
+
+> Sunucuda `PBXTR_Sms__HashPepper` yazılmadan dağıtım kalkmaz.
+
+**Bu yanlıştı ve ölçümle çürüdü.** `AddPbxtrSms` `Sms:Provider` boş olduğunda **erken dönüyor**;
+biber kapısı o dalda hiç koşmuyor. Sunucudaki compose'da `PBXTR_Sms__*` anahtarlarının **hiçbiri
+yoktu**, yani dağıtım zaten kalkıyordu — SMS sadece kapalıydı. Bir kapının *varlığı* ile o kapının
+*koştuğu dal* farklı şeyler; ben ikisini birleştirmiştim.
+
+Ayrıca ölçüldü: `pbxtr-demo/docker-compose.yml` `app` servisi için **`env_file` KULLANMIYOR** —
+değişkenleri tek tek sayıp `.env`'den `${...}` ile enterpole ediyor. Bu yüzden `.env`'e
+`PBXTR_Sms__...` yazmak **etkisizdir**; anahtarın compose'da da sayılması gerekir.
+
+## Yapılanlar
+
+### 1. Sunucu: mail ön koşulu ve compose sapması (BR-SYS-81/82/83)
+
+- **Neden:** ön koşul dosyası uygulamaya ulaşmıyordu ve depo ile sunucudaki compose ayrışmıştı.
+- **Ne yapıldı:** iki ayrı 24 saniyelik kesintiyle uygulandı (kullanıcı onayı alınarak). Yazmadan
+  önce sunucudaki `.env`'de 12 zorunlu değişkenin varlığı doğrulandı, aday compose
+  `docker compose config` ile geçerlendi.
+- **Sonuç:** uygulama artık ölçümü **görüyor** ve `precondition_missing` yerine doğru şekilde
+  **SPF başarısız** diyor. Depo ↔ sunucu compose sha'sı **aynı**.
+- **Yeni kapı:** `deploy/compose-sunucu-sapma.sh` (`yerel-yayin.sh` 1/7-c) — iki iddia: (1) sha
+  eşitliği, (2) `app.environment` içindeki her `PBXTR_*` anahtarının **çalışan konteynerde**
+  bulunması. Çıkış kodları 0/1/2(vacuity)/3(ölçülemedi); dört mutasyon doğrulandı.
+- **Commit:** `9c552306`
+
+### 2. `strings` yokluğu bir ölçümü sessizce sıfır gösterdi
+
+- **Neden:** derlemenin gerçekten yeni kodu taşıdığını doğrulamak istedim.
+- **Ne oldu:** `strings ... | grep -c X` üç ölçüm için de **0** yazdı. "Yeni tipler ikilide yok"
+  demekti. Gerçek sebep: **bu makinede `strings` YOK** ve boş girdi alan `grep -c` 0 basıyor.
+- **Doğru ölçüm:** node ile ham bayt araması, hem UTF-8 hem **UTF-16LE** (.NET dizeleri böyle
+  saklanır). Sonuç: üç yeni tip de ikilide **var**, `schedule-owner` **var**, `tenant-owner` ve
+  `tr-TR` **gitmiş**.
+- **Ders:** aracın yokluğu, ölçümün "0" sonucu gibi görünür. Bu depoda aynı sınıf bugün ikinci kez
+  yaşandı (sabah `confd-sunucu-sapma.sh` üç durumlu hâle getirilmişti).
+
+### 3. BR-QA-13 — gönderici alan adı literali bekçisi
+
+- **Neden:** rapor postası adresi ayardan gelmeli; kodda alan adı literali olmamalı.
+- **Önce ölçüldü:** `src/` altında `pbxtr.com` geçen **14 satırın hiçbiri çalışan kod değil**
+  (7 XML doc/yorum, 7 `.test.tsx` fikstürü). Yani düzeltme değil, **regresyon bekçisi**.
+- **Ne yapıldı:** `tests/Pbxtr.Architecture.Tests/SenderDomainLiteralGuardTests.cs` — üç kural
+  (sunucu `pbxtr.com`, istemci `pbxtr.com`, gömülü `no-reply@`/`postmaster@`/`bounce@`), yorum
+  satırı ve `.test.*` hariç, vacuity kapılı (1272 C# / 381 TS; eşikler 500 / 200).
+- **Doğrulama:** üç mutasyon ayrı ayrı kırmızı, mutasyon geri alındı, ağaç temiz.
+- **Neden önemli:** beyaz-etiket gönderici alanı (BR-SYS-44) bayinin kendi alan adıyla
+  göndermesini gerektiriyor. Koda kaçacak tek literal, bayinin postasını **bizim** alan adımızdan
+  yollar; SPF/DKIM hizalaması bizim kayıtlarımıza düşer. Belirti yanıltıcıdır: mesaj gider, teslim
+  edilir, yalnızca `From` yanlıştır.
+- **Commit:** `b3b79c7d`
+
+### 4. BR-QA-14 — ekran dokuz dilde yanlış şey söylüyordu (gerçek kusur)
+
+- **Kartın öncülü:** "`replyToPolicy` gönderim yoluyla eşleşmiyor **olabilir**".
+- **Ölçüm:** gerçekten eşleşmiyordu. Sabit `tenant-owner`, ekran metni *"yanıt adresi tenant
+  sahibidir"*; adres ise `ReportDeliveryDispatcher.cs:425` içinde `schedule.OwnerUserId`'den
+  okunuyor ve o alan `EfReportScheduleService.cs:128` içinde `_tenantContext.UserId` ile —
+  **zamanlamayı KURAN kişi** ile — doldurulur.
+- **Etkisi:** süpervizörün kurduğu bir zamanlamada yanıtlar süpervizöre gider; ekran yöneticiye
+  "tenant sahibine gider" diyordu.
+- **Karar:** kod tasarıma uygun (`ReportSchedule.OwnerUserId` zaten böyle tanımlı), yanlış olan
+  **etiketti**. Sabit `schedule-owner` oldu, dokuz dilin metni ve iki bayat yorum düzeltildi.
+- **Bekçi:** `ReplyToPolicyParityTests.cs` — 6 test, iddia zincirini bağlıyor (`ReplyToAddress`
+  tek atama, adres `schedule.OwnerUserId` + `HomeTenantId == tenantId` üzerinden, sistem
+  postasında Reply-To yok, istemci haritası ↔ sunucu kodu birebir, dokuz dilde metin + eski
+  anahtarın yokluğu).
+
+### 5. BR-BE-34 — kart P3 kozmetik diyordu, ölçüm ÇÖKME gösterdi
+
+- **Kartın öncülü:** "`AnalyticsExportCsv.cs:255` tr-TR kültüründe ondalık ayırıcı virgül üretir".
+- **Ölçüm:** `Directory.Build.props:11` ile `InvariantGlobalization=true` **tüm projelerde** açık.
+  O kipte `tr-TR` kültürü **yoktur** ve `new CultureInfo("tr-TR")` **`CultureNotFoundException`
+  fırlatır**. Yani satır yanlış ayırıcı üretmiyordu — yüzde içeren **her analitik dışa
+  aktarımında patlıyordu** (9 çağrı yeri).
+- **Aynı hata daha önce görülmüş:** `CallReportCsv.FormatPercent` BR-BE-15 ile ölçülüp
+  düzeltilmiş, bu dosya o turda atlanmış.
+- **Düzeltme:** `ToString("0.00", InvariantCulture).Replace('.', ',')` — aynı çıktı ("75,50"),
+  kültürden bağımsız.
+- **Bekçi:** `InvariantGlobalizationGuardTests.cs` — yasak **artı** yasağın **öncülünü** ayrıca
+  ölçen ikinci test (props ayarı hâlâ `true` mu). Bekçinin kendi varsayımını ölçmesi, ayar
+  değiştiğinde kuralın sessizce anlamsızlaşmasını engelliyor.
+- **Sonuç:** `src/` içinde kalan `new CultureInfo(` sayısı **0**. Kart P3 → **P1**.
+
+### 6. Ön yüz turu (BR-FE-23, BR-QA-17, BR-QA-25, BR-QA-09)
+
+- **BR-FE-23:** zil/modal yalnızca #09 ve #15'in render ağacındaydı; agent #19/#23'e geçince ağaç
+  sökülüyor, `AudioContext` kapanıyordu — kusur "zil kısık" değil **"zil YOK"**. `IncomingCallAlert`
+  kabuğa taşındı; **yeni fetch/abonelik/interval yok** (polling yasağı korundu), mevcut
+  `AgentStatusProvider`'dan besleniyor. Yutulan `setSinkId` reddi yüzeye çıkarıldı.
+- **BR-QA-17:** `vi.mock` imza daralması depo genelinde **76 adet** ölçüldü. En riskli ikisi
+  düzeltildi; kalanlar satır ve sayısıyla donduruldu, çark yalnız aşağı döner. Düzeltilenlerden
+  biri gerçek risk taşıyordu: `updateTenantSettings` ikizi ekranın **`etag`'ini `signal` adıyla**
+  kaydediyordu.
+- **BR-QA-25 / BR-QA-09:** `If-Match` davranışı fetch seviyesinde üç hâlli ölçüldü; denetim hedef
+  türü paritesi 43/43, iki yönlü, anti-vacuity kaynak okunamazsa **atar**.
+
+### 7. Provisioning turu (BR-BE-72/74/47/75/49/73)
+
+- **BR-BE-72:** öncül **yanlış** — 304 dalı denetim satırı yazmıyor, iş Karar #33 ile zaten
+  kapanmış, backlog satırı bayattı.
+- **BR-BE-75:** dört belge `POST /provisioning/report`'u çağırıyordu, **uç yoktu**. Yazıldı; gövde
+  kapalı küme, serbest metin denetim günlüğüne giremez, denetim kuyruğuna yazılamazsa **503**.
+- **BR-BE-47:** kartın önerdiği `ITenantCache` yolu **seçilmedi** — sunucunun "teslim ettim" kaydı
+  düğümün diskinde ne olduğunu söylemez ve silme geri alınamaz; ayrıca GET'e `SetAsync` eklemek
+  Sınıf A idempotency kapalı listesini kırardı. Doğru kaynak düğümün kendisi: `X-Pbxtr-Have`.
+- **BR-BE-73:** kod değişikliği **yapılmadı**, gerekçesi ölçülü — alarm yüzeyi olmadan fail-open
+  yapmak, bugün gürültülü olan bir arızayı **sessiz** hâle getirirdi.
+- **Commit:** `f5ed10db`, kartlar `ec65b607`
+
+### 8. `backlog.md` bir kez 4742 → 9334 satıra şişti (kendi hatam)
+
+- **Sebep:** JS `String.replace`'in `$` + backtick özel deseni. BR-BE-75 kart metnindeki regex
+  örneği (`{0,39}$`) hemen ardından gelen backtick ile birleşince **"eşleşmeden önceki tüm metin"**
+  olarak yorumlandı ve dosyanın tamamı enjekte edildi.
+- **Fark ediş:** doğrulama çıktısında aynı kart kodunun **iki satır** görünmesi.
+- **Düzeltme:** `git checkout --` ile geri alındı, replacement fonksiyona çevrildi
+  (`replace(hedef, () => yeni)`), sonuç 4742 satırda doğrulandı.
+- **Not:** bu hata bu depoda daha önce de not edilmişti; bu kez farklı bir yerden geldi
+  (kart metnindeki regex örneği).
+
+### 9. smtp2go — kullanıcının adımı, ölçüm bende
+
+- **Ölçülen:** `spf.smtp2go.com` düz `ip4:` listesi → **ek DNS lookup yok**, SPF 10-lookup bütçesi
+  sorun değil. Sunucudaki `/etc/pbxtr/mail-onkosul.env`'de `PBXTR_MAIL_DOMAIN`,
+  `PBXTR_MAIL_RELAY_HOST`, `PBXTR_MAIL_SPF_INCLUDE` **dolu**; `PBXTR_MAIL_DKIM_SELECTOR` ve
+  `PBXTR_MAIL_RETURN_PATH_HOST` **boş**. Sarmalayıcı (satır 72-73) ikisini de env'den okuyor —
+  yani eşlenik ayar **bağlı**, yalnızca değer yok.
+- **Ölçülen (olumsuz):** kullanıcı "DNS'leri ekledim" dedikten sonra yetkili sunucuya
+  (`pam.ns.cloudflare.com`) doğrudan soruldu: apex TXT, `_dmarc` TXT ve MX **üçü de boş**.
+  Cloudflare'de kayıt anında yetkilidir → yayılma gecikmesi değil. Kayıtlar başka bir bölgeye
+  girilmiş ya da kaydedilmemiş.
+- **Ölçülen (olumsuz):** paylaşılan API anahtarı smtp2go tarafından **reddedildi**
+  (`An API User matching the passed 'api_key' was not found`).
+- **Bekleyen:** selector sayısı (`s<N>`), doğru bölgeye girilmiş DNS kayıtları, gerçek API
+  anahtarı (bana yazılmadan sunucuya konacak).
+
+## Kararlar
+
+- **Kart öncülü ölçülmeden kod yazılmaz.** Bu turda kapanan 13 karttan **beşinde** öncül
+  yanlıştı ya da kartın önerdiği çözüm yanlıştı. İkisinde altından **daha ağır** bir kusur çıktı
+  (BR-BE-34 çökme, BR-QA-14 dokuz dilde yanlış iddia).
+- **Bir bekçi kendi öncülünü de ölçmeli.** `InvariantGlobalizationGuardTests` ikinci bir testle
+  `Directory.Build.props` ayarını doğruluyor; ayar değişirse kural sessizce anlamsızlaşmıyor,
+  **kırmızı** yanıyor.
+- **Aracın yokluğu ölçüm sonucu gibi görünür.** `strings` yok → `grep -c` 0 → "yeni kod ikilide
+  yok" yanlış sonucu. Ölçüm aracının varlığı ayrıca doğrulanmalı.
+- **Paralel ajan varken `git add -A` kesinlikle yok; yollar tek tek sayılır.** Bu turda confd
+  ajanının iki dosyası bilerek commit dışında bırakıldı.
+
+## Açık kalanlar / sonraki adım
+
+- **smtp2go:** DNS kayıtları `pbxtr.com` bölgesinde **yok**; kullanıcı bölgeyi teyit edecek ve
+  `s<N>` selector sayısını verecek. Sonra `PBXTR_MAIL_DKIM_SELECTOR` / `PBXTR_MAIL_RETURN_PATH_HOST`
+  sunucuya yazılıp `pbxtr-mail-onkosul.service` elle koşturulacak; beklenen `ok=true`.
+- **BR-SYS-80:** çalışan imaj `RemovedBasis` taşımıyor (ölçüldü: 0). Sıra değişmedi — önce onu
+  taşıyan imaj yayınlanmalı, **sonra** confd betiği aktarılmalı. Yayın kullanıcı onayı ister.
+- **BR-SEC-08** kurulda: ilke taslağı + 7 yetkilik etki listesi teslim edildi, koda dokunulmadı.
+- **Netgsm** gerçek sağlayıcı doğrulaması hesap açılmadan yapılamıyor; sunucuda SMS kapalı.
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı, tur sonuna saklandı. Yazılmış ama
+  koşulmamış test dosyası sayısı 60'ın üzerinde.
+- **Koşan ajanlar:** confd düğüm istemcisi (BR-SYS-36/37/38/39) ve provisioning BE ölçüm turu
+  (BR-BE-43/46/48/50/52).
+
+## Bilanço
+
+**281 kart — 167 bitti.** (Sabah: 280 kart / 148 bitti. Bu turda **+19 bitti, +1 kart**.)
