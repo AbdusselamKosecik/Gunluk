@@ -1054,3 +1054,121 @@ komutları o kümeye girmiyor.
 
 **290 kart — 183 bitti, 8 kapandı/red, 11 yarım, 88 açık.**
 (Sabah 276/122 ile başlandı. Gün boyunca **+61 bitti, +14 yeni kart**.)
+
+---
+
+# Beşinci tur — 2026-09-07 gece
+
+## Bağlam
+
+Gün boyunca biriken dört açık karar (A10–A13) PBXTR kuruluna götürüldü. Kurulu ben topladım,
+karar metnini ben yazdım. **Turun asıl sonucu kararlar değil, kurulun brifingimi çürütmesi oldu.**
+
+## Yapılanlar
+
+### 19. Kurul Karar #37 — on üye, dört karar
+
+Sonuçlar: **A10 ŞARTLI ONAY** (7 ŞARTLI · 3 HAYIR — mekanizma değiştirildi) ·
+**A11 ŞARTLI ONAY** (8 ŞARTLI · 2 HAYIR + DB lideri izolasyon vetosu — regex reddedildi) ·
+**A12 ONAY** (5 EVET · 5 ŞARTLI, karşı oy yok) · **A13 ŞARTLI ONAY**
+(1 EVET · 7 ŞARTLI · 2 HAYIR — birleştirme reddedildi).
+
+- **Dosya:** `yonetim/kurul-kararlari.md` (+375 satır), `yonetim/acik-kararlar.md` (A10–A13 kapandı)
+- **Commit:** `830baed8` — push edildi
+- **Sonuç:** karar bekleyen madde **SIFIR** (`grep -c "^## 🟡" → 0`)
+
+### 20. Kurul, kendisine sunulan brifingin BEŞ öncülünü çürüttü
+
+Bunlar benim yazdığım cümlelerdi ve dördü kararın **yönünü** değiştirdi.
+
+1. **"Kısıt konursa admin'in iki sistem ekranı kilitlenir" — YANLIŞ.** Beş üye (CTO, backend-lider,
+   db-lider, frontend-uzmanı, Şeytan) **bağımsız olarak** aynı yeri ölçtü:
+   `PermissionCatalog.cs:565-583`/`:604-613` sistem rollerinin etkin kümesini **açılışta** doğrular
+   ve ihlalde `InvalidOperationException` atar. `admin` `phone.unmask` taşımadığı için seed'e
+   `requires` konsaydı sonuç *"ekran kilitlenir"* değil, **uygulama hiç açılmaz** olurdu.
+   Ayrıca `requires` bir **çalışma anı kapısı değildir** — `PermissionAuthorizationHandler` yalnız
+   `IsSatisfiedBy` çağırıyor; `MissingPrerequisites`'in tek çağıranı `CustomRolePolicy.cs:126`.
+   **Yani önerdiğim kısıt, koruma değil, dağıtım kuralıydı ve tek etkisi ürünü açılmaz yapmaktı.**
+2. **"#63 bu kısıttan etkilenir" — YANLIŞ.** #63'ün ekran yetkisi `telephony.console.read`
+   (`screens.generated.ts:88`), `system.command.run` değil. Etkilenen ikili #41 ve #43.
+3. **"#63'te hiçbir maskeleme yok" — YANLIŞ.** `AsteriskCommandCatalog.cs:63` `UnmaskPermission`
+   tanımlı, `AST-01 core show channels` **zaten** `phone.unmask` istiyor, katalog yetkiye göre
+   **filtreli** dönüyor ve `AmiAsteriskConsole.cs:92` ikinci kapıyı çalışma anında koyuyor.
+   Dosyanın kendi yorumu A11'de önerdiğim cümlenin aynısını **altı ay önce** yazmış:
+   *"çözüm maskeleme DEĞİL, yetkilendirmedir."*
+4. **"Katalogda 8 komut var" — YANLIŞ.** AST-01…AST-12 (11 farklı CLI dizesi).
+5. **"`/bundle` sözlük gelirse `.join()` ile patlar" — YANLIŞ, ve gerçek daha kötü.**
+   Asterisk uzmanı ve Linux uzmanı **bağımsız olarak** aynı zinciri ölçtü: `withheld` sözlük
+   gelirse `withheld.length` **`undefined`**, `undefined > 0` **false**, `.join()` **hiç
+   çağrılmaz**. İstisna yok, çıkış kodu yok → *"SERVIS EDILMEYEN TURLER"* bandı **kaybolur**,
+   `/tmp/pbxtr-withheld-turler` **boş** yazılır, `:551`'deki eksilme kapısının muafiyet listesi
+   çöker ve kesilen tür `BEYANSIZ EKSILME → exit 75` ile **yanlış sebeple** kırmızıya döner.
+   **Kırılan şey bir ayrıştırıcı değil, toll-fraud kapısının kendi raporudur.**
+
+### 21. Karar konusu OLMAYAN altı gerçek arıza — hepsi ölçümde çıktı
+
+Üyeler karar için ölçüm yaparken kartı olmayan altı kusur buldu. Beşi yeni kart, biri güncelleme:
+
+- **BR-SEC-10 (Şeytan)** — `ProvisioningContentGate` **yalnızca düğüm ucunda** koşuyor.
+  `FindUndeliverableKinds`'in tek üretim çağrısı `ProvisioningNodeBundleEndpoints.cs:514`;
+  `ProvisioningEndpoints.cs:430` yalnız sır kapısını çağırıyor. Yani **Mod A ile çeken her
+  kurulum `#exec` / `#include` direktif kapısından hiç geçmiyor** — o kapının kendi yorumu
+  *"#exec KOMUT CALISTIRIR"* diyor. `ProvisioningTenantPrefixGuardTests` o yol için **vacuous**.
+- **BR-SEC-11 (süpervizör)** — `.pcap` indirmesi `auditSink.TryEnqueue` ile yazılıyor ve **dönüş
+  değeri okunmuyor**; `ChannelAuditSink.cs:31-33` bu kuyruğun ayrıcalıklı eylemlerde
+  kullanılmasını **birebir yasaklıyor**. Kodun kendi yorumu *"HER indirme yazilir"* diyor ama
+  mekanizma bunu garanti etmiyor. **Kaydın düşme olasılığı en yüksek an, denetimde ona en çok
+  ihtiyaç duyulan andır.**
+- **BR-SYS-88 (db-lider)** — `CaptureRules.Lifetime = 30 dk` ama `Purge()` **fırsatçı**: yalnız
+  `:87`/`:94`/`:162`'den (List/Open/Run) çağrılıyor, zamanlayıcı yok. Kimse ekrana girmezse
+  kişisel veri + SIP digest materyali taşıyan pcap **diskte süresiz** kalır. "30 dk'da imha"
+  bugün **ölçülmemiş bir iddia**.
+- **BR-AST-43 (asterisk-uzmanı)** — `rtp-headers` snaplen 96. Hesap: 14+20+8+12 = 54 → **42 bayt
+  payload**. G.711'de %26 parça (iddia tutar) ama **G.729 = 20 B, G.723.1 = 24 B, Opus@8k ≈ 20 B**
+  → **payload'ın TAMAMI**. Yani G.729 müzakere edilebilen bir düğümde bu şablon **tam bir çağrı
+  kayıt cihazıdır** ve #21'in yetki+denetim zincirini atlar. Üstelik `CaptureEndpoints.cs:90`
+  `CarriesAudio: false` **sabit yazılmış** — ekran ölçülmemiş bir güvence veriyor, ve
+  `CaptureTemplateTests.Rtp_sablonu_SES_TASIMAZ` **yanlış bir iddiayı koruyor**.
+- **BR-QA-34 (linux-uzmanı)** — #43'ün gizlilik güvenliğini taşıyan şey **kod değil ağ kipi**:
+  app düz bridge'de, `network_mode: host` yok, `NET_ADMIN` yok, tcpdump `-p`. `sip` şablonu bugün
+  **fiilen hiçbir paket yakalamıyor**. Bir gün compose'a `network_mode: host` eklenirse **aynı kod**
+  tüm SIP trafiğini müşteri numaralarıyla yakalar ve **tek bir test bile kırılmaz** — koda
+  dokunulmadığı için review de yakalamaz.
+- **BR-QA-33 (CTO + linux-uzmanı, ben ölçtüm)** — "iki şıktan biri" hâlinden **ölçülmüş** hâle
+  çevrildi. Üç gerçek: `AmiAsteriskConsole.cs:91-92` kapıyı **`AsteriskCommandCatalog`'tan**
+  kuruyor (yalnız AST-01'de `phone.unmask`); `SystemCommandRunner.cs:93` **aynı ifadeyi**
+  **`system-commands.json`'dan** kuruyor (enum'un tamamı için `phone.unmask`); taşımanın kendisi
+  (`UnixSocketSystemAgent.cs`) **hiçbir yetki kontrolü taşımıyor** — `Permission` kelimesi dosyada
+  **0 kez** geçiyor. **Sonuç sessiz başarısızlık değil, yüzeye göre farklı cevap:** `phone.unmask`
+  taşımayan operatör `pjsip show contacts`'ı **#63'ten çalıştırır, #41'den çalıştıramaz.**
+
+## Kararlar
+
+- **Bir kurul brifingi de bir iddia yığınıdır ve ölçülmeden yazılırsa kurulu yanlış soruya
+  oylatır.** Bu turda kurul dört kararın ikisinde **benim önerdiğim mekanizmayı reddetti** ve
+  gerekçesi her seferinde ölçümdü. Brifing metnini kurula sunmadan önce her teşhis cümlesinin
+  ölçülmesi gerekiyor — kartlar için geçerli olan kural karar metinleri için de geçerli.
+- **Aynı yeri beş ajanın bağımsız ölçmesi, bir ajanın ölçmesinden farklı bir şey üretiyor.**
+  A10'un öncülünü beş üye ayrı ayrı çürüttü; tek bir ajana sorsaydım bir "hayır" oyu olarak
+  görünürdü, beşi birden gelince **öncülün kendisi** düştü.
+- **"Patlar" ile "sessizce yutar" arasındaki fark, kararın yönünü değiştirebilir.**
+  `{}.length === undefined` yüzünden `/bundle` birleştirmesi bir çökme değil, bir **kapının
+  sessizce susması** üretiyordu. Gürültülü çökme tercih edilirdi — bu, `grep` exit-1 dersinin
+  (bu sabah) JavaScript'teki tam karşılığı.
+- **Bağlayıcı genel kural (Ş37-30):** *provisioning yanıtında var olan bir alanın **TİPİ** hiçbir
+  zaman değiştirilmez; yeni bilgi **yeni alanla** gelir.* Sahadaki confd sürümleri ölçülemediği
+  sürece tek güvenli evrim biçimi budur.
+
+## Açık kalanlar / sonraki adım
+
+- **Karar #37'nin 38 şartı** (`Ş37-1…Ş37-38`) uygulanmadı — kurul kararı planlamaya **kendiliğinden
+  geçmez** (skill kuralı). Kullanıcı "başla" demeden kod yazılmayacak.
+- **smtp2go** hâlâ kullanıcıda: DNS kayıtları `pbxtr.com` bölgesinde yok, selector sayısı ve
+  gerçek API anahtarı bekleniyor.
+- **BR-SYS-86** yayın onayı kullanıcıda.
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı ("testleri sona sakla").
+
+## Bilanço
+
+**299 kart** (+9: BR-QA-33, BR-SEC-10, BR-SEC-11, BR-SYS-88, BR-AST-43, BR-QA-34 bu turda).
+**Karar bekleyen açık madde: 0.**
