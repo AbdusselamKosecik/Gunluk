@@ -925,3 +925,132 @@ eşleme bozulacaktı.
 
 **285 kart — 177 bitti, 10 yarım, 93 açık, 5 kapandı/red.**
 (Sabah 276/122 ile başlandı. Gün boyunca **+55 bitti, +9 yeni kart**.)
+
+---
+
+# Dördüncü tur — 2026-09-07 akşam geç
+
+## Yapılanlar
+
+### 13. confd düğüm ajanında İKİ GERÇEK ÜRETİM KUSURU
+
+İkisi de ancak ajan **aynı gövdeyle iki kez** koşturulunca çıktı. 17 fikstürün hiçbiri ajanı
+aynı kök altında iki kez koşturmuyordu; "önceki durum" hep fikstürün **elle yazdığı** defterdi
+— yani **ajan kendi yazdığını hiç okumadı.**
+
+- **D1 — "sha256 değişmediyse reload yok" kuralı fiilen SIFIR kez çalışıyordu.** Defteri yazan
+  satır dört sütun yazıyor; okuyan `sed` geri referansı **satırın kalanının tamamını** alıyordu,
+  yani karşılaştırma hiçbir zaman doğru olamıyordu. Ölçüm: değişmeyen gövdede ikinci koşu
+  *"değişen tür sayısı: 12"*. **Üretimdeki karşılığı: her beş dakikada tam yazım +
+  `module reload res_pjsip.so` + `queue reload all` + `dialplan reload` — canlı çağrıların
+  üstünde, sonsuza kadar.**
+- **D2 — ilk başarılı teslimden sonra ajan, kuyruk türü her değiştiğinde SESSİZCE ölüyordu.**
+  `EKSIK=$(grep -vxF -f YENI ESKI ...)` — `grep` hiçbir satır seçmezse **1** döner ve bu,
+  kapının ölçmek istediği **normal** haldir ("kuyruk kaybı yok"). `set -euo pipefail` altında
+  atama başarısız sayılıyor ve ajan orada ölüyordu: `exit 1`, gerekçe yazmadan, diske hiçbir
+  şey yazmadan. Kuyruk defteri kuran iki fikstür de **gerçek bir eksilme** üretiyordu, yani
+  *"önceki defter VAR + eksilme YOK"* dalı **hiç koşmamıştı**.
+- **Panzehir:** F18 (aynı gövde ikinci kez → sıfır yazım/reload) ve F19 (önceki defter var +
+  eksilme yok → ajan ölmez). Fikstür 17→19, iddia 67→74. İkisi de mutasyonla doğrulandı.
+- **Ders:** bir bekçi, ölçtüğü şeyin **ikinci koşusunu** içermiyorsa "durum" mantığını hiç
+  ölçmemiştir. Fikstürün elle yazdığı önceki durum, ürünün ürettiği önceki durum değildir.
+
+### 14. BR-SYS-40 — `TimeoutStartSec` N=50'de YETMİYOR
+
+Gövde sunucudan ölçüldü (t0007 = 9 881 B). N=2/10/50 → gzip 1,9 / 7,2 / **33 KB** — sözleşmenin
+8 MB eşiğinin **1/250**'si. **Gövde sorun değil; sınır çağrı sayısında.** Tek `docker exec`
+hedef sunucuda **115 ms** ölçüldü → N=50 için tur ~**300 sn**, `TimeoutStartSec=240` **yetmez**
+ve kesilen tur **yarım teslimdir**. Tavan ~**38 tenant**; değer büyütülemez (300 sn timer
+aralığından küçük kalmalı). Servis dosyasındaki *"N=50 ölçülmedi"* borç bloğu **ölçülmüş
+tabloyla** değiştirildi. Yeni kart BR-SYS-87 (çağrı toplulaştırma).
+
+### 15. BR-SYS-70 — yayında `--force-recreate nginx` kalktı
+
+Kartın dört öncülü de doğru çıktı. **Ek ölçüm (kartta yoktu):** recreate'in tek makul gerekçesi
+*"app'in IP'si değişir"*di — compose'da `app` **sabit adresli** (`172.28.0.11`, depo ve sunucu
+birebir aynı). Yani recreate **hiçbir şey kazandırmadan** tüm SIP/izleme WebSocket'lerini
+düşürüyordu. Yerine gerçek konteynerde `nginx -t` → geçerse `nginx -s reload`.
+
+**Sahte sağlık kanıtı kaldırıldı:** `curl --fail http://127.0.0.1/` — `--fail` **3xx'i hata
+saymaz**, yani 443 bloğu tamamen kırıkken de yeşil geçerdi. Yerine iki gerçek ölçüm.
+
+**Ş35-4'ün WebSocket 101 şartı bilerek yazılmadı:** ölçüldü, `/ws/` upgrade isteğine bugün
+**200** dönüyor; şartı olduğu gibi yazmak **her yayını geri alan** bir kapı kurardı.
+
+### 16. BR-SYS-71 — `sysagent` bileşeni `All` listesinde yoktu
+
+Kart tek yönü soruyordu (*listede olup yayılmayan*); o yön yeşildi. **Ölçüm öbür yönü kırık
+buldu:** sınıf 16 sabit tanımlıyor, `All` 15 taşıyordu — `SystemAgent` listede yoktu, oysa probe
+onu gerçek bir bileşen olarak yayıyor ve sabitin kendi açıklaması *"ön sistem ekranı bu bileşene
+bakar"* diyor. Mevcut `HealthComponentLabelPairingTests` bunu göremezdi: o test sabit ↔ **etiket**
+çiftini ölçüyor, sabit ↔ **liste** çiftini kimse ölçmüyordu. İki yönlü bekçi kuruldu, iki mutasyon
+kırmızı doğrulandı.
+
+### 17. BR-QA-05 — beş ön ölçüm; biri yeni bir risk açtı
+
+**#43 Paket İzleme ham `.pcap` dosyasını istemciye indiriyor** (`CaptureEndpoints.cs:223-224`).
+Bir SIP yakalaması tam numaraları taşır ve **bir pcap anlamlı biçimde maskelenemez** — bu, açık
+karar A11'in *"çıktıyı maskele"* seçeneğini #43 için **geçersiz** kılıyor. Geriye yetki (A10) ya
+da kapsam daraltma kalıyor. Yeni kart BR-SEC-09.
+
+(b) öncülü yanlıştı: `call.hold`/`call.transfer` kodları **hiçbir şeyi kapamıyor**, ikisi de tek
+uca çökertilmiş ve kapıları `call.handle`. (e) **vacuous**: canlı DB'de 45.393 denetim satırı var
+ama `qa.*` ve `recording.*` **sıfır** — "dinlemeden puanlama" oranı hesaplanamaz.
+
+### 18. Posta/rapor turu — yedi kart
+
+`MailWarningDto` daraltıldı (aynı yanıtta iki konvansiyon vardı). Ölçüm bir boşluk da gösterdi:
+**hiçbir test `message` alanına bakmıyordu**, o yüzden daraltma hiçbir testi kırmadı.
+İlk taslak yarışının gerçek PostgreSQL kanıtı yazıldı — `Barrier` **bilerek** kullanılmadı,
+çünkü A önce commit ederse B `UPDATE` dalına düşer ve test **yeşil ama ölçülmemiş** olur.
+BR-BE-51 **bloke**: `provisioningGapSec`'i üretecek kalıcı kayıt yok (provisioning durumu Redis'te
+30 dk TTL) → yeni kart BR-DB-44.
+
+## Kendi hatalarım (bu turda dört tane)
+
+1. **BR-SEC-06'yı yanlış ölçtüm ve yanlış yazdım.** *"`AddMemberAsync` operasyonel olup olmadığına
+   hiç bakmıyor"* dedim; kapı **zaten vardı** (`EfQueueAdministration.cs:442-452`). Dosyayı satır
+   440'ta okumayı bırakmıştım. Kart ve commit ile düzeltildi.
+2. **Sağlık bileşeni ölçümünü üç kez yanlış yaptım.** `node -e` heredoc'u `\b`'yi **gerçek
+   backspace karakterine** çevirdi ve regex hiçbir şeye eşleşmedi → *"15/15 bileşen hiç geçmiyor"*
+   gibi **imkânsız** bir sonuç. Sonucun imkânsızlığı kurtardı.
+3. **`kapi_27`'yi yanlış koşturdum:** fonksiyon `WF="$0"` kullanıyor; onu `/tmp/k27.sh` olarak
+   koşturunca **yanlış dosyayı** taradı ve altı bekçiyi "çağrılmıyor" sandım. Doğrusu 14/14.
+4. **Canlı DB'ye `scope <> 'tenant'` sorgusu attım** — o değer hiç yok (`global`/`dealer`/`single`),
+   yani sayım anlamsızdı.
+
+## Ajanın bir kazası — kayıt için
+
+Bir ajan ölçüm sırasında bir komuta **`git checkout -- .`** dahil etti ve o andaki tüm
+commit'lenmemiş değişiklikleri geri aldı. **Kayıp olmadı** (paralel işlerin hepsi zaten
+commit'liydi, HEAD `origin/main` ile eş, benim `sysagent` düzeltmem ve yeni test dosyam yerinde)
+— **ama bu şanstı.** `git add -A` yanlış şeyi *ekler* ve geri alınabilir; `git checkout -- .`
+yanlış şeyi **siler** ve reflog'da izi **yoktur**. Bundan sonra ajan brifinglerine
+`git checkout -- .` / `git restore .` / `git clean -fd` / `git reset --hard` yasağı da açıkça
+yazılacak — "commit etme" cümlesi *yazma* işlemlerini yasaklıyor gibi okunuyor ve geri alma
+komutları o kümeye girmiyor.
+
+## Kararlar
+
+- **Bir bekçi, ölçtüğü şeyin ikinci koşusunu içermiyorsa "durum" mantığını hiç ölçmemiştir.**
+  Fikstürün elle yazdığı önceki durum, ürünün ürettiği önceki durum değildir.
+- **`grep`'in 1 dönmesi `set -e` altında bir arıza değil, çoğu zaman NORMAL haldir.** `|| true`
+  ile susturmak üçüncü hali (gerçek hata) ikinciye katar ve kapıyı fail-open yapar; üç hal ayrı
+  okunur.
+- **Bir aracın çıktısı beklenmedikse önce aracın kodunu oku.** Bugün üç kez, tahminle
+  "düzeltmeye" kalksaydım çalışan bir şeyi bozacaktım.
+
+## Açık kalanlar / sonraki adım
+
+- **smtp2go** hâlâ sende: DNS kayıtları `pbxtr.com` bölgesinde yok, selector sayısı ve gerçek API
+  anahtarı bekleniyor.
+- **BR-SYS-86** yayın onayı sende. Gerekçesi düzeltildi: ters sıranın bedeli "kalıcı kırmızı düğüm"
+  değil, **"kuyruk kaldırma işlemleri teslim edilmez"**.
+- **Kurulda dört madde:** A10 (`phone.unmask` — `admin` kilitlenir), A11 (serbest metin maskeleme;
+  #43 için **geçersiz**, bkz. ölçüm eki), A12 (`NODE_NOT_PINNED`), A13 (`withheld` biçimi).
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı.
+
+## Bilanço
+
+**290 kart — 183 bitti, 8 kapandı/red, 11 yarım, 88 açık.**
+(Sabah 276/122 ile başlandı. Gün boyunca **+61 bitti, +14 yeni kart**.)
