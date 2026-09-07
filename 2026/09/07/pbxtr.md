@@ -372,3 +372,169 @@ tekrarlanamaz**.
 
 **270 kart — 120 bitti, 15 devam, 136 kalan.** (Sabahki *"134 kart / 78 kalan"* rakamı §9'daki sayım
 hatası yüzünden yanlıştı.)
+
+---
+
+# EK — Kurul turu (Karar #36) ve bir araç kusuru
+
+## Bağlam
+
+Gün boyunca beş kart karar bekleyerek birikmişti. Kullanıcı karar darboğazı olmak istemediği için
+bunlar kurula gitti (kayıtlı ders: *"kararı kullanıcıya değil kurula sor"*). On üye paralel koştu;
+her birine iki disiplin **birebir aynı cümleyle** verildi: *"kartın öncülünü ölçmeden kabul etme"*
+(bugün on altı kez yanlış çıkmıştı) ve *"`Test Run Aborted` gördüğün her koşuyu TEKRARLA"*.
+
+## 19. Kurul turunun asıl çıktısı: **altı üye brifingdeki bir cümleyi ölçerek çürüttü**
+
+Bu turun değeri alınan kararlarda değil, **kararların dayandığı öncüllerin yıkılmasında**. Kurula
+beş kart gitti, **dördünün metni değişti** ve biri tamamen düştü.
+
+### 19.1 BR-DB-40 bir düzeltme kartı değilmiş — bir **ölçüm** kartıymış
+
+Üç bağımsız çürütme geldi ve üçü de kartın rakamına dokunuyor:
+
+- **Şeytan (İtiraz 1.2 — tek başına kartı düşürebilir):** `01-rls-template.sql:113-121`, GUC boşsa
+  fonksiyon **regex'e hiç ulaşmadan** `RETURN NULL` yapıyor. Yani *"GUC set değil"* koşusu regex'i
+  değil **erken dönen dalı** ölçmüş. Üstelik yüklem `tenant_id = app_current_tenant()` ve plan
+  `Index Only Scan` — `NULL` anahtarla o tarama **0 satır** üretir. **İki koşu aynı işi yapmıyorsa
+  `8,6 µs/satır` bölmesinin paydası uydurmadır.**
+- **Şeytan (1.3):** kart *"inline varyant denendi, DAHA KÖTÜ çıktı (105 ms)"* diyor. Regex satır
+  başına koşuyorsa inline varyantta da aynı regex koşar → süre **eşit** olmalıydı, **%35
+  artmamalıydı.** Artması, baskın maliyetin regex değil **çağrı yolu** olduğunu söyler.
+- **DB Lideri (rakip ve daha güçlü teşhis):** `01-rls-template.sql:315` →
+  `USING (tenant_id = app_current_tenant() OR app_is_cross_tenant())`. **Bu `OR` bir indeks koşulu
+  olamaz.** `tenant_id = f()` tek başına olsaydı planlayıcı onu index scankey'e koyar ve **tarama
+  başına bir kez** değerlendirirdi; `STABLE` bunun için yeterlidir. `OR` ile yüklemin tamamı
+  **Filter**'a düşüyor. Rakam da oturuyor: 77 buffer ≈ 9.000 satır × 8,6 µs ≈ 77 ms.
+
+**Ve bir metodoloji hatası:** *"inline denendi, daha kötü çıktı"* bir karşı kanıt **değil**, çünkü
+kartın kendi cümlesi *"regex yine satır başına koşuyor"* diyor — denenen varyant **regex'i taşımış**.
+Ölçüm, *inline etmenin* değil *regex'i taşımanın* sonucu. Bu ikisi karıştırıldığı için **doğru çözüm
+(regexsiz, tek ifadeli, inline edilebilir `LANGUAGE sql`) elenmiş durumdaydı.**
+
+**Güvenlik sorusu kapandı:** regex bir kapı değil, **derin savunma**. CTO ölçtü — `EXCEPTION WHEN
+invalid_text_representation` bloğunun yerine konmuş, çünkü o blok alt-transaction açıp
+`PARALLEL SAFE` ile çelişiyormuş; görevi cast hatasını bastırmak.
+
+**Ama "SET LOCAL anına al" önerisi reddedildi — ve sebebi ayrı bir ölçüm:** Backend Lideri
+`TenantSessionWriter` dışında `app.tenant_id` yazan **en az 11 çağrı yeri** saydı
+(`LeaveEnforcementJob`, `ObjectRowRetentionJob`, üç `Recording*Job`, `QueuePushReconciliationJob`,
+`PersistentTelephonyProvider`, ve `St44AcceptanceSeeder:77,88,96` — **sonuncusu parametre değil,
+string interpolasyonu**). Yani **doğrulama taşınamaz, yalnızca çoğaltılabilir.**
+
+> **Ders:** *"Kontrol grubu kurdum"* demek yetmez — **kontrol grubunun aynı işi yaptığı ayrıca
+> ölçülmeli.** Burada iki koşunun `rows=` değeri hiç yazılmamıştı; yazılsaydı hata ilk dakikada
+> görülürdü.
+
+### 19.2 BR-SEC-07 tamamen düştü: iki iddiasının ikisi de yanlıştı
+
+- *"Bu kısıt hiçbir yerde yazılı değil"* → **yazılı.**
+  `doc/analiz/rol-yetki-ekran-analizi-2026-09-06.md:314-317`, betik çıktısıyla üretilmiş, tarihli.
+  **On iki gün önce ölçülüp belgelenmiş.**
+- *"`ivr.write` bir vakadır"* → **değil.** `owner ∖ (admin ∪ superadmin)` = **60 kalem**, ve
+  **`ivr.read` bile hiçbir global rolde yok** (admin IVR'ı okuyamıyor).
+- **Ve üçüncü, hiç sorulmamış bulgu:** `permissions.seed.json:915-923` — **admin**
+  `queue.write`/`workinghours.write` taşıyor, **superadmin taşımıyor** → **`superadmin ⊄ admin`.**
+  Bu, *"platform yöneticisi çağrı akışını değiştirmemeli"* gerekçesini de çürütüyor (çalışma saati
+  de çağrı akışıdır). **Ortada bir ilke değil, birikmiş bir kesit var.**
+
+> **Ders:** *"belgelenmemiş"* iddiası da bir öncüldür ve **grep'lenerek ölçülür.** Kart, kısıtı
+> "keşfettiğini" sanıyordu; kısıt zaten yazılıydı ve kart onu **ikinci kez** keşfetmişti.
+
+### 19.3 BR-BE-81: "kapatılamaz" gerekçesinin ikisi de yanlıştı — ama kartta yazmayan gerçek bir açık çıktı
+
+- *"Platform anahtar alanı yeni bir istisna açar"* → **açmaz, bugün zaten var:**
+  `RedisPlatformCounters.cs:41-77` `pbxtr:sys:*` yazıyor ve gerekçesi **yapısal çakışmazlıkla**
+  yazılı: *"`sys` geçerli bir GUID değildir."*
+- Testteki *"mimari karar gerektirir"* → **gerektirmiyor:** `EfApiKeyDirectory.cs:130-156`
+  `PlatformCacheState()` ile **`ITenantCache` içinde** platform ad alanı kuruyor; desen **üç yerde**
+  kullanılmış.
+- **Buna karşılık db-lider kartta hiç yazmayan bir izolasyon açığı ölçtü:** `ApiKey.cs:51` —
+  **`Node` serbest metin ve nullable**; tenant B, `Node = "asterisk-01"` yazarak **tenant A'nın
+  düğüm kovasını tüketebilir.** Yani "düğüm başına sayaç" bugünkü veri modeliyle bir **çapraz-tenant
+  DoS yüzeyi.**
+- **Ve sınırın yönü tersine çevrildi** (Asterisk + Linux): 429 alan confd **geri çekilir** → config
+  **bayat kalır** → yeni dahili devreye girmez. Bu bir **santral doğruluk sorunu ve sessiz**; yani
+  burada **gevşeklik doğru taraf.**
+
+**Benim bir rakamım da bayat çıktı:** *"30 günde 968 koşu"* demiştim; 5 dakikalık timer 30 günde
+~8.460 eder. Ölçülen **282/gün** ve 968, kurulumdan sonraki ~3,5 günün sayısıymış.
+
+### 19.4 Kimsenin sormadığı en ciddi bulgu: **yan etkili GET** (BR-BE-107, P1)
+
+`ProvisioningNodeBundleEndpoints.cs:99` **`MapGet`**, ve `TryAcquireAsync` **`SET NX EX` ile numaralı
+slot rezerve ediyor** — bu bir **nonce ilkeli**. CLAUDE.md §3.2 Ş6 tam olarak bunu yasaklıyor. Ama
+bekçi `AsteriskClassBIdempotencyTests` **yalnızca Sınıf B** uçlarını sayıyor; bu uç **Sınıf A**
+olduğu için kapsam dışı → **kural var, bu yüzeyde koşan bekçi yok.** nginx `proxy_next_upstream` bu
+GET'i sessizce tekrar gönderirse **düğüm kendi kotasını yakar** ve görünür bir iz kalmaz.
+
+> **Ders:** bir kuralın **kapsamı**, kuralın kendisi kadar ölçülmeli. *"Bekçi var"* demek
+> *"bu yüzeyde koşuyor"* demek değil — bu, `kapinin-kosmamasi-bulgu-degildir` dersinin yeni bir yüzü:
+> bekçi koşuyor, **yeşil**, ama **yanlış kümeyi** sayıyor.
+
+### 19.5 BR-FE-66: karar iki son kullanıcının aynı cümleyi bağımsız söylemesiyle çözüldü
+
+- **Agent:** *"`—` gördüğümde **'kimse beklemiyor'** diye düşünürüm. Kesinlikle bunu düşünürüm."*
+- **Süpervizör:** *"İlk gün 'bozuk mu' derim. İkinci gün bakmayı bırakırım. Üçüncü gün ekipteki
+  herkes o karonun sürekli `—` olduğunu öğrenir ve **karo ölür**."*
+
+**Ama ikisi de *"sessizce ölçülmüşlerin maksimumu"*nu da reddetti** — süpervizör somut koydu:
+*"4 dk görünce müdahale etmem; ölçülemeyen kuyrukta 12 dk bekleyen varsa kabul edilemez. Sessizlik
+beni yavaşlatır; **yanlış sayı beni yanlış yöne götürür** — ikincisi daha kötü."*
+
+**Ve Şeytan kartı hafif bulup ağırlaştırdı:** `presentOnPbx = false` olan kuyruk tanım gereği ne olay
+üretir ne `QueueSummary`'de görünür → karo **kalıcı olarak** `—`. TTL/mutabakat aritmetiği bu kümeye
+**hiç değmiyor**; senaryo teorik değil, **provisioning sapması olan her tenant'ta sürekli hâl.**
+
+**Çözüm iki üyenin önerisinin birleşimi** — *"santralde yok"* ile *"ölçemedim"* **farklı olgular**:
+`presentOnPbx = false` toplama **hiç girmez** (kalıcı `—`'yi kaynağında kaldırır), kalan gerçek
+delikler için **`≥` + sayı** → rakam **alt sınır olduğunu kendisi söyler** ve BL-QA-42 korunur.
+
+**Ve kapsam dışı gerçek bir eksik:** `DashboardScreen.tsx:439/445/449` `NO_VALUE`'yu **çıplak**
+yazıyor (`title` yok, `VisuallyHidden` yok); oysa #17'de `NoLiveFigure` var ve Ş35-27 gereği metriğin
+adını taşıyor. Süpervizörün *"gri okunmaz"* itirazının tire karşılığı: **çıplak tire, renk kadar
+sessizdir.**
+
+## 20. Araç kusuru: **kurul sonucu bir karardır, açık iş değildir**
+
+ClickUp senkronunda görüldü: **BR-SEC-07 kurulda RED aldı** (iş yapılmayacak) ama eşleme onu
+`backlog`'a düşürdü — yani kapanmış bir kart panoda **sonsuza kadar açık** görünecekti. Aynı şekilde
+karar almış dört kart da `backlog`'da kalıyordu ve *"henüz bakılmamış"* ile *"karar verildi,
+planlanmayı bekliyor"* **aynı hücrede** birleşiyordu.
+
+İki kural eklendi (`Kurul: RED → complete`, `Kurul: (ŞARTLI )?ONAY → to do`) ve **yama iki dosyaya
+birden kondu** — geçen turda aynı sınıf bir yama yalnızca birine konmuştu ve araç *"yeni: 0"* derken
+üç kart eksikti.
+
+**Vacuity kontrolü:** kuralın dokunduğu satır sayısı = `Kurul:` taşıyan kart sayısı = **5**; başka
+hiçbir kartı yakalamıyor. Kuru koşuyla doğrulandı, sonra gerçek koşu yapıldı.
+
+## Kararlar (bu bölüm)
+
+- **Kontrol grubunun aynı işi yaptığı ayrıca ölçülür.** İki koşunun `rows=` değeri yazılmazsa
+  "aynı plan" iddiası bir varsayımdır ve bölmenin paydası uydurma olabilir.
+- **"Belgelenmemiş" de bir öncüldür ve grep'lenir.** Bir kart, zaten yazılı olan bir kısıtı ikinci
+  kez keşfedebilir.
+- **Bir kuralın kapsamı, kuralın kendisi kadar ölçülür.** Bekçi yeşil olabilir ve yine de **yanlış
+  kümeyi** sayıyor olabilir (Sınıf B sayan bekçi, Sınıf A ucunu görmez).
+- **Kurul çıktısı panoda "açık iş" değildir.** RED kapanmıştır, ONAY planlanmayı bekler; ikisini de
+  backlog'a düşüren bir araç, alınmış kararı görünmez kılar.
+
+## Sonraki adım
+
+- **BR-SYS-82 hâlâ kullanıcı onayı bekliyor.** Linux Uzmanı kesintiyi ölçtü: 502 penceresi
+  **~10–20 s**, betiğin "tamam" demesi ~35–45 s (aradaki fark ilan gecikmesi). Aktif çağrılar
+  **düşmez**. Önerilen pencere **03:00–05:00 yerel**, confd timer'ı **önce durdurulur**.
+- **BR-SYS-83 (yeni):** `confd-sunucu-sapma.sh` imaj ön koşulunu `strings` ile ölçüyor ama
+  konteynerde `strings` **yok** → dal **her zaman** `OLCULEMEDI` veriyor. Düzeltme **yazılmadı**,
+  çünkü bu turda sunucuya erişilemedi (`Connection timed out`) ve **ölçümsüz yazılmaz.** Ayrıca
+  naif düzeltme ikinci bir kusur doğurur: `grep -c` sayım **0 iken çıkış kodu 1** verir, yani
+  bugünkü `|| echo OLCULEMEDI` kalıbı aynen taşınırsa **meşru bir sıfır da "ölçülemedi" olur.**
+- SMS sağlayıcı katmanı (BR-BE-54/55/56/57) hâlâ koşuyor.
+
+**Commit'ler:** `97fbfff9` (Karar #36 + backlog senkronu), `3b7b15f2` (ClickUp eşleme düzeltmesi).
+
+## Bilanço (kurul turu sonrası)
+
+**276 kart — 122 bitti, 11 devam, 1 karar bekleyen, 142 kalan.**
+(Beş yeni kart Karar #36'dan doğdu: BR-BE-107, BR-SEC-08, BR-OPS-01, BR-DB-42, BR-SYS-83.)
