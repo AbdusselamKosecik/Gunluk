@@ -538,3 +538,131 @@ hiçbir kartı yakalamıyor. Kuru koşuyla doğrulandı, sonra gerçek koşu yap
 
 **276 kart — 122 bitti, 11 devam, 1 karar bekleyen, 142 kalan.**
 (Beş yeni kart Karar #36'dan doğdu: BR-BE-107, BR-SEC-08, BR-OPS-01, BR-DB-42, BR-SYS-83.)
+
+---
+
+# İkinci tur (2026-09-07, akşam) — "hızlıca maddeleri bitir, testleri sona sakla"
+
+## Bağlam
+
+Kullanıcı hedefi değiştirdi: *"Hizlica maddeleri bitir testleri sona sakla. once maddeler bitsin."*
+Bu turda **hiçbir test koşulmadı** (talimat). Doğrulama: derleme, `tsc -b`, kapı betikleri ve
+mutasyon. Ajanlar test **dosyası** yazdı ama koşturmadı.
+
+## 21. Disk bozulması — 3118 hatanın tek satırı bile kod değildi
+
+- **Belirti:** `dotnet build` → **3118 hata**, hepsi `CS0246` ("Domain namespace'i yok").
+- **Gerçek sebep:** `src/Pbxtr.Domain/Modules/Messaging/SmsClosedSets.cs` diskte **2147 baytlık
+  NUL bloğuna** dönüşmüştü (boyut doğru, içerik tamamen `0x00`); Domain'in
+  `obj/.../ref/Pbxtr.Domain.dll`'i de `MZ` yerine `0000` ile başlıyordu.
+- **Üç tuzak birden:**
+  1. Domain'i tek başına derlemek **"0 Error(s)"** dedi — MSBuild artımlı olarak **atladı**.
+     Yalan ancak `obj/`+`bin/` silinince ortaya çıktı (202 gerçek hata).
+  2. Bozuk ref dll'i silmek **yetmedi**: MSBuild `refint/`ten geri kopyaladı, dosya **aynı boyut
+     ve aynı zaman damgasıyla** geri geldi. `obj/Debug`'ın tamamı silinmeliydi.
+  3. Ağacı taramak için yazdığım `grep -qP '\x00'` döngüsü **"temiz" dedi** — grep desende NUL
+     eşleyemiyor. Bayt okuyan bir node betiğiyle tekrar ölçtüm: bozuk dosya **1**.
+- **Sebep tahmini:** eşzamanlı ajan yükü. Bu yüzden turun geri kalanında `dotnet` yetkisi **tek
+  ajana** verildi.
+- **Sonuç:** dosya `git checkout` ile geri alındı, enum ile birebir örtüştü, **kayıp yok**.
+- **Deftere yazıldı:** `nul-blogu-derleme-selini-uretir`.
+
+## 22. BR-SYS-83 — kartın öncülü TERS yönde yanlıştı
+
+- Kart: *"`strings` yok, o dal **her zaman** `OLCULEMEDI` veriyor."*
+- **Ölçüldü: dal her zaman `0` veriyordu.** `grep -c` sayım sıfırken stdout'a `"0"` yazar **ve**
+  çıkış kodu 1 verir; `|| echo OLCULEMEDI` ikinci satıra düşer ve
+  `IMAJ_SAYI=$(bolum IMAJ | head -1)` **birinciyi** alır. `:383`'teki dal **ölü koddu.**
+- **Kontrol grubu:** işaretçiyi **gerçekten taşıyan** bir fikstür bile eski kalıpta `0` döndü,
+  yeni kalıpta `1`. Eski kodun bugün doğru cevabı vermesi **tesadüf**.
+- **Düzeltme:** üç durum ayrı token (`DOSYA_YOK` / `ARAC_YOK` / `<sayı>`), `strings` yoksa
+  `grep -ac` ile ikiliye doğrudan bakılır, sayısal olmayan her işaret tek bir "ölçülemedi"
+  dalına düşer. Commit `c18be95d`.
+
+## 23. Kart durumu denetimi — hipotezim çürüdü, yerine başka bir sapma çıktı
+
+55 "Bekliyor" kartının teşhis cümlesi tek tek ölçüldü.
+
+- **Hipotez** ("iş bitmiş, satır bayat kalmış") **büyük ölçüde çürüdü: 55'te 2.**
+- **Yerine çıkan:** **yedi kartın teşhis cümlesi yanlış.** İkisi ters yönde
+  (*"hiçbir yerde kullanılmıyor"* / *"hiç koşmadı"* derken şey vardı ve koşuyordu; biri kartın
+  yazıldığı **aynı gün** eklenmişti). Biri kartın önerdiği kapı numarasını (`kapi_28`) **dolu**
+  buldu — kurulsaydı mevcut SMTP kapısını ezecekti. BR-DB-34 ise **kötüleşmişti**: "ikinci kez"
+  değil **üçüncü kez**.
+- Aynı ders bu turda üç kez daha tekrarlandı (BR-FE-33 uygulanabilir değildi, BR-FE-57'de kod
+  haklı yorum bayattı, BR-FE-67'nin Asterisk bağı gereksizdi). **Oran deftere işlendi.**
+
+## 24. Bitirilen kartlar
+
+| Kart | Ne yapıldı | Commit |
+|---|---|---|
+| BR-BE-54/55/56/57 | Netgsm sağlayıcı katmanı, kapalı küme, devre kesici, fail-closed açılış | `46a3b7f8` |
+| BR-SYS-83 | Ölçülmemiş önkoşul "sayım = 0" diye raporlanıyordu | `c18be95d` |
+| BR-SYS-52/53 | Kart bayatmış; 53 mutasyonla doğrulandı | `8766cb09` |
+| BR-DOC-06 + Ş36-26 | `pjsip reload` → `module reload res_pjsip.so` (13 dosya, 14 yer) | `5f916a67` |
+| BR-DOC-03/04/13 | Üçünün de öncülü küçük çıktı (bkz. §25) | `3dcdffc6` |
+| BR-SYS-57 | Posta ön koşul tazelik payı kapısı (`kapi_34`), 4 mutasyon | `6422ce68` |
+| BR-FE-42…47 | SMS ön yüzü + Arapça çoğul boşluğu | `910a1aed` |
+| BR-BE-58/60/64 | SMS satır yazımı, arama saati, kampanya turu | `af5825ca` |
+| BR-SYS-79 + 6 P3 | CSP hash kapısı (`kapi_35`) + Web kartları | `a006e9a9` |
+
+## 25. Belge kartları — üçünün de işi kartta yazandan büyüktü
+
+- **BR-DOC-04:** kart yalnız `PAYLOAD_TOO_LARGE` eksik diyordu. Ölçüldü: `ProblemCodes` **96 kod**,
+  belge **45** sayıyordu → **51 eksik**. Ters yön temiz (hayalet kod **0**). 51'i de anlamlarıyla
+  eklendi, aynı betikle yeniden ölçüldü: **96 = 96**.
+- **BR-DOC-13:** sayı **10 değil 18**. Belge kendi içinde de çelişiyordu (başlık "10 uç", tablo 11
+  satır). Daha önemlisi: *"hepsi provisioning tetikler"* ilkesi **artık yanlış** — 18'in dördü
+  tetiklemiyor; ortak nitelik "kaybedilen güncellemenin geri alınamaz olması" olarak yeniden
+  yazıldı.
+- **BR-DOC-03:** F6 → **BİLİNÇLİ**, R7 → **BORÇ**. Kurul Karar #30/2 ile **10/10** oyla
+  `recording.listen`'ın owner+supervisor'a açılmasına karar vermiş; `permissions.seed.json:888`
+  hâlâ yalnız `superadmin` taşıyor. **Karar yazılmış, uygulanmamış.**
+
+## 26. Araç kusuru — ClickUp "Çoğu bitti"yi KAPALI sayıyordu
+
+- BR-BE-64'ün durumu *"Çoğu bitti (otomatik tur BR-DB-43)"* idi ve mapper `complete` dedi.
+- Kısmi satır kuralı bir **kelime listesiydi** (`Yarısı|Kısmen`) ve "Çoğu" listede yoktu.
+- Kural **yapısal** yapıldı: *"bitti" içerip "Bitti" ile başlamayan her durum kısmidir.*
+- **İlk denemem eski kapsamı kaybetti:** `KISMEN KAPANDI` içinde "bitti" geçmiyor. Ölçüldü,
+  geri eklendi. **Yeni bir kapı, değiştirdiği kapının kapsamını kaybetmemelidir.**
+- Yama **iki dosyaya** birden uygulandı; eşleşme bekçisi (`!=1 → throw`) ikinci dosyadaki farklı
+  deseni yakaladı.
+
+## 27. Ajanların bulduğu gerçek kusurlar (kartlarda yazmıyordu)
+
+- **`SmsBody.Render(body, null)` şablonu olduğu gibi döndürüyordu** → `{tutar}` içeren bir şablon
+  toplu gönderimde müşteriye **ham süslü parantezle** giderdi.
+- **`problemMessage`, `BLOCKED_IYS_UNVERIFIED`'i `prb.generic`'e düşürüyordu** → Ş1-1 kapısı
+  çalışır ama agent "Bir hata oluştu" görüp **aynı ticari şablonu tekrar denerdi**.
+- **Demo CSP'si Report-Only değil ZORLAYICI** → tema önyükleme scripti demoda **bugün fiilen
+  bloklanıyordu**. Kart bunu gelecek zamanla yazmıştı.
+- **Arapça çoğul boşluğu** (benim ölçümüm): yeni `sms.segments` yalnız `one`/`other` taşıyordu;
+  `Intl.PluralRules('ar')` **2** için `two`, **3–10** için `few` seçer — parça sayısının tipik
+  aralığı eksikti. Emsal `ticket.count` altı kategori taşıyor. Dördü eklendi.
+
+## Kararlar
+
+- **Eşzamanlı ajan koştururken `dotnet` tek ajana verilir.** Bugünkü NUL bozulmasının en olası
+  sebebi budur ve bedeli bir kaynak dosyasıydı.
+- **Ölçemediğim kapıyı yazmam.** BR-SYS-81 (compose sapma kapısı) yazılmadı: kartın kendisi
+  "önce sapma kapatılmalı" diyor ve sunucu yine `Connection timed out`.
+- **Kısmi durum, tam sayılmaz** — ve bu kuralı **liste** değil **yapı** zorlar.
+
+## Açık kalanlar / sonraki adım
+
+- **BR-SYS-82 hâlâ kullanıcı onayı bekliyor** (kısa kesinti; 502 penceresi ~10–20 s, aktif
+  çağrılar düşmez, önerilen pencere 03:00–05:00 yerel).
+- **YAYIN ÖNKOŞULU DEĞİŞTİ:** `Sms:Provider` yazılıysa **`Sms:HashPepper` zorunlu** (mock dâhil),
+  yoksa uygulama **hiç açılmaz**. Sunucuda `PBXTR_Sms__HashPepper` yazılmadan dağıtım kalkmaz;
+  değer `sifreler` aynasına düşmeli.
+- **Yeni kartlar:** BR-DB-43 (çağrı sonrası SMS'in veri bağı yok, özellik inert),
+  BR-BE-108 (zaman aşımında SMS izi kalmıyor — denetim satırı gönderimle aynı transaction'da),
+  BR-QA-31 (§1.5.1 ↔ `ProblemCodes` parite bekçisi yok), BR-SYS-84 (`style-src` zorlayıcı
+  yapıldığı gün 17 inline stil özniteliği bloklanır).
+- **Testler hâlâ koşulmadı** — kullanıcının açık talimatı. Sona saklandı.
+
+## Bilanço
+
+**280 kart — 148 bitti, 9 yarım, 104 bekliyor, 19 diğer.**
+(Sabah: 276 kart / 122 bitti. Bu turda **+26 bitti, +4 yeni kart**.)
