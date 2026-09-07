@@ -102,6 +102,34 @@ Mutasyon koşturulmasaydı ikisi de **yalan söyleyen kapı** olarak kalırdı. 
   kurulumda advisory kilit **hiçbir şeyi serileştirmezdi** — tek node'lu testte kusursuz yeşil veren,
   üretimde vacuous bir kilit. `hashtextextended` ile PostgreSQL tarafına alındı.
 
+### 7. `users` izolasyonu — kolay görünen çözüm ÖLÇÜLDÜ ve reddedildi
+
+- **Arıza üretildi:** çapraz kipteki bir aktör, A tenant'ının kullanıcı satırını kilitledi ve
+  A'nın **kendi** yazma isteği **2004 ms bekledi**. Sızıntı değil **bloklama** — ve hiçbir denetim
+  satırı üretmiyor.
+- **`UserRecord : ITenantOwned` yapmak akla ilk gelen çözümdü; uygulandı, derlendi, koşuldu ve
+  reddedildi.** EF `TenantId ... unmapped` ile **`BootstrapSeeder`'ın ilk sorgusunda** patladı.
+  Mapli hâle getirmek `users`'a `tenant_id` kolonu ister ve o kolon CLAUDE.md §4 ile **yasak**.
+  Üstelik giriş yolu (`FindByLoginAsync`) tenant **bilinmeden** koşuyor — global filtre orada
+  0 satır üretir ve **kimse giriş yapamaz**. Yani kolay çözüm, ürünü açılışta kilitlerdi.
+- Seçilen yol: kapının koşulu **kendisi** taşıması. Çapraz kipte **0 satır kilitlendi, kurban hiç
+  beklemedi**; mutasyon ısırdı.
+
+### 8. `PUT /tenant/settings` — damga tek kolon değilmiş
+
+- Damga `GREATEST(tenants.updated_at, tenant_settings.updated_at)`. Yalnızca birincisini almak
+  kapıyı **maskeleme seviyesi için vacuous** yapardı; ölçüldü: yalnızca maskeyi değiştiren bir
+  yazımda `tenants.updated_at` **değişmiyor**.
+- Kurulun bu ucu kümenin en ağırı saymasının gerekçesi karta girdi: **kayıp güncellemenin veri
+  İMHA ETTİĞİ tek yer** — A saklama süresini 365'e çeker, B bayat gövdesiyle 90'a alır, iş
+  **275 günlük ses kaydını siler** ve geri dönüşü yoktur.
+- **İki ölçüm hatası ajan tarafından yakalandı ve ikisi de defterde kayıtlı tuzaklar:**
+  1. Yarış testinin ilk hâli her istekte giriş yapıyordu; parola doğrulaması pencereden uzun
+     sürdüğü için ikinci aktör kapıya birincinin **commit'inden sonra** varıyordu ve mutasyon
+     **ısırmıyordu** — yani test kapıyı değil kendi kurulumunu ölçüyordu.
+  2. Başka bir ajanın `testhost`'u DLL'i kilitlemişti; build **"0 Error(s)"** dedi ama kopya
+     başarısız oldu ve mutasyonlu koşum **eski ikiliye** gitti.
+
 ## Kararlar (bu tur)
 
 - **Ajanın "bu kartın öncülü yanlış" demesi başarıdır.** Bu turda on kez oldu ve her seferinde
