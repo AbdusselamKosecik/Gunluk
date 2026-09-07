@@ -292,3 +292,83 @@ yani talimatın bedeli logo değil, **gündüz temasındaki koyu yanıp sönme**
 
 **258 kart — 101 bitti, 6 devam, 152 kalan.** (Sabahki *"134 kart / 78 kalan"* rakamı, §9'daki
 sayım hatası yüzünden **yanlıştı**.)
+
+### 15. Sprint-43-b veri katmanı — ve "yapısal bekçi çalışma-anı hatasını görmez"
+
+- **`sms_resolve_tenant` HİÇ ÇALIŞMIYORDU.** Gövdesinde `min(uuid)` vardı ve **PostgreSQL'de
+  `min(uuid)` yok**. Yapısal bir bekçi bunu göremezdi: fonksiyon **vardı**, imzası **doğruydu**,
+  yalnızca **çağrıldığında** patlıyordu — yani her DLR **sessizce başarısız** olurdu. Smoke testi
+  yakaladı.
+- **`sms_provider_accounts` salt-okunurluğu HER DAĞITIMDA sessizce siliniyordu.** REVOKE migration
+  gövdesindeydi, ama `00-roles.sql` her dağıtımda yeniden koşuyor ve şemadaki **bütün tablolara**
+  toplu yazma yetkisi veriyor. Append-only'de daha önce ölçülen hatanın **birebir aynısı**.
+  Çözüm kaynağına kondu ve küme **ad listesinden değil trigger'ın varlığından** türetiliyor —
+  çünkü bu depoda ad listesi **iki kez** bayatlamıştı.
+- **Şablon tazelemesi olmadan staging kırmızı olacaktı** ve bu **taklit edilerek** ölçüldü.
+- **`.cs` dosyalarında CRLF, `prosrc` md5'lerini değiştiriyor.** Yerelde CRLF ile ölçüp donduran biri
+  CI/deploy'da kırmızı alır.
+
+**Ve çapraz kesen bir ölçüm (BR-DB-40):** RLS yükleminin **UUID regex'i satır başına koşuyor.**
+Kontrol grubuyla izole edildi — aynı sorgu, aynı satırlar, **aynı plan**, tek fark GUC:
+`app.tenant_id` **set** iken **77,7 ms**, **set değil** iken **3,6 ms** (~8,6 µs/satır). p95 < 5 ms
+eşiği ≈ **600 satır**, ve bu **SMS'e özgü değil — RLS'li her tablo** bunu ödüyor. *"Fonksiyonu
+inline et"* denendi ve **daha kötü** çıktı (105 ms).
+
+### 16. Ölçüm bir kartı değil, verilen ŞARTI da reddedebilir
+
+Sağlık ajanı kuruldan gelen ton şartını (*"sarı yalnızca `unmeasurable && warning`"*) **uygulamadı**
+ve haklıydı: şart, kararın kendi Ş35-22'siyle çelişiyordu (sarının yüklemi *"ölçüldü, **çalışıyor**,
+ama eşiği aştı"* — bu `Ok` hâlidir) ve Ş35-23'ün *"`Unmeasurable` sarıya katlanmaz"* şartını ihlal
+ediyordu. Uygulansaydı bu turda **sıfır sarı satır** olurdu — kart hiçbir şey kapatmazdı.
+
+Aynı ajan üçüncü bir eşik ayarı da **açmadı**: `CertificateWarnDays`/`DangerDays` zaten vardı ve
+#47'de zaten okunuyordu. *Aynı gerçeği iki ayardan okumak bir gün iki farklı cevap üretirdi.*
+
+### 17. Kapatılan başlıca kusurlar (bu bölüm)
+
+- **Sertifika 10 gün kala yeşildi** (`days > 0 ? Ok : Down`) — operatöre **sıfır uyarı süresi**.
+- **`StateText` catch-all'ı** her yeni enum değerini sessizce yanlış raporluyordu; iki uçta da
+  kapatıldı ve `BackupStatusEndpoints`'teki *"bilerek"* iddiası **ölçülerek çürüdü**.
+- **Santralde olmayan kuyruk "0 bekleyen · 0/4 agent" ile SAKİN görünüyordu** — üstte tehlike
+  rozeti, altta huzurlu sıfırlar. Rozetin kendi metni **dokuz dilde** *"ölçümlerin boş olması sakin
+  demek değildir"* diyordu; ölçümler **boş değildi**. Yazılmış ama uygulanmamış bir karar.
+- **`PUT /users/{id}` kapılandı**; `fetchUser` **ölü koddu**, yani istemcinin damgayı okuyacak yolu
+  hiç yoktu.
+- **`PUT /tenant/mask-level`: kayıp güncelleme DEĞİL, DEADLOCK.** FK yüzünden uç tenant satırını
+  **zaten kilitliyordu, ama yanlış sırada**; ölçümde aktör A **500** aldı.
+- **`X-Pbxtr-Have` başlığı tabanı seçer, kapsamı seçmez** — yabancı bir `have` ile gövdede o
+  tenant'ın dizesi **hiç geçmiyor**; ölçüldü.
+- **Düğüm hız sınırı düğüm başına değilmiş:** tenant A limite girdikten sonra **tenant B aynı düğüm
+  adıyla geçiyor**; fiilî hak `N × 30 / 5 dk`.
+- **`gitleaks` düşük entropili sağlayıcı sırrını kaçırıyor** — iki fikstür, tek fark değer.
+- **confd tür adı dosya adından türetiliyordu**; kurulsa **her 5 dakikada bir kalıcı exit 75**.
+- **#57 düğüm alanı sunucuda zaten zorunluydu; istemci "opsiyonel" diye SÖZ VERİYORDU.**
+
+### 18. `pbxtr-confd` ve compose: aynı yapısal kusurun üç yüzeyi
+
+- confd betiği sunucuda **225 satır**, depoda **560** — ve onu oraya koyan bir **kurulum yolu yok**.
+- `kapi_30`'un yedi iddiasının **tamamı depo dosyalarına** grep atıyordu; *"confd betiği ile C#
+  kümesi birebir aynı"* derken **sunucuda çalışmayan iki kopyayı** karşılaştırıyordu.
+- **`docker-compose.yml` için sapma kapısı yok** ve sunucudaki kopya **30 Ağustos'tan kalma**.
+  Sonucu ölçüldü: posta ön koşul drop-in'i **yarım indi** — ölçüm üretiliyor ama uygulama onu
+  **göremiyor**; belirti **DNS düzeltildiği gün** çıkacak ve operatör **yanlış yere** bakacak.
+
+**Ve taşımanın kendisi sessiz bir arıza üretiyor:** `scp` hedefi **aynı inode üzerinde kırpar**;
+timer koşarken bash betiği **ilerledikçe okuduğu** için çalışan koşuya **yeni dosyanın eski
+ofsetindeki baytları** okutur — root olarak, çalışan bir santrale karşı, **sessiz ve
+tekrarlanamaz**.
+
+## Kararlar (bu bölüm)
+
+- **Yapısal bekçi, çalışma-anı hatasını görmez.** Yazılan her şey **çağrılarak** ölçülmeli;
+  `min(uuid)` vakası bunun ders kitabı örneği.
+- **Bir düzeltme kaynağına konmazsa her dağıtımda geri alınır.** Salt-okunurluk vakası, append-only
+  vakasının tekrarıydı — ve çözüm **ad listesi değil**, çünkü bu depoda ad listesi iki kez bayatladı.
+- **"Ölçemedim" ile "sıfır" farklı şeylerdir** ve bu ayrım bugün **üç ayrı yerde** arıza çıkardı.
+  `?? 0` artık bekçili.
+- **Kartın öncülünü ölçmeden kabul etme** — bugün **on altı** kez yanlış çıktı.
+
+## Bilanço (gün sonu)
+
+**270 kart — 120 bitti, 15 devam, 136 kalan.** (Sabahki *"134 kart / 78 kalan"* rakamı §9'daki sayım
+hatası yüzünden yanlıştı.)
