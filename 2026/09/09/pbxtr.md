@@ -78,3 +78,19 @@ Kod değişikliği yok; bu tur bir **ölçüm ve senkron** turudur.
   değil** (confd manifest sapması, `staging-yayin.sh` nginx, yayın betiği format
   adımı, `test-kos.sh` yanlış kırmızı, `AST-03/04` yeniden ölçüm…).
 - Karar #37'nin 38 şartı ve Karar #38'in şartları hâlâ `/sprint-planla` bekliyor.
+
+### 4. ClickUp bağlantı bilgileri CLAUDE.md'ye yazıldı (§14)
+- **Neden:** Kullanıcı talimatı: *"clickup baglanti bilgilerini claude.md ye yazarmisin"*.
+  Bilgi üç betiğin içine dağılmıştı; yeni bir oturum panoyu bulmak için kodu okumak
+  zorundaydı.
+- **Ne yapıldı:** `CLAUDE.md` sonuna **§14 ClickUp — teslim panosu** eklendi:
+  API tabanı, liste kimliği `901820472076`, `Authorization` başlığı (**ham token,
+  `Bearer` YOK**), token dosyası ve `sifreler` aynasındaki yedeği, üç betiğin görevi ve
+  koşum sırası, durum eşlemesinin **yapısal** kuralı.
+- **Token DEĞERİ yazılmadı** — yalnızca yolu. Yerel dosya ile `sifreler` aynası
+  sha256 ile karşılaştırıldı (`e356ed4a43ce`), **aynı**; ayna bayat değil.
+- **Dokunulan dosyalar:** `CLAUDE.md`
+- **Sonuç:** Belgeye ayrıca panonun bu turda ölçülen üç sınırı yazıldı: senkron tek
+  yönlüdür (elle değişiklik sessizce ezilir), yalnızca `BR-*` taşır (EPIC A–R story
+  satırları hiç gitmez), karta dönüşmemiş iş panoda hiç yoktur.
+- **Commit:** `de81e05` — docs: CLAUDE.md §14
