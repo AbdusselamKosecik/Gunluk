@@ -180,3 +180,83 @@ uygulanmamis`) test tarafındaki ikizi.
 - `AST-03`/`AST-04` **"ölçüldü" sayılmaz** — canlı koşuldu ama `No objects found` döndü
   (o düğümde trunk/kayıtlı cihaz yok). Trunk tanımlı bir düğümde tekrarlanmalı.
 - Kullanıcı tarafı: smtp2go DNS kayıtları, BR-SYS-86 yayın onayı.
+
+---
+
+## 6. Sisteme yükleme — yayın yolu dört kapıda durdu, dördü de gerçek bulguydu
+
+- **Neden:** Kullanıcı emrinin son ayağı: *"sisteme yukleyip deneyebilirsin."*
+- **Komut:** `PBXTR_CONFD_SAPMA=0 bash deploy/yerel-yayin.sh --yayinla`
+- **Sonuç:** **`tekbirsoft/pbxtr:demo-d66684a676ce` canlıda.** Yedek alındı
+  (`/home/vuo/pbxtr-demo/backups/pre-d66684a676ce.dump`), 27/27 bekçi assert'i geçti,
+  nginx reload edildi.
+
+### Kapı 1 — nginx sunucu sapması (CANLI KUSUR)
+
+Kapı yönü bilerek kendi kararı saymıyor. Ölçtüm: sunucu ile depo arasında **tek bir kod satırı**
+farklıydı — depodaki CSP, tema önyükleme scriptinin `sha256` karmasını taşıyor, sunucudaki
+taşımıyordu.
+
+Körlemesine kopyalamadım: karmanın **sunucuda servis edilen `index.html` ile eşleştiğini**
+hesaplayarak doğruladım (`sha256-X3x5UKUE…`, birebir). Canlı başlığı da okudum: `script-src 'self'`,
+karma yok, başlık **zorlayıcı**. Yani tema önyükleme scripti üretimde **fiilen bloklanıyordu** —
+BR-SYS-79'un tam da önlemek için var olduğu FOUC canlı demoda duruyordu.
+
+Sıra: yedek → kopya → `nginx -t` → reload → doğrula. Sonuç: CSP karmayı taşıyor, `80 → 301`,
+`443 → 200 text/html`.
+
+**Yapısal sebep (karta dönmeli):** `staging-yayin.sh` nginx yapılandırmasını sunucuya
+**göndermiyor**; o dosyalar oraya elle konuyor.
+
+### Kapı 2 — confd sunucu sapması (DAİRESEL BAĞIMLILIK)
+
+Kapı doğru teşhis etti: bugün taşımak düğümü **kalıcı kırmızı** yapardı, çünkü koşan imaj
+`removed` üretmiyor ve taşınan betiğin 7. adımı her koşuda `exit 75` verirdi. Reçete: önce imajı
+yayınla, sonra taşı.
+
+Atlamadan önce reçetenin uygulanabilirliğini ölçtüm: `RemovedBasis` `f9c78fad`'de gelmiş, koşan
+imaj (`demo-3a4039ad`) **o commit'ten önce**, HEAD **sonra**. Yani bu yayın kapının kendi (1)
+adımı. `PBXTR_CONFD_SAPMA=0` ile yalnız bu tur atlandı; iz `artifacts/ATLANAN-KAPILAR.txt`'de.
+**Atlamak sapmayı kapatmaz** — taşıma ayrı adım olarak duruyor.
+
+### Kapı 3 — `dotnet format` de hiç koşmamış
+
+5 dosyada 14 sapma (11 boşluk + 3 import sırası); hiçbiri bu turda dokunduğum dosya değil.
+Boşluk dışındaki fark yalnız `using` sıralaması.
+
+**Yan bulgu:** yayın betiğinin kendi biçim adımı *"Formatted 5 of 1937 files"* yazdığı hâlde
+çalışma ağacına **hiçbir değişiklik bırakmamıştı** (`git status` temiz). Düzeltici elle
+koşturulunca aynı beş dosya gerçekten değişti (md5 farklı). Yani o adım hatayı **bildiriyor** ama
+düzeltmeyi **kalıcı kılmıyor**.
+
+### Kapı 4 — `test-kos.sh`: 440/440 geçti ama ikili bayattı
+
+Kapı `KALDI` dedi: test DLL'i bu koşunun derleme anından eskiydi (`dll=1788834964 < eşik=1788850329`,
+~4,3 saat). Defterdeki tam tuzak: *"0 Errors" yalan olur, ölçüm eski ikiliye gider.*
+
+Ölçtüm: ikili (05:36) kaynaktan (05:31) **yeni**, yani derleme güncel — MSBuild artımlı davranıp
+yeniden bağlamamış, kapı bunu "bu koşuda derlenmedi" diye okumuş. **Kapıyı gevşetmedim**; Release
+çıktılarını silip ikilileri bu koşuda yeniden ürettim. Kapının iddiası dürüstçe karşılandı.
+
+### Yükleme sonrası doğrulama (canlı)
+
+| Ölçüm | Sonuç |
+|---|---|
+| Koşan imaj | `tekbirsoft/pbxtr:demo-d66684a676ce` |
+| `pbxtr-app` | `Up (healthy)`, recreate edildi |
+| `/health` | **200** |
+| Panel `443` | **200 text/html** |
+| CSP | karma yerinde |
+| **ARI** | `Stasis uygulamasi 'pbxtr' acildi` |
+| **AMI** | `AMI baglandi. banner=Asterisk Call Manager/11.0.0` |
+| Hata sayımı (5 dk) | **0** |
+
+CLAUDE.md §3.0'ın *"doğrulanır — doğrulanmadıysa bu bir eksiktir"* şartı bu turda **karşılandı**:
+santral bağlantısı belge değil, ölçüm.
+
+## Açık kalanlar — güncelleme
+
+- `staging-yayin.sh` nginx yapılandırmasını göndermiyor (sapmanın yapısal sebebi) → kart.
+- confd taşıması: imaj artık `RemovedBasis` taşıyor, yani **(2) taşı** adımı artık uygulanabilir.
+- Yayın betiğinin biçim adımının yazımı ağaca inmiyor → kart.
+- `test-kos.sh` ağaç değişmediğinde yanlış kırmızı verebiliyor (artımlı derleme) → kart.
