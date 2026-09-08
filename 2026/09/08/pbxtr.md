@@ -260,3 +260,51 @@ santral bağlantısı belge değil, ölçüm.
 - confd taşıması: imaj artık `RemovedBasis` taşıyor, yani **(2) taşı** adımı artık uygulanabilir.
 - Yayın betiğinin biçim adımının yazımı ağaca inmiyor → kart.
 - `test-kos.sh` ağaç değişmediğinde yanlış kırmızı verebiliyor (artımlı derleme) → kart.
+
+---
+
+## 7. confd taşıması denendi — GERİ ALINDI, ve neden geri alındığı bir bulgudur
+
+- **Neden denendi:** Yayın turunda atlanan confd sapma kapısının reçetesi *"(1) imajı yayınla,
+  (2) sonra taşı"* idi. İmaj yayınlandı, yani (2) açıldı.
+- **Ön koşul ölçüldü, tahmin edilmedi:** betiğin kendi göstergesi yayından önce
+  `imaj RemovedBasis: 0` derken şimdi **`1`** diyor. Ayrıca dağıtılan `Pbxtr.Api.dll` içinde
+  `RemovedBasis` **kontrol grubuyla** doğrulandı (`ProvisioningEndpoints` = 2 eşleşme, yani
+  grep ikili üzerinde gerçekten çalışıyor). İlk denemem `removedBasis` (küçük r) ve `strings`
+  ile yapılmıştı ve **ikisi de 0 döndü** — `araç-yokluğu-sıfır-gibi-görünür` tuzağının birebir
+  tekrarı; kasa ve araç düzeltilince cevap değişti.
+
+### Ne oldu
+
+`--olc` → sapma doğrulandı → timer durduruldu → `--tasi` (dört dosya atomik, `.onceki` yedekli)
+→ **ilk koşu elle ve izlenerek**. İki ayrı arıza çıktı:
+
+1. **`226/NAMESPACE`** — `ReadWritePaths=/var/lib/pbxtr-confd` yazan unit, dizinin **önceden var
+   olmasını** ister; taşıma betiği yalnız dosya kopyalıyor, dizin oluşturmuyor. Dizinler
+   `root:root 700` ile oluşturuldu (`/etc/pbxtr/confd` ile aynı izin).
+2. **`78/CONFIG` — `dugum adi yok (/etc/pbxtr/confd/dugum)`.** Yeni model **düğüm kimliği**
+   ister; eski model istemiyordu.
+
+### Neden geri alındı
+
+`staging-yayin.sh`in kendi metni kapatıyor: anahtar ve düğüm adı **bilerek üretilmez** —
+*"anahtar #57 ekranından DÜĞÜME PİNLİ olarak üretilir; bu betik anahtar ÜRETMEZ (üretseydi
+yönetici parolası düğümde durmak zorunda kalırdı)"*. Yani taşımanın kalan ayağı bir ürün-tarafı,
+elle yapılacak adımdır ve tasarım bunu otomatikleştirmeyi **açıkça reddediyor**.
+
+Canlıda **çalışan** bir teslim yolunu kırık bırakmak, kapatmaya çalıştığımız sapmadan kötüdür.
+`--geri-al` çalıştırıldı: eski unit döndü, elle tek koşu **temiz** (`status=0/SUCCESS`,
+*"SONUC: urunun urettigi config teslim edildi"*), timer yeniden **active**.
+
+### Bu turda ölçülen, kayda geçmesi gereken üç şey
+
+1. **Taşıma betiği eksik:** `/var/lib/pbxtr-confd` ve `.../is` dizinlerini oluşturmuyor →
+   `--tasi` tek başına **her zaman** `226/NAMESPACE` verir. (Dizinler artık sunucuda var, boş.)
+2. **Taşımanın gerçek ön koşulu `RemovedBasis` değil, DÜĞÜM KİMLİĞİdir.** Kapının metni yalnız
+   `RemovedBasis`'i sayıyor ve *"artık taşınabilir"* izlenimi veriyor; oysa düğüm adı ve pinli
+   anahtar olmadan yeni unit **hiç açılmaz**.
+3. **Eski confd yolu çalışıyor ve bir eksiği var:** her koşuda
+   `!!! SERVIS EDILMEYEN TURLER: pjsip — çözülmemiş PBXTR-SECRET(...) yer tutucusu`.
+   Yani PJSIP config **teslim edilmiyor**, eski hâliyle kalıyor; PJSIP'i
+   `demo-softphone-provision.sh` ayrı teslim ediyor. Bu, sessiz değil (günlükte yazılı) ama
+   ölçülmüş bir eksiktir.
