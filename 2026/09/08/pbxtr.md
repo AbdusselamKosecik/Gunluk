@@ -308,3 +308,45 @@ Canlıda **çalışan** bir teslim yolunu kırık bırakmak, kapatmaya çalışt
    Yani PJSIP config **teslim edilmiyor**, eski hâliyle kalıyor; PJSIP'i
    `demo-softphone-provision.sh` ayrı teslim ediyor. Bu, sessiz değil (günlükte yazılı) ama
    ölçülmüş bir eksiktir.
+
+### Düzeltme — taşımanın gerçek engeli düğüm kimliği DEĞİLMİŞ
+
+Yukarıdaki *"gerçek ön koşul düğüm kimliğidir"* çıkarımım **eksikti**; ölçüm devam edince
+düzeldi. Sunucu günlüğündeki `crit` satırı düğüm adını zaten söylüyordu
+(`node=asterisk-01`, `keyid=ak_...`), eski betik de onu sabit taşıyor
+(`NODE=${PBXTR_NODE:-asterisk-01}`), ve `/etc/pbxtr/confd/anahtar` **zaten vardı** (63 bayt,
+`600 root:root`). Yani eksik olan tek şey `dugum` dosyasıydı — bir sır değil, zaten yürürlükte
+olan bir ad. Yazıldı (`600 root:root`), taşıma tekrarlandı.
+
+**Bu kez yeni confd uçtan uca koştu** — node-bundle çekti, yazdı, reload etti ve reload sonrası
+doğrulama yaptı. Ve **asıl engeli orada buldu:** pbxtr'ın beklediği nesne sayıları santraldekiyle
+tutmuyor.
+
+| tenant t0007 | beklenen | ölçülen |
+|---|---|---|
+| endpoints | 12 | **18** |
+| auths | 12 | **6** |
+| aors | 12 | **6** |
+| queues | 2 | **3** |
+| contexts | 8 | **11** |
+| parkingLots | 1 | **0** |
+
+Tasarım gereği sapan tenant önceki revizyona geri alındı, koşu `75/TEMPFAIL` ile **başarısız**
+işaretlendi — betiğin kendi cümlesiyle: *"Bilinen/temiz tenantlar teslim edildi ve santral
+ÇALIŞIR durumda; koşu BAŞARISIZ işaretlendi. **Sessiz atlama YASAKTIR.**"* `queues` türü
+rollback'e kapalı olduğu için geri alınmadı ve ileri yönde yeniden teslim gerekti.
+
+**Geri alındı**, çünkü betiğin talimatı bu (`exit 75 → --geri-al`) ve yeni yol yerinde kalsaydı
+timer her 5 dakikada bir teslim → doğrula → geri al döngüsüne girip **canlı santrali sürekli
+reload** ederdi. Eski yol geri yüklendi, elle koşturuldu (`exit 0`), `queues` ileri yönde yeniden
+teslim edildi (`rev=1`), timer `active`.
+
+Santral doğrulaması: uptime 2 gün, 18 bağlam, 3 kuyruk, 7 endpoint, app `health=200`.
+
+**Kalan gerçek iş (kart):** yeni confd yolu **teknik olarak hazır** — engel artık kurulum değil,
+**pbxtr'ın ürettiği manifest ile santralin fiili durumu arasındaki sapma**. Bu sapma bugüne kadar
+görünmüyordu, çünkü eski yol reload sonrası nesne sayısı doğrulaması **yapmıyor**. Yani yeni yol
+kurulmadan da var olan bir tutarsızlığı ilk kez o ölçtü.
+
+**Sunucuda bıraktıklarım:** `/var/lib/pbxtr-confd` + `/is` (boş, `700 root:root`) ve
+`/etc/pbxtr/confd/dugum` (`asterisk-01`). Üçü de yeni yol için gerekli, eski yola zararsız.
