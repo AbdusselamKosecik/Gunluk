@@ -452,3 +452,26 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   sonuç "imaj taşımıyor" değil **"yöntem bozuk"** diye okunacak.
 - **Çelişkiyi görmezden gelme.** "Günlükte var ama ikilide yok" cümlesi imkânsızdı; onu
   kovalamak üç kartı düzeltti. Ölçüm birbirini tutmuyorsa hikâye yazma, yöntemi ölç.
+
+### `BR-SYS-96` (c): kalıp tek yerde — ve aynı sınıftan iki homoglif kaçağı
+
+- **(c) maddesi ölçüldü:** depoda ikili içeriği tarayan **başka betik yok**. `deploy/` altındaki
+  tüm `.sh`/`.py`/`.rb` içinde `strings` / `grep -a` / `.dll` geçen satırlar tarandı;
+  `RemovedBasis` ölçümü dışındaki her isabet ya bir **yorum** (`module reload res_pjsip.so`
+  açıklamaları), ya bir **çalıştırma** (`dotnet Pbxtr.Api.dll migrate`), ya bir **fikstür yolu**
+  (`test-kos-yayin-test.py:83`). Kusur tek noktada; (a)+(b) kapsamı tamamen kapatıyor.
+- **Yan bulgu — aynı sınıf, farklı yüzey: Kiril homoglif kaçakları.** `backlog.md` tarandı,
+  **iki** kaçak bulundu ve düzeltildi:
+
+  | dize | kaçak | nerede |
+  |---|---|---|
+  | `bosluguдur` | Kiril **`д`** | bugün **benim** yazdığım `BR-SYS-96` metninde |
+  | `iki blogа` | Kiril **`а`** | önceden var olan bir kartta |
+
+  Bu, kartın ana bulgusuyla birebir aynı sınıf: aranan dize ile depodaki dize **göze aynı
+  görünüyor**, bayt olarak farklı, ve arama **sessizce 0** dönüyor. Ucuz kapı bir satır:
+  `[\u0400-\u04FF]` taraması.
+- **Kendi metnimde çıkması ders:** bu tur boyunca kart metinlerini `node` heredoc'larıyla
+  yazıyorum; klavye/kopyalama yoluyla bir Kiril harf sızdığında **hiçbir şey uyarmıyor** ve o
+  kart bir daha `grep` ile bulunamıyor.
+- **Commit:** `8e65783e`
