@@ -505,6 +505,29 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `6f78b76c`
 
+
+### `BR-SYS-94(c)` kurula gitmeden once daraltildi — cevabin yarisi zaten yaziliymis
+
+- **Neden:** (c) maddesini *"kurul sorusu"* ilan etmistim. Kurulu toplamadan once Karar #43'un
+  kendi kuralini uyguladim: **bu zaten karara baglanmis mi?**
+- **Bulunan 1 — compose'un kendi gerekcesi duzeltmeyi destekliyor.**
+  `pbxtr-demo/docker-compose.yml:674-679` birebir: *"IMAJ DEPODA URETILIR … **Surum SABITTIR**:
+  taban imaj `andrius/asterisk:22.10.1` … **`latest` bir gun 23'e kaydiginda bunu kimse fark
+  etmezdi**"*. Yazarin kaygisi **fark edilmeyen sessiz kayma** — ve tam o kayma yasandi, ama
+  **diger eksende**: Asterisk surumu sabit kaldi, **pbxtr katmani** (`conf/` + `lab-entrypoint.sh`)
+  kaydi. **`:22` etiketi iki ekseni karistiriyor.** Yani (c-i) mevcut niyete aykiri degil,
+  **onun tamamlanmasi**.
+- **Bulunan 2 — dikis zaten var.** `image: ${PBXTR_ASTERISK_IMAGE:-pbxtr-asterisk:22}` — imaj adi
+  ortam degiskeniyle ezilebilir; sha'li etiket compose'a **hic dokunmadan** verilebilir.
+  Degisiklik yalniz `yerel-yayin.sh` tarafinda ve desen `:62`'de zaten yazili.
+- **Sonuc:** kurula giden soru **iki dar maddeye** indi: (1) imaj **her yayinda mi** girecek yoksa
+  **degistiginde mi** (ikincisi ucuz ama *"dokunulmadi sanip atlama"* riski tasir — bugunku ariza
+  tam olarak odur); (2) `:22` etiketi **korunacak mi** (korunursa eksenler karisik kalir;
+  kaldirilirsa `PBXTR_ASTERISK_IMAGE` vermeyen kurulum **acilmaz** — bilincli secilirse iyi,
+  kazara olursa kotu).
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
+- **Commit:** `964dfd36`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
