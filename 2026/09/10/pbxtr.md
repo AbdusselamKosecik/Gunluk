@@ -62,6 +62,26 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Doğrulama:** Depo tarandı, "BAĞLANMIYORUZ" geçen başka yer yok.
 - **Commit:** `1a3e8fd` — push edildi.
 
+
+### `BR-AST-55`'in üçüncü kök adayı — `hint` değil `state_interface`; ve ölçüm laboratuvara bağlı
+
+- **Neden:** Karar #42, `-local`'a `hint` üretme adayını *"kart yazılmadan ölçülmeli"* diye
+  şarta bağlamıştı.
+- **Ne yapıldı:** canlıda `core show hints` → **9 hint, dokuzu da park yuvası**; üreticide
+  tek isabet `parkinghints=yes` (`ConfigRenderer.cs:1027`) — pbxtr dahili için **hiç hint
+  üretmiyor**. Bu, sorunun yanına ikinci bir adayı koydu: `app_queue`'nun üye bazlı
+  **`state_interface`** kancası. Ölçüldü: pbxtr onu **yalnız okuyor**
+  (`AmiCommandChannel.cs:164`, `AmiTenantCode.cs:139`), hiçbir yerde yazmıyor —
+  `ITelephonyProvider.QueueAddAsync(queueName, memberEndpoint, penalty)` (`:330`) böyle bir
+  parametre taşımıyor ve **altı çağrı yerinin** hiçbiri geçmiyor. **Dikiş yok.**
+- **Ölçülemeyen:** hangisinin fiilen işe yaradığı. `hint`/`state_interface` A/B'si **yazma**
+  ister; canlıda salt-okuma kısıtı var. `deploy/asterisk-lab/` tezgâhı gerekiyor ve yerelde
+  **Docker Desktop kapalı** (`npipe dockerDesktopLinuxEngine` yok).
+- **Bunun değeri:** Karar #42'nin **iki** açık ölçüm şartı (Ş42-2 ve `hint` adayı) **aynı tek
+  şeye** dayanıyormuş — laboratuvar ayağa kalkarsa ikisi de aynı turda kapanır.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `d63b9914`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
