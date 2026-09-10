@@ -1985,3 +1985,31 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   ölçümü yapıldığında aynı koşuda doğrulanmalı (iki ölçüm tek çağrıya sığar).
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `3fb2b779`
+
+### `BR-BE-123` — hasar üç alan değil **altı**, ve düzeltmenin biçimi dosyanın kendisinde yazılı
+
+- **Neden:** `BR-BE-122` ve `BR-BE-123` aynı satırdan (`TelephonyEventPipeline.cs:1063-1078`)
+  çıkıyor. Kurula giderken *"bu satır başka ne kırıyor"* sorusunun ölçülmemiş kalması,
+  düzeltme kapsamının eksik çizilmesi demekti.
+- **Ne yapıldı:** `LiveCallState`'in tam alan envanteri çıkarıldı
+  (`RedisLiveStateStore.cs:922-931`) ve `Newchannel` dalının verdiği argümanlarla eşleştirildi.
+  - Kayıt **dokuz** alan taşıyor, dal yalnız **beşini** veriyor → kalan dördü **varsayılana** düşüyor:
+    `OnHold → false`, `OnHoldSince → null`, `ParkedSlot → null`, `ParkedSince → null`.
+  - Ayrıca **`StartedAt` yeni bacağın anına resetleniyor** — ve bu, **kodun kendi uyarısını
+    çiğniyor**: `RedisLiveStateStore.cs:905-908` harfiyen *"süreyi çizer — **sıfırdan
+    başlatmaz**; sıfırdan başlatmak, dört dakikadır bekleyen bir çağrı için `00:00` yazmak
+    olurdu"* diyor.
+- **Sonuç / doğrulama:** `RedisLiveOperationsView.cs:598-601` canlı izleme satırını tam bu
+  alanlardan üretiyor (`call?.OnHoldSince`, `call.ParkedSlot is not null`, `call?.ParkedSlot`)
+  → **beklemedeyken veya parktayken doğan bir bacak** (danışmalı aktarım, park'tan alma, ikinci
+  arama) süpervizör ekranında **"beklemede" ve "parkta" rozetlerini düşürüyor** ve bekleme
+  sayacını sıfırlıyor.
+- **Ve karşıt kanıt da aynı dosyada:** Hold ve Park dalları **doğru deseni** kullanıyor —
+  `call with { OnHoldSince = … }` (`:1116`), `call with { ParkedSlot = slot }` (`:1177`),
+  `call with { ParkedSlot = null, ParkedSince = null }` (`:1229`). **Kısmi güncelleme deseni bu
+  dosyada zaten var; `Newchannel` onu kullanmayan TEK dal.** Bu, düzeltmenin hem yerini hem
+  biçimini tartışmasız kılıyor — kurula gidecek bir tasarım sorusu kalmıyor.
+- **Ayrı kart açılmadı:** tek satırın hasarı tek kartta muhasebe edilir (istişaredeki
+  *"iki yerde durum tutma"* uyarısı). Kabul kriterine beklet/park/`StartedAt` maddeleri eklendi.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `117ff489`
