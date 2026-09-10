@@ -49,3 +49,20 @@ Dünün tam kaydı: `2026/09/10/pbxtr.md`.
   tekrar koşmadan "kusur" demek, bugün defalarca eleştirdiğim yanlış-kırmızı sınıfının ta kendisi
   olurdu.
 
+### 3. Altı kırmızının **altısı da** yalıtımda yeşil — hepsi çökme artefaktı
+
+- Kalan üç sınıf da tek başına koşuldu: **110/110 yeşil**, 10 dk 40 sn, `Skipped: 0`.
+- **Toplam: 161 test, 0 kırmızı.** Yani çöken koşunun ürettiği **altı kırmızının altısı da**
+  gerçek kusur değildi.
+- **Bunun anlamı iki yönlü:**
+  (a) `Modules` diliminde **bugüne kadar bilinen bir kusur yok**;
+  (b) ama dilim **hâlâ bir bütün olarak ölçülmedi** — çökmeden önce kaç vaka koştuğu bile
+  bilinmiyor. *"161 yeşil"* bir dilim ölçümü değildir.
+- **Yöntem kararı:** dilim, deponun kendi yaptığı gibi **parçalara** bölünerek koşulacak
+  (`api-test-shards.py` üretimde 4 shard kullanıyor). Burada modül klasörlerine göre dört grup:
+  1. `Access, AgentDesk, Analytics, Announcements, Automation, CallHistory, Campaigns`
+  2. `Compliance, Contacts, Dashboard, Dialer, Ivr, Leaves, Licensing`
+  3. `Live, Media, Messaging, NetworkQuality, Provisioning, Queues, Realtime`
+  4. `Recordings, Reports, ResultCodes, Scripter, Security, Support, SystemAdmin, Telephony, Tenancy`
+  Grup 1 arka planda koşuyor.
+
