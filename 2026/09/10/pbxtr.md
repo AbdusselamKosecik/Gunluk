@@ -256,3 +256,33 @@ sordum; cevabı "hayır, sahada kimse beklemiyor" çıktı ama **aynı ölçüm 
 renderer'ın koşulsuz masa endpoint'i ürettiğini görünce sonuç tersine döndü:
 öncelik düştü, öncüllük düşmedi. Tek ölçümle yetinseydim yanlış kararı
 verecektim — hem "P1 kalsın" hem "P1 düşsün" yanlış olurdu.
+
+### 7. A-5'in ön koşulu ölçüldü — (a) seçeneği sandığımdan pahalı
+- **Neden:** Karar #39, A-5'in *"masa endpoint adı dialplan'de `Dial()` ediliyor mu"*
+  ölçümü yapılmadan seçilemeyeceğini kayda geçirmişti.
+- **Canlı ölçüm** (`t0007-dialplan.conf`, altı dahilinin altısında da aynı):
+  ```
+  same => n,Dial(PJSIP/t0007-1042&PJSIP/t0007-wrtc-1042,30,tT)
+  ```
+- **Kaynağı** `ConfigRenderer.cs:732-739` (`LocalDialDevices`): `desk` **koşulsuz**
+  kuruluyor, `HasWebRtc` ise `&` ile WebRTC bacağı ekleniyor. Yani masa adı bir
+  yedek değil, **her çağrıda paralel çalan birinci bacak**.
+- **Sonuç:** A-5 (a) *"masa endpoint'i üretilmesin"* seçeneği "kullanılmayan bir
+  nesneyi üretmeyi bırakmak" değil — `LocalDialDevices` de değişmek zorunda (yoksa
+  dialplan var olmayan endpoint'i çevirir) ve zil grubu/kuyruk yolları da etkilenir.
+  İki seçenek artık **eşit maliyetli değil**; karar verilebilir durumda ama kurula ait.
+- **Yan bulgu — yeni açık soru A-6 (bu kartlardan bağımsız):**
+  `ConfigRenderer.cs:833-841` XML notu *"`PJSIP_DIAL_CONTACTS()` kullanılır, çıplak
+  `PJSIP/<endpoint>` DEĞİL… şablonun kendi extension dalı da bu formu kullanır"* diye
+  **şart koşuyor** ve gerekçesini yazıyor. Ama canlıda ölçülen extension dalı
+  **çıplak `&` birleştirmesi** kullanıyor. Not zil grubu metodunun başında duruyor —
+  extension dalı için de geçerli mi, yoksa bilinçli ayrım mı, **ölçülmedi**. Ya not
+  yanlış yerde (belge kusuru), ya extension dalı **kendi notunun yazdığı tuzağa**
+  düşüyor (davranış kusuru).
+- **Commit:** `9e2f7c4` — A-5 ön koşul ölçümü.
+
+### 8. Arka planda takılı ssh durduruldu
+Linux uzmanının turundan artakalan bir `nginx log_format` ölçümü arka planda asılı
+kalmıştı. Durdurmadan önce gereksiz olduğunu doğruladım: aynı ölçüm zaten oya
+girmişti. Ajan sonradan teyit etti — o ölçümü host mount'undan tamamlamış,
+sonuç değişmemiş (`cache-control: no-store`, nginx gövde/başlık loglamıyor).
