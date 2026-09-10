@@ -2293,3 +2293,29 @@ küçüldü. Ama ders aynı: **ölçmeden "pahalı" demek de bir öncüldür.**
 **`BR-QA-51`'in ölçülebilir kapsamı bitti.** Açık kalan üç madde de tasarım kararı ve üçü de
 kurulun: **(a)** kaynak ayrımı, **(c′)** üretimde `seed-sample` politikası, **(d′)** ayrımın
 gireceği tablolar.
+
+### `BR-AST-60` — zincirin son halkası **sahada** doğrulandı; ve bir yanlış genişletme önlendi
+
+- **Neden:** kart bugüne kadar **depo** kodundan kuruluyordu (`ConfigRenderer.cs:549`,
+  `AsteriskAriProvider.cs:258`, `AriStasisApp.cs:181-196`). Sunucudaki **gerçek** dialplan'in aynı
+  satırı taşıyıp taşımadığı ölçülmemişti — ve `BR-AST-58` bu depoda tam da *"canlıdaki dosya
+  depodakinden farklı"* sınıfını üretmişti.
+- **Ölçüm (canlı, salt-okuma):**
+  `/etc/asterisk/pbxtr.d/dialplan/t0007-dialplan.conf:13` → `[pbxtr-t0007-out]` ve `:23` →
+  `[pbxtr-t0007-int]`, ikisi de harfiyen
+  `same => n,ExecIf($["${PBXTR_CTL}"="1"]?Stasis(pbxtr))`; `-out` bağlamında satır
+  `Goto(pbxtr-outbound,${EXTEN},1)`'den **önce** (`:18`).
+- **Sonuç:** öngörülen belirti **teorik değil** — canlıda **kurulu** bir yapılandırmanın sonucu.
+  Ölçüm için gereken tek şey originate; kartın "BLOKLAYICI" etiketi yerinde.
+- **Ve bir yanlış genişletme önlendi:** `-int` de aynı satırı taşıdığı için *"dahili aramalar da
+  asılıyor"* yazmak üzereydim. **Yanlış olurdu.** `PBXTR_CTL` yalnız originate yolunda
+  damgalanıyor (`AsteriskAriProvider.cs:258`) ve originate **her zaman** `pbxtr-{kod}-out`
+  bağlamını hedefliyor (`:229`; müşteri-önce dalında da `Local/…@pbxtr-{kod}-out`, `:221`).
+  Telefonun kendi bağlamından gelen dahili çağrıda değişken **hiç set edilmiyor** → `ExecIf`
+  yanlış → satır **inert**. `-int`'teki devir satırı **bugün ölü kod**; `BR-AST-59` onu
+  canlandırırsa belirti dahili aramalara da yayılır — iki kart aynı dilimde ölçülmeli.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `a496549b`
+
+Bugün ilk kez bir genişletmeyi **yazmadan önce** ölçüp durdurdum. Onuncu vaka, ama deseni tersine
+çeviren ilki.
