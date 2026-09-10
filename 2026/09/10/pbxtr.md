@@ -565,6 +565,32 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
 - **Commit:** `b1a92117`
 
+
+### Istisarenin ciktisi `sprint-44` Blok 0'a islendi (dort kart buyudu)
+
+- **Neden:** istisare *"ayri kart acilmayacak, icerik Blok 0'a baglanir"* demisti. Sozun geregi.
+- **`LX-04`** — uc ek sart: (a) taban imaj **digest** ile sabitlenir (`22.10.1` bir **etiket**tir,
+  uzerine yeniden yayinlanabilir; compose'un kendi *"latest 23'e kayarsa kimse fark etmez"*
+  kaygisi burada da gecerli); (b) ses paketi **pinlenir** — `Dockerfile:36` `-current`, checksum
+  yok -> **ayni sha farkli imaj**, yani etiket yalan soyler; (c) **ON SART:** `t0007`/`lab`
+  fiksturleri temizlenmeden otomatik insa **acilmaz**. Kabul kriterine olculebilir satir eklendi:
+  `docker run … grep -rl "pbxtr-t0007-\|pbxtr-lab-" /etc/asterisk` -> **bos**.
+- **`LX-06`** — santral icin **saglik kapisi yokmus** (`pbxtr-deploy-artifact:102-112` yalniz app
+  + nginx). `santral_healthy()`: `core show version` 0, `pjsip show transports` ->
+  **`Objects found: 2`**, acilis gunlugunun son 60 sn'sinde **ERROR yok**. Kanal>0 ise adim
+  **DURUR**.
+- **`LX-07`** — `rollback()` yalniz `PBXTR_IMAGE`'i geri aliyor; **santral rollback'i bugun
+  mumkun degil**. Ayrica REGISTER geri donus suresi olculecek — *"birkac saniye"* bir olcum
+  degil, **bakim penceresinin gercek uzunlugu odur**.
+- **`LX-08`** (en cok buyuyen) — dort ayak: (a) **insa != dagitim**, dagitici yalniz app+nginx
+  recreate ediyor, santral icin ayri kod yolu + **negatif test**; (b) **push hedefi yok**
+  (`pbxtr-asterisk` yerel ad) ve `staging-yayin.sh` asterisk'i **hic bilmiyor**; (c) artefakt
+  dogrulayici **tek RepoTag** zorunlu -> `:22` ile `:22-<sha>` **ayni tar'a konamaz**; (d) mevcut
+  elle prosedur (`README:251-266`) ezilmez ve **LX-02 bloklayici on sart** (aksi halde etiket
+  deponun sha'sini tasir ama imaj baska agactan insa edilir -> **yalan etiket**).
+- **Dokunulan dosyalar:** `yonetim/sprintler/sprint-44.md`
+- **Commit:** `7b755f80`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
