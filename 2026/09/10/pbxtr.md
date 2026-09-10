@@ -296,6 +296,26 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `95055f77`
 
+
+### Sapmanin cinsi olculdu — elle duzenleme DEGIL, bayat imaj
+
+- **Neden:** `pjsip.conf`'un canlida depodan sapmis oldugunu olcmustum ama **neyin** farkli
+  oldugunu acmamistim. `BR-SYS-91`'in aradigi sapmanin tek somut ornegi buydu.
+- **Olculen:** `extensions.conf` canlida depo fiksturuyle **bayt bayt ayni** (`066072bb`);
+  `pjsip.conf` ise **sapmis** (`ab7f1ac9` depo / `49ef3a45` canli). Sapmanin tamami **27 satir
+  ve hepsi YORUM** — canli dosya deponun iki olcum kaydini tasimiyor: (1) 2026-08-29 *"uretilen
+  tasima `bind` satiri TASIR ve tasimak ZORUNDADIR"*, (2) 2026-08-30 *"`qualify_frequency = 0`
+  — tarayici icin acik olmasi zararlidir"*. **Islevsel fark yok.**
+- **Iki sonuc:**
+  1. Sunucudaki dosyalar **elle duzenlenmemis** — hepsi bir imaj tohumundan gelmis, yalnizca
+     **eski** bir imajdan. Yani `BR-SYS-94`'un (a-ii) host gecisi bir *"kullanici ayarini ezme"*
+     riski tasimiyor; **gecis ucuzladi.**
+  2. Sapma **`BR-SYS-92` ile ayni kokten**: konteyner `2026-09-06` imajindan ve o imaj `bind`
+     duzeltmesinden once. `pjsip.conf`'un eksik yorumlari, imajin bayatliginin **bagimsiz bir
+     parmak izi** — ve `BR-SYS-91`'in dosya karsilastirmasi bunu **yakalardi**.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `501365ea`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
