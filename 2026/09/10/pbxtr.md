@@ -995,3 +995,54 @@ edildi.
 En çarpıcı olan şu: bugünkü yedi hatanın **dördünün cevabı zaten depoda yazılıydı** — `ADR-015`,
 CSS yorumu, `ConfigRenderer.cs:833-844` ve `AsteriskObjectName.cs:490`'ın kendi belgeleri.
 Bilgi eksikliği değil, **okumadan iddia** sorunuydu.
+
+### 25. BR-AST-58 — gelen çağrı yolu hiç bağlanmamış; canlıda çalışan tek numara elle yazılmış
+
+Karar #42'nin açık bıraktığı *"`pbxtr-inbound` bağlamını kim üretecek?"* sorusunu kapatmadan
+bırakamazdım — kendi kuralım: **karta yazılmayan iş ClickUp'ta hiç yoktur.** Kart yoktu
+(`grep -c "pbxtr-inbound" yonetim/backlog.md` → **0**). Ölçtüm ve iş büyüdü.
+
+**Ölçüm 1 — bağlam yok:** `dialplan show pbxtr-inbound` → *"There is no existence of context"*.
+`ConfigRenderer.cs:464` **her** gelen çağrıyı oraya `Goto` ediyor.
+
+**Ölçüm 2 — beklemediğim şey:** canlı `pbxtr-t0007-in` bağlamı **iki dosyadan birleşmiş**:
+
+```
+pbxtr-t0007-in → 4 extension, 15 öncelik, TEK bağlam
+  '8001' '_tut[1-9]' 'h'  ← extensions.conf        (ELLE YAZILMIŞ)
+  '_X.'                    ← t0007-dialplan.conf:36 (ÜRETİLEN)
+```
+
+Aynı bağlam `extensions.conf:25` ve `pbxtr.d/dialplan/t0007-dialplan.conf:3`'te **iki kez**
+tanımlı; `#include` satır **175**'te, yani elle yazılandan **sonra**. Asterisk bağlamları
+**birleştiriyor**.
+
+**Sonuç:** Asterisk `8001`'i `_X.`'ten daha spesifik eşleşme sayıyor → **elle sabit kodlanmış tek
+numara çalışıyor** (`Queue(t0007-satis)`), **başka her gelen numara** `_X.`'e düşüp var olmayan
+bağlama gidiyor ve **çağrı ölüyor**.
+
+Bugün belirti üretmiyor (0 DID, 0 trunk) ama gelen çağrı yolu **hiç kurulmamış** durumda. Ve
+domain kodu o bağlamları **var sayıp üzerine sözleşme yazmış**: `InboundDid.cs:100,188`,
+`InboundRoute.cs:32,87,127`, `RouteDecisionEndpoints.cs:325`. Sınıf B `route-decision` ucu
+**çalışıyor ama tüketicisi yok**.
+
+Bu aynı zamanda daha önce *"yanlış alarm"* diye kapattığım `t0007-satis` gözlemini de
+açıklıyor: o kuyruk gerçekten elle yazılmış ve **elle yazılmış bağlamdan** çağrılıyor.
+
+- **Commit:** `9564217a` · **Backlog:** 356 kart
+
+## Gün kapanışı
+
+| | |
+|---|---|
+| pbxtr commit | 9 (push'lu) |
+| Gunluk commit | 8 (push'lu) |
+| Kurul turu | 3 (#40, #41, #42) |
+| ADR | 1 (ADR-017) |
+| Kapanan açık soru | A-6, A-7, A-8, A-11, A-12, BE-00, **A-5 (kapatıldı)** |
+| Çürüyen öncülüm | **7** |
+| Yeni kart | BR-AST-53/55/56/57/58, BR-QA-49/50, BR-SYS-91/92/93, BR-OPS-02, BR-FE-71 |
+| Kalan iş | **356 kart = 228 kapalı + 128 kalan** |
+
+**Sırada kullanıcı var:** `/basla pbxtr sprint-44` ve **A-2** kararı. §7/3 gereği uygulamaya
+kendim geçemem.
