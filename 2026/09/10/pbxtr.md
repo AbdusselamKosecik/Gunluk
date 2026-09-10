@@ -2670,3 +2670,33 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   biçimleri). İkisi de `gitleaks` kapısının işi ve o kapı **Docker'a bağlı**.
 - **Bu üç taramanın günlükteki değeri:** `gitleaks` koşamadığı sürece elde ölçülmüş bir taban
   var; koştuğunda **beklenen sonuç sıfırdır** ve sıfır çıkmazsa fark **yenidir**.
+
+### Python'lu kapılar da koşuldu — **iki yeni yeşil**, bir Windows artefaktı
+
+- **Neden:** ilk turda "dış araç istiyor" diye ayırdığım 15 kapıdan 6'sı **python3** istiyordu ve
+  bu makinede **python3 VAR**. Yani onları da ölçebilirdim; ayırmak bir varsayımdı.
+- **Ortam envanteri:** `python3` **VAR**, `openssl` **VAR**; `ruby`, `gitleaks`, `nginx`,
+  `expect` **yok**.
+- **Sonuç (6 kapı): 2 yeşil, 4 kırmızı** — ve dördü de gerçek kusur değil:
+
+  | kapı | sonuç | sınıf |
+  |---|---|---|
+  | `kapi_02`, `kapi_07` | **YEŞİL** | yeni bilgi |
+  | `kapi_04`, `kapi_05` | docker daemon kapalı | ortam |
+  | `kapi_42` | `ModuleNotFoundError: yaml` | ortam (paket yok) |
+  | `kapi_01` | **Windows CRLF artefaktı** | platform |
+
+- **`kapi_01` teşhisi (ve doğrulandı):** artefakt doğrulayıcının öz-testi checksum dosyasını
+  `pathlib.Path.write_text(f"…{NAME}\n")` ile yazıyor; **Windows'ta metin kipi `\n`'i `\r\n`
+  yapıyor** ve doğrulayıcının deseni (`pbxtr-artifact-validate.py:12`) satır sonunda **tam olarak
+  `\n`** arıyor → `checksum tek beklenen hedef olmali`. Hipotez tek satırla ölçüldü:
+  `write_text(...)` → son iki bayt `b'\r\n'`; `write_text(..., newline='\n')` → `\n`.
+  **Kapı Linux konteynerinde koşar ve orada doğrudur** (`yerel-kapilar.sh` başlığı bunu yazıyor).
+- **Değiştirmedim, sebebini yazıyorum:** çare tek kelime (`newline="\n"`,
+  `deploy/pbxtr-artifact-validate-selftest.py:16`) ama kapıların **desteklenen koşum yolu Linux
+  konteyneridir** ve bu bir güvenlik kapısının öz-testidir; tek taraflı dokunmak yerine kayda
+  geçiriyorum. Windows'ta kapı koşturmak isteyen biri için bu **bilinmesi gereken** bir yanlış
+  kırmızıdır.
+- **Toplam tablo (bugün ölçülen 33 kapı):** 23 yeşil, 10 kırmızı → **1 gerçek kusur**
+  (`kapi_26`, düzeltildi), 5 ortam (docker/yaml/expect), 2 benim harness'ım, 1 platform (CRLF),
+  1 nginx yok. Geri kalan 9 kapı (`ruby`, `gitleaks`, `nginx`, `dotnet`) bugün **ölçülemedi**.
