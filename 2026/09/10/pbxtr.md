@@ -2646,3 +2646,27 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   bir değişkene (`const x = "…"`) yazılmış bir sır **hâlâ görünmez** ve onu ancak entropi tabanlı
   bir araç (`gitleaks`) bulur. Üç taramanın üçü de aynı yere çıkıyor: **gitleaks kapısı
   Docker'a bağlı ve bugün koşamıyor.**
+
+### Entropi taraması — adı ne olursa olsun: **üretim sırrı yok**
+
+- **Neden:** üç taramanın da kalan sınırı aynıydı: *"nötr adlı bir değişkene yazılmış sır
+  görünmez."* Bunu kapatmak için `gitleaks`'in **entropi ayağının** kaba bir taklidi yazıldı.
+- **Yöntem:** izlenen tüm kod/yapılandırma dosyalarında **20+ karakterli** tırnaklı literaller;
+  GUID, hex hash, slug ve yol biçimleri elendi; kalanların **Shannon entropisi** hesaplandı
+  ve `H ≥ 4.0` olanlar aday sayıldı. **Değer yine hiç basılmadı** — yalnız uzunluk, entropi ve
+  karakter-sınıfı şekli.
+- **Sonuç:** **1.028.485** satır tarandı, **232 aday**. Dağılım tamamen açıklanabilir:
+  **63** `package-lock.json` bütünlük hash'i, geri kalanların çoğu **migration/index adı**
+  (`AA_aaaa_aaaaaa_…`), **migration kimliği** (`99999999999999_Aaaa…`) ve
+  `decision-code-manifest.json` kayıtları.
+- **En yüksek entropili gerçek aday incelendi ve zararsız çıktı:**
+  `tests/Pbxtr.Api.Tests/Platform/Persistence/ProductionStartupGuardTests.cs:39` — 69 karakter,
+  `H=5.43`. Bir üst satır `"Auth:JwtSigningKey"`, bir alt satır
+  `"Auth:Issuer" = "https://pbxtr.test"` → **test fikstürü**. (Değer okunmadı; satır maskelenerek
+  basıldı.)
+- **Üç taramanın toplamı:** ad bazlı **güncel**, ad bazlı **geçmiş**, entropi bazlı **güncel** —
+  üçü de temiz. **Kalan tek boşluk: entropi × geçmiş** (yani geçmişte eklenip silinmiş yüksek
+  entropili bir dize) ve `gitleaks`'in **küratörlü kural seti** (sağlayıcıya özgü token
+  biçimleri). İkisi de `gitleaks` kapısının işi ve o kapı **Docker'a bağlı**.
+- **Bu üç taramanın günlükteki değeri:** `gitleaks` koşamadığı sürece elde ölçülmüş bir taban
+  var; koştuğunda **beklenen sonuç sıfırdır** ve sıfır çıkmazsa fark **yenidir**.
