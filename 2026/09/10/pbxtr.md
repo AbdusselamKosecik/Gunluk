@@ -1938,3 +1938,24 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
 
 `BR-QA-51`'de açık kalan iki dar soru: **(c′)** üretim DB'sinde `seed-sample` koşma politikası,
 **(d′)** kaynak ayrımı alanının hangi tablolara birlikte gireceği. İkisi de tasarım kararı → kurul.
+
+### `BR-QA-51` (c′) teknik yarısı — tohum yolunda **ortam kapısı yok**, tek kapı bir parola
+
+- **Neden:** (c′) *"üretimde `seed-sample` koşma politikası"* diye kurula gidecekti; kurula
+  **ölçülmemiş** bir soru göndermemek için teknik yarısı önce ölçüldü.
+- **Ne yapıldı:**
+  - Depo: `MaintenanceCli.cs`, `MaintenanceRunner.cs`, `SampleDataSeeder.cs` içinde
+    `IsProduction`/`IsDevelopment` kontrolü → **0 isabet**. `ASPNETCORE_ENVIRONMENT` yalnızca
+    yapılandırma kurmak için okunuyor (`MaintenanceCli.cs:137-139`, varsayılan `"Production"`).
+  - Tek kapı: `Bootstrap:SampleUserPassword` zorunluluğu (`SampleDataSeeder.cs:41-45`).
+  - Canlı: o anahtar **kalıcı değil** — `pbxtr-app` konteyner ortamında yok ve sunucudaki
+    `.env`'de `SampleUserPassword` **0 eşleşme**.
+- **Sonuç / doğrulama:** her tohum koşusu **parolayı o an elle veren bilinçli bir insan
+  eylemidir** — kaza değil. Ama **kayıtsız**: kim/ne zaman koştuğunu gösteren denetim satırı yok.
+  Kurul sorusu böylece daraldı: *üretimde `seed-sample` **yasaklansın** mı (ortam kapısı), yoksa
+  izin verilip **denetlensin** mi?*
+- **Yöntem notu (bugünün sızıntısından sonra):** env okuması bu sefer kurala uygun yapıldı —
+  konteynerde önce `cut -d= -f1` ile **yalnız adlar**, dosyada `grep -c` ile **yalnız sayı**.
+  Değer hiçbir aşamada getirilmedi. Sertleştirilen kural ilk kullanımında işe yaradı.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `166c4873`
