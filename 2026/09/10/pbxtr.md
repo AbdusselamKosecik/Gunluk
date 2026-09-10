@@ -153,6 +153,23 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `44d73993`
 
+
+### Kartlara yazdigim BASKALARININ onculleri de olculdu (yeni DoD kurali kendine uygulandi)
+
+- **Neden:** Karar #43'un DoD kurali *"kapsam da olculur"* diyor; kurul uyelerinin iddialarini
+  karta aktarirken onlari da olcmem gerekiyordu.
+- **`BR-FE-72` — iddia DOGRU, sayi YANLIS:** Frontend Uzmani *"bekci yalniz `intervention` ve
+  `monitor` yuzeylerini kapsiyor"* demisti; `LiveFailureMessageSurfaces.cs`'i okudum, **uc**
+  yuzey var: `monitor`, `intervention`, **`call-permission`** (`shared/status.ts` /
+  `CALL_PERMISSION_REASON`). Asil iddia aynen duruyor:
+  `grep -c "callControlErrors\|parkErrors"` -> **0**. Kart duzeltildi.
+- **`BR-BE-122`/`123` — DOGRULANDI:** `TelephonyEventPipeline.cs:1063-1078`, `Newchannel` her
+  geldiginde `SetCallAsync` **bastan kurulmus** bir `LiveCallState` aliyor
+  (`direction ?? "inbound"`, `queueKey ?? ""`, `contact_id`, kanal) — kismi guncelleme degil
+  **tam degistirme**. Her yeni bacak kaydin tamamini eziyor.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `538c80af`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
