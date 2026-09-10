@@ -2171,3 +2171,43 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
 - **Durum sözcüğü `Açık` bilerek dışarıda:** eylem değil durum; yakalamak yanlış kırmızı üretirdi.
 - **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/system/SystemReadOnlySurfaces.test.tsx`
 - **Commit:** `5fa27483`
+
+### Türkçe yerel sınıfı C# tarafında da tarandı — **temiz**
+
+- **Neden:** `\b` tuzağının kardeşi, .NET'te **kültüre duyarlı** string işlemleridir: Türkçe
+  yerelde `"I".ToLower()` → `"ı"` olur ve karşılaştırmalar sessizce kayar.
+- **Ne yapıldı / sonuç:** `src/` altında `.ToLower()`/`.ToUpper()` (Invariant olmayan) **1**
+  isabet, `StartsWith`/`EndsWith`/`IndexOf` (StringComparison'suz) **2** isabet.
+  **Üçü de EF Core sorgu ağacının içinde** (`EfUserDirectory.cs:141`,
+  `SampleDataSeeder.cs:499,505`) — yani .NET'te değil, **PostgreSQL'de** `lower()`/`LIKE` olarak
+  koşuyorlar; .NET kültür ayarı onlara dokunmuyor. Uygulama kodunda kültüre duyarlı tek bir
+  karşılaştırma yok; `LoginIdentifier.Normalize` zaten `ToLowerInvariant()` kullanıyor
+  (`AuthenticationPolicy.cs:125`).
+- **Kart açılmadı, kapı yazılmadı:** üç isabetlik bir sınıf için mimari bekçi kurmak, defterdeki
+  *"kapı kurmadan önce mevcut veriyi ölç"* dersinin tersi olurdu. **Ölçülüp temiz çıktı**; kayıt
+  aynı soruyu yarın yeniden sormamak için.
+
+### Commit dizini — ek (öğleden sonra ve akşam turu)
+
+Yukarıdaki dizin `0278fa58`'de bitiyordu; bugünün toplamı **61 commit**. Sonrası:
+
+- `169b75ed` — BR-QA-51 (YENI, P1): call_events canlı görünüyor ama 03 Eylül'den beri tek gerçek olay yok
+- `529e2563` — clickup: BR-QA-51 kartı açıldı
+- `50e43928` — kart(BR-QA-51): kapsam (b) ölçüldü — tehlike DARALDI, kusur yüzeyde değil VERİDE
+- `ece34d57` — kart(BR-QA-51): kapsam (c) ölçüldü — "son olay 09-08" bir ÇAĞRI DEĞİL, seed-sample tarihi
+- `ac0ed739` — kart(BR-SEC-16): üç santral/API sırrı transkripte düştü — rotasyon kararı kullanıcıda
+- `3b6e352b` — clickup: BR-SEC-16 panoya açıldı (iz kaydı)
+- `4dce1942` — kart(BR-QA-51): kusur `call_events`'e özgü değil — canlı `cdr`ın ~%88'i de simüle/tohum
+- `166c4873` — kart(BR-QA-51): (c′) teknik yarısı ölçüldü — tohum yolunda ORTAM KAPISI YOK
+- `3fb2b779` — kart(BR-BE-122): öncül doğrulandı ve kusur KESKİNLEŞTİ — giden çağrıda koşulsuz
+- `117ff489` — kart(BR-BE-123): hasar üç alan değil ALTI — dosyanın kendi deseni düzeltmeyi yazıyor
+- `5e125202` — kart(BR-FE-73): "en az üç" ALT SINIRI tam sayıma çevrildi — üç yer, dört dize
+- `af936f0c` — kart(BR-FE-72): korumasız yüzey iki harita değil, PAYLAŞILAN BİRLEŞİM
+- `da54b01f` — araç: kart atıf doğrulayıcı — 825 atıf denetlendi, SATIR TAŞAN 0
+- `33c9e121` — clickup: işi DEVREDİLMİŞ dört kart panoda açık görünüyordu — kural + test + mutasyon
+- `5fa27483` — test(system): salt-okuma bekçisi tam da yasakladığı etiketleri KAÇIRIYORDU
+
+**Günün deseni, tek cümlede:** bugün ölçtüğüm her şeyde **yanlış olan taraf benim yazdığım
+cümleydi** — kartın teşhisi, delilin cinsi, sayının alt sınırı, kapının kapsamı, hatta ölçüm
+komutunun kendisi (üç sır sızıntısı). Ölçüm hiçbirinde işi büyütmedi ya da küçültmedi; **yerini
+değiştirdi.**
