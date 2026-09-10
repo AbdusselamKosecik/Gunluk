@@ -387,6 +387,22 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
 - **Commit:** `3640cc20`
 
+
+### Gun kapanis denetimi — kart numarasi cakismasi ve mezar tasi konvansiyonu (SONUC: TEMIZ)
+
+- **Neden:** bugun 8 kart actim; defterdeki *"kart numarasi once olculur"* dersi bes cakismadan
+  geliyor. Kapatmadan once dogrulama.
+- **Bugunku sekiz kart:** `BR-AST-53`, `BR-AST-59`, `BR-AST-60`, `BR-BE-122`, `BR-BE-123`,
+  `BR-FE-72`, `BR-FE-73`, `BR-SYS-94` — **her biri tam olarak bir kez** tanimli, cakisma yok.
+- **Denetim uc eski cift buldu:** `BR-BE-47` (satir 4492 + 4569), `BR-BE-53` (1493 + 4608),
+  `BR-SYS-45` (1495 + 4527). **Ucu de KASITLI mezar tasi** — eski satir acikca
+  *"Yerini satir N aldi (eski durum: …)"* diyor.
+- **Asil sorulan soru — arac bu deseni taniyor mu:** evet. `rows.json`'da ucu de **tek kayit**
+  ve **canli satirin** durumuyla: `BR-BE-47` -> *Bitti (2026-09-07)*, `BR-BE-53` -> *Bekliyor*,
+  `BR-SYS-45` -> *Bitti (2026-09-06)*. Mezar tasinin eski durumu panoya **gitmiyor**.
+- **Sonuc:** negatif bulgu — konvansiyon calisiyor, duzeltilecek bir sey yok. Kayda geciriliyor
+  ki bir sonraki denetim ayni ucluyu yeniden arastirmasin.
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
