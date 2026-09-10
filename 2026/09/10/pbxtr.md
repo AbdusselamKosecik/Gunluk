@@ -343,6 +343,33 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `b287e82a`
 
+
+### Bayatlik bir SINIF hatasi mi? — alti imajin tamami olculdu, cevap HAYIR
+
+- **Neden:** `BR-SYS-92`'nin koku bayat imaj cikinca ayni soruyu her konteyner icin sormak
+  gerekiyordu — ozellikle **ana uygulama** icin: "bitti" denmis kartlar canlida var mi?
+- **Olculen (canlidaki alti konteynerin imaj insa tarihi):**
+  `pbxtr-app` **tekbirsoft/pbxtr:demo-d66684a676ce** (2026-09-08) · `pbxtr-asterisk`
+  **pbxtr-asterisk:22** (2026-08-29) · `postgres:16-alpine` (07-07) · `redis:7-alpine` (07-26) ·
+  `minio` (2025-04-22) · `nginx:1.27-alpine` (2025-04-16).
+- **Uygulama tarafi saglikli:** `pbxtr-app` etiketi **commit sha'si gomulu** tasiyor —
+  `d66684a6` (2026-09-08T05:32+03:00), imaj bir saat sonra insa edilmis, yani **sira dogru**
+  (`BR-SYS-92`'deki "commit'ten once insa" hatasi burada yok). Gecikme dar ve bilinen:
+  `d66684a6..HEAD` arasinda `src/`'ye dokunan **2 commit** (`176bfe64` — Karar #39 K-16/K-18'in
+  iki gercek kusuru; `aae46c27`).
+- **ASIL BULGU ETIKETLEME FARKINDA:** `pbxtr-app` etiketi *"depo surumu"*nu tasiyor;
+  `pbxtr-asterisk` etiketi (`:22`) **Asterisk surumunu** tasiyor, depo surumunu **degil**.
+  Sonuc: birinin bayatligi **tek komutla** olculuyor, digerininki **12 gun gorunmedi**.
+- **`BR-SYS-91`'e iki madde eklendi:** (5) acilis gunlugunde `res_pjsip` ERROR satiri varsa kapi
+  kirmizi; (6) imaj etiketi commit sha'si tasimali (`pbxtr-asterisk:22-<sha>`) ve kapi *"kosan
+  imajin sha'si HEAD'in kac commit gerisinde"* sorusunu sorar — (1)-(3)'teki dosya
+  karsilastirmalarindan **once** ve **cok daha ucuza** cevap verir.
+- **Yontem notu:** bayatlik **sinif hatasi degilmis** — alti imajin yalniz biri sorunlu ve
+  sorunlu olan tam da **sha'siz etiketlenen**. Kusur "dagitim disiplini yok" degil, **"bir imaj
+  disiplinin disinda kalmis"**. Birincisi surec isi, ikincisi tek satirlik etiket degisikligi.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `3b321d4c`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
