@@ -220,3 +220,39 @@ taşıyorsa **kabuk üzerinden geçirme, dosyadan oku.**
 - Kullanıcı kararı bekleyen: **A-2** t0012 düğüme pinlensin mi (BR-AST-49).
 - Karar #39 uygulaması `/sprint-planla pbxtr` bekliyor (kurul skill'i kendiliğinden
   planlamaya geçmeyi yasaklar).
+
+### 6. A-1 ölçüldü — Şeytan kısmen haklı çıktı, ama plan yine de değişmedi
+- **Neden:** Karar #39 bu ölçümü BR-AST-51a'nın ön koşulu yapmıştı.
+- **Ölçüm (canlı, salt-okuma):**
+
+  | tenant | dahili | WebRTC | **masa telefonu** |
+  |---|---:|---:|---:|
+  | t0007 | 6 | 6 | **0** |
+  | t0012 | 3 | 0 | **3** |
+
+- **Şeytan'ın *"aciliyet şişirilmiş olabilir"* itirazı kısmen doğrulandı:** çalışan
+  tenant'ta sahada REGISTER olmayı bekleyen masa telefonu **sıfır**. t0012'nin 3
+  masa telefonu var ama o tenant zaten hiçbir düğüme pinli değil — onların engeli
+  sır deposu değil, **bir üst katmandaki eksik anahtar**.
+- **Ama 51a'nın öncüllüğü düşmedi ve sebebi ölçüldü:** `ConfigRenderer.cs:217-235`
+  masa üçlüsünü **koşulsuz** üretiyor (`foreach (var extension …)`), WebRTC üçlüsü
+  `if (extension.HasWebRtc)` ile **ek olarak** geliyor. t0007'nin paketi 6 masa
+  `auth` (`vault:`, veri **yok**) + 6 WebRTC `auth` (`kv:extwrtc:`, AES-GCM ile
+  **saklı**) taşıyor. Fail-closed **tür bazında** olduğu için tek çözülemeyen ref
+  `pjsip` türünün tamamını withheld ediyor — **sahada tek bir masa telefonu olmasa
+  bile.**
+- **Yeni açık soru A-5 (kurula gitmeli):** yalnız WebRTC'si olan dahili için masa
+  endpoint'i üretilmeli mi? **(a)** üretilmesin → t0007'nin paketi tümüyle
+  çözülebilir olur ve **BR-AST-51b tek başına** canlı semptomu kapatır, 51a P1
+  olmaktan çıkar, K-1 sırası yeniden yazılır. **(b)** bugünkü hâl korunsun → K-1
+  aynen geçerli. **(a)'dan önce ölçülmeli:** masa endpoint adı dialplan'de `Dial()`
+  ediliyor mu — ediliyorsa (a) çağrı yolunu kırar.
+- **Sonuç:** `BR-AST-51a` önceliği **A-5 kapanana kadar GEÇİCİ** işaretlendi.
+- **Commit:** `f4c1a2b` — A-1 ölçümü.
+
+## Bugünün dersi
+**Bir ölçüm, kendisini isteyen kararı da düzeltebilir.** A-1'i "P1 haklı mı" diye
+sordum; cevabı "hayır, sahada kimse beklemiyor" çıktı ama **aynı ölçüm sırasında**
+renderer'ın koşulsuz masa endpoint'i ürettiğini görünce sonuç tersine döndü:
+öncelik düştü, öncüllük düşmedi. Tek ölçümle yetinseydim yanlış kararı
+verecektim — hem "P1 kalsın" hem "P1 düşsün" yanlış olurdu.
