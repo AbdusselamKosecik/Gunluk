@@ -157,3 +157,66 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   imzası, 1440×900 boyut ve >10 KB ölçüyor; görüntünün **doğru render olduğunu** ölçmüyor.
   Playwright akışı tarayıcı istiyor ve bugün koşulamadı.
 - **`BR-QA-55` (P2) açıldı**, panoya işlendi (`fark: 0`), atıf denetimi temiz.
+
+### Görsel sadakat kapısı — ikinci ölçüm: Playwright koşuldu, iki iddiam düzeldi
+
+- **Neden devam edildi:** yukarıdaki maddede *"düzeltme görsel yargı ister"* diye bırakmıştım.
+  Yargıyı **Playwright'a** verdirmeyi denedim: hash'i tutmayan `dashboard-live` tabanı piksel
+  karşılaştırmasından geçerse taban sadıktır, kalırsa değildir.
+- **Koşu:** `npx playwright test` (Windows, chromium) → **3/3 kırmızı.**
+- **Ve tam da bu yüzden hakemlik edemedi:** kırmızıların **ikisi hash'i TUTAN** tabanlar
+  (`dashboard-prototype`, `login`). Hash'i doğru olan bir taban piksel karşılaştırmasında
+  düşüyorsa ölçülen şey arayüz değil, **render ortamıdır**.
+- **Sebep bulundu — tabanın platformu:**
+
+  | kanıt | değer |
+  |---|---|
+  | `playwright.config.ts:11` | `snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}'` — varsayılandaki **`{platform}` düşürülmüş** |
+  | `d5fee96d:.github/workflows/ci.yml` | Frontend işi **`runs-on: ubuntu-24.04`**, *"Görsel fidelity: baseline ve mutant kapısı"* adımı orada |
+  | boyutlar | beklenen/gerçek **ikisi de 1440×900** |
+  | bayt farkı | 43024→44049 ve 75677→77154 (**~%2**) → yerleşim değil, **metin rasterizasyonu** |
+  | tarayıcı | `playwright-core/browsers.json` chromium **rev 1193 / 140.0.7339.186**, kurulu; her iki taban commit'inde pin `^1.55.1` → **değişken değil** |
+
+  Tek taban + `maxDiffPixels: 0` + platform yok = tabanı üretmeyen her makinede **kalıcı kırmızı.**
+- **DÜZELTME 1 — "iki buçuk saat sonra kırıldı" yanlıştı.** `git ls-tree -r d5fee96d` ile
+  ölçtüm: o commit manifestoya **üç** taban yazdı ama ağacında **yalnızca
+  `login-desktop-dark.png` vardı**. `verify-visual-baselines.mjs:30` eksik dosyada `readFile`
+  ile fırlatır (fail-closed) → `test:fidelity:verify` **daha ilk gün `ENOENT`** veriyordu.
+  **Kapı doğduğu an kırıktı**; bayat hash sonradan üstüne bindi.
+  Yan bulgu: `add3899a`'da gelen iki PNG'den `dashboard-prototype` manifestoyla **tuttu**,
+  `dashboard-live` **tutmadı** — hash'ler geliştirici makinesindeki dosyalardan önceden
+  alınmış, ikisi yeniden üretimden sağ çıkmış, biri çıkmamış.
+- **DÜZELTME 2 — `dashboard-live` ekran görüntüsüne HİÇ ULAŞMIYOR.** O koşuda
+  `dashboard-live-1440x900-actual.png` **üretilmedi**: test `toHaveScreenshot`'tan **önce**
+  düşüyor. `visual-tests/dashboard-live.visual.spec.ts:74` birebir
+  `"Widget'ları sürükleyerek düzeni değiştirin"` bekliyor; **bu dize kaynakta hiç yok**
+  (`grep "düzeni değiştirin" src/Pbxtr.Web/src` → 0). Bugünkü arayüz
+  `dashboard.reorderHint` = *"Widget'ları sürükleyerek ya da tutamağa odaklanıp ok tuşlarıyla
+  sıralayın"* çiziyor (`i18n/messages/tr.json:908`) — klavyeyle sıralama erişilebilirlik
+  işinden gelen değişiklik. Kırık koşunun `error-context.md:64`'ü satır satır gösteriyor.
+  İkinci ve bağımsız uyuşmazlık: test düz `'`, ürün tipografik `'` kullanıyor.
+- **Asıl sonuç:** hash'i güncellemek **tek başına yanlış çözüm olurdu.** `dashboard-live`
+  tabanı, widget ızgarası **tutamak düğmeleri kazanmadan önce** alınmış; hash'i bugünkü PNG'ye
+  çekmek **eskimiş bir arayüzün fotoğrafını "doğru taban" ilan etmek** olurdu.
+- **Komutlar:**
+  ```bash
+  npx playwright test                      # 3/3 kirmizi
+  git ls-tree -r --name-only d5fee96d -- src/Pbxtr.Web/visual-tests/__screenshots__/
+  git show d5fee96d:.github/workflows/ci.yml | grep -B8 fidelity
+  grep -rn "düzeni değiştirin" src/Pbxtr.Web/src        # 0 isabet
+  ```
+- **`BR-QA-55` kapsamı büyüdü:** (e) sapmış metin iddiası `dashboard.reorderHint`'e çekilir
+  — tercihen dizeyi elle yazmak yerine `tr.json`'dan okuyarak, aksi hâlde aynı sapma üçüncü
+  kez olur — ve **taban PNG yeniden üretilir**, hash aynı commit'te güncellenir;
+  (f) `snapshotPathTemplate`'e `{platform}` geri konur **veya** kapı yalnızca
+  `yerel-kapilar.sh`'in ubuntu konteynerinde koşacak biçimde bağlanır.
+- **Commit:** `456de0a7` — *olcum: gorsel sadakat kapisi DOGDUGU AN kirikti; piksel farki ise ORTAM*
+
+## Kararlar (ek)
+
+- **"Koşmayan kapı bulgu değildir"in ikizi yazıldı: "hep kırmızı kapı" da kapı değildir.**
+  Tek taban + `maxDiffPixels: 0` + platform ayrımı yok bileşimi, kapıyı ya hiç koşulmaz ya da
+  koşulduğunda hep kırmızı yapar; ikisi de kapıyı fiilen kaldırır.
+- **Hakem seçerken önce hakemi ölç.** Piksel karşılaştırmasını taban sadakatine hakem yaptım;
+  hakemin kendisi ortamdan etkileniyordu. Kontrol grubu (hash'i **tutan** iki taban) olmasaydı
+  `dashboard-live`'ı haksız yere "sapmış" ilan edecektim.
