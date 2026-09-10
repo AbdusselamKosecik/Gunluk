@@ -2486,3 +2486,30 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
 - **Hafızaya yazıldı:** `\b` tuzağının üçüncü tekrarı ve genişletilmiş ders — *"bir tarayıcı
   **sıfır** basıyorsa önce kalıbı bilinen bir örnekle pozitif kontrol et"*. Bu tuzak en çok
   **tek kullanımlık** betiklerde ısırıyor, çünkü orada test yok ve sıfır "temiz" görünüyor.
+
+### Türkçe `\b` tuzağı için araç depoya girdi — **ama kapıya bağlanmadı** (`BR-QA-54`)
+
+- **Neden:** sınıf bugün **üç kez** ısırdı ve üçüncüsü en kötü biçimdeydi: çıktı `0` oldu, yani
+  kusur **temiz bir sonuç** gibi göründü. Hafıza notu tek başına yetmez — *"CI dışındaki bekçi
+  insan hafızasıdır"*.
+- **Ne yapıldı:** `yonetim/arac/regex-turkce-sinir-tara.js`. Regex literallerini ve
+  `new RegExp('…')` çağrılarını ayrıştırıyor, `\b`'in **hemen bitişiğinde** Türkçe harf arıyor.
+- **Bitişiklik şartı gerekliydi:** ilk sürüm *"kalıpta `\b` var + Türkçe harf var"* diyordu ve
+  `/güncelle|uygula|kur\b|yükselt/` gibi **sağlam** bir kalıbı da işaretliyordu (`kur\b` ASCII
+  `r` ile biter, sınır doğru çalışır). **Gürültülü kapı, kapatılan kapıdır.**
+- **İki yönlü doğrulama:**
+
+  | girdi | beklenen | sonuç |
+  |---|---|---|
+  | fikstür `/Ölçüldü\b/` | yakalansın | **yakalandı** |
+  | fikstür `/Measured\b/` | yakalanmasın | yakalanmadı |
+  | depo (578 dosya, 1028 kalıp) | temiz | **0 riskli** |
+
+- **Ve ilk pozitif kontrolüm de yanlıştı:** `printf '…\b…'` **backspace** üretmiş, fikstür `\b`
+  taşımıyordu; araç "0" dedi ve ben bir an aracı suçladım. **Bozuk olan fikstürdü.** Düzeltip
+  tekrarladım — bugünün dersi *"sıfır basan tarayıcıyı önce bilinen bir örnekle sına"* daha ilk
+  kullanımında kendini gösterdi.
+- **Kart `BR-QA-54` (P2) açıldı çünkü iş bitmedi:** araç **hiçbir kapıya bağlı değil**.
+  `deploy/yerel-kapilar.sh` 42 kapı taşıyor, bu tarayıcı orada **yok**. Kapı eklemek CLAUDE.md §7
+  kapsamında bir iştir; kart onu **önerir**, tek taraflı bağlamam.
+- **Doğrulama:** atıf denetimi 3/3 temiz; ClickUp yeni 1, `fark: 0`. Backlog **375 kart**.
