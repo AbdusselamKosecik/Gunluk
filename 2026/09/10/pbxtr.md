@@ -657,3 +657,48 @@ ClickUp: 5 yeni kart açıldı, senkron farkı **0**.
   olmadigi icin"* diyor — **09-03'te kaldırılan §3.0 gerekçesi**, bugün AGENTS.md'de
   düzelttiğimin aynısı. K-15 gereği **düzeltmedim**; kapı `BR-SYS-92` ile açılınca düzeltilir.
 - **Kullanıcıya ait:** A-2 ve `/sprint-planla pbxtr` → **"başla"**.
+
+### 20. A-11 kapandı — trunk ref'i üretilen bir şema değil, serbest metin
+
+- **Neden:** Karar #40'ın açık sorusu: t0007'ye trunk eklendiği an `pjsip` yeniden çözülemez
+  ref taşır mı, ve trunk sırrı fiilen çözülüyor mu?
+- **Ne yapıldı:** Ölçtüm.
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | `kv:trunk:` depo genelinde | **0 isabet** |
+  | `AsteriskConfigValue.cs:74` | `^[A-Za-z0-9._:@/\-]+\z` — karakter sınıfı, şema değil |
+  | `TrunkAdminEndpoints.cs:956,930` | `secret_ref` **operatörün elle yazdığı** alan |
+  | `trunks.secret_cipher` | **VAR** (AES-256-GCM + `secret_key_version`) |
+  | canlı `trunks` | **0 satır** |
+
+- **ÜÇÜNCÜ yayımlanmış hatam:** Karar #39'un ref ailesi tablosunda (`:7677`) üçüncü satırı
+  **`kv:trunk:{code}:{slug}`** diye yazmışım — sanki desk ve WebRTC gibi **kod tarafından
+  üretilen** bir şemaymış gibi. **Öyle bir şema yok.** Üstünü çizdim, eski metni silmedim.
+  Tablonun *"sır saklı mı: EVET"* kolonu doğruydu; hata yalnız ref'in biçiminde.
+
+- **Ve bu bir biçim ayrıntısı değil — `BR-AST-51b`'nin tasarımını değiştiriyor.** Desk ve
+  WebRTC için çözümleyici ref'i **ayrıştırarak** satıra ulaşabilir. Trunk için ayrıştırma
+  **imkânsız**: ref keyfi metin, iki tenant aynı metni yazabilir, biri `sifre1` yazabilir.
+  Yani çözümleyici *"ref'i ayrıştıran bir fonksiyon"* **olamaz**; render zamanında elde olan
+  **satır kimliğiyle** çözmek zorunda. Ref o noktada yalnızca yer tutucunun **etiketi**,
+  arama anahtarı değil.
+
+- **Karar #40'ın çözülemeyen çelişkisine etkisi:** DB Lideri'nin *"karar render zamanında
+  verilsin"* şartı bu ölçümle **güçleniyor** — render'da satır kimliği elde var, teslim anında
+  yalnız metin var ve metinden geri dönüş **yok**. A-8'e bu girdiyle gidiyor.
+
+- **Asıl soruya cevap: EVET**, trunk eklendiği an `pjsip` yeniden çözülemez ref taşır
+  (`ConfigRenderer.cs:337` koşulsuz üretiyor); canlıda 0 trunk olması **fikstür tesadüfü**.
+- **Commit:** `44f575d5` — push edildi.
+
+### Bugünün deseni — üç öncülüm çürüdü, üçü de aynı sebepten
+
+Bugün dört ayrı turda **dört yayımlanmış hatam** düzeltildi: A-6 ("belge kusuru kesin"),
+"yeşil rozet", "BR-AST-53 teslim edilemez", "kv:trunk şeması". Ortak sebep tek: **adı
+tanıdık gelen bir şeyi ölçmeden o sandım** — "şablon"u `ConfigRenderer` sandım, `PJSIP`
+kanal teknolojisini tür adı sandım, ref'i şema sandım, gri rozeti yeşil sandım.
+
+Dördü de kurul üyeleri tarafından **ölçümle** yakalandı, ben de her birini kendim doğruladım.
+Defterdeki *"kart öncülü ölçülmeden yazılmaz"* kuralı doğru ama yetersiz: asıl kural
+**"tanıdık gelen ad, ölçülmüş ad değildir."**
