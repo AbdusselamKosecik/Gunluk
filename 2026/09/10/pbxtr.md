@@ -170,6 +170,32 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `538c80af`
 
+
+### `BR-AST-58(a)` kapsami olculdu — ve Karar #43'un kendi sartiyla celisti
+
+- **Neden:** Karar #43 gelen yondeki Stasis devir noktasini `BR-AST-58`'in (a) maddesine havale
+  etti; ama o maddenin **ne icerdigini** olcmemistim. (Yeni DoD kuralinin ikinci uygulamasi —
+  bu kez kural benim bir sonraki adimimi duzeltti.)
+- **(a-1) Sablon dosyasi depoda HIC YOK.** `find . -name "*pbxtr-inbound*"` -> bos.
+  `10-pbxtr-inbound.conf` ne sevk ediliyor ne uretiliyor; yalniz
+  `doc/mimari/asterisk-dialplan-sablonu.md:242-306`'da belge olarak var.
+- **(a-2) CELISKI:** gelen yoldaki **her** baglam tenant oneksiz — `[pbxtr-inbound]` (`:245`),
+  `[pbxtr-decide]` (`:299`), `[pbxtr-after-queue]` (`:368`), `[pbxtr-notenant]` (`:202`).
+  Tenant `${PBXTR_TENANT}` kanal degiskeninden okunuyor. Ama **Ş43-6 (CTO Ş5)** devir satirinin
+  **tenant ONEKLI** baglamda durmasini sart kosmustu, ve Seytan'in onerdigi `pbxtr-after-queue`
+  da paylasimli. Yani gelen yoldaki her dogal devir noktasi paylasimli bir baglamda.
+  Iki yol var (baglamlari tenant basina uret / Ş43-6 gerekcesini yeniden yaz), ikisi de bedelli
+  -> Karar #43'un acik sorularina **dorduncu madde**.
+- **(a-3) `__PBXTR_REC` ayni kanalda IKI ANLAM tasiyor:** `ConfigRenderer.cs:1503` onu **dosya
+  adi tabani** yapiyor (`${CHANNEL(linkedid)}`), sablon `:293` **boole bayragi** yapiyor (`1`)
+  ve `:303`/`:430` o bayraga bakip **ikinci bir MixMonitor** basliyor. Iki sonuc: (i) tenant
+  "tumunu kaydet" acik + route-decision `record=1` -> cift kayit, ikinci dosya
+  `CDR(recordingfile)`'da gorunmez, ETL indirmez, diskte oksuz kalir; (ii) tenant ayari kapali
+  ama `record=1` -> kayit baslar ama `CDR(recordingfile)` hic set edilmez -> **kayit var, ETL
+  bulamiyor**; uyusmazlikta "kayit yok" denir. **Bugun latent**, `BR-AST-58` sevk ettigi gun dogar.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `60355533`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
