@@ -196,6 +196,27 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `60355533`
 
+
+### Ş43-6'nin "bayt bayt ayni" sarti bugun uygulanamaz — altin dosya mekanizmasi yok
+
+- **Neden:** Ş43-6 (CEO Ş1 + CTO Ş4) *"bayrak kapaliyken uretilen dialplan bugunkuyle bayt bayt
+  ayni olmali (regresyon fiksturuyle kanitlansin)"* diyor. Sartin **maliyetini** olctum.
+- **Olculen:** `ConfigRendererTests.cs` 564 satir, **87 iddia** — `Contains` 41,
+  `DoesNotContain` 23, `True` 10, `Equal` 7, `Single` 3, `Throws` 2, `StartsWith` 1. Tam metin
+  karsilastiran tek `Assert.Equal(expected, ...)` bir **dize yardimcisina** ait (`:111`,
+  `Slugify`). **Hicbir `.csproj`'de** Verify / ApprovalTests / Snapshooter **yok**.
+- **Sonuc:** 64 alt-dize iddiasi *"su satir var/yok"* diyebilir ama **"baska hicbir sey
+  degismedi" DIYEMEZ** — Ş43-6 tam olarak ikincisini istiyor.
+- **Planlamaya etkisi:** `BR-AST-59b` yalniz opt-in uretimini degil **bir altin-dosya fiksturu
+  kurma isini de** tasiyor; fikstur **mutasyonla dogrulanmali**, yoksa "bayt bayt ayni" iddiasi
+  *kosmayan kapi* sinifina girer. Sart gecersiz degil — bedeli gorunur oldu, `59b` S degil **M**.
+- **Yontem notu:** bu turda taramalarim **ucuncu kez** kendi gurultusunu uretti (`altin` deseni
+  `altinda` kelimesine takildi; oncekiler Turkce-karakter taramasi ve kapsam sayimiydi).
+  Ders: **desen tabanli arama, aradigi seyin tanimini degil yazilisini olcer** — bulgu her
+  seferinde dosya acilip dogrulanmali.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `7f69068f`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
