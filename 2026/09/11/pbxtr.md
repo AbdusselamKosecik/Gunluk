@@ -345,3 +345,49 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   üretti ve ikisi de **yeşile benziyordu** — defterdeki *"araç yokluğu sıfır gibi görünür"*
   ile aynı sınıf. Kontrolü, sonucu bildiğim bir dosyayla (`s28`) yaptım; o olmasaydı iki
   yanlış envanter karta girecekti.
+
+### `BR-AST-40`'ın önkoşulunu ölçtüm — ve bir kartın iddiası çürüdü
+
+- **Neden bu kart:** "karar bekleyen" kartlar arasında **kendi önkoşulunu yazan** tek kart buydu:
+  *"Önce ölç: confd bugün hangi biçimi gönderiyor?"* Kararı tıkayan şey bir onay değil, bir
+  **ölçüm eksiğiydi** — ve onu ben yapabilirim.
+- **Depoda iki üretici, iki ayrı biçim:**
+
+  | üretici | biçim | yol |
+  |---|---|---|
+  | `pbxtr-confd-cek.sh:145` | **öneksiz** — `queues=1` | tek tenantlık `/bundle` |
+  | `pbxtr-confd-dugum.sh:370` | **tenant önekli** — `t0007/queues=12` | çok tenantlı `/node-bundle` |
+
+  Yani **daraltmanın hedefi olan öneksiz girdiyi, çok tenantlı istemci zaten hiç üretmiyor.**
+- **Canlı ölçüm (salt-okuma, `root@176.88.41.220`):** birim `ExecStart` **`pbxtr-confd-cek.sh`**
+  gösteriyor; kurulu o dosya **225 satır** ve içinde `X-Pbxtr-Have` **0 eşleşme**. Fiilen
+  gönderdiği başlık **üç tane**: `X-Pbxtr-Key`, `X-Pbxtr-Node`, `X-Pbxtr-Asterisk-Version`.
+  `/etc/pbxtr/confd/revizyonlar` defteri de **yok**.
+- **Sonuç: karar ucuzladı.** Bugün daraltmak **hiçbir istemcinin davranışını değiştirmez**;
+  kart bir davranış değişikliği değil, bir **sürpriz kaldırma** işi ve ajan sürümü gerektirmiyor.
+- **KEŞİF GİBİ SUNMADIM — bu üçüncü kez düştüğüm tuzak.** Yazmadan önce backlog'a baktım:
+  kurulu betiğin `X-Pbxtr-Have` taşımadığı **`BR-SYS-73`'te zaten yazılı** (*"altısı da SIFIR
+  eşleşme"*), `BR-SYS-76`/`BR-SYS-80`/`BR-SYS-86` aynı sapmayı taşıyor. Karta *"bu bir keşif
+  değil, teyit"* diye yazdım; yeni olan yalnızca bugünkü doğrulama ve başlıkların tam listesi.
+- **Ama bir kartın ölçülmüş iddiası ÇÜRÜDÜ:** `BR-SYS-86` *"`pbxtr-confd-dugum.sh` sunucuda
+  YOK"* diyor (07 Eylül ölçümü). **Bugün VAR:** 1743 satır / `9561d431` — depodaki 1745 satır /
+  `0399fafc`'den hâlâ **2 satır sapıyor**. Yani birileri 07 Eylül'den sonra taşımış.
+  **Ama devreye alınmamış:** birim hâlâ eski istemciyi koşuyor. Bugünkü hâl *"ajan yok"* değil,
+  **"ajan var, kimse açmamış"** — ve bu hiçbir yere yazılmamıştı.
+- **`BR-SYS-80`'in rakamı da tazelendi:** kart *"depo 560 satır"* diyor, bugün **654**.
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 'systemctl cat pbxtr-confd | grep ExecStart'
+  ssh root@176.88.41.220 'grep -c X-Pbxtr-Have /usr/local/lib/pbxtr/pbxtr-confd-cek.sh'   # 0
+  ssh root@176.88.41.220 'grep -o "X-Pbxtr-[A-Za-z-]*" /usr/local/lib/pbxtr/pbxtr-confd-cek.sh | sort -u'
+  ```
+- **Commit:** `3bb500d4`
+
+## Kararlar (ek 3)
+
+- **"Karar bekleyen" kartların bir kısmı onay değil ÖLÇÜM bekliyor.** `BR-AST-40` kararı
+  kilitleyen şeyi kendi metnine yazmıştı ve o iş bana açıktı. Karar kuyruğunu tararken ilk
+  soru "kim onaylayacak" değil, **"bu karar hangi ölçüm gelmeden verilemez"** olmalı.
+- **Sunucu ölçümlerinin bir tazelik ömrü var.** `BR-SYS-86`'nın 07 Eylül ölçümü dört günde
+  çürüdü, çünkü sunucuya **depo dışından** dokunuldu. Sunucuya dayanan her kart iddiası
+  tarihiyle yazılmalı ve ona dayanıp iş planlamadan önce **yeniden ölçülmeli.**
