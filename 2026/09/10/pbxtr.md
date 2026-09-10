@@ -477,6 +477,34 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
   girer. Kusur cikarsa kart o zaman acilir.
 - **Dokunulan dosya:** yok (negatif bulgu, yalniz kayit).
 
+
+### YAPISAL KOK — Asterisk imaji yayin hattinin TAMAMEN disinda
+
+- **Neden:** bloke eylemlerden birini **hazirlamak** istedim: `BR-SYS-92`'nin duzeltmesi bir imaj
+  yeniden insasi ve kosulacak komut dizisi hicbir yerde yazili degildi.
+- **Aranan bulunamadi — ve yoklugun kendisi asil bulgu oldu:**
+  - `deploy/yerel-yayin.sh` (561 satir) **yalniz uygulama imajini** uretiyor: `:46`
+    `IMAGE=tekbirsoft/pbxtr`, `:62` `ETIKET="$IMAGE:demo-$KISA"`, `:502` `docker build … -t
+    "$IMAGE:demo" -t "$ETIKET" .`, `:516-517` `docker push`.
+  - Betikte **`asterisk` kelimesi hic gecmiyor**.
+  - Depoda `pbxtr-asterisk` imajini insa/dagitan **hicbir betik yok**.
+- **Bugunun tamami bundan cikiyor:** uygulama imaji her yayinda betikle insa edilip **sha ile
+  etiketlenip** itiliyor (bayatligi tek komutla olculuyor); Asterisk imaji **elle** insa edilmis
+  (2026-08-29T14:34:25Z), **bir daha hic insa edilmemis**, `:22` ile etiketlenmis — yani
+  **Asterisk surumunu** tasiyor, **depo surumunu degil** -> bayatligi hicbir yerden okunamiyor.
+- **Sonuc:** `BR-SYS-92` bir unutkanlik degil, bir **kapsam boslugu**. Ve tam bu yuzden **bugun
+  duzeltilse bile tekrarlar** — bir sonraki depo duzeltmesi ayni sessizlikle sunucuya ulasmaz.
+- **Duzeltme ucuz, cunku desen zaten yazili:** `yerel-yayin.sh:62`'deki sha etiketleme birkac
+  satir; `pbxtr-asterisk:22-$KISA` ayni desen. `BR-SYS-94` (c) netlesti: **(c-i)** imaj yayin
+  hattina alinir ve sha ile etiketlenir (o zaman `BR-SYS-91`'in (6) maddesi neredeyse bedavaya
+  gelir), ya da **(c-ii)** elle kalmasi **bilincli karar** olarak yazilir ve kapi onu zorunlu
+  olcer. **Ikisinden biri secilmeden BR-SYS-92 yeniden yasanir.** Bu bir **kurul sorusudur**
+  (dagitim politikasi), teshis degil.
+- **Yontem notu:** defterdeki *"arac yoklugu sifir gibi gorunur"* dersinin tersi — burada aranan
+  betigin **yoklugu**, on iki gunluk arizanin sebebini acikladi.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `6f78b76c`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
