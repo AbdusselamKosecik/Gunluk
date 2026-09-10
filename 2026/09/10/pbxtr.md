@@ -1094,3 +1094,44 @@ Yani canlıdaki tek işleyen gelen yol şu:
 **Yöntem notu:** ikisi de **kart yazılmadan** ölçüldü ve ikisi de kartların içeriğini değiştirdi
 — `BR-AST-55`'in üç kök adayından ikisi düştü, `BR-AST-58`'in kapsamı büyüdü. Karar #42'de kabul
 edilen CTO kuralının (*"öncül, karar oylanmadan önce ölçülmüş olacak"*) ilk çalışan örneği.
+
+### `BR-AST-58(b)` envanteri — ve gelen çağrıda ARI kontrolünün yapısal yokluğu (`BR-AST-59`)
+
+- **Neden:** Karar #42, `BR-AST-58`'in (b) maddesinde elle yazılmış dialplan bloklarının
+  envanterini şart koşmuştu: hangisi demo kalıntısı, hangisi gerçek gereksinim.
+- **Ne yapıldı (salt-okuma, `root@176.88.41.220`):** canlıdaki `extensions.conf`,
+  `queues.conf`, `pjsip.conf` ve `pbxtr.d/dialplan/t0007-dialplan.conf` blok blok çıkarıldı,
+  her blok "üretilen / elle-demo / elle-tezgâh / elle-gerçek" olarak sınıflandırıldı.
+- **Envanterin kendi düzeltmesi:** daha önce *"pbxtr altı bağlam üretiyor"* yazmıştım;
+  canlı dosya **sekiz** taşıyor (`-callback` ve `-vm` de üretiliyor; `-rg` bu turda yok
+  çünkü t0007'de 0 zil grubu var).
+- **Çürütülen çıkarım:** `[pbxtr-t0007-stasis]` bloğunun elle yazılmış olduğunu görünce
+  *"ARI ters yönü elle yazılmış bir tezgâha bağlı"* diye düşündüm. Ölçtüm — **yanlıştı:**
+  `ConfigRenderer` devir satırını üretiyor (`:549`, `:604`), canlı dosyada var (`:13`, `:23`).
+- **Ölçümün ortaya çıkardığı gerçek kusur:** o satır **yalnız `-out` ve `-int`** bağlamlarında
+  var. `[pbxtr-t0007-in]` taşımıyor — ve taşısa bile işe yaramazdı, çünkü `PBXTR_CTL` damgasını
+  `AsteriskAriProvider.cs:258` **yalnız pbxtr originate ederken** basıyor; gelen çağrıyı pbxtr
+  originate etmez. Sonuç: gelen kuyruk çağrısının **iki bacağı da Stasis dışında** →
+  bekletme/aktarma/park/kayıt **409**. **`BR-AST-58` bunu kapatmaz:** `pbxtr-inbound` yazılınca
+  çağrı çalar, panelden bekletilemez.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (yeni kart `BR-AST-59`, P1), `yonetim/kurul-kararlari.md`
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 "sed -n '1,45p' /etc/asterisk/pbxtr.d/dialplan/t0007-dialplan.conf"
+  grep -n 'Stasis\|PBXTR_CTL' src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs
+  node yonetim/arac/clickup-olustur.js && node yonetim/arac/clickup-senkron.js
+  ```
+- **Sonuç / doğrulama:** backlog 360 kart; ClickUp `fark olan kart: 0, izde olmayan: 0`.
+- **Commit:** `9d366e34` (envanter + kart), `c982e893` (ClickUp izi)
+
+## Kararlar
+- `BR-AST-59` bir **düzeltme değil tasarım kararıdır** → kurula gider. Açık soru: gelen bacak
+  Stasis'e **koşulsuz** mu girecek, yoksa tenant/DID bazlı dar bir opt-in mi? `ConfigRenderer.cs:519`'daki
+  *"neden her çağrı değil"* gerekçesi originate edilen çağrılar için yazılmıştı ve gelen yöne
+  olduğu gibi uygulanamaz.
+- `BR-AST-59`, `BR-AST-58` ile **birlikte** planlanır; tek başına inmez.
+
+## Açık kalanlar / sonraki adım
+- `BR-AST-59` kurul turu (kapasite ayağı `BR-SYS-93`'ün `maxcalls`/fd tavanıyla birlikte ölçülmeli).
+- Ş42-2 (`A-5′` boş `Dial()` argümanı) hâlâ `BR-SYS-92`'ye veya laboratuvara bağlı.
+- Kullanıcıda: **A-2** (t0012 düğüm pini) ve **`/basla pbxtr sprint-44`**.
