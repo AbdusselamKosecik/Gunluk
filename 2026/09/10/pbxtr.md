@@ -2592,3 +2592,26 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
 - **Sonuç:** temiz — ama **gitleaks kapısının yerine geçmez.** Bu tarama yalnız *izlenen dosyaların
   şu anki hâline* bakar; **git geçmişine bakmaz**. Geçmişte commit edilip sonra silinmiş bir sır
   bu yöntemle **görünmez** ve onu ancak `gitleaks` (Docker) bulur.
+
+### Git **geçmişinde** sır var mı — 93.525 eklenen satır tarandı, **temiz**
+
+- **Neden:** bir önceki tarama kendi sınırını yazmıştı: *"yalnız izlenen dosyaların şu anki hâline
+  bakar, git geçmişine bakmaz."* Sınırı yazıp bırakmak, bugün defalarca eleştirdiğim şeydir.
+- **Yöntem (değer hiçbir zaman getirilmedi):**
+  ```bash
+  git log --all -p --unified=0 -- "*.env" "*.env.*" "*.conf" "*.json" "*.yml" \
+      "*.yaml" "*.example" "*.sh" "*.ps1"
+  ```
+  çıktısındaki **`+` ile eklenen** satırlarda `SECRET|PASSWORD|TOKEN|KEY|PEPPER|PASS` içeren
+  atamalar süzüldü; 16+ karakter, base64/hex görünümlü, yer tutucu kalıbına uymayanlar aday
+  sayıldı. Adaylar **değeriyle değil**, `anahtar adı + uzunluk + karakter-sınıfı şekli` ile
+  raporlandı.
+- **Sonuç:** **93.525** eklenen satır tarandı, **4 aday** çıktı ve **dördü de dosya yoluydu**
+  (`PBXTR_SystemAgent__TokenPath`, `PBXTR_DataProtection__KeyRingPath`,
+  `PBXTR_Provisioning__SigningKeyPath` …) — şekilleri `/aaa/aaaaa/aaa/aaaaaaaa.aaaaa` biçiminde,
+  yani `/var/lib/...`. **Gerçek sır yok.**
+- **Sınırlar (açıkça):** (a) yalnız yapılandırma biçimli yollar tarandı, **kaynak kod dosyaları
+  taranmadı**; (b) yalnız `ANAHTAR=DEĞER` kalıbı ve **adında** anahtar sözcük geçen atamalar —
+  nötr adlı bir değişkene yazılmış sır **görünmez**; (c) yer tutucu eleme sezgiseldir, tamamı
+  büyük harf olan gerçek bir değer elenmiş olabilir; (d) **entropi analizi yok** —
+  `gitleaks`'in yerine geçmez, onun koşamadığı gün için **kısmi** bir cevaptır.
