@@ -2237,3 +2237,28 @@ değiştirdi.**
 
 Bu, bugün **kendi cümlemi ölçüp çürüttüğüm dokuzuncu** vaka — ve tek "iyi yönde" olanı: kusur
 küçüldü. Ama ders aynı: **ölçmeden "pahalı" demek de bir öncüldür.**
+
+### `BR-QA-51` (b-1) tenant kırılımıyla daraldı — **kirlenen gerçek müşteri tenant'ı yok**
+
+- **Neden:** (b-1) *"rapor yüzeyleri tohum satırını gerçek geçmiş gibi gösteriyor"* diyordu ama
+  **kimin raporu** sorusu ölçülmemişti.
+- **Ölçüm (canlı, salt-okuma):**
+
+  | tenant | olay | gerçek (SIM/ olmayan) | cdr |
+  |---|---|---|---|
+  | `t0007` Ertan Grup Çağrı Merkezi | 7534 | **360** | 1058 |
+  | `t0012` Kuzey Pazarlama | 260 | **0** | 30 |
+  | `t0000` pbxtr Platform | 0 | 0 | 2 |
+
+  İkisi de tohumun kendi tenant'ları: `SampleDataSet.cs:50,52`
+  (`PrimaryTenantCode = "t0007"`, `SecondaryTenantCode = "t0012"`).
+- **Sonuç:** tohum **yalnız kendi iki tenant'ına** yazıyor; yeni açılan bir tenant etkilenmiyor.
+  **Bugün simüle veriyle kirlenen gerçek bir müşteri tenant'ı YOK — çünkü gerçek müşteri tenant'ı
+  henüz yok.** Kalan gerçek risk iki dar başlıkta: (i) **sunum/demo** bu iki tenant üzerinden
+  yapılıyor ve rakamlar gerçek görünüyor; (ii) bir demo tenant'ı ileride **gerçek müşteriye
+  çevrilirse** geçmişi uydurma olarak devralır — ve kapsam (a)'nın kaynak ayrımı olmadan bu
+  **fark edilemez**.
+- **Ölçülmeyen açıkça yazıldı:** hangi raporun kaç satırını şişirdiği **hâlâ ölçülmedi**; ölçülen
+  "filtre yok" olgusu ve tenant kırılımıdır.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `5109b298`
