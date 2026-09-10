@@ -453,6 +453,30 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `bfdb376b`
 
+
+### Acik P1 referans denetimi — 102 `dosya:satir` referansinin tamami gecerli (SONUC: TEMIZ)
+
+- **Neden:** kartlar `dosya.cs:satir` referansi tasiyor ve kod degistikce bunlar **sessizce**
+  bayatliyor. Global kural da bunu soyluyor: bir kayit dosya/fonksiyon/bayrak adi veriyorsa,
+  onermeden once hala var oldugu dogrulanir.
+- **Olculen:** 52 acik P1 kartindan **102 benzersiz** `dosya:satir` referansi cikarildi; her
+  biri depoda cozuldu ve satir numarasi dosya sinirlariyla karsilastirildi.
+  **Sonuc: 100 dogrudan gecerli, 0 tasma.** "Bulunamayan" 2 referans benim **cikarim
+  artefaktim**ci: kart hem tam yolu (`deploy/pbxtr-confd-cek.sh:271`) hem kisaltmayi
+  (`cek.sh:271`) yaziyor; dosyalar var (654 ve 1745 satir), satirlar sinir icinde.
+  **Yani 102/102 gecerli.**
+- **YONTEMIN SINIRI (yazilmasi sart):** "satir dosya sinirinda" yalnizca **kaba** bayatligi
+  yakalar — satirin hala **iddia edilen seyi** gosterdigini gostermez. Bugun elle dogruladigim
+  referanslar (`ConfigRenderer.cs:549/:604`, `AriStasisApp.cs:181-196`,
+  `TelephonyEventPipeline.cs:1063-1078`, `AsteriskAriProvider.cs:258`,
+  `LiveFailureMessageSurfaces.cs`) icerik olarak da tuttu; kalan ~97'si icin **yalnizca sinir**
+  dogrulandi.
+- **Karar: BU ICIN KART ACILMADI.** Otomatik bir "referans curumesi" kapisi cazip gorunuyor ama
+  denetim **sifir gercek kusur** buldu; sifir kusurlu bir kapi kurmak defterdeki
+  *"kapi kurmadan once mevcut veriyi olc"* ve *"kosmayan kapi bulgu degildir"* tuzaklarina
+  girer. Kusur cikarsa kart o zaman acilir.
+- **Dokunulan dosya:** yok (negatif bulgu, yalniz kayit).
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
