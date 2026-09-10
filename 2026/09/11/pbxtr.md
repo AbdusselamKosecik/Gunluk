@@ -66,3 +66,37 @@ Dünün tam kaydı: `2026/09/10/pbxtr.md`.
   4. `Recordings, Reports, ResultCodes, Scripter, Security, Support, SystemAdmin, Telephony, Tenancy`
   Grup 1 arka planda koşuyor.
 
+### 4. `Pbxtr.Api.Tests` bir bütün olarak ölçüldü — **4864 vaka, sıfır kırmızı**
+
+Dilim dörde bölünerek koşuldu; çökme **tekrarlamadı** (en yüklü grupta `testhost` 3,9 GB'ta
+kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin altında).
+
+| dilim | vaka | süre | atlanan |
+|---|---|---|---|
+| `Platform.*` | **1182** | 8 dk 09 sn | 0 |
+| Modules grup 1 — Access…Campaigns | **577** | 13 dk 25 sn | 0 |
+| Modules grup 2 — Compliance…Licensing | **318** | 6 dk 18 sn | 0 |
+| Modules grup 3 — Live…Realtime | **551** | 4 dk 19 sn | 0 |
+| Modules grup 4 — Recordings…Tenancy | **2071** | 31 dk 23 sn | 0 |
+| kalan — Wallboard, WorkingHours, `HealthEndpointTests`, `Support` | **165** | 6 dk 42 sn | 0 |
+| **TOPLAM** | **4864** | ~70 dk | **0** |
+
+- **Ve son grup bitmeden kendi filtremi denetledim** — iyi ki: `Modules/` altında **`Wallboard`
+  ve `WorkingHours`** dört grubun **hiçbirine** girmiyordu; kök seviyedeki `HealthEndpointTests.cs`
+  ile `Pbxtr.Api.Tests.Support` namespace'i de ne `Modules.` ne `Platform.` filtresine giriyordu.
+  Dördü ayrı koşuldu (**165/165**). *"Envanter sayacı kendi filtresini ölçmez"* dersi:
+  denetlemeseydim **dört alan sessizce ölçülmemiş** kalacak, ben de *"Api.Tests yeşil"*
+  diyecektim.
+- **`Skipped: 0` her dilimde:** yani `RequiresDockerFact` atlaması hiçbir dilimde tetiklenmedi;
+  ADR-012 R-3'ün *"atlama sessizdir"* uyarısı bu koşular için geçerli değil — ölçüm gerçekten
+  koştu.
+- **Kapanan soru:** dün başlayan tur artık tam: **42/42 kapı**, **web 1725/1725**,
+  **mimari 446/446** (bugünün kırmızısı bulunup kapatıldı), **Api.Tests 4864/4864**.
+  Ölçülemeyen tek küme: `Pbxtr.Integration.Tests` (gerçek PostgreSQL + Docker ister) ve
+  Docker'a bağlı 5 kapı + 2 `gitleaks` kapısı.
+
+## Açık kalanlar / sonraki adım
+- `Pbxtr.Integration.Tests` ve Docker'a bağlı kapılar **kullanıcıdaki Docker maddesine** bağlı.
+- Dünden devreden kullanıcı işleri değişmedi: `/basla pbxtr sprint-44`, `BR-AST-60` originate
+  onayı (ölçüm artık **dahiliye** indirgendi), **A-2** (t0012 düğüm pini), `BR-SEC-16` rotasyon
+  kararı (bedeli ölçüldü: tek anahtar).
