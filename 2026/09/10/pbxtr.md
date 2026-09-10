@@ -2344,3 +2344,32 @@ Bugün ilk kez bir genişletmeyi **yazmadan önce** ölçüp durdurdum. Onuncu v
 
 Bu, kullanıcının yapacağı ölçümü hem **ucuzlatıyor** hem de sonucunu **yorumlanabilir** kılıyor:
 dahiliye originate'te asılma görülürse sebep tektir.
+
+### `BR-AST-61` açıldı — üç ölü hedefin ikisi **kartsızdı**; ve "ikinci kırık" bir keşif değilmiş
+
+- **Önce düzeltme (üçüncü kez aynı hata):** bir önceki maddede *"ikinci bağımsız kırık"*ı yeni bir
+  bulgu gibi yazdım. **Değildi.** Deponun kendi belgesi
+  `doc/mimari/asterisk-dialplan-sablonu.md:457-459` harfiyen şunu diyor: *"`deploy/` altında
+  `20-pbxtr-outbound.conf` diye teslim edilen bir dosya **yoktur** ve `ConfigRenderer` bu bağlamı
+  **üretmez**"* — ve bunu **BORÇ (D-13)** diye işaretlemiş. `ADR-015:810` de A4'ü *"ayrı kart"*
+  diye bırakmış. Yeni olan iki şey: (i) sahada **Asterisk'in kendi ağzından** doğrulanması,
+  (ii) bunun `BR-AST-60`'ın "emniyet" cümlesini çürütmesi. Kartın tonunu düzelttim.
+- **Ve asıl boşluk:** dialplan **üç** ölü hedefe gönderiyor —
+  `ConfigRenderer.cs:464` → `pbxtr-inbound` (**`BR-AST-58` kapsıyor**),
+  `:582` → `pbxtr-outbound` (**kart yoktu**),
+  `:579` → `pbxtr-dialer-announce` (**kart yoktu**; `backlog.md`'de `grep` → **0 isabet**).
+  Üçünün de **tanımını üreten kod yok**; `[pbxtr-outbound]` depoda yalnız **belgede** statik
+  şablon olarak duruyor (`:395`).
+- **`BR-AST-61` (P1) açıldı** — kapsam: (a) `[pbxtr-outbound]` üretimi (trunk seçimi,
+  `call-permission`, `PBXTR_DIALNUM`, fail-closed), (b) `[pbxtr-dialer-announce]` üretimi,
+  (c) D-13 borcu (trunk başına numara biçimi) **burada çözülmez ama kararı verilir** — bazı
+  trunk'lar `+` kabul etmiyor ve bugün böyle bir alan yok; sessizce varsayılmamalı.
+- **`BR-AST-60` ile aynı yolda ama bağımsız:** 60 çözülse çağrı burada düşer, 61 çözülse Stasis
+  asılması önce gelir. **Tek dilimde planlanmalı.** Dahili panel araması bu karttan etkilenmez
+  (akış `-local`'a daha önce sapıyor).
+- **Doğrulama:** `kart-atif-dogrula.js BR-AST-61` → 5 atıf, **satır taşan 0, depoda yok 0**.
+  ClickUp: yeni 1, `fark olan kart: 0`.
+- **Commit:** kart + ClickUp izi
+
+Defterdeki kural bir kez daha birebir işledi: **belgede "borç" yazmak, panoda görünür iş
+üretmiyor.** Bugün bu, kartsız kalmış ikinci ve üçüncü ölü hedefi buldu.
