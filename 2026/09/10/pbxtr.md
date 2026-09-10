@@ -2408,3 +2408,32 @@ Defterdeki kural bir kez daha birebir işledi: **belgede "borç" yazmak, panoda 
   yazmasaydım kartlar ölçülmüş gibi okunurdu — günün tekrarlayan hatası tam olarak budur.
 - **Doğrulama:** atıf denetimi 11 atıf / **satır taşan 0**; ClickUp **yeni 5**, `fark olan kart: 0`.
   Backlog 366 → **371 kart**.
+
+### ADR-012 — **ADR kendi kaderini yazmış:** "kartlar açılmazsa bu belge baskın hata deseninin yeni örneği olur"
+
+- **Neden:** ADR-015 taraması aynı sınıfın başka ADR'lerde de olabileceğini gösterdi.
+  `doc/mimari/` altında "açık madde / ayrı kart" geçen dosyalar tarandı; iki aday çıktı
+  (ADR-005, ADR-012).
+- **ADR-012'nin kendi cümlesi (`:350-351`):** *"G1/G2/G3 kurulmadıkça bu ADR'nin yarısı
+  öneridir. **Kurulum kartları açılmalı; açılmazsa bu belge projenin baskın hata deseninin yeni
+  bir örneği olur.**"* — **açılmadı ve oldu.**
+- **Ölçüm (2026-09-10):**
+
+  | bekçi | durum | kanıt |
+  |---|---|---|
+  | G3 ham SQL kapalı listesi | **KAPANDI** | `BL-QA-23` → `RawSqlAllowlistTests` (2026-08-17) |
+  | G2 (i) `ITenantOwned` uygulanmış mı | **KAPANDI** | `TenantIsolationSurfaceTests` (2026-08-29), üç `[Fact]`, gerekçeli onay listesi + ölü kayıt + vakum |
+  | G2 (ii) filtre **gerçekten** takıldı mı | **AÇIK** | o dosyada `QueryFilter` **0 isabet**; ölçüm yalnız **sentetik** modelde (`TenantRow`/`GlobalRow`) |
+  | G1 modül sızıntı-testi kapsamı | **HİÇ BAŞLAMADI** | `TenantLeakCoverageTests` yok; backlog'da da **0 isabet** |
+
+- **Açılan kartlar:** `BR-QA-52` (P2, G1) ve `BR-QA-53` (P2, G2-ii).
+- **G2(ii) neden önemli:** `OnModelCreating` filtreyi bir **döngüyle** takıyor; owned type, TPH
+  türevi, döngüden önce yapılandırılan ya da gölge bir entity **sessizce** ıskalanabilir —
+  arayüz uygulanmış olur, **filtre olmaz**, CLAUDE.md §4'ün iki katmanından biri düşer ve
+  **RLS doğru cevap verdiği sürece hiçbir test kızarmaz**. Bu, `TenantIsolationSurfaceTests`'in
+  kendi gerekçe metnindeki sessizlik argümanının aynısı — yarısı kapatılmış, yarısı açık kalmış.
+- **Ölçmediğimi karta yazdım:** Domain'de `ITenantOwned` anan **76 dosya** var (`grep -rl`);
+  ADR ölçüm anında **33 tip / 31 dosya** demişti. **Dosya sayısı tip sayısı değildir** ve tip
+  sayısını bugün saymadım.
+- **Doğrulama:** atıf denetimi 4/4 temiz; ClickUp **yeni 2**, `fark olan kart: 0`.
+  Backlog **373 kart**.
