@@ -245,6 +245,30 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md` (366 kart), `yonetim/kurul-kararlari.md`
 - **Commit:** `31151498`
 
+
+### `BR-SYS-94` duzeltme yolu ikiye bolunuyor — depo/imaj tek basina yetmiyor
+
+- **Neden:** `BR-SYS-94`'u yazdiktan sonra bir varsayimi olcmemistim: imaji duzeltmek canliyi
+  duzeltir mi?
+- **Olculen:** uretimde `/etc/asterisk` **imajdan gelmiyor** —
+  `pbxtr-demo/docker-compose.yml:99` ile **host dizininden bind mount** ediliyor
+  (`${PBXTR_ASTERISK_CONF_DIR:-./asterisk}:/etc/asterisk`). Giris betigi tohumu
+  `/opt/pbxtr/asterisk-default/`'ten **yalniz EKSIK dosyalar icin** kopyaliyor
+  (`lab-entrypoint.sh:47-68`).
+- **Betigin kendi yorumu bedeli zaten yazmis** (`:36-40`): *"imaj yukseltmesiyle gelen YENI bir
+  taban ayari, ayni adli bir dosya host'ta zaten varsa UYGULANMAZ… sessizce ezmek, 'sunucuda
+  degistirdigim ayar geri geldi' sinifinda bir ariza uretirdi"*. Yani **kusur degil, bilincli
+  tasarim** — ama sonucu kartin tasimasi gerekiyordu.
+- **Sonuc:** `conf/`'u depoda duzeltip imaji yeniden uretmek **canliyi degistirmez**; host'taki
+  lab fiksturu kalicidir. Kapsam iki ayaga ayrildi: **(a-i)** depo/imaj tarafi, **(a-ii)** host
+  tarafi gecisi (elle silme ya da `PBXTR_ASTERISK_CONF_RESET=1` ile bir kez acilma).
+  **(a-ii) yazilmazsa duzeltme sahada hic gorunmez** — *"duzelttik ama degismedi"* sinifi.
+- **Ve bu tam olarak `BR-SYS-91`'in var olma sebebi:** host config imajdan **suresiz** sapabilir
+  ve bugun bunu olcen hicbir sey yok.
+- **Yontem notu:** cevap yine **dosyanin kendi yorumundaydi**. Bugun bu ucuncu kez oldu.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `b1a86e65`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
