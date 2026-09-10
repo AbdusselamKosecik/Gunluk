@@ -770,3 +770,91 @@ Kapanan açık sorular: **A-6, A-7, A-11, A-12, A-8**. Açık kalanlar ölçüml
 açılmadan ölü gerekçe düzeltilmez), **A-10** `BR-AST-55` kartına dönüştü.
 
 Kullanıcıya ait: **A-2** ve `/sprint-planla pbxtr` → **"başla"**.
+
+### 22. `/sprint-planla pbxtr` — ve beşinci öncülüm bir YÖNTEM hatasıydı
+
+Süreç kuralı §7/2 *"onaydan sonra planlanır"* diyor; kurul onayı vardı, plan çıktısı yalnız
+`yonetim/` altına gidiyor ve uygulama zaten ayrı kapıya ("başla") bağlı. Planlamayı kullanıcıya
+bırakmakla gereksiz bir darboğaz yaratmışım. Sekiz alan paralel koştu.
+
+#### Beşinci öncül — ve bu diğer dördünden farklı sınıfta
+
+Canlı sayımları `pbxtr_owner` ile, `app.tenant_id` kurmadan koştum. Altı tablonun altısı da
+**RLS zorlanmış** (`relforcerowsecurity = t`). `extensions` **0** döndü — oysa t0007'nin altı
+dahilisini **aynı gün** ölçmüştüm. Sayılar *"sıfır"* değil **"ölçemedim"**di.
+
+Doğru sayım (`postgres`, RLS baypas — amaç RLS davranışı değil gerçek satır sayısıydı, açıkça
+yazdım):
+
+| tenant | dahili | **zil grubu** | **DID** | kuyruk | IVR | trunk |
+|---|---|---|---|---|---|---|
+| t0007 | 6 | **0** | **0** | 2 | 0 | 0 |
+| t0012 | 3 | **0** | **0** | 1 | 0 | 0 |
+
+`call_events` son olay: **2026-09-08 07:57 UTC** — iki gündür yeni olay yok. Kuyruk üyelikleri
+ise **dolu** (6/3/3).
+
+**Sonuç: `BR-AST-53` "CANLIDA SÜREN ARIZA" değil.** Kod kusuru gerçek ve doğrulandı, ama kusura
+çarpacak **tek bir çağrı yolu yapılandırılmamış**. Agent'ın *"Muhasebe grubunu arıyorum kimse
+açmıyor"* anlatısı bir **saha senaryosu**ydu; ben onu **canlı gözlem gibi sundum** ve kurulun
+**dört üyesi o çerçeveye oy verdi.** Kart P1 kalıyor (sessiz + bu depoda iki kez geri gelmiş bir
+sınıf) ama aciliyet gerekçesi değişti.
+
+Güzel tarafı: **CEO'nun kendi şartı bunu kapatıyor.** Ş41-6 *"etkilenen tenant listesi ölçümle
+belirlenir; liste sıfır çıkarsa bildirim yapılmaz ve 'sıfır çıktı' da yazılı olur"* diyordu.
+Liste sıfır. Bayi bildirimi yapılmıyor, gerekçesi kayıtlı.
+
+**`BR-SYS-92` etkilenmiyor** ve tek gerçek canlı arıza olarak kalıyor — `transport-ws` yüklü
+değil, bu yapılandırmaya bağlı olmayan **ölçülmüş** bir durum.
+
+#### Altıncı öncül: "beş yer, aynı düzeltme" yanlış
+
+Asterisk uzmanı ölçtü — **üç ayrı sınıf**, ve biri **ters yönde**:
+
+| Sınıf | Yer | Düzeltme |
+|---|---|---|
+| A | `ConfigRenderer.cs:942`/`:968` | `&` ile birleştir — **kartın anlattığı fix yalnız burada geçerli** |
+| B | `ProvisioningRevisionService.cs:733`, `CachedInboundRouteSource.cs:393` | `&` **tekrarlanmaz**; `Goto(pbxtr-{tref}-local,…)` |
+| C | `IvrTestCaller.cs:107` | **TERS:** ARI `endpoint` **tek** adres alır, `&` verilirse **400**. Doğru düzeltme `PJSIP/` önekini **silmek** |
+| D | `asterisk-dialplan-sablonu.md:559` | Kod değil **belge** — `RenderIvrFlow` `extension` hedefi **hiç üretmiyor** |
+
+Gerçek kod yüzeyi **dört**, beş değil. C sınıfı bir tuzaktı: kartıma bakarak `&` uygulayan biri
+çalışan bir yolu kırardı.
+
+#### Yeni kart `BR-AST-56` (P1) — süpervizör sayaç sandı, davranış kusuru çıktı
+
+`ConfigRenderer.cs:952-953` eşzamanlı dalda `Dial()` sonrası **koşulsuz** `Goto(overflow,1)`;
+sıralı dalda koruma **var** (`:976`) ve **o korumanın kendi yorumu tehlikeyi tarif ediyor**:
+*"görüşme bittikten sonra sıradaki dahili çalmaya başlardı."* Yazar tehlikeyi bilmiş, sıralıda
+kapatmış, eşzamanlıda kapatmamış. Taşma bölümü yalnız sayaç basmıyor — **`FallbackTarget`'i de
+çeviriyor**. Yani eşzamanlı grupta **karşı taraf önce kapatırsa arayan, görüşme bittikten sonra
+başka bir yere yönlendirilir**. (Canlıda yaşanmıyor: 0 zil grubu.)
+
+#### Turun diğer üç bulgusu
+
+- **Linux, üçüncü sha:** sunucudaki **inşa kaynağı** da düzeltme öncesi (`f3debeaa…`). Yani
+  *"sunucuda `docker build` koş"* tek başına arızayı **düzeltmiyor**; önce depo ağacı taşınmalı.
+- **Frontend:** `useSoftphone.ts`'te `retry|reconnect|backoff` → **0 isabet** ve `failed`
+  **terminal**. İmaj düzelse bile agent kendiliğinden yeşile **hiç** dönmez. Ayrıca `tr.json`'da
+  **19 ayrı "ölçülemedi" formülasyonu** var — kayıt ekseni için dördüncü aile icat edilmemeli.
+- **DB:** `sla_buckets` zil grubunu **taşıyamaz** (PK `queue_id NOT NULL`, üç sorgu onu kuyruk
+  sanıyor) → ayrı tablo. Ve REGISTER durumu **kalıcı tabloya değil Redis'e** — gözlemdir, kayıt
+  değil; kalıcıya yazmak `cdr`/`call_events`'ten sonra en hızlı büyüyen yazma yolunu açardı.
+
+#### Sprint-44 yazıldı
+
+5 blok. Bloklayıcı zincir: imaj (`LX-02→LX-04→LX-06`) ve ADR-017 şeması (`D-01→D-03`).
+**Kurula giden beş çözülmemiş karar** yazılı — en önemlisi CEO ile Süpervizör'ün `BR-AST-55`
+zamanlamasında çeliştiği nokta; ikisini uzlaştırmadım, çelişkiyi kayda geçirdim.
+
+- **Commit:** `53a3d48c` · **Backlog:** 352 kart = 228 kapalı + **124 kalan**
+
+## Günün kapanışı — altı öncül, iki ayrı sınıf
+
+**Dört tanesi** "tanıdık gelen adı ölçmeden o sanmak"tı (şablon→sınıf, `PJSIP`→tür adı,
+ref→şema, gri→yeşil). **Beşincisi farklı ve daha sinsi: doğru soruyu yanlış ayrıcalıkla sormak.**
+`pbxtr_owner` ile koşan sayım sessizce sıfır döndürüyor ve **sıfır bu depoda en tehlikeli cevap**.
+**Altıncısı** ise bir genellemeydi: bir deseni beş yere aynı sanıp uygulamak.
+
+Bundan sonraki kural: canlı sayımda ya GUC kurulur ya baypas rolü açıkça yazılır — ve
+**beklenen bir satırın sıfır çıkması, sorgunun kendisinden şüphelenmek için yeterli sebeptir.**
