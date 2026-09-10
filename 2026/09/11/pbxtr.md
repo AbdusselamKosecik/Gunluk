@@ -391,3 +391,64 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
 - **Sunucu ölçümlerinin bir tazelik ömrü var.** `BR-SYS-86`'nın 07 Eylül ölçümü dört günde
   çürüdü, çünkü sunucuya **depo dışından** dokunuldu. Sunucuya dayanan her kart iddiası
   tarihiyle yazılmalı ve ona dayanıp iş planlamadan önce **yeniden ölçülmeli.**
+
+### Tazelik dersini uyguladım: üç kartın imaj önkoşulu düştü, bir ölçüm yöntemi kusurlu çıktı
+
+- **Neden:** bir önceki maddede *"sunucuya dayanan her kart iddiası yeniden ölçülmeli"* diye
+  yazdım. `BR-AST-49` (07 Eylül ölçümü, "karar bekleyen") ile başladım.
+- **`BR-AST-49` — belirti değişti, sapma duruyor.** 07 Eylül'de *"her tick
+  `Rejected/NO_SUCH_QUEUE` tekrarlıyor"* yazıyordu. **Bugün o satır yok.** Yerine bir **teşhis**
+  var (`QueueMembershipSyncJob.cs:863`, `baf8d3b6`, 2026-09-06):
+
+  > *t0012 hiçbir pbxtr-confd düğümüne ATANMAMIŞ (pinli aktif API anahtarı yok). Config
+  > üretiliyor ama HİÇBİR santrale teslim edilmiyor; kuyruklarının santralde olmaması
+  > BEKLENEN SONUÇTUR. Müdahale: #57 ekranından düğüme pinli bir anahtar üretin.*
+
+  24 saatte **5 satır**, "her tick" değil. Sağlıklı taraf da ölçüldü: *"santralde eksik olan
+  9 kuyruk üyeliği eklendi"*. Santralde 3 kuyruk var, üçü de `t0007-*`; `t0012` **0 eşleşme**.
+  **Sapmanın kendisi duruyor; değişen şey görünürlüğü** — kartın sınıfı "sessiz sapma"dan
+  "kullanıcı işlemi bekleyen teşhis edilmiş durum"a (A-2) geçti.
+- **Sonra bir çelişki yakaladım.** Çalışan imajın o kodu taşıyıp taşımadığına baktım:
+  `grep -ac ATANMAMIS /app/Pbxtr.Infrastructure.dll` → **0**. Ama o satır **canlı günlükte
+  basılıyor.** İki şeyden biri yanlıştı; kontrol grubu koştum.
+- **Yöntem kusurlu çıktı — ve sebebi öğretici:**
+
+  | dize | ASCII `grep` | NUL-sıyırmalı | gerçek |
+  |---|---|---|---|
+  | `ATANMAMIS` (dize sabiti) | **0 / 0** | 1 / 1 | VAR |
+  | `queue-membership-sync` (dize sabiti) | **0 / 0** | 4 / 0 | VAR (günlükte) |
+  | `RemovedBasis` (özellik adı) | 1 / 1 | 2 / 2 | VAR |
+  | `ZZZ_OLMAYAN_DIZE` (negatif kontrol) | 0 / 0 | 0 / 0 | YOK ✓ |
+
+  .NET ikilisinde **tip/üye adları** `#Strings` yığınında ve **UTF-8**'dir — ASCII `grep`
+  görür; **dize sabitleri** `#US` yığınında ve **UTF-16**'dır — ASCII `grep` **hiç göremez**.
+- **VE BUNUN ÜÇ KARTA DOKUNAN BİR SONUCU VAR.** `BR-SYS-80`/`BR-SYS-86`'nın dayandığı
+  *"koşan imaj `RemovedBasis` taşımıyor (sayım 0)"* iddiasını yeniden ölçtüm — **artık doğru
+  değil.** Çalışan imaj `tekbirsoft/pbxtr:demo-d66684a676ce`, **2026-09-08T07:58Z** üretimi,
+  yani kartlar yazıldıktan **bir gün sonra**. Doğrulayıcılar: `ProvisioningRemovalManifest`
+  1/1, `AcknowledgedRevisions` 1/0, `removedBasis` + `previous_revision` + `node_declared`
+  Infrastructure'da 1/1/1.
+  **`BR-SYS-80`'in tarif ettiği DÖNGÜ KIRILDI:** (1). adım (`RemovedBasis` taşıyan imajı
+  yayınla) **zaten yapılmış**; kalan yalnız (2) betiği taşı + `ExecStart`'ı çevir. Kapının
+  bloklama dalı (`sayım = 0`) artık ateşlemiyor, `PBXTR_CONFD_SAPMA=0` atlama gerekçesi de düştü.
+- **`BR-SYS-96` (P2) açıldı** — kapı bugün doğru cevabı **doğru sebeple değil**, seçtiği
+  kelimenin türü sayesinde veriyor: `RemovedBasis` bir **özellik adı**. Kontrol bir gün bir
+  **mesaj metnine** çevrilirse kapı sessizce hep `0` der ve `BR-SYS-83`'ün kapattığı tuzağın
+  aynısını yeniden açar — o kart `strings` yokluğunu ve `grep -c` çıkış kodunu düzeltti,
+  **kodlamayı** hiç ele almadı. Bu bir regresyon değil, o kartın **kapsam boşluğu**.
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 'docker exec pbxtr-app sh -c "tr -d \"\000\" < /app/Pbxtr.Api.dll | grep -c RemovedBasis"'
+  ssh root@176.88.41.220 'docker logs --since 24h pbxtr-app 2>&1 | grep -c queue-membership-sync'
+  ssh root@176.88.41.220 'docker exec pbxtr-asterisk asterisk -rx "queue show"'
+  ```
+- **Commit:** `988ba551`
+
+## Kararlar (ek 4)
+
+- **Bir ikiliyi `grep` ile sorgulamak bir KODLAMA sorusudur.** .NET'te ne aradığın (üye adı mı,
+  dize sabiti mi) hangi yığında olduğunu ve hangi kodlamada durduğunu belirler. Bundan sonra
+  her ikili ölçümü **pozitif + negatif kontrolle** koşulacak; ikisi beklendiği gibi çıkmazsa
+  sonuç "imaj taşımıyor" değil **"yöntem bozuk"** diye okunacak.
+- **Çelişkiyi görmezden gelme.** "Günlükte var ama ikilide yok" cümlesi imkânsızdı; onu
+  kovalamak üç kartı düzeltti. Ölçüm birbirini tutmuyorsa hikâye yazma, yöntemi ölç.
