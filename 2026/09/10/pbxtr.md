@@ -217,6 +217,34 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `7f69068f`
 
+
+### `BR-SYS-94` — envanterin siniflandirmasi YANLISTI: lab fiksturu uretim imajina gomulu
+
+- **Neden:** `BR-SYS-91`'in (santral sapma kapisi) kapsamini olcerken, bugunku envanterin
+  "elle yazilmis" dedigi bloklarin gercekten elle mi yazildigini sorgulama ihtiyaci dogdu.
+- **Olculen zincir:** `sha256(deploy/asterisk-lab/conf/extensions.conf)` ==
+  `sha256(canli /etc/asterisk/extensions.conf)` == `066072bb...`, ikisi de **175 satir**.
+  Yol: `deploy/asterisk-lab/Dockerfile:52` -> `COPY conf/ /etc/asterisk/`;
+  uretim compose'u (`pbxtr-demo/docker-compose.yml:674-692`) o imaji kullaniyor
+  (`pbxtr-asterisk:22`, *"sunucuda build: YOKTUR"*).
+- **Sonuc:** o bloklar **elle yazilmis kalinti degil**, imaja gomulu **laboratuvar fiksturu**.
+  `[pbxtr-t0007-in]` iki dosyada birden tanimli; `#include` satir **175**'te (sonda) -> Asterisk
+  birlestiriyor -> imajdaki sabit `8001` uretilen `_X.`'ten daha spesifik -> tek calisan gelen
+  numara **kalici olarak bos** bir kuyruga gidiyor. **Gelen cagri yolundaki asil belirleyici
+  pbxtr'in urettigi config degil, imaja gomulu fikstur.**
+- **Daha genel sonuc:** fikstur tenant kimligini **sabit** tasiyor (`t0007`). Bugun canli tenant
+  o oldugu icin gorunmuyor; baska bir tenant'a kurulan her dagitim **baska musterinin tenant
+  kodunu tasiyan** bir baglamla acilir.
+- **`BR-SYS-91` kapsami da duzeldi:** o kartin (3) maddesi
+  *"/etc/asterisk/*.conf ≟ deploy/asterisk-lab/conf/*"* karsilastirmasi **bugun YESIL doner** —
+  ikisi zaten ayni. Kapi kusuru yakalamaz, **onaylar**. Gereken: semantik kural —
+  *"pbxtr.d/ altinda tanimlanan hicbir baglam pbxtr.d/ disinda ikinci kez tanimlanamaz."*
+- **Yontem notu:** envanterin ilk hali bir varsayimi olcmemisti — **bir dosyanin uretilen dizinin
+  disinda olmasi, elle yazildigi anlamina gelmiyor**; ucuncu bir kaynak (imaj katmani) vardi.
+  Dogru soru *"bunu kim yazdi"* degil **"bu dosya nereden geliyor"**du.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (366 kart), `yonetim/kurul-kararlari.md`
+- **Commit:** `31151498`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
