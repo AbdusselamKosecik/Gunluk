@@ -2094,3 +2094,23 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   hâlâ o iddiayı taşıdığını **ölçmez**. O ikinci soru insan işidir.
 - **Dokunulan dosyalar:** `yonetim/arac/kart-atif-dogrula.js` (yeni)
 - **Commit:** `da54b01f`
+
+### Mükerrer kart kimliği taraması — **kusur çıkmadı, kapı çalışıyor** (ve mutasyonla doğrulandı)
+
+- **Neden:** defterdeki *"kart numarası önce ölçülür — beş çakışma bulundu; körü körüne senkron
+  açık işi kapalı gösterir"* dersi. Bugün karta çok dokundum; sayım tazelenmeliydi.
+- **Ne yapıldı ve ne çıktı:** kaba `grep` sayımı **341 satır / 338 benzersiz kimlik** dedi — üç
+  çakışma: `BR-BE-47`, `BR-BE-53`, `BR-SYS-45`. **Üçü de yanlış alarm çıktı:** her birinin eski
+  satırı `Yerini satır NNNN aldı` ile işaretli ve `clickup-cikar.js:115-116` bu satırları sayımdan
+  **düşürüyor**; ardından `:118-124` gerçek mükerrer kimliği **hata sayıp `exit 1`** veriyor.
+  Yani mekanizma zaten doğru ve **sessiz değil, gürültülü**.
+- **Kapının vacuous olmadığı mutasyonla ölçüldü:** `BR-QA-51` satırının kimliği `BR-QA-50` yapıldı
+  (gerçek çakışma, "yerini aldı" işareti olmadan) → çıkarıcı **`HATA: mukerrer kart kimligi:
+  BR-QA-50`, çıkış kodu 1**. `git checkout` ile geri alındı, koşu yeşile döndü (365 kart).
+- **Ve asıl not bende:** benim kaba `grep` sayımım **yanlış olandı**. `^| BR-XX-N |` deseni hem
+  "yerini aldı" satırlarını sayıyor hem de `BR-00a`, `BR-C1`, `BR-A1`, `BR-FE-ALT` gibi **27 ayrı
+  numaralandırma ailesini** hiç görmüyor (çıkarıcı onları taşıyor: 365). Defterdeki *"envanter
+  sayacı kendi filtresini ölçmez"* dersinin bu sefer **öznesi bendim**: araç doğru, elle sayım
+  yanlış. Sayıyı sormak için `clickup-cikar.js` koşulur, `grep` değil.
+- **Sonuç:** kart açılmadı, düzeltme yapılmadı — **ölçülüp temiz çıkan bir sınıf.** Kayıt bunun
+  için var: aynı soruyu yarın yeniden sormamak.
