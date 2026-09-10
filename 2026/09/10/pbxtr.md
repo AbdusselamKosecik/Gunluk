@@ -2069,3 +2069,28 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   düzeltildi; karta **yalnız doğrulanmış hâli** yazıldı.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `af936f0c`
+
+### Kart atıf denetimi — 825 atıf, **satır taşan 0** (ve araç depoya girdi)
+
+- **Neden:** bugün kartlara çok sayıda yeni `dosya:satır` atfı yazdım. O atıflar kartın
+  **öncülüdür**; dosya taşınınca ya da satır kayınca atıf **sessizce** yanlışlaşır ve kart doğru
+  görünmeye devam eder. Elle kontrol bu sınıfı kapatamaz.
+- **Ne yapıldı:** `yonetim/arac/kart-atif-dogrula.js` yazıldı ve `backlog.md`'nin tamamına koşuldu.
+- **Sonuç / doğrulama:** **825 atıf denetlendi, SATIR TAŞIYOR: 0.** Depoda bulunamayan 36 atfın
+  hepsi **üç meşru sınıfta** ve bu sınıflar dosyanın başlığına yazıldı:
+  (a) **canlı sunucu yolları** (`/etc/asterisk/pbxtr.d/...`, `/var/lib/pbxtr-confd/...`) — depoda
+  olmamalı; (b) **planlanan çıktılar** — kart onları *üretilecek* diye yazıyor
+  (`deploy/sms-kesinti-tatbikat.md`, `deploy/confd-kabul-olc.sh`); (c) **kısaltılmış adlar**
+  (`dugum.sh` ↔ `pbxtr-confd-dugum.sh`). Bu yüzden çıktı "hata" değil, **gözden geçirilecek
+  liste** olarak basılıyor.
+- **Mutasyonla doğrulandı:** `RedisLiveStateStore.cs:922-931` → `:99922` yapıldı, araç **kırmızı**
+  verdi (`SATIR TAŞIYOR: 1`); `git checkout` ile geri alınınca **yeşile** döndü.
+- **Aracın kendi yazımı bir tuzak öğretti** (başlığa yazıldı): `REF` düzenli ifadesinde **uzantı
+  sırası önemli** — `ts` önce yazılırsa `.tsx` yarısından kesiliyor ve **16 sahte "dosya yok"**
+  üretiyor. İlk koşum tam bunu yaptı; sayı 20 idi, düzeltince 4'e düştü. `.module.css` → `.cs`
+  kırpığı da ayrıca eleniyor. **"Araç yokluğu sıfır gibi görünür" dersinin kardeşi: bozuk araç
+  ise gürültüyü kusur gibi gösterir.**
+- **Sınırı açıkça yazılı:** dosyanın **varlığını** ve satır sayısını ölçer; satırın **içeriğinin**
+  hâlâ o iddiayı taşıdığını **ölçmez**. O ikinci soru insan işidir.
+- **Dokunulan dosyalar:** `yonetim/arac/kart-atif-dogrula.js` (yeni)
+- **Commit:** `da54b01f`
