@@ -319,3 +319,47 @@ confd taşımasının aynı hatası olur.
   karar verilebilir), A-6/(ii) (canlı çağrı ölçümü gerekir).
 - **Kullanıcıya ait:** A-2 (t0012 düğüme pinlensin mi), ve Karar #39'un uygulaması
   için `/sprint-planla pbxtr` → "başla".
+
+### 10. K-16 taraması iki gerçek kusur buldu — biri diğerinden sinsi
+Karar #39/K-16 *"sunucu metinlerindeki ekran numarası referansları bu turda
+taransın"* diyordu. Registry'den 70 geçerli kod çıkarıldı, `src/` tarandı.
+**Yedi isabet, ikisi gerçek:**
+
+1. **`SystemHealthProbe.cs:1657` → `#680`.** Registry'de 680 kodlu ekran **yok**;
+   API Anahtarları **#57**. Bu bir **operatör mesajı**: *"yeni açılmış bir tenant
+   için anahtar üretilmemiş olabilir"* deyip **var olmayan bir ekrana** yolluyordu.
+2. **`permissions.seed.json:816` → `#55` ve `#55.1`.** Ölçüldü: `/dealer` = **#56**
+   Bayi Paneli, `/dealer-dashboard` = **#59** Bayi Dashboard, ve **`#55` = Destek
+   Talepleri**. Bu `#680`'den **daha sinsi**: 680 hiçbir şey, ama 55 **var olan ama
+   alakasız** bir ekran — okuyan kişi Destek Talepleri'ne bakıp yetkinin ilgisiz
+   olduğu sonucuna varırdı.
+
+Kalan beş isabet yanlış pozitif: üçü `Karar #10.3` gibi **karar** numarası, ikisi
+`screens.json`'daki *"#10 ve #21 KULLANILMADI"* diyen bilinçli not.
+
+### 11. K-18 yazıldı — ve yanındaki satırın bayat olduğu da kaydedildi
+`doc/prototip-urun-farklari.md` §36'ya (#27) dokuzuncu fark satırı **BORÇ** olarak
+eklendi: *"dahilinin santralde fiilen KAYITLI olup olmadığı"*. Gerekçesi bugün
+canlı ölçüldü: 6 dahilinin altısı da **"Config: Üretildi" (yeşil)** görünürken
+`pjsip` türü **10+ gündür hiç teslim edilmiyordu** — kolon **yeşil yalan**
+söylüyordu.
+
+Aynı bölümdeki **7. satırın gerekçesinin bayat** olduğunu da adıyla kaydettim
+(*"bu fazda hiçbir Asterisk bağlantısı yoktur (§3.0)"* — o karar 09-03'te
+kaldırıldı). **Düzeltmedim**, çünkü Karar #39/K-15 ölü gerekçelerin **kapı fiilen
+açılmadan** düzeltilmesini yasaklıyor. Bunu bilerek yarım bırakmak, "karar yazılmış
+ama uygulanmamış" desenine düşmemek için.
+
+- **Ölçüm:** Release build 0/0. Seed'e dokunduğum için defterdeki *"yetki seed'i iki
+  namespace ister"* kuralı uygulandı → `Platform.Authorization` + `Platform.Screens`
+  + `RoleScreenMatrix` + `DealerScreenScope` + `UserAdminEndpoint` + `Health` =
+  **376/376, skip 0**.
+- **Commit:** `b3a91d6`
+
+### 12. Bugün üçüncü kez backtick yendi — bu sefer backslash de
+`node -e "..."` ve heredoc'tan sonra bu kez **quoted heredoc içindeki `\`**
+yenip `/\/g` regex'i `/\/g` oldu ve script parse hatası verdi. Üç farklı kabuk
+bağlamı, aynı sınıf. **Defterdeki notu güncelledim:** metin backtick/backslash
+taşıyorsa kabuktan hiç geçirme — Write tool ile dosyaya yaz, node script
+dosyasından oku, ve **yazdıktan sonra backtick sayısının çift olduğunu ölç**.
+Bu turda K-18 satırında öyle yaptım: 20 backtick, çift, dört anahtar segment yerinde.
