@@ -2568,3 +2568,27 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   (`generate-screens.mjs`, `generate-alarm-metrics.mjs`) — ikisi de DM010 kapsamında.
   Yani bu sınıf **kapalı**; kapının kendi yazdığı *"src/Pbxtr.Web dışını görmez"* sınırı bugün
   boş bir kümeye işaret ediyor.
+
+### Depoda sır var mı — ucuz tarama, **temiz** (gitleaks kapısı bugün koşamıyor)
+
+- **Neden:** bugün üç sır **transkripte** düştü (`BR-SEC-16`). Doğal ikinci soru: aynı sınıf
+  **depoya** da düşmüş mü? `gitleaks` kapıları (`kapi_08`, `kapi_09`, `kapi_20`) aracı gerektiriyor
+  ve bugün koşamıyor — o yüzden araçsız bir yaklaşım kullanıldı.
+- **Ölçüm 1 — izlenen sır biçimli dosya:** `git ls-files` üzerinde `.env` / `.pem` / `.key` /
+  `token` / `secret` / `credential` deseni **28 isabet** verdi; **hepsi** ya `.example` dosyası ya
+  da adında o sözcük geçen **kaynak dosya** (`AuthTokenService.cs`, `ISecretProtector.cs` …).
+  **Gerçek sır dosyası izlenmiyor.**
+- **Ölçüm 2 — `.clickup-token`:** `git ls-files` → **0** (izlenmiyor), `git check-ignore` →
+  `.gitignore:60`. CLAUDE.md §14'ün yazdığı durum **doğrulandı**.
+- **Ölçüm 3 — yapılandırma dosyalarında gerçek görünümlü değer:** izlenen tüm
+  `.env/.example/.conf/.json/.yml` dosyalarında `SECRET|PASSWORD|TOKEN|KEY|PEPPER` içeren
+  atamalar tarandı; **16+ karakterli ve base64/hex görünümlü** üç aday çıktı
+  (`deploy/pbxtr.env.example` `:114`, `:197`, `:258`). **Değerler hiçbir aşamada basılmadı**;
+  yalnız **şekilleri** üretildi: `AAAAAAAA_99_AAAA_AAAAAAAA` gibi — yani büyük harfli sözcükler
+  + alt çizgi, klasik **yer tutucu**. Gerçek sır değil.
+- **Yöntem notu (bugünün sızıntısından çıkan disiplin):** tarayıcı değeri **hiç getirmedi**;
+  uzunluk ve karakter-sınıfı şekli üzerinden karar verdi. Sabah `cut -c1-60` ile yaptığım hata
+  tam olarak bunun tersiydi.
+- **Sonuç:** temiz — ama **gitleaks kapısının yerine geçmez.** Bu tarama yalnız *izlenen dosyaların
+  şu anki hâline* bakar; **git geçmişine bakmaz**. Geçmişte commit edilip sonra silinmiş bir sır
+  bu yöntemle **görünmez** ve onu ancak `gitleaks` (Docker) bulur.
