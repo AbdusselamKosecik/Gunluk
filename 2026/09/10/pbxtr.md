@@ -905,3 +905,93 @@ Sprint-44 planı hazır ve **"başla" bekliyor**. §7/3 gereği uygulamaya geçm
 | A-9 | `BR-SYS-92` kapanmadan **ölçülemez** |
 | A-13 | K-15 gereği kapı açılınca |
 | A-2 | **kullanıcı kararı** |
+
+### 24. Karar #42 — tam kurul 10/10; A-5 kapandı ve cevabı deponun kendi kodunda yazılıymış
+
+- **Neden:** Sprint-44'ü üç karar blokluyordu ve üçü de kurulun — "başla" kapısına takılmıyorlar.
+  CEO'nun Ş41-7 şartı gereği **tam kurul**. (İlk partide Linux ve Frontend'i göndermeyi atladım,
+  tur içinde düzelttim — kendi kuralımı ikinci kez ihlal etmek üzereydim.)
+
+#### S1 — A-5 kapatıldı, üçüncü kez yanlış eksende sorulmuş
+
+Şeytan turu bitirdi. `ConfigRenderer.cs:833-844`, **renderer'ın kendi yazılı kuralı**:
+
+> *"**`PJSIP_DIAL_CONTACTS()` kullanilir, ciplak `PJSIP/<endpoint>` DEGIL** … kayitli contact'i
+> olmayan bir AOR icin **bos dize** doner."*
+
+A-5'in üç turdur **üretim tarafında** çözmeye çalıştığı şey — *"kayıtsız masa nesnesi çağrıyı
+bozmasın"* — **çağrı anında kendiliğinden çözülüyor**. Zil grubu kurala uyuyor; `LocalDialDevices`
+uymuyor. **On tüketici yok, şema yok, `configStatus` kırılmıyor.** → `BR-AST-57` (`A-5′`).
+
+(a) ayrıca üç bağımsız ölçümle düştü: `ConfigRenderGuard.cs:247-262` bir **varlık kapısı değil**
+(üç üye ayrı ölçtü) → (a) altında eksik üretim **fail-open ve sessiz**; maliyet gerekçesinin
+sistem karşılığı yok (canlı: 6 AOR / 0 contact iken 18 fd, 60 thread, 78.7 MB); panel kalıcı
+"Bekliyor".
+
+**Backend lideri nitelemesini geri aldı ve sebebini yazdı:** *"`ForExtension()`'ı bir üretim yeri
+sandım, oysa o bir **ad fonksiyonudur**; adı üretenle adı tüketen yerler ayrı."*
+
+#### S2 — İki öncülüm daha çürüdü
+
+- *"İkisi de bugünkü davranış değil"* — **yanlış**. Kuyruk üyeliği zaten `Local/{ext}@…-local/n`
+  ile itiliyor; dış çağrılar o bağlamdan **bugün de** geçiyor.
+- DID yolu *"yanlış çevriliyor"* değil — **hiç çevrilmiyor**:
+  `dialplan show pbxtr-inbound` → **"There is no existence of context"**. `ConfigRenderer.cs:464`
+  oraya `Goto` ediyor ama bağlamı **hiçbir şey üretmiyor**. → DID yarısı **kapsam dışı**.
+
+**Ve turun en güzel sentezi:** CTO `Goto`'nun dış arayanın `__PBXTR_DIR` damgasını ezeceğini
+buldu; Asterisk uzmanı bağımsız olarak `Goto` yerine **`Dial(Local/…/n)`** önerdi. İkincisi
+**yeni kanal çifti** yarattığı için birincinin sorununu **kendiliğinden çözüyor** — ve kuyruk
+yolunun bugün neden bozulmadığını da açıklıyor.
+
+Frontend bedeli ölçtü: **#19 CDR'da yön bir filtre.** Yanlış etiket *görünür* hata; "Gelen
+çağrılar" filtresiyle arayan o çağrıyı **hiç bulamaz** — **görünmez** hata.
+
+#### S3 — CEO kendi ifadesini geri çekti
+
+> *"'Baskın kök 53'ün ta kendisi' dedim; ölçüm çürüttü. İki arızayı tek karta koymak, **canlıda
+> gerçek olanı latent olanın arkasına saklamak** olurdu."*
+
+Üç üye bağımsız ölçtü: kuyruk yolu 53'ün dokunduğu yer değil. CEO'nun *"53'ün kabul ölçütüne
+RNA ekle"* şartı **vacuous geçerdi**.
+
+**Ve `qualify_frequency = 60` önerisi Linux tarafından tarih zinciriyle reddedildi:**
+
+| Kanıt | Zaman |
+|---|---|
+| `bind` düzeltmesi | 2026-08-29 **14:39 UTC** |
+| Canlı imajın pişmesi | 2026-08-29 **14:34 UTC** (5 dk **önce**) |
+| `qualify_frequency = 0` ölçümü | 2026-08-30 (**ertesi gün**) |
+
+Ölçümdeki contact adresi `172.28.0.10` = **`pbxtr-nginx`** → o an **gerçek kayıtlı WSS contact
+vardı**. Sebep **topolojik**: contact URI'si ters vekilin efemer portunu taşıyor. `BR-SYS-92`
+bunu değiştirmez → qualify açılırsa **ölçülmüş kesinti birebir geri gelir**.
+
+#### Yeni kartlar (numaralar ÖNCE ölçüldü — bugünün dersi)
+
+`BR-AST-57` (A-5′) · `BR-QA-50` (RNA geri-alınamazlık bekçisi, `BE-30`'dan bağımsız) ·
+`BR-SYS-93` (**`maxcalls`/`maxfiles` yazılmamış, fd tavanı 1024, Asterisk'in kendi koruması
+kapalı** — Linux buldu)
+
+#### Plan kesildi
+
+58 görev → Blok 4'ün 12 frontend görevi + `LX-16…21` + `D-10…12` + **Blok 5'in tamamı**
+sprint-45'e. `OPS-01` çıktı çünkü canlıda **2 gündür 0 trafik** — alarm ilk gün tamamen gürültü
+olur ve doğru çalıştığı **ölçülemez**. Süpervizörün Ş-S2 itirazı kayda geçti.
+
+- **Commit:** `3cce764f` · **Backlog:** 355 kart = 228 kapalı + **127 kalan**
+
+## Günün kapanışı — yedi öncül, ve CTO'nun teşhisi
+
+Bugün **yedi** öncülüm ölçümle çürüdü; **dördü bu son turda**. CTO teşhisi doğru koydu:
+
+> *"Sorun senin yargında değil — **ölçümün karardan sonra gelmesinde.** `BE-00` ve `K-9` doğru
+> desendi."*
+
+Kural DoD'ye girdi: **kurula giden her kararın öncülü, karar oylanmadan önce dosya:satır ile
+ölçülmüş olacak.** DB lideri de RLS yöntem hatası için belirlenimli bir kapı önerdi ve kabul
+edildi.
+
+En çarpıcı olan şu: bugünkü yedi hatanın **dördünün cevabı zaten depoda yazılıydı** — `ADR-015`,
+CSS yorumu, `ConfigRenderer.cs:833-844` ve `AsteriskObjectName.cs:490`'ın kendi belgeleri.
+Bilgi eksikliği değil, **okumadan iddia** sorunuydu.
