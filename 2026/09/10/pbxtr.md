@@ -591,6 +591,26 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/sprintler/sprint-44.md`
 - **Commit:** `7b755f80`
 
+
+### `BR-SYS-94`'teki curutulmus cumle duzeltildi — Sinif A / Sinif B ayrimi
+
+- **Neden:** istisare kartin govdesindeki bir iddiayi curutmustu ama karti duzeltmemistim; orada
+  **olcumle yanlislanmis bir cumle** duruyordu ve karti uygulayacak kisiyi yaniltirdi.
+- **Yanlis olan:** *"conf/'u depoda duzeltip imaji yeniden uretmek CANLIYI DEGISTIRMEZ"* — **genel**
+  bir iddia olarak yazilmisti. Imaj **iki propagasyon sinifi** tasiyor ve cumle yalniz birinde dogru:
+  - **Sinif A** (`lab-entrypoint.sh`, ikili, ses, MOH): betik `/etc/asterisk` altindaki uretilmis
+    dosyalari **her acilista kosulsuz `cat >`** ile yeniden yaziyor (`:136-161`, `:86`, `:96`)
+    -> **yeniden insa + recreate TEK BASINA yeter.** `BR-SYS-92`'nin `bind` duzeltmesi tam da burada.
+  - **Sinif B** (`conf/` tohumu, `Dockerfile:64` -> `/opt/pbxtr/asterisk-default/`):
+    `lab-entrypoint.sh:47-68` yalniz **eksik** dosyalari kopyaliyor -> yeni imaj **hicbir sey
+    yapmaz, sessiz no-op.**
+- **Ikinci ekleme:** sha etiketi `BR-SYS-91`'in dosya karsilastirmasini **kaldirmaz** — Sinif B icin
+  **yaniltici yesildir** (dogru etiket + bayat host dosyasi = bugunku arizanin aynisi).
+  Karsilastirma bayt-bayt yerine **anlamsal** olur; 27 satirlik yorum farki kapiyi surekli kirmizi
+  tutardi ve *"kirmiziya alisilan kapi kapi degildir"*.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `0278fa58`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
