@@ -2735,3 +2735,28 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
 - **Kalan gerçek boşluk:** `gitleaks` (2 kapı) ve docker'a bağlı 5 kapı **hâlâ ölçülemedi**;
   ikisi de kullanıcıdaki Docker maddesine bağlı. Bugünkü üç sır taraması o boşluğun **kısmi**
   yerine geçiyor ve günlükte tabanı yazılı.
+
+### Test takımları koşuldu — web 1725/1725 yeşil, mimaride **bugünün kırmızısı** çıktı
+
+- **Web (vitest):** **185 dosya / 1725 test yeşil**, 73 sn. Bugün dokunduğum iki şey de kapsamda:
+  yeniden üretilen `system-roles.generated.ts` ve düzelttiğim `SystemReadOnlySurfaces.test.tsx`
+  regex'i. Sabahki turda anılan dört kırmızı **kalmamış**.
+- **Mimari (xunit):** **446 test, 1 KIRMIZI** →
+  `DeployPrivilegeTests.Deploy_altinda_onaysiz_ayricalik_artisi_yok` (SYS-19).
+- **Teşhis:** `deploy/capture-topology-guard.py` ve `-test.py` `setcap` **kelimesini** taşıyor —
+  ama onu **çağırmıyor**, Dockerfile'larda **arıyor** (`:231` token karşılaştırması, `:236`
+  `dockerfile.setcap` bulgusu). Yani ayrıcalık artışını **engelleyen** taraf.
+  **İki bekçi birbirini kırmızı tutuyordu.**
+- **Ne zaman geldi:** dosyalar **bugün** `aae46c27` ile geldi. Yani bu **bugünün kırmızısı** ve
+  mimari takım bugüne kadar ayrı koşulmadığı için görülmemişti — *"koşmayan kapı"* değil,
+  **koşulmayan takım**.
+- **Çözüm testin kendi önerdiği remedy:** `Onaylananlar` listesine **gerekçesiyle** eklendi.
+  Onay **dar**: yalnız bu iki dosya, yalnız `setcap` mekanizması. Aynı dosyalarda `NOPASSWD` /
+  `cap_add` / `privileged` / `User=root` çıkarsa test **yine kırmızı** olur.
+- **Mutasyonla doğrulandı:** girdilerden birinin mekanizması `setcap` → `NOPASSWD` yapıldı,
+  test **kırmızı** oldu — yani onay **dosya bazlı değil, mekanizma bazlı**. Geri alınınca
+  **446/446 yeşil**.
+- **Kendi artefaktım da yakalandı:** `kapi_42`'yi koşturmam `deploy/__pycache__/` üretmişti ve
+  aynı test onu da işaretledi. Dizin `.gitignore:70` ile zaten yok sayılıyor; yine de sildim —
+  **ürettiğim artefakt bir bekçiyi kırmızı tutuyorsa bulgu sanılır.**
+- **Commit:** `eb1d643a`
