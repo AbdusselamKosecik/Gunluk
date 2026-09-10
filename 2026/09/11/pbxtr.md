@@ -270,3 +270,30 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   `permissionsAll` + negatif test; (b) sonra fikstürleri yeniden üret; (c) 8 betik ya kapıya
   bağlanır ya ST-44 izi kapandıysa kaldırılır; (d) POSIX bağımlı ikisi konteyner kapısı olur.
 - **Commit:** `8e867c46` — *olcum: CI kaldirilirken 8 ST-44 betigi sahipsiz kaldi (BR-QA-56)*
+
+### Dersi hemen uyguladım: yetki kuralını çoğaltan yerleri taradım
+
+- **Neden:** yukarıdaki bulguda hafızaya *"bu kuralı kendi ölçümümde uygulamak yetmez,
+  depodaki her yetki okuyucusunu taramak gerekir"* diye yazdım. Yazıp bırakmak, kararı
+  yazıp uygulamamanın ta kendisi olurdu — bu projenin baskın hata deseni.
+- **Tarama:** `permissionsAll`'ı **bilen** 20 dosya ile `screens.json`'dan rol→ekran kararı
+  **veren** dosyaları kesiştirdim.
+- **Sonuç — kuralı çoğaltan yalnız iki yer var:**
+  1. `deploy/st44/s30-canonical-fixtures.py` (yukarıda; **etkin** fazla-sayım)
+  2. `tests/Pbxtr.Integration.Tests/Delivery/RoleScreenProofPlan.cs:161` — gizli
+     (`inMenu:false`) ekranlar için `screen.Permission is null || identity.Permissions
+     .Contains(screen.Permission)` diye **elle** hesaplıyor, `ScreenRegistry.IsVisible`
+     yerine. O metodun **kendi belge yorumu** (`ScreenRegistry.cs:115-118`, Karar #23
+     §Ş23-5) tam da bunu yasaklıyor: *"Yalnızca `Permission`'a bakan bir dal bırakılırsa
+     menü ile 403 kararı ayrışır."*
+- **Ve etkiyi ölçtüm — bugün SIFIR.** `permissionsAll` taşıyan **gizli** ekran iki tane
+  (`tenant-documents` → `tenant.self.read`, `dealer-tickets` → `ticket.inbox.dealer`) ve
+  **yedi rolün hiçbirinde** iki kural ayrışmıyor. Yani **gizil** bir kusur: bir role
+  `tenant.read` verilip `tenant.self.read` verilmediği gün plan "görünür" der, ürün 403
+  döner ve kanıt koşusu **yanlış tarafı** suçlar. "Bugün sıfır" ile "sorun yok" aynı şey
+  değil; kartta ikisi de yazılı.
+- **İyi haber de kayda geçti:** `AppSidebar.tsx` yetki kararı **hiç vermiyor** — menüyü
+  `/me/menu`'den hazır alıyor (doğru mimari), ve `RoleScreenMatrixTests.cs:149` zaten
+  `ScreenRegistry.IsVisible` kullanıyor.
+- **`BR-QA-56` kapsamına (e) eklendi.**
+- **Commit:** `8f00b8a3` — *olcum: yetki kuralini cogaltan ikinci yer bulundu — bugun zararsiz, gizil*
