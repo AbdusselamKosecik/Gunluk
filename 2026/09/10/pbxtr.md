@@ -133,6 +133,26 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/sprintler/sprint-44.md`
 - **Commit:** `46bcb506`
 
+
+### `BR-FE-73` olculdu — kapi YOK, tek ornek DEGIL, ve yontem kendi hedefini kacirdi
+
+- **Neden:** Karti yazarken *"JSX icinde gomulu dize birakmayi engelleyen bir kapi var mi —
+  kart yazilmadan olculmeli"* diye isaretlemistim.
+- **Sonuc 1 — kapi yok:** `i18n.test.tsx` yalniz sozluk butunlugunu olcuyor (dil kumesi,
+  anahtar esligi, bos metin, yer tutucu kaybi, ceviri != kopya). JSX icindeki dizeleri goren
+  **hicbir kural yok.**
+- **Sonuc 2 — tek ornek degil, en az uc:** `ConsoleScreen.tsx:1195` (`' · beklemede'`),
+  `AgentDeskScreen.tsx:633` (`'Otomatik (dialer)' : 'Manuel arama'`),
+  `CallerFacts.tsx:57` (`'Bilinmeyen arayan'`).
+- **Yontem siniri (kartin asil gerekcesi):** ilk taramayi Turkce'ye ozgu karakterlerle
+  (`gusioc`) yaptim ve **kendi hedefimi kacirdim** — `' · beklemede'` tamamen ASCII. Bu sinif
+  regex ile guvenilir sayilamaz; **"uc tane" bir ALT SINIRDIR.** Tam sayim AST/lint ister —
+  ki kartin (b) maddesi tam olarak o oldu.
+- **Kapsam buyudu:** P3 -> P2. Tek satirlik junior isi degil: uc isabet sozluge tasinir +
+  AST/lint tabanli kapi eklenir + kapi mutasyonla dogrulanir.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `44d73993`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
