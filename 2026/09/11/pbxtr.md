@@ -589,3 +589,53 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
 - **"Sahipsiz" iddiası da bir envanterdir ve dar tutulmalı.** `yonetim/arac`'ı toptan
   "bağlanmamış" diye yazmıştım; içindeki en önemli bekçi aslında her koşuda çalışıyordu.
   Bir dizini değil, **her bekçiyi tek tek** sınıflandır.
+
+### Tazelik sorununun da sınıfını kapattım — ve sınıflandırıcım ilk denemede yanlıştı
+
+- **Neden:** bugün üç ayrı kartın canlı iddiası çürüdü ya da eskidi. Dördüncüyü de tek tek
+  aramak yerine **evreni ölçtüm**: hangi açık kartlar canlıya dayanıyor ve kaç günlük?
+- **İlk sınıflandırıcı YANLIŞTI ve yayınlamadan yakaladım.** Geniş desen (`canli|sunucu|…`)
+  **50 kart / 29 bayat** dedi. Örnekle sınadım:
+  - `BR-BE-111` → *"NODE_NOT_PINNED ayrı hata kodu — **SUNUCU VE İSTEMCİ AYNI KARTTA**"*.
+    Bu bir canlı ölçüm değil, "sunucu tarafı + istemci tarafı" demek.
+  - `BR-SYS-56` → *"Canlı DNS ölçümü yayın kapısında zorunlu **DEĞİL**"*. Yani kart tam da
+    canlı ölçüme dayanmamak hakkında.
+
+  Bu, defterde yazılı **fazla geniş sınıflandırıcı** tuzağının bir örneği daha (önceki:
+  *"15 kapı dış araç istiyor"* deyip 6'sının yeşil koşması).
+- **Daraltılmış ölçüm — canlı bir artefaktı ADLANDIRAN ifadeler** (IP, `docker exec/logs`,
+  `systemctl`, `asterisk -rx`, `/etc/pbxtr`, `/app/Pbxtr`, "koşan imaj"):
+
+  | | |
+  |---|---|
+  | canlıya dayanan **açık** kart | **19** |
+  | ≥4 gün eski | **7** |
+  | tarihsiz | **0** |
+
+  **Yöntem kendini doğruladı:** bugün tazelediğim dört kart (`BR-SYS-80/86`, `BR-AST-40/49`)
+  **"0 gün"** çıktı.
+- **Yedi bayattan dördü tek SSH turunda ölçüldü — üçü de AYAKTA:**
+
+  | kart | ölçüm | sonuç |
+  |---|---|---|
+  | `BR-AST-14` | `ari show apps` → `pbxtr`, `Enabled: Yes`, Asterisk 22.10.1 (2026-08-26) | **değişmedi** |
+  | `BR-SYS-34` | `/etc/pbxtr/mail-relay-onkosul.json` | **YOK** → `ok=true` hiç üretilmemiş |
+  | `BR-SYS-47` | aynı dosya | **hâlâ yok** → üç kapanış kanıtı bugün de üretilemez |
+  | `BR-BE-119` | **iki yarısı da** | santralde **9 üye "Not in use"** (71 128 sn önce login), Redis'te `live:agent:*` **SIFIR** (tüm DB'de 15 anahtar) |
+
+- **`BR-BE-119` (P1) özellikle önemli:** kartın *"CANLIDA SÜRÜYOR"* etiketi **doğru** ve
+  mekanizma aynen işliyor — `live:agent:{userId}` kaydı yalnızca bir agent durum **olayı**
+  geldiğinde yazılıyor; olay gelmediği için kayıt yok, kayıt olmadığı için panel **0** sayıyor.
+  Ölçülmemiş sıfır dört gün sonra da yerinde.
+- **Kalan üç bayat kart bugün ölçülemez ve sebebi yazıldı:** `BR-AST-28` üretimde **reload**
+  ister (salt-okuma kısıtının dışında), `BR-SYS-87` bir yük ölçümü, `BR-SYS-70` depo tarafı.
+- **Commit:** `6fa22980`
+
+## Kararlar (ek 8)
+
+- **Bir sınıflandırıcıyı yayınlamadan önce üç örnekle sına.** Geniş desen 29 "bayat" kart
+  üretti; ikisine bakmak deseni çürüttü. Sayı, bakılmadan raporlansaydı 29 kartlık sahte bir
+  borç listesi çıkacaktı.
+- **Ölçüm yöntemini kendi kendine doğrulat.** Bugün tazelediğim kartların "0 gün" çıkması,
+  tarih çıkarımının çalıştığının **ücretsiz kontrol grubuydu**; bunu ayrıca kurmak gerekmedi,
+  yalnızca bakmak yetti.
