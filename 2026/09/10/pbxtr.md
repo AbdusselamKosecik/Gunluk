@@ -1911,3 +1911,30 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   `live-*`/`SIM/` satırları **çalışan bir simülasyondan değil**, tohumdan ve 08-26→08-29
   penceresindeki eski koşulardan geliyor.
 - **Commit:** `BR-SEC-16` kartı + ClickUp izi (pano: yeni 1, fark 0)
+
+### `BR-QA-51` (d) — kusur `call_events`'e özgü değil: canlı `cdr`'ın ~%88'i de gerçek değil
+
+- **Neden:** (c) ölçümünden sonra doğal soru: bu veri kimliği kusuru tek tabloda mı?
+- **Ne yapıldı:** canlı `cdr` aynı kimlik uzayı ayrımıyla sayıldı (salt-okuma, `postgres` rolü).
+
+  | kimlik uzayı | satır | aralık |
+  |---|---|---|
+  | `live-*` (simülasyon) | 527 | 08-26 → 08-29 |
+  | `cdr-*` (tohum) | 433 | 09-02 → 09-08 |
+  | **gerçek Asterisk `uniqueid`** | **97** | 08-29 → **08-30** |
+  | GUID biçimli | 32 | 08-26 → 08-30 |
+  | `demo-*` | 1 | 09-08 |
+
+  Referans olarak yapılandırma tarafı: `tenants` 3, `users` 18, `queues` 3, `extensions` 9 —
+  **küçük ve gerçek**. Şişen yalnızca **çağrı verisi**.
+- **Sonuç / doğrulama:** `cdr` toplam 1090 satırın **~%88'i simüle veya tohum**. Ve bu tablo
+  CLAUDE.md §3.4'e göre **mutabakat kaynağıdır** — CEL/CDR mutabakatı buradan yürüyecekse
+  karşılaştırılacak satırların çoğu gerçek değil. Kaynak ayrımı bu yüzden tek tabloya değil,
+  **çağrı verisi ailesinin tamamına** (`cdr`, `call_events`, ES indeksi, raporlar) uygulanmalı.
+  Ayrıca gerçek `cdr` satırlarının tarih penceresi (**08-29/30**) `call_events`'in gerçek
+  penceresiyle **birebir aynı** — iki bağımsız tablo aynı cevabı verdi, ölçüm kendini doğruladı.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (`BR-QA-51` kapsam (d))
+- **Commit:** `4dce1942`
+
+`BR-QA-51`'de açık kalan iki dar soru: **(c′)** üretim DB'sinde `seed-sample` koşma politikası,
+**(d′)** kaynak ayrımı alanının hangi tablolara birlikte gireceği. İkisi de tasarım kararı → kurul.
