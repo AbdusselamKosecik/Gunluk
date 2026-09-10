@@ -2615,3 +2615,34 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   nötr adlı bir değişkene yazılmış sır **görünmez**; (c) yer tutucu eleme sezgiseldir, tamamı
   büyük harf olan gerçek bir değer elenmiş olabilir; (d) **entropi analizi yok** —
   `gitleaks`'in yerine geçmez, onun koşamadığı gün için **kısmi** bir cevaptır.
+
+### Kaynak kodda gömülü sır var mı — **924.625 satır tarandı, ürün kodunda sıfır**
+
+- **Neden:** geçmiş taramasının (b) sınırı *"kaynak kod dosyaları taranmadı"* diyordu. Sınırı
+  yazıp bırakmamak için kapatıldı.
+- **Yöntem (değer yine hiç basılmadı):** izlenen tüm `.cs/.ts/.tsx/.js/.mjs` dosyalarında
+  `…Secret|Password|Token|ApiKey|Pepper…` adlı bir alana **tırnaklı literal** atayan satırlar;
+  12+ karakter, boşluksuz, rastgele görünümlü olanlar aday. Yorum satırları elendi.
+- **Sonuç:** **924.625** satır tarandı, **95 aday**. Kök dağılımı:
+
+  | kök | aday |
+  |---|---|
+  | `tests/Pbxtr.Integration.Tests` | 52 |
+  | `tests/Pbxtr.Api.Tests` | 26 |
+  | `src/Pbxtr.Web` | 11 (**hepsi `*.test.ts`**) |
+  | `src/Pbxtr.Api` | 3 |
+  | `src/Pbxtr.Domain` | 2 |
+  | `tests/Pbxtr.Architecture.Tests` | 1 |
+
+  Test dışındaki **beş** aday tek tek okundu ve **beşi de sabit kod dizesi**:
+  `ProblemResponse.cs:160` `TokenExpired = "TOKEN_EXPIRED"`,
+  `:181` `PasswordResetUnavailable = "PASSWORD_RESET_UNAVAILABLE"`,
+  `ProvisioningEndpoints.cs:942` `SecretPlaceholderReason = "secret_placeholder"`,
+  `AsteriskNumberField.cs:188/205` `UNKNOWN_PREFIX_TOKEN` / `UNKNOWN_PRESENTATION_TOKEN`.
+  **Ürün kodunda gömülü sır yok.**
+- **Test fikstürleri kasıtlı ve zararsız:** şekilleri `a99-aaaa-aaaaaaaaaa-aaaaaa` (yani
+  `t01-test-…`) ve `AAAAAA_AA_aaaaa` biçiminde — üretimde kullanılmayan sabitler.
+- **Kalan sınır (dürüstçe):** bu tarama **adında** anahtar sözcük geçen atamaları görür; nötr adlı
+  bir değişkene (`const x = "…"`) yazılmış bir sır **hâlâ görünmez** ve onu ancak entropi tabanlı
+  bir araç (`gitleaks`) bulur. Üç taramanın üçü de aynı yere çıkıyor: **gitleaks kapısı
+  Docker'a bağlı ve bugün koşamıyor.**
