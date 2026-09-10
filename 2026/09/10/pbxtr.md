@@ -82,6 +82,38 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `d63b9914`
 
+
+### Kurul Karar #43 — `BR-AST-59` ŞARTLI ONAY, ama kart iki yerinden düzeltildi
+
+- **Neden:** `BR-AST-59` bir düzeltme değil tasarım kararıydı → §7/1 gereği kurula gitti.
+- **Ne yapıldı:** 10 üye paralel oyladı. **10/10 ŞARTLI → ŞARTLI ONAY.**
+- **Kartımdaki HATA (bu turun asıl dersi):** kart *"beklet/aktar/park/kayıt 409"* diyordu.
+  Üç bağımsız ölçüm (Şeytan, Süpervizör, kendi okumam) **üçünün çalıştığını** gösterdi:
+  kayıt dialplan `MixMonitor`'dür (`ConfigRenderer.cs:463` → `:1502-1510`), kör aktarma
+  `Redirect`'tir (`AsteriskAriProvider.cs:462-466`), canlı izleme `ChanSpy`'dır (`:682-751`).
+  Listede **olmayan** DTMF ise kırık (`:640`). Yeni kapsam: **ARI hold + ARI DTMF + ARI
+  talep-üzerine kayıt.**
+- **İkinci düzeltme:** `-in` bir **damgalama bağlamı**, yönlendirme yapmıyor; gelen yönlendirme
+  statik `10-pbxtr-inbound.conf`'ta. Devir noktası `BR-AST-58(a)` ile aynı dosyada.
+- **Kurulun bulduğu, kartta olmayan üç kusur → beş yeni kart:**
+  - **`BR-AST-60` (P1, BLOKLAYICI):** Stasis devrinin karşı tarafı **hiç yazılmamış** —
+    `StasisStart` işleyicisi ve `POST /channels/{id}/continue` depoda yok
+    (`AriStasisApp.cs:181-196`). **Beş üye bağımsız buldu.** Sonucu: **giden yön bugün
+    canlıda kırık olabilir** — `IsConnected=true` → her agent-önce originate `PBXTR_CTL=1`
+    basıyor → `Stasis()` koşuyor → `Goto(pbxtr-outbound)` (`:578`) hiç koşmuyor. Trunk/DID
+    gerekmiyor; agent originate'i yeter.
+  - **`BR-BE-122` (P1):** sufle sesi müşteriye gidebilir — `live:call.ChannelId` "en son doğan
+    bacak" (`TelephonyEventPipeline.cs:1063-1078`, `AmiEventMapper.cs:94`).
+  - **`BR-BE-123` (P1):** her yeni bacak canlı kayıttaki yön/kuyruk/cariyi siliyor.
+  - **`BR-FE-72` (P2)** bekçisiz hata haritaları, **`BR-FE-73` (P3)** gömülü Türkçe.
+- **Yan bulgu — ClickUp durum eşlemesi:** `Kurul: Karar #43 ŞARTLI ONAY` biçimi dar kalıba
+  uymayıp sessizce `backlog`'a düşüyordu; karara bağlanmış kart panoda sonsuza kadar açık
+  görünürdü. Kalıp genişletildi, dört iddia eklendi, **mutasyonla doğrulandı**.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`, `yonetim/backlog.md` (360→365),
+  `doc/prototip-urun-farklari.md`, `yonetim/arac/clickup-durum.js` + testi
+- **Sonuç / doğrulama:** ClickUp `fark olan kart: 0, izde olmayan: 0`; durum testi 4/4 yeşil.
+- **Commit:** `e49b038b` (karar + kartlar), `2bfd557e` (eşleme düzeltmesi)
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
@@ -94,6 +126,13 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
   somutladı: bir gün gecikmiş bir metin, bir turluk canlı Asterisk işini yedi.
 
 ## Açık kalanlar / sonraki adım
+
+- **KULLANICI ONAYI BEKLİYOR — `BR-AST-60` (Ş43-1):** giden yönün bugün kırık olup olmadığı
+  ölçümü **originate gerektiriyor**, yani mevcut salt-okuma kısıtının dışında. Bu ölçüm
+  yapılmadan `BR-AST-59` planlanmaz. Sonuç "asılı kalıyor" ise tek satırlık geri alınabilir
+  emniyet hazır: `AsteriskAriProvider.cs:258`'de `PBXTR_CTL` sabit `"0"`.
+- Ş43-2 / Ş43-5 / Ş43-8 **laboratuvar** istiyor — `BR-AST-55` ile aynı blokaj (Docker Desktop).
+- Ş43-11 sırası bağlayıcı: `BR-SYS-93` → `BR-AST-60` → `59a` → `BR-AST-58` → `59b`.
 - **111 kapalı olmayan kart** (`yonetim/kalan-isler.md`) + **46 doğrulama borcu
   olan kapalı kart**.
 - Artık **engelsiz** olan Asterisk zinciri: `BR-AST-47` (ReconcileAsync gerçek
