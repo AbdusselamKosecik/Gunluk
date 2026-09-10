@@ -2463,3 +2463,26 @@ Bugün **sekiz kart** yalnızca *"belgede yazılı ama panoda yok"* sınıfında
 **Hiçbiri yeni bir kusur değildi** — hepsi deponun kendi belgelerinde **yazılıydı** ve hiçbiri
 panoda **yoktu**. Defterdeki kural bugün en pahalı hâliyle doğrulandı: *"bir iş `backlog.md`'ye
 kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önceden yazmıştı**.
+
+### Prototip borç defteri — **tarama burada durduruldu** (mekanik olarak karar verilemiyor)
+
+- **Neden:** borç-kart taramasının doğal devamı `doc/prototip-urun-farklari.md`'ydi; dosyanın
+  kendi sayımı **31 BORÇ** diyor (`:2392`).
+- **Ne oldu:** satır bazlı tarayıcı yazdım ve **üç turda üç kez** ölçüm kusuru buldum:
+  1. `/\bBORÇ\b/` **hiçbir şey eşleşmedi** → *"BORÇ tablo satırı: **0**"* — bugün yazdığım
+     `\b` kuralına **kendi tarayıcımda** düştüm. Doğrusu 36 satır buldu.
+  2. `BORÇ KAPANDI` / `~~BORÇ~~` satırları **açık borç sanıldı** (15 satır).
+  3. Kalan "kimliksiz" satırların çoğu borç değil: `:2793-2795` **efsane** satırları
+     (YOK / YAPMAYACAĞIZ / ERTELENDİ etiketlerinin tanımı), `:414` **BİLİNÇLİ** bir satırın
+     içinde geçen "BORÇ" sözcüğü, `:466`/`:1556` tartışma satırları.
+- **Karar: bu tarama burada duruyor.** Kalan aday sayısı (13) **regexle karara bağlanamaz** —
+  her satır insan okuması ister. Daha da önemlisi: **CLAUDE.md bu dosyayı zaten kayıt defteri
+  ilan etmiş** (BL-DOC-02, *"orada yazılı olmayan bir sapma unutulmuştur"*), yani ADR'lerin
+  aksine burada *"kart açılmalı"* diyen bir cümle **yok**. 13 kart açmak, deponun bilerek
+  kurduğu tek defteri **ikiye bölmek** olurdu — istişarenin *"iki yerde durum tutma"* uyarısı.
+- **Ölçülüp yazılan tek gerçek:** pano bu 13 satırı **göstermiyor** ve göstermesi de tasarım
+  gereği beklenmiyor; *"ne kaldı"* sorusu ClickUp'tan sorulursa prototip borçları **eksik**
+  sayılır. Bu, `CLAUDE.md §14`'ün *"panonun görmedikleri"* listesindeki maddeyle aynı sınıf.
+- **Hafızaya yazıldı:** `\b` tuzağının üçüncü tekrarı ve genişletilmiş ders — *"bir tarayıcı
+  **sıfır** basıyorsa önce kalıbı bilinen bir örnekle pozitif kontrol et"*. Bu tuzak en çok
+  **tek kullanımlık** betiklerde ısırıyor, çünkü orada test yok ve sıfır "temiz" görünüyor.
