@@ -428,6 +428,31 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `doc/mimari/asterisk-dialplan-sablonu.md`
 - **Commit:** `f38cfcab`
 
+
+### Acik P1 govde denetimi — iki kartin kapsami SPRINT DOSYASINDA kalmis
+
+- **Neden:** `BR-QA-06`'yi okurken tek satirlik, kabul kriteri olmayan bir P1 gordum. Bunu
+  sistematik olctum: acik P1'lerin kac tanesi **baslanamaz** durumda?
+- **Olculen:** 52 acik P1'in **yalniz 4'unun** govdesi <160 karakter — yani %92'si govdeli.
+  Dordunden ikisi (`BR-SYS-42`, `BR-BE-53`) somut cikti adi tasidigi icin uygulanabilir.
+  Geriye **`BR-QA-06`** (50 karakter) ve **`BR-SYS-51`** (27 karakter) kaldi.
+- **Asil bulgu:** ikisinin de kapsami **VARDI** — ama **sprint dosyalarinda**
+  (`sprint-36.md`/`sprint-41.md` ve `sprint-43.md`), kartta degil. CLAUDE.md §14'e gore kaynak
+  `backlog.md` ve ClickUp onun yansimasi; dolayisiyla **panoya giden metin saplamaydi** ve is
+  panoda **uygulanamaz** gorunuyordu. Bu, kuralin kendi ifadesiyle *"bir is backlog.md'ye kart
+  olarak yazilmadiysa ClickUp'ta hic yoktur"* deseninin bir varyanti: **kart var ama kapsami yok.**
+- **Yapilan:** kapsam birebir karta tasindi — `BR-QA-06`'nin alti maddelik kabul kumesi (t0007
+  anahtari t0012 nesnesi goremez, kesif disinda `cross_tenant` yok, paket sir tasimaz, `removed`
+  yalniz pinli anahtari kalmayan tenant, denetim satirlari tenant basina, 409 ayrimi) + rakam
+  kapilari; `BR-SYS-51`'in runbook adi (`deploy/sms-kesinti-tatbikat.md`), tatbikat adimlari,
+  on kosulu (`BR-SYS-45` bekcisi) ve bagimliliklari.
+- **Eklenen olculebilirlik:** `BR-SYS-51`'in *"tek alarm"* sarti sayilir hale getirildi — iki
+  alarm cikarsa kart kapanmaz (gurultu, kesinti kadar pahalidir).
+- **Sonuc / dogrulama:** ClickUp senkronu **2 kart** guncelledi (baslik), ardindan `--kuru`
+  temiz.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `bfdb376b`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
