@@ -2013,3 +2013,32 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   *"iki yerde durum tutma"* uyarısı). Kabul kriterine beklet/park/`StartedAt` maddeleri eklendi.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `117ff489`
+
+### `BR-FE-73` — "en az üç" alt sınırını tam sayıma çevirdim (ve yöntem hatası bir kez daha bendeydi)
+
+- **Neden:** kart *"üç tane bir **alt sınırdır**, tam sayım değil"* diye kendi yöntem sınırını
+  yazıyordu. Ölçülebilir bir soruyu ölçülmemiş bırakmak, bugünkü desenin kaynağı.
+- **Ne yapıldı:** yöntem regex'ten çıkarıldı. `.tsx` kaynağı **karakter bazlı** taranıp
+  **yorumlar (satır, blok ve JSX `{/* */}`) soyuldu**, sonra JSX ifade konumundaki tırnaklı
+  literaller süzüldü; `t()`/`translate()` argümanları, `value:`/`key:`/`className`/`aria-*`
+  teknik alanları ve tek kelimelik dizeler elendi.
+  **225 `.tsx` → 127 aday → insan-metni süzgeciyle 33 → elle doğrulama.**
+- **Sonuç / doğrulama:** **gerçek isabet üç yerde, dört dize**:
+  `ConsoleScreen.tsx:1195`, `AgentDeskScreen.tsx:633` (iki dize), `CallerFacts.tsx:57`.
+  İlk turda aday sanılanların **hepsi yanlış pozitif**:
+  - `CallTab.tsx:62-63` `'Satış fırsatı'` bir **`value`** alanı ve yanında
+    `labelKey: 'tag.opportunity'` duruyor — **doğru yazılmış**.
+  - `SettingsScreen:1387`, `PlatformHealthScreen:425/499`, `WallboardDesign:199`,
+    `NetworkInterfaces:357` → **JSX yorumlarının içindeki** cümleler. İlk tarayıcım yalnız
+    `//` ile *başlayan* satırları eliyordu; `{/* … */}` bloklarını görmüyordu.
+- **Ayrı bir küme:** `ui/gallery/UiGallery.tsx` **29 gömülü Türkçe dize** taşıyor ama
+  **çizilmiyor** (`App.tsx:17-20`: *"bileşen vitrini artık burada ÇİZİLMEZ… dosya kütüphanede
+  duruyor"*; içe aktaran başka yer yok). Ürün yüzeyinde değil — **ama kapı yazılırken bu dosya
+  allowlist'te ADIYLA muaf tutulmalı, sessizce değil**: vitrin yeniden bağlandığı gün 29 isabetle
+  geri gelir.
+- **Yöntemin kalan sınırları karta yazıldı:** yalnız `.tsx`; şablon literalleri ayrı tarandı ve
+  Türkçe karakterli isabetlerin **tamamı belge yorumlarında** çıktı; JSX metin düğümü taraması
+  ilk turda yapılmıştı.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Komutlar:** tarayıcı `scratchpad/tr-tara2.js` (karakter bazlı yorum soyucu + literal süzgeci)
+- **Commit:** `5e125202`
