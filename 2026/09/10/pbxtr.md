@@ -1798,3 +1798,44 @@ edilen CTO kuralının (*"öncül, karar oylanmadan önce ölçülmüş olacak"*
 - `BR-AST-59` kurul turu (kapasite ayağı `BR-SYS-93`'ün `maxcalls`/fd tavanıyla birlikte ölçülmeli).
 - Ş42-2 (`A-5′` boş `Dial()` argümanı) hâlâ `BR-SYS-92`'ye veya laboratuvara bağlı.
 - Kullanıcıda: **A-2** (t0012 düğüm pini) ve **`/basla pbxtr sprint-44`**.
+
+### `BR-QA-51` kapsam (b) ölçüldü — çerçevem yine ölçümde daraldı
+
+- **Neden:** kartı yazarken (b) maddesini *"hangi yüzeyler simüle satırları sayıyor — bu kart
+  yazılırken ölçülmedi"* diye açık bırakmıştım. Açık bırakılan öncül, defterdeki
+  `kart-onculu-olculmeden-yazilmaz` dersinin tam hedefi; aynı gün kapatıldı.
+- **Ne yapıldı:** `call_events` okuyan tüm yerler ve `SIM/` önekinin kaynağı tarandı.
+  - `SIM/` önekini **yazan** tek yer tohumlayıcıdır: `SampleDataSet.cs:977`, `:1010`.
+  - `call_events` **okuyan 12 dosya** var (`AnalyticsDtos`, `ReportEndpoints`, `CdrEndpoints`,
+    `NetworkQualityEndpoints`, `DialerDtos`, `RouteDecisionDiagnostics`/`Endpoints`,
+    `TenantCallDataRetentionEndpoints`, `ApiKeyEndpoints`, `CallResultEndpoints`,
+    `TenantEndpoints`, `SystemHealthProbe`) ve **hiçbiri `SIM/` filtrelemiyor**.
+  - **Ama korktuğum yüzey yokmuş:** `SystemHealthProbe`'un `call_events` kullanımı
+    **retention lag partition sayımıdır** (`:1593-1605`, `pbxtr_sys.call_data_retention_lag()`,
+    `pending_tenants` kolonu), *"canlıda çağrı akıyor"* iddiası değil.
+- **Sonuç / doğrulama:** kartın çerçevesi **daraltıldı**. Kalan risk iki dar başlıkta:
+  (b-1) rapor/analiz yüzeyleri tohum satırını gerçek geçmiş gibi gösteriyor — **hangi raporun
+  kaç satırını şişirdiği ölçülmedi**, ölçülen yalnız *"filtre yok"* olgusudur; (b-2) **insan
+  okuması** — bu tablodan *"canlıda trafik var"* çıkarımını **bugün ben yaptım**.
+  Yani kusur bir **yüzey** kusuru değil, bir **VERİ KİMLİĞİ** kusuru: simüle satır ile gerçek
+  satırın ayrımı tesadüfi bir dize önekine bağlı. Asıl madde bu yüzden (a); (b) tek başına bir
+  düzeltme gerektirmiyor.
+- **Ayrıca:** kartta yazılı olan ama **ölçülmemiş** sayılar (*"400 çağrı, 369 AgentConnect"*)
+  çıkarıldı. Ölçülmemiş sayı, ölçülmüş sayı gibi görünür — bugünün tekrarlayan hatası.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (`BR-QA-51` gövdesi ve durum sütunu)
+- **Komutlar:**
+  ```bash
+  grep -rn "call_events" src/ --include=*.cs -l
+  grep -rn "SIM/" src/ --include=*.cs
+  grep -n "call_events" -C6 src/Pbxtr.Api/Platform/Health/SystemHealthProbe.cs
+  node yonetim/arac/clickup-senkron.js --kuru
+  ```
+- **Sonuç / doğrulama:** ClickUp `fark olan kart: 0, izde olmayan: 0` (durum eşlemesi değişmedi;
+  senkron gövde taşımaz).
+- **Commit:** `50e43928` — kart(BR-QA-51): kapsam (b) ölçüldü — tehlike DARALDI
+
+#### Bugünün deseni bir kez daha
+
+Ölçüm bu sefer bir kusuru **büyütmedi, küçülttü** — ama yine benim yazdığım çerçeveyi çürüttü.
+Sekizinci öncül. Ortak sebep aynı: *"muhtemelen şöyledir"* cümlesini karta **teşhis** diye
+yazmak. Kartın açık bıraktığı madde (a) ve (c) hâlâ ölçülmedi ve öyle **işaretli** duruyor.
