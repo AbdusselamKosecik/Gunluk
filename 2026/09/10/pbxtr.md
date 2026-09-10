@@ -858,3 +858,50 @@ ref→şema, gri→yeşil). **Beşincisi farklı ve daha sinsi: doğru soruyu ya
 
 Bundan sonraki kural: canlı sayımda ya GUC kurulur ya baypas rolü açıkça yazılır — ve
 **beklenen bir satırın sıfır çıkması, sorgunun kendisinden şüphelenmek için yeterli sebeptir.**
+
+### 23. BE-00 ölçüldü — A-5(a) "en ucuz seçenek" değil, ve düzeltmeye çalıştığı ekranı bozuyor
+
+- **Neden:** Sprint-44'ün BE-00 görevi. Backend lideri A-5(a)'yı *"en ucuz — koşulsuz `foreach`
+  koşullu olur, şema yok"* diye tarif etmiş ve ölçümü **kendisi istemişti**. Ölçüm bir kurul
+  kararına (A-5) girdi olduğu için "başla"yı beklemez.
+- **Ne yapıldı:** `AsteriskObjectName.ForExtension`'ın üretim kodundaki **tüm** tüketicilerini
+  çıkardım: **10 yer**. Beşi `BR-AST-53` kapsamında zaten var. **İkisi kapsamda yok:**
+  `ProvisioningRevisionService.cs:744` (sesli mesaj kutusu) ve `ConfigRenderGuard.cs:256`
+  (çıkış kapısı). Ayrıca `LocalDialDevices` (`:734`) `desk`i **koşulsuz** ekliyor.
+
+- **Onuncu tüketici turun ironisi:**
+
+  ```csharp
+  // EfUserAdministration.cs:577
+  ExtensionConfigStatus.Of(latestPjsip, ForExtension(tenantCode, extension.Number))
+  // Of(): pjsipContent.Contains($"[{objectName}]") ? Generated : Pending
+  ```
+
+  Çıpa **masa nesne adı**. A-5(a) uygulanırsa WebRTC-only dahililerin masa bölümü metinde
+  **hiç olmaz** → `configStatus` **kalıcı olarak "Bekliyor"**. t0007'nin altı dahilisi her şey
+  doğru üretilip teslim edilmişken **sonsuza dek "Bekliyor"** görünür.
+
+  **`BR-FE-70`/`BR-FE-71` tam da bu kolonu düzeltmek için açıldı; A-5(a) onu ters yönden ikinci
+  kez bozardı.**
+
+- **Sonuç:** Karar #40'ın A-5 reddi **güçlendi**. Orada (a)'yı *"sıfır fayda"* diye reddetmiştik;
+  şimdi ikinci gerekçe var — **(a) ucuz da değil.** Kurula giden hâli: (a) ancak üç ön koşul
+  birlikte karşılanırsa değerlendirilebilir; üçüncüsü `configStatus` çıpasının masa nesnesinden
+  bağımsızlaştırılması ki **A-12'nin "üç eksen" ayrımı bunu zaten gerektiriyor** (A ekseni
+  *"bu dahilinin nesnesi üretildi mi"* olmalı, *"masa nesnesi üretildi mi"* değil).
+
+- **Commit:** `d0e77087` — push edildi.
+
+## Durum
+
+Sprint-44 planı hazır ve **"başla" bekliyor**. §7/3 gereği uygulamaya geçmiyorum.
+Ölçümle kapatılabilecek açık soru kalmadı:
+
+| Açık soru | Neden bekliyor |
+|---|---|
+| A-5 | BE-00 ölçüldü → **kurul kararı** |
+| AST-53-x (DND / `DialAutoAnswer`) | kurul kararı |
+| `BR-AST-55` zamanlaması | CEO ↔ Süpervizör **çelişkisi**, kurula gider |
+| A-9 | `BR-SYS-92` kapanmadan **ölçülemez** |
+| A-13 | K-15 gereği kapı açılınca |
+| A-2 | **kullanıcı kararı** |
