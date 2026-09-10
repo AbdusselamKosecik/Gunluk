@@ -370,6 +370,23 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
 - **Commit:** `3b321d4c`
 
+
+### `pbxtr-app`'in 2 commit gecikmesi KUSUR DEGIL — ve bu ayrim kapinin esigini belirliyor
+
+- **Neden:** onceki olcumde "dar ve bilinen bir gecikme" demistim ama **ne tasidiklarini**
+  bakmamistim. Eger "Bitti" denmis kart duzeltmeleriyse, kartlar kapali gorunurken canlida yok
+  demek olurdu.
+- **Olculen:** `aae46c27` (**bugun 15:33**, 37 dosya — 09-09 turunun kurtarilmasi + `tsc -b`
+  kirmizilari) ve `176bfe64` (**bugun 16:37**, 2 dosya — Karar #39 K-16/K-18). **Ikisi de
+  bugunden**, imaj ise 09-08'den.
+- **Sonuc:** uygulama tarafinda *"duzeltilmis ama dagitilmamis kusur"* **YOK** — yalnizca
+  bugunun isi henuz dagitilmamis, bu normaldir. Asterisk vakasiyla **ayni sinifta degil**.
+- **`BR-SYS-91`'in esigi buradan cikiyor:** kapi *"kosan imaj HEAD'in gerisinde"* dedigi anda
+  kirmizi olamaz — o halde **her gun kirmizi** olur ve gurultuye doner. Olcmesi gereken sey
+  **gecikmenin YASI**dir: bugunun commit'i normaldir, **on iki gunluk bir imaj degildir**.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
+- **Commit:** `3640cc20`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
