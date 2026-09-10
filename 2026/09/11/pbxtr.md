@@ -639,3 +639,43 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
 - **Ölçüm yöntemini kendi kendine doğrulat.** Bugün tazelediğim kartların "0 gün" çıkması,
   tarih çıkarımının çalıştığının **ücretsiz kontrol grubuydu**; bunu ayrıca kurmak gerekmedi,
   yalnızca bakmak yetti.
+
+### Negatif sonuç: "depoya bakarak çürütülebilir kart iddiası" sınıfı BOŞ
+
+- **Neden bakıldım:** bugün dört kart iddiası ölçümle düzeldi (`BR-SYS-86`, `BR-SYS-80`,
+  `BR-AST-49`, `BR-QA-55`). Hepsi **canlı sunucuya** dayanıyordu. Soru: aynı şey **depo
+  tarafında** da var mı — mekanik olarak sınanabilen kaç iddia yanlış?
+- **İki kalıp tarandı:**
+  1. *"`<dosya>` **N satır**"* → **4 iddia.** `BR-SYS-80`'in `pbxtr-confd-cek.sh` **654**'ü
+     bugünkü dosyayla birebir uyuyor; ikisi sunucu yolu (depoda olmaması doğru); biri bugün
+     benim yazdığım **düzeltme cümlesinin içindeki alıntı** (*"kart 560 diyor, bugün 654"*).
+  2. *"`<dosya>` içinde `<dize>` **hiç geçmiyor / 0 eşleşme**"* → **2 iddia.**
+     `BR-SYS-91`'in *"`compose-sunucu-sapma.sh` içinde `asterisk` hiç geçmiyor"* iddiası
+     **bugün de doğru** (0).
+- **Tek "sapma" adayı YANLIŞ POZİTİFTİ — ve sebebi öğretici.** `BR-DB-34` şöyle diyor:
+  > *"DB kapısı yolu (`db-kapilari-docker.sh:168` → `dotnet ef database update`, sonra
+  > `deploy/db/ci-check.sh`) `MaintenanceRunner`'dan **geçmiyor**"*
+
+  Tarayıcım bunu *"`MaintenanceRunner` dizesi `ci-check.sh`'de geçmiyor"* diye okudu ve
+  dosyada 9 eşleşme bulup "SAPMIS" dedi. **Türkçede "geçmiyor" iki ayrı şey demek:**
+  *metinde bulunmuyor* ve *yürütme yolu oradan geçmiyor*. Mekanik bir tarayıcı bu ikisini
+  ayıramaz.
+- **Sonuç: sınıf boş.** Depo tarafı iddialar zaten `kart-atif-dogrula.js` ile korunuyor
+  (bugün 910 atıf, 0 gerçek kusur). Bayatlayan şey **canlı** iddialar — ve o sınıf bugün
+  ayrıca kapatıldı (19 kart / 7 bayat / 4'ü ölçüldü).
+- **Bunu yazıyorum ki yarın aynı aramayı tekrar yapmayayım:** aranan şey yok, ve
+  aranmasının mekanik yolu da güvenilir değil.
+
+## Kullanıcıya düşen işler — bugünkü ölçümlerden SONRA güncel hâli
+
+Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmesi gerekenler:
+
+| iş | bugünkü durum |
+|---|---|
+| `BR-SYS-80` / `BR-SYS-86` — confd betiğini taşı | **Döngü kırıldı.** Koşan imaj (`demo-d66684a676ce`, 2026-09-08) `RemovedBasis` **taşıyor**; kartların "önce imajı yayınla" adımı **zaten yapılmış**. Kalan: `--tasi` + `ExecStart`'ı `dugum.sh`'e çevir. `PBXTR_CONFD_SAPMA=0` atlama gerekçesi **düştü**. |
+| `BR-SEC-16` — sır rotasyonu | Bedel **yeniden ölçüldü ve küçük**: tek aktif anahtar (`confd-cek`), organik trafik 2026-08-30'da bitmiş. Karar penceresi kullanıcının. |
+| `BR-AST-40` — öneksiz `Have` girdisi daraltılsın mı | **Karar bedelsiz**: canlı düğüm `X-Pbxtr-Have`'i **hiç göndermiyor**; daraltmak bugün hiçbir istemciyi etkilemez. |
+| **A-2** — t0012 bir düğüme pinlensin mi | Artık **sessiz değil**: uygulama her turda *"#57 ekranından düğüme pinli bir anahtar üretin"* diye yazıyor. Karar hâlâ kullanıcının. |
+| `BR-QA-55` — `dashboard-live` tabanı | **Görsel yargı** + taban PNG'nin **yeniden üretilmesi** gerekiyor (arayüz değişmiş). Piksel karşılaştırması bu makinede hakemlik **edemez** (taban Linux'ta üretilmiş). |
+| Docker Desktop | Kapalı → `Pbxtr.Integration.Tests` + 5 kapı + 2 gitleaks kapısı **ölçülemiyor**. |
+| `/basla pbxtr sprint-44` | Kullanıcı komutu bekliyor; §7 gereği uygulamaya geçilmedi. |
