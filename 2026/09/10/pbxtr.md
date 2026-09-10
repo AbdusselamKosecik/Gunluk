@@ -2262,3 +2262,34 @@ küçüldü. Ama ders aynı: **ölçmeden "pahalı" demek de bir öncüldür.**
   "filtre yok" olgusu ve tenant kırılımıdır.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `5109b298`
+
+### `BR-QA-51` (b-1) sayısallaştı — **son 7-10 günün her rapor penceresi %100 uydurma**
+
+- **Neden:** (b-1)'de kalan tek ölçülebilir soru *"hangi raporun kaç satırını şişirdiği"*ydi.
+  Rapor sorgularını **taklit etmek** yeni bir öncül üretirdi; bunun yerine **verinin kendisi**
+  ölçüldü.
+- **Ölçüm — `t0007` günlük kırılımı (canlı, salt-okuma):**
+
+  | gün | olay | gerçek |
+  |---|---|---|
+  | 2026-09-08 | 1730 | **0** |
+  | 09-07 … 09-02 | her gün **291** | **0** |
+  | 08-30 | 345 | **345** |
+  | 08-29 | 3004 | **15** |
+  | 08-26 | 709 | 0 |
+
+- **Sonuç:** *"bugün"*, *"bu hafta"*, *"son 7 gün"* gibi **varsayılan pencerelerin tamamı** bu
+  tenant için **%100 uydurma**. Gerçek telefon olayı yalnız 08-29/08-30 penceresinde, toplam
+  **360**.
+- **Tohumun bir imzası var:** 09-02→09-07 arası **günde tam 291** olay. Düz bir günlük eğri gerçek
+  çağrı merkezi verisinde görülmez — kaynak ayrımı alanı gelene kadar elde kalan tek (ve zayıf)
+  ipucu bu.
+- **Sınır açıkça yazıldı:** rapor uçlarının sorguları taklit **edilmedi**; ölçülen, o sorguların
+  üzerinde çalışacağı **verinin bileşimidir**. Bir raporun kendi filtresi payı değiştirebilir ama
+  **payda aynı kalır: gerçek satır yok.**
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `f8d68e02`
+
+**`BR-QA-51`'in ölçülebilir kapsamı bitti.** Açık kalan üç madde de tasarım kararı ve üçü de
+kurulun: **(a)** kaynak ayrımı, **(c′)** üretimde `seed-sample` politikası, **(d′)** ayrımın
+gireceği tablolar.
