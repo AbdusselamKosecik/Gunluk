@@ -2042,3 +2042,30 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Komutlar:** tarayıcı `scratchpad/tr-tara2.js` (karakter bazlı yorum soyucu + literal süzgeci)
 - **Commit:** `5e125202`
+
+### `BR-FE-72` — korumasız yüzey iki harita değil, **paylaşılan birleşim**
+
+- **Neden:** kart *"`callControlErrors.ts` ve `parkErrors.ts` bekçinin kapsamında değil"* diyordu.
+  Kapsamın kendisi ölçülmemişti — bugünkü desen gereği önce onu ölçtüm.
+- **Ne yapıldı:**
+  - Her iki harita da `Record<TelephonyFailureReasonValue, MessageKey>` biçiminde
+    (`parkErrors.ts:188`, `callControlErrors.ts:102`) — yani anahtar kümesi kendi dosyalarında
+    **değil**, tek bir yerde: `app/api/problem.ts:140-148`
+    (`export const TelephonyFailureReason = { … } as const`).
+  - O birleşim **elle yazılmış, üretilmemiş**; `LiveFailureMessageSurfaces.cs`'te
+    `TelephonyFailureReason` **0 kez** geçiyor.
+  - **Bugün sapma yok:** sunucu enum'u (`ITelephonyProvider.cs:1031`) yedi üye taşıyor
+    (`Unknown … Rejected`) ve istemci birleşimi **birebir aynı yedi**.
+- **Sonuç / doğrulama:** kart bir **sapma** bildirmiyor, **sapmayı tutan hiçbir şey olmadığını**
+  bildiriyor — ve `BR-AST-59` bunu doğrudan tetikleyecek: `NotUnderControl` sunucu enum'una
+  eklendiğinde **TypeScript hiçbir şey söylemez** (istemci birleşimi yeni üyeyi tanımadığı için
+  iki harita da kendi kapalı kümesiyle tutarlı kalır); sunucudan gelen yeni sebep **bilinmeyen
+  dize** olarak düşer ve kullanıcı yedek cümleyi görür. Bekçinin kapsamı bu yüzden üç değil
+  **dört** kalem: iki harita + **ikisinin anahtar kaynağı** `problem.ts:140-148` ↔ enum.
+  Asıl kapı sonuncusudur; iki harita TypeScript sayesinde birleşime zaten bağlı.
+- **Yöntem notu:** ilk üye çıkarmam sloppy'ydi — `problem.ts`'te iki ayrı `as const` bloğu var
+  (`ProblemCode` `:12-118`, `TelephonyFailureReason` `:140-148`) ve ilk sayımım `PayloadTooLarge`/
+  `InternalError`'ı yanlış bloktan almıştı. Blok sınırları `grep -n "as const;"` ile kesinleştirilip
+  düzeltildi; karta **yalnız doğrulanmış hâli** yazıldı.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `af936f0c`
