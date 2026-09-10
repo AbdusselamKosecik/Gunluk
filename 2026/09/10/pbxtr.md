@@ -611,6 +611,29 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `0278fa58`
 
+
+### Gunun iki kalici dersi hafizaya yazildi
+
+- **Ders 1 — "bu zaten karara baglanmis mi" sorusu SPRINT DOSYALARINI da kapsar.** Oncul
+  taramami `kurul-kararlari.md` ve `doc/mimari/ADR-*` ile sinirlamistim; sprint dosyalarini
+  aramadim. Sonuc: `sprint-44`'te **kelimesi kelimesine yazili** bir tespiti *"yapisal kok, kimse
+  gormemis"* diye kurula goturdum ve gereksiz bir istisare turu kostu. Ayni turda ikinci ornek:
+  iki P1 kartinin kabul kriterleri **yalniz sprint dosyalarinda** duruyordu, backlog karti 27 ve
+  50 karakterlik saplamaydi, pano isi **baslanamaz** gosteriyordu.
+  **Uygulama:** bir bulguyu "yeni" ilan etmeden once `grep -rn "<anahtar>" yonetim/` — kararlar,
+  backlog **ve sprintler**. Ters yon de gecerli: kapsam sprint dosyasinda kalmissa **karta tasi**
+  (kaynak `backlog.md`, sprint dosyasi senkron edilmez).
+- **Ders 2 — "etiket uretmek dagitim degildir".** Bayat imajin cozumunu *"sha ile etiketle"* diye
+  ozetlemistim; olcum uc yerden curuttu: dagitici o servise **hic dokunmuyor**; imajin adinin
+  **registry ad alani yok** (`push` calismaz); ve imaj **iki propagasyon sinifi** tasiyor —
+  giris betiginin her acilista kosulsuz yazdiklari (**kesin** uygulanir) ve host'a *yalniz
+  eksikse* tohumlananlar (**sessiz no-op**). Ucuncusu en sinsisi: sha etiketi ikinci sinif icin
+  **yaniltici yesil** uretir.
+  **Uygulama:** bir dagitim/otomasyon onerisinde uc halkayi **ayri ayri** olc — **uret** / **tasi**
+  (push-pull hedefi gercekten var mi) / **uygula** (dagitici o servise dokunuyor mu, ve degisiklik
+  hangi dosyalara kesin, hangilerine kosullu yansiyor).
+- **Dokunulan dosya:** `~/.claude/.../memory/kart-onculu-olculmeden-yazilmaz.md`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
