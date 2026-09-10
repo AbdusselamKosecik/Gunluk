@@ -220,3 +220,53 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
 - **Hakem seçerken önce hakemi ölç.** Piksel karşılaştırmasını taban sadakatine hakem yaptım;
   hakemin kendisi ortamdan etkileniyordu. Kontrol grubu (hash'i **tutan** iki taban) olmasaydı
   `dashboard-live`'ı haksız yere "sapmış" ilan edecektim.
+
+### CI göçünün tam farkı — kalemleri tek tek keşfetmeyi bıraktım, envanteri bir kerede aldım
+
+- **Neden:** `BR-QA-54` (bağlanmamış araçlar) üç kalemle açılmıştı, `BR-QA-55` dördüncüyü ekledi.
+  Beşinciyi de keşifle bulmak yerine **bütün envanteri** ölçtüm: hangi doğrulayıcı hangi
+  kapıdan çağrılıyor?
+- **Yöntem:** `5bc08dd9` (*"ci: GitHub Actions kaldirildi, 27 kapi depoya tasindi"*) öncesindeki
+  `ci.yml`'de anılan depo betiklerini çıkardım, bugünkü `yerel-kapilar.sh` + `yerel-yayin.sh` +
+  `test-kos.sh` + `yerel-kapilar.Dockerfile` metniyle karşılaştırdım.
+
+  | | |
+  |---|---|
+  | eski CI'da anılan depo betiği | **30** |
+  | bugünkü kapılarda anılan | **21** |
+  | taşınmayan | **9** — biri kasıtlı silinmiş (`integration-workflow-contract-test.rb` → `integration-yayin-contract-test.py`), **8'i duruyor ve çağrılmıyor** |
+
+  Beşinin adı depoda **başka hiçbir dosyada geçmiyor** — belge dâhil. **13 gündür ölçüm yok.**
+- **Beş öz-test koşturuldu: 2 yeşil, 3 kırmızı — ve üçü aynı şey değil.**
+  - `s30-live-proof-test.py` → `AttributeError: os.geteuid`
+  - `s30-build-live-config-test.py` → `ValueError: canonical journal path drift`; sebebi
+    `s30-build-live-config.py:31`'in `str(pathlib.Path(base)/run/"resource.json")` ile POSIX
+    dizesini karşılaştırması — **Windows'ta ayraç ters döner.**
+  - **İkisi de ortam artefaktı, kusur değil.** *"Araç yokluğu bulgu değildir"* dersinin bir
+    örneği daha; bunlar konteyner kapısı olarak işaretlenmeli, atlanmamalı.
+- **Üçüncüsü gerçek: `st44-role-matrix.json` ölü bir fotoğraf.** Son üretim **2026-08-22**
+  (`5d6bfce3`). Üreticinin bugünkü çıktısıyla tutmuyor (20142 vs 15734 bayt) ve dosyanın
+  **kendi içine gömdüğü üç kaynak hash'inin ÜÇÜ DE** sapmış: `screens.json` (09-06),
+  `permissions.seed.json` (09-10), `delivery-manifest.json` (09-06).
+- **Öncülü ölçmeden yazmadım — ve iyi ki:** rol→ekran sayıları korkutucu görünüyordu
+  (superadmin **55→22**, admin 38→25, bayi 19→4). "Superadmin 33 ekran kaybetti" diye
+  yazacaktım. Sebebi ölçtüm: seed'de bundle sayısı **17→27**, superadmin'in bundle listesi
+  **17 kalemden 6'ya** indirilmiş — **en az yetki işinin kasıtlı sonucu.** Fikstür o işten
+  **önceki** dünyayı fotoğraflamış. **Ürün regresyonu değil, ölü fikstür.**
+- **İkinci ve ayrı kusur — üretici yetki kuralını eksik uyguluyor.**
+  `s30-canonical-fixtures.py` görünür ekranı yalnız `x["permission"] in granted` ile seçiyor.
+  Ama `screens.json`'da **9 ekran `permissionsAll` taşıyor** ve o alan **ek bir VE koşulu**
+  (`agent-desk`: `permission=call.handle` **+** `permissionsAll=['agent.self.read']`).
+  Fazla-sayım ölçüldü: **owner 39→38, süpervizör 34→33**. Bugün küçük, ama **kural yanlış** —
+  ve defterdeki *"ekran yetkisi iki alanda durur"* dersinin **üçüncü** örneği.
+  Önce düzeltilmezse, bayat fikstürü **doğru sanılan** bir fikstürle değiştirmiş oluruz.
+- **Komutlar:**
+  ```bash
+  git show 5bc08dd9~1:.github/workflows/ci.yml   # eski kapi listesi
+  python deploy/st44/s30-canonical-fixtures-test.py
+  git log -1 --format=%ad --date=short -- deploy/st44/st44-role-matrix.json
+  ```
+- **`BR-QA-56` (P2) açıldı** ve panoya işlendi (`377 kart`, `fark: 0`). Kapsam: (a) üreticiye
+  `permissionsAll` + negatif test; (b) sonra fikstürleri yeniden üret; (c) 8 betik ya kapıya
+  bağlanır ya ST-44 izi kapandıysa kaldırılır; (d) POSIX bağımlı ikisi konteyner kapısı olur.
+- **Commit:** `8e867c46` — *olcum: CI kaldirilirken 8 ST-44 betigi sahipsiz kaldi (BR-QA-56)*
