@@ -84,3 +84,65 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
   `staging-yayin.sh` nginx, yayın betiği format adımı, `test-kos.sh` yanlış
   kırmızı, `AST-03/04` yeniden ölçüm).
 - .NET test takımı bu turda koşulmadı (yalnız Release derleme + frontend).
+
+### 4. Engel kalkınca canlı santral ölçüldü — zincirin gerçek ön koşulu çıktı
+- **Neden:** `AGENTS.md` düzelince 09-09'da atlanan canlı Asterisk işleri açıldı.
+  Aranan `BR-AST-49`'du; altından `BR-AST-51` çıktı.
+- **Komutlar:** `ssh root@176.88.41.220` üzerinden **salt-okuma**:
+  ```bash
+  docker logs pbxtr-app | grep -c NO_SUCH_QUEUE
+  docker exec pbxtr-asterisk asterisk -rx "queue show"
+  docker exec pbxtr-asterisk asterisk -rx "pjsip show endpoints|auths|aors"
+  docker exec pbxtr-postgres psql -U postgres -d pbxtr -c "..."
+  journalctl -u pbxtr-confd | grep "SERVIS EDILMEYEN"
+  ```
+
+**BR-AST-49 — kartın ÜÇÜNCÜ hipotezi doğru çıktı, teşhis kapandı**
+- `NO_SUCH_QUEUE` spam'i **bitmiş**: 9 saatlik **tam** günlükte 0 isabet.
+  Yerini adıyla konmuş bir teşhis almış (`baf8d3b6`, Karar #31/S41):
+  *"t0012 hiçbir pbxtr-confd düğümüne ATANMAMIŞ … Müdahale: #57"*.
+- **Mesaja güvenmedim, DB'den doğruladım:** t0012'nin pinli aktif anahtarı **0**,
+  aktif anahtarı da **0**. Sayılar da tuttu: t0007 = 2 kuyruk / 9 üyelik (9'u da
+  iniyor), t0012 = 1 kuyruk / 3 üyelik (hiç inmiyor).
+- Durum `Bekliyor` → **`Karar bekleyen`**: bu artık bir arıza değil, bir karar.
+
+**BR-AST-51 (YENİ, P1) — asıl bulgu kapı değil, GEREKÇESİ**
+- `ProvisioningDeliveryGate.cs:41-45` bugün harfiyen *"bedeli bugün SIFIRDIR —
+  Asterisk fiilen bağlı değildir (proje kararı)"* diyor. **O karar 2026-09-03'te
+  kaldırıldı.** Kapının yazılı gerekçesi artık yürümeyen bir karara dayanıyor.
+- **Bedel sıfır değil, ölçülmüş:** `journalctl -u pbxtr-confd` **her 5 dakikada**
+  *"SERVIS EDILMEYEN TURLER: pjsip / cozulmemis PBXTR-SECRET(...)"* diyor, 10+
+  gündür. `pjsip show endpoints/auths/aors` = **6/6/6**, altısı da
+  `t0007-wrtc-*` — yalnız WebRTC yarısı var ve onu **elle bir betik** tesliyor.
+- **09-08'in confd tıkanıklığının sebebi buymuş:** yeni yol *"auths 12 beklenen /
+  6 ölçülen"* deyip `exit 75` verdi ve geri alındı.
+- Depoda `ISecretResolver`/`ResolveSecret`/`kv:` çözen **tek satır yok**.
+- **Kapı doğrudur, kaldırılmamalı:** çözülmemiş yer tutucu Asterisk için
+  **geçerli bir parola dizesidir** ve ref'in iki bileşeni de gizli değil →
+  meşru telefon REGISTER **olamaz** (gürültülü), saldırgan parolayı **türetip**
+  REGISTER **olur** (sessiz toll-fraud). Yazılacak olan çözümleyici.
+- Bu, **BR-SYS-80 → BR-SYS-86 → BR-AST-17** zincirinin gerçek ön koşulu.
+
+- **Commit:** `1d4d9c1` — BR-AST-51 açıldı, BR-AST-49 güncellendi, ClickUp
+  senkron (339/339, fark 0).
+
+## Bu turda yaptığım iki ölçüm kusuru — ikisi de yakalandı
+1. **Yanlış çıkarım önlendi:** santralde pbxtr'da olmayan `t0007-satis` kuyruğu
+   göründü, ilk bakışta *"kaldırılamamış yetim nesne"* gibiydi. Ölçtüm: **yetim
+   değil** — `/etc/asterisk/queues.conf` içinde **elle yazılmış**,
+   `extensions.conf:30-31` ondan `Queue()` çağırıyor. Ana config'e dokunulmaması
+   CLAUDE.md §3.1'in kuralı. Kartı yazmadan ölçmeseydim backlog'a **uydurma bir
+   arıza** girecekti.
+2. **"Araç yokluğu sıfır gibi görünür" tekrarı:** ilk sayımım *"auths 0, aors 0"*
+   dedi. Sebep gerçek değil **desendi** — CLI çıktısı `     Auth:` (beş boşluk),
+   benim desenim `^ Auth:`. Ham çıktıya dönünce 6/6. **Sıfır gördüğümde ham
+   çıktıya dönmek kural olmalı.**
+
+## Açık kalanlar — güncelleme
+- **112 kapalı olmayan kart** (BR-AST-51 eklendi, BR-AST-49 karar bekleyene geçti).
+- **Sıradaki iş `BR-AST-51`**: teslim-tarafı sır çözümleyici. Çözümleme yalnız
+  servis anında ve bellekte olmalı; çözülmüş parola `provisioning_revisions`'a
+  yazılmaz, loglanmaz. Bugünkü fail-closed davranış (tür bazında `withheld`)
+  **aynen korunur**.
+- **Karar gerekiyor (kullanıcı/kurul):** t0012 bir düğüme pinlensin mi, yoksa
+  bilerek teslim edilmediği mi yazılsın (#57).
