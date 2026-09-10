@@ -523,3 +523,33 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   olarak yazacaksan **kaçış gösterimiyle** yaz; aksi halde kapıyı kuran gün kendi belgesine
   takılır. (Bu, bugün erken saatte gördüğüm *"kapının kendi belgesi kapıyı kırıyordu"*
   vakasının ikinci örneği.)
+
+### Kendi bıraktığım "ölçülmedi" ucunu kapattım — 41 dakikalık fark tasarımmış
+
+- **Neden:** bir önceki maddede `last_used_at`'in `last_bundle_served_at`'ten 41 dakika geride
+  olduğunu görüp *"kusur mu bilinçli mi, ölçülmedi"* diye yazmıştım. Açık uç bırakmak, bir
+  sonraki turda birinin onu **arıza sanarak** kovalaması demek.
+- **Cevap kodda yazılı:** iki alanın yazımı **ayrı eşiklerle** kısıtlanıyor.
+
+  | alan | yazım eşiği | kaynak |
+  |---|---|---|
+  | `last_used_at` | **1 saat** | `ApiKeyCacheKeys.cs:203` |
+  | `last_bundle_served_at` | **1 dakika** | `ApiKeyCacheKeys.cs:167` |
+
+  Ölçtüğüm 41 dakika birinci pencerenin **içinde**. Gerekçe de yazılı (`ApiKey.cs`):
+  `last_bundle_served_at` bir **canlılık** ölçüsü ve onu okuyan sağlık eşiği **dakikalar**
+  mertebesinde — saatlik bir pay o eşiği anlamsız kılardı.
+- **Ve iki alan zaten aynı şey değil:** `last_used_at` **her** kimlik doğrulamasında
+  (429/500 ile biten çekim dâhil) yazılır, `last_bundle_served_at` **yalnızca başarılı**
+  çekimde. `ApiKeyEndpoints.cs:352-353` bunu açıkça söylüyor: *"aynı sütunda
+  gösterilmemelidir."*
+- **Sonuç:** *"birbirinin yerine okunmamalı"* uyarım doğruydu, ama sebebi tahmin ettiğim gibi
+  bir kusur değil, **yazılı bir sözleşme**. Karta öyle geçti.
+- **Commit:** `8c8ff9b9`
+
+## Kararlar (ek 6)
+
+- **"Ölçülmedi" notu bir borçtur, aynı turda kapatılmalı.** Bugün iki kez açık uç bıraktım
+  (bu ve `dashboard-live` tabanı); birincisi on dakikalık bir kod okumasıyla kapandı ve
+  cevabı **"kusur yok"** çıktı. Kapatılmayan bir "ölçülmedi", bir sonraki turda **arıza gibi**
+  okunur ve iki kat pahalıya kovalanır.
