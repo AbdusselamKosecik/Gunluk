@@ -1959,3 +1959,29 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   Değer hiçbir aşamada getirilmedi. Sertleştirilen kural ilk kullanımında işe yaradı.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `166c4873`
+
+### `BR-BE-122` öncülü doğrulandı — ve kusur *belirsiz* değil, **giden çağrıda koşulsuz**
+
+- **Neden:** kart Karar #43 turunda Süpervizör'ün bulgusuyla açılmıştı; öncülü **benim
+  okumamla doğrulanmamıştı**. Bugünün deseni tam da bu: doğrulanmamış öncül.
+- **Ne yapıldı:**
+  1. `AgentMonitoringService.cs:685-733` `ResolveInvocationAsync` okundu: hedef gerçekten
+     **tek alandan** geliyor (`_live.GetCallChannelAsync(callId)`), **bacak seçen hiçbir mantık
+     yok.** Oradaki tek kapı `ChanSpyInvocation.IsExactChannelName` (`:714-726`) ve o bir
+     **biçim** kapısıdır (önek/uç adresiyle açılan ChanSpy'ın DTMF ile kanal gezinmesini
+     engeller — Karar #23 §Ş23-4a); **hangi bacak** olduğunu sorgulamaz.
+  2. `AsteriskAriProvider.cs:190`: `var customerFirst = request.OnAnswer is not null`.
+     - **Agent'ın başlattığı normal giden çağrıda `OnAnswer` yoktur** → agent bacağı **önce**,
+       müşteri bacağı **sonra** doğar → *"en son doğan bacak"* kuralı gereği saklanan kanal
+       **müşterinindir** → sufle **her seferinde müşteriye** gider.
+     - Yalnız **geri arama** yolunda (`CallbackDispatcher.cs:201` → `OriginateRequest.CustomerFirst`)
+       sıra tersine döner ve hedef **tesadüfen** doğru olur.
+- **Sonuç / doğrulama:** kartın *"hedef belirsiz"* çerçevesi **yumuşakmış**. Gelen çağrıda kusur
+  *"aktarım/park olursa"* koşulluyken, **giden çağrıda koşulsuzdur** — ve giden çağrı bu ürünün
+  ana kullanım yönü. Kabul kriteri genişletildi: ses testi **giden çağrıda da** koşulacak.
+- **Ölçümün sınırı karta yazıldı:** bacak doğuş sırası **koddan** çıkarıldı, **AMI telinde
+  doğrulanmadı.** `Dial` ile doğan bacağın `Newchannel`'ının aynı `linkedid` ile gelmesi
+  Asterisk'in standart davranışıdır ama **bu depoda ölçülmemiştir**; `BR-AST-60` originate
+  ölçümü yapıldığında aynı koşuda doğrulanmalı (iki ölçüm tek çağrıya sığar).
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `3fb2b779`
