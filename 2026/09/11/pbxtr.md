@@ -100,3 +100,33 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
 - Dünden devreden kullanıcı işleri değişmedi: `/basla pbxtr sprint-44`, `BR-AST-60` originate
   onayı (ölçüm artık **dahiliye** indirgendi), **A-2** (t0012 düğüm pini), `BR-SEC-16` rotasyon
   kararı (bedeli ölçüldü: tek anahtar).
+
+### 5. Yayın yolunun iki sessiz kapısı: `tsc -b` **yeşil**, `dotnet format` **112 sapma**
+
+- **Neden:** defterde iki not var — *"`tsc --noEmit` yayın kapısı değil; yayın imajı `tsc -b` ile
+  kırılır"* ve *"`dotnet format` beş dosyada sapma buldu; **o araç da hiç koşmamış**"*. İkisi de
+  yayın yolunda koşan ama gündelik akışta koşulmayan kapılar.
+- **`npx tsc -b` → rc=0.** Yani TypeScript proje derlemesi temiz; `tsc --noEmit`'in görmediği
+  test `tsconfig`'i dahil.
+- **`dotnet format --verify-no-changes` → 112 bulgu, 8 dosya.** Dağılım tamamen **bugünün/dünün
+  yeni işi** (Asterisk konsolu + sistem-ops):
+
+  | bulgu | dosya |
+  |---|---|
+  | 47 | `Tests/AsteriskConsoleTenantQueueTests.cs` |
+  | 23 | `Pbxtr.Architecture.Tests/SystemAgentCallSiteTests.cs` |
+  | 18 | `SystemAdmin/AsteriskConsoleAuditTests.cs` |
+  | 9 | `Telephony/Asterisk/AmiAsteriskConsole.cs` |
+  | 5 | `SystemOps/SystemCommandRunner.cs` |
+  | 4+3+3 | `SystemFileObservationTests`, `BackupStatusReader`, `SystemObservationCommandRunnerTests` |
+
+- **Değişikliğin cinsi ölçüldü:** `git diff -w` **hâlâ fark gösteriyor** (65/27) — yani düzeltme
+  saf boşluk değil: `using` sıralaması ve ayraç yerleşimi de değişti (ör. `BackupStatusReader`'da
+  `file = file with { … }` çok satırlı bloğa çevrildi). **Anlamsal değişiklik yok.**
+- **Doğrulama:** `dotnet build` → **0 uyarı, 0 hata**; ardından
+  `dotnet format --verify-no-changes` → **0 bulgu**.
+- **Ve asıl bulgu düzeltme değil, tekrar:** `d66684a6`'da (dün) aynı araç *"beş dosyada sapma
+  buldu — o araç da hiç koşmamış"* diye kaydedilmişti. Bir gün sonra **112 bulgu**. Yani sapma
+  **her yeni işte sessizce birikiyor** ve tek fark eden şey, birinin aracı elle koşturması.
+  `BR-QA-54`'ün (bağlanmamış araçlar) kardeşi; oraya not düşülmesi gereken üçüncü araç bu.
+- **Commit:** `f1dbbf46`
