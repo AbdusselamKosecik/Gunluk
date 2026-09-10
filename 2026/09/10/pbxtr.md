@@ -519,3 +519,37 @@ olmayan: 0"*.
 - **Kullanıcıya ait:** A-2 (t0012 bir düğüme pinlensin mi, yoksa bilerek teslim
   edilmediği mi yazılsın) ve Karar #39 uygulaması için `/sprint-planla pbxtr` → "başla".
 - Karar #40 kapsam değiştirdiği için **tam kurul** ya da kapsamın #41'e taşınması.
+
+### 18. A-7 kapandı — ve korktuğumun tersi çıktı
+
+- **Neden:** Karar #40'ta `pbxtr-aor-base.max_contacts` için lab (`1`) ile doküman
+  (`3`) çelişiyordu. Endişem şuydu: **lab yanlışsa labda yapılacak her A/B ölçümü
+  canlıyı temsil etmez** — `pjsip reload` dersinin aynı sınıfı.
+- **Ne yapıldı:** Canlıdan salt-okunur ölçtüm (`docker exec pbxtr-asterisk`,
+  `pjsip show aors` + `/etc/asterisk/pjsip.conf`).
+
+  ```
+  pbxtr-aor-base    max_contacts = 1   qualify_frequency = 60
+  pbxtr-aor-webrtc  max_contacts = 3   qualify_frequency = 0
+  ```
+
+- **Sonuç: canlı = lab. Yanlış olan DOKÜMANDI** (`asterisk-provisioning.md:196`),
+  düzelttim. Bu **iyi haber**: lab bu iki şablon için canlıyı temsil ediyor, yani
+  `BR-AST-54`'ün "auth'suz endpoint ne yapar" A/B'si labda koşulabilir — A-7 onun
+  ön koşuluydu ve kalktı.
+
+- **Aynı okumadan çıkan ikinci ölçüm, ve bu daha ağır:** altı AOR listelendi
+  (`t0007-wrtc-1042…1047`) ve **altısının da altında tek bir `Contact` satırı yok.**
+  Canlıda şu anda **hiçbir cihaz kayıtlı değil** — WebRTC yarısı bile. Panel yine
+  de altı dahiliyi *"Config: Üretildi"* yeşiliyle gösteriyor. `BR-FE-70`'in
+  ayıracağı `generated`/`withheld` ikilisi bunu **hâlâ göstermez**; üçüncü bir
+  durum (`registered`) gerekiyor. K-18 onu kapsam dışı bırakmıştı — kart açılması
+  gerektiğini karar kaydına yazdım.
+
+- **A-9 ayakta:** `pbxtr-aor-webrtc.qualify_frequency = 0` canlıda doğrulandı, yani
+  Asterisk Uzmanı'nın "erişilebilirlik filtresi yok, hangi contact çevrilir
+  öngörülemez" gerekçesi geçerli.
+
+- **Dokunulan dosyalar:** `doc/mimari/asterisk-provisioning.md`,
+  `yonetim/kurul-kararlari.md`
+- **Commit:** `1a46ea65` — push edildi.
