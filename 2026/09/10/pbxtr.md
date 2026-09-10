@@ -2114,3 +2114,32 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
   yanlış. Sayıyı sormak için `clickup-cikar.js` koşulur, `grep` değil.
 - **Sonuç:** kart açılmadı, düzeltme yapılmadı — **ölçülüp temiz çıkan bir sınıf.** Kayıt bunun
   için var: aynı soruyu yarın yeniden sormamak.
+
+### ClickUp durum eşlemesi — **işi devredilmiş dört kart panoda açık görünüyordu**
+
+- **Neden:** sabah `Kurul: Karar #NN ONAY` kalıbının `backlog`'a düştüğünü bulup düzeltmiştim.
+  Aynı sınıfın başka üyeleri var mı diye **catch-all grubun tamamını** taradım.
+- **Ne yapıldı:** `backlog` grubundaki 105 kartın **57 benzersiz durum metni** listelendi.
+  Dördü **açık iş taşımıyor**:
+
+  | kart | durum | işi nerede |
+  |---|---|---|
+  | `BR-SYS-73` | Yeniden yazıldı | `BR-SYS-76/77/78` |
+  | `BR-QA-24` | Bölündü (2026-09-07) | `BR-QA-36/37/38` + `BR-SYS-89` |
+  | `BR-BE-95` | Kapsam dışı — topoloji şartı | — (kapsam dışı) |
+  | `BR-SEC-06` | Ölçüldü — kalan iş `BR-BE-119/120/121` | üç kartta |
+
+- **Kural dar tutuldu:** çıplak `Ölçüldü` ve `Kapsam daraldı` **kapanış değildir** (ayrı negatif
+  test). Gerekçe karta ve koda yazıldı: **açık işi kapalı göstermek, kapalıyı açık göstermekten
+  kötüdür** — bu yüzden sınır bilerek dar.
+- **Ve bir tuzak buldum:** ilk yazımım `\b` kullanıyordu ve **iki kural hiç eşleşmedi**.
+  **JS'te `\b` yalnız ASCII harf tanır**; `yazıldı` ve `Ölçüldü` sondaki `ı`/`ü` yüzünden sınır
+  üretmiyor. Hata yok, uyarı yok — sadece `false`. Testler olmasa "kural çalışıyor" sanacaktım.
+  Türkçe harf kümesini dışlayan ileri-bakışla düzeltildi ve **hafızaya yazıldı**
+  (`js-b-siniri-turkce-harfi-gormez`).
+- **Doğrulama:** 6/6 test yeşil; kural kaldırılınca **1 test kırmızı** (mutasyon).
+  Pano: `fark olan kart: 4` → yazıldı → yeniden ölçümde **`fark olan kart: 0, izde olmayan: 0`**.
+  Grup dağılımı: `complete` 228 → **232**, `backlog` 105 → **101**.
+- **Dokunulan dosyalar:** `yonetim/arac/clickup-durum.js`, `yonetim/arac/clickup-durum.test.js`,
+  `CLAUDE.md` §14
+- **Commit:** `33c9e121`
