@@ -269,6 +269,33 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `b1a86e65`
 
+
+### `BR-SYS-92` bagimsiz dogrulandi — ve ariza SESSIZ DEGIL, gunlugu okunmuyor
+
+- **Neden:** `BR-SYS-94` (lab fiksturu uretim imajinda) bir hipotez dogurdu: `BR-SYS-92` de ayni
+  kokten mi?
+- **ONEMLI — bu bir kesif degil, DOGRULAMA:** `BR-SYS-92` eksik `bind` satirini, yeniden insa
+  gerekliligini ve *"elle duzeltme geri ezilir"* uyarisini **zaten yaziyordu**. Olcumun ekledigi
+  sey, duzeltmenin **sinanabilir** hale gelmesi.
+- **Olculen:**
+  - `sha256(depo deploy/asterisk-lab/lab-entrypoint.sh)` = **917ea946...**, `bind` **var**
+  - `sha256(canli konteyner /usr/local/bin/lab-entrypoint.sh)` = **522688cd...**, `bind` **YOK**
+  - imaj `pbxtr-asterisk:22`, konteyner olusturma **2026-09-06** -> **duzeltme oncesi**
+  - canli dosya mtime **bugun 04:01** -> konteyner bugun acildi ve **eski entrypoint yine
+    bind'siz yazdi**; kartin uyarisi **fiilen gozlendi**
+  - `pjsip show transports` -> `Objects found: 1` (yalniz udp)
+- **Asil ders:** ariza **sessiz degil**. `docker logs pbxtr-asterisk` her ~5 dakikada iki ERROR
+  satiri basiyor, sonuncusu **bugun 18:22:34**
+  (`transport_apply: ... could not be started as binding not specified`). On gun boyunca acikca
+  ve tekrar tekrar yazildi; **kimse okumadigi icin sessiz sayildi.**
+- **`BR-SYS-91`'e besinci olcum eklendi:** acilis gunlugunde `res_pjsip` ERROR satiri varsa kapi
+  kirmizi. Dosya karsilastirmasindan **daha ucuz ve daha erken** yakalar.
+- **`BR-SYS-92`'ye kabul olcutu eklendi** (yeniden insadan sonra ucu birden): konteyner ici
+  entrypoint hash'i `917ea946...` **ve** `pjsip show transports` -> `Objects found: 2` **ve**
+  acilis gunlugunde `transport-ws` ERROR satiri yok.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `95055f77`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
