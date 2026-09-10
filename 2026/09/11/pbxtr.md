@@ -679,3 +679,46 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
 | `BR-QA-55` — `dashboard-live` tabanı | **Görsel yargı** + taban PNG'nin **yeniden üretilmesi** gerekiyor (arayüz değişmiş). Piksel karşılaştırması bu makinede hakemlik **edemez** (taban Linux'ta üretilmiş). |
 | Docker Desktop | Kapalı → `Pbxtr.Integration.Tests` + 5 kapı + 2 gitleaks kapısı **ölçülemiyor**. |
 | `/basla pbxtr sprint-44` | Kullanıcı komutu bekliyor; §7 gereği uygulamaya geçilmedi. |
+
+### `BR-QA-56` (c) cevaplandı — ve envanterim iki yönde birden yanlıştı
+
+- **Soru:** sekiz sahipsiz ST-44 betiği **bağlansın mı, kaldırılsın mı?** Kararın önkoşulu
+  ölçülebilirdi: bu iz hâlâ canlı mı?
+- **ST-44 ölü DEĞİL — dört kanıt:**
+  1. Üç systemd birimi somut `ExecStart` taşıyor: `s30-evidence-runner/sign/promote.service`,
+     üçü de `/usr/bin/python3 /opt/pbxtr/deploy/st44/...`.
+  2. `DeployPrivilegeTests.cs:144-145` bu birimlerden ikisini **`User=root` diye izin
+     listesine** almış.
+  3. `S28AcceptancePreflightTests.cs:14` `s28-acceptance-preflight-test.sh`'i **fiilen
+     koşturuyor**.
+  4. `st44` geçen **on** C# test dosyası var — `Integration.Tests/Delivery/` kanıt-koşucu
+     ailesinin tamamı dâhil.
+- **Karşı kanıtı da yazdım:** `deploy/st44/`'e son dokunuş **2026-08-31** (11 gün) ve ST-44
+  **sprint-27…30**'da geçiyor, **sprint-41…44**'te geçmiyor.
+- **Cevap: BAĞLA, KALDIRMA.** C# yarısı kapılı ve canlı; kaldırmak izin listesini **boş
+  hedefe** bırakır ve teslim-kanıtı anlatısını keser.
+- **VE ENVANTERİM İKİ YÖNDE BİRDEN YANLIŞTI:**
+
+  | kusur | yönü |
+  |---|---|
+  | `.service`/`.timer` dosyalarını **çağırıcı saymıyordum** — oysa systemd bir çağırıcıdır | sayıyı **yüksek** gösteriyordu |
+  | `backlog.md`/`rows.json` anmalarını **çağırma sayıyordum** | sayıyı **düşük** gösteriyordu |
+
+  İkincisi özellikle can sıkıcı: kartın **kendi cümlesi** *"belgede anılmak bağlanmak
+  değildir"* diyordu, ama tarayıcı o kuralı uygulamıyordu. Dahası, bugün o araç adlarını
+  karta yazdığım için tarayıcı onları **kendi yazdığım metin yüzünden** "bağlı" saydı.
+- **Düzeltilmiş sayı: 51 aday, 29 kapıdan, 9 dolaylı, 11 HİÇBİR YERDE** (8 değil).
+  On birin dökümü: beş ST-44 öz-testi, `deploy/ci/api-test-shards.sh`,
+  `deploy/db/br-db-34-…-taslak.sh` (adı taslak), `deploy/e09-yuk-olcum.sh` (yük aracı),
+  ve **üç `yonetim/arac` aracı**.
+- **Commit:** `b2fe7fe3`
+
+## Kararlar (ek 9)
+
+- **Bir kuralı karta yazmak onu uygulamaz.** *"Belgede anılmak bağlanmak değildir"* cümlesini
+  sabah karta yazdım; akşam kendi tarayıcım o kuralı çiğnedi ve belge anmasını bağlanma saydı.
+  Kural yazılıyorsa **ölçen araca da konmalı** — yoksa yalnızca bir niyet beyanıdır.
+- **Envanter sayısı üç turda 3 → 4 → 8 → 11 oldu.** Her tur bir kapsam deliği kapattı
+  (`yonetim/`, `.cs` çağırıcılar, `.service` çağırıcılar, belge anması). "Sınıfı kapat"
+  dersi doğru ama **yeterli değil**: kapatırken evrenin **her iki ucunu** da (neyi tarıyorum
+  / neyi çağırıcı sayıyorum) ayrı ayrı yazmak gerekiyor.
