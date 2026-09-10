@@ -114,6 +114,25 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Sonuç / doğrulama:** ClickUp `fark olan kart: 0, izde olmayan: 0`; durum testi 4/4 yeşil.
 - **Commit:** `e49b038b` (karar + kartlar), `2bfd557e` (eşleme düzeltmesi)
 
+
+### sprint-44 Karar #43'e gore tadil edildi — ve planlama yeni bir bag ortaya cikardi
+
+- **Neden:** Karar #43 baglayici bir sira (S43-11) dayatti; sprint-44 o karardan once yazilmisti.
+- **Planlama sirasinda cikan, KARARDA OLMAYAN bag:** `-local` baglamina `-out`/`-int`'ten
+  `GotoIf(DIALPLAN_EXISTS(...))` ile giriliyor ve o satir `ExecIf(...?Stasis)`'ten **SONRA**
+  kosuyor — canli dosyada dogrulandi (`t0007-dialplan.conf:13` Stasis, `:15` `-local`'a GotoIf).
+  Yani **`BR-AST-60` dogruysa kanal `-local`'a hic ulasmiyor** ve sprint-44'un iki ana kalemi
+  (`BR-AST-57` / `A-5'` ve `AST-53-b` tasma yarisi) **olculemez** hale geliyor. Bu, `BR-AST-58`'in
+  DID yarisi icin Karar #42'de verilen Ş42-8 gerekcesinin **birebir aynisi**.
+- **Sonuc:** `BR-AST-60` olcumu sprintin **yeni birinci kalemi** (BR-SYS-93'ten sonra).
+  `BR-AST-57`/`AST-53-b` onun arkasina alindi — kod yazilabilir ama *"canlida gorunur sonuc"*
+  iddiasi olcum oncesi yapilamaz.
+- **Frontend bos kalmiyor:** `BR-FE-72` (bekcisiz hata haritalari, `BR-AST-59`'dan once inmesi
+  tercih edilir) ve `BR-FE-73`. `BR-BE-122`/`123` de `BR-AST-59`'dan bagimsiz, bu sprinte alinabilir.
+- **DoD'ye eklenen kural:** *kapsam da olculur.*
+- **Dokunulan dosyalar:** `yonetim/sprintler/sprint-44.md`
+- **Commit:** `46bcb506`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
