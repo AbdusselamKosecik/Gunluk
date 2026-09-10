@@ -2319,3 +2319,28 @@ gireceği tablolar.
 
 Bugün ilk kez bir genişletmeyi **yazmadan önce** ölçüp durdurdum. Onuncu vaka, ama deseni tersine
 çeviren ilki.
+
+### `BR-AST-60` — aynı yolda **ikinci bağımsız kırık**: kartın "emniyeti" outbound'u çalıştırmıyor
+
+- **Neden:** devir satırının canlıda kurulu olduğunu doğruladıktan sonra doğal soru: satır
+  geçilse ne olacaktı? `-out` bağlamının son satırı `Goto(pbxtr-outbound,${EXTEN},1)`.
+- **Ölçüm — Asterisk'in kendi cevabı (canlı, salt-okuma CLI):**
+  - `dialplan show pbxtr-outbound` → **"There is no existence of 'pbxtr-outbound' context"**
+  - `dialplan show pbxtr-inbound` → aynı cevap → **`BR-AST-58`'in ölü hedef bulgusunun saha
+    doğrulaması**
+  - `/etc/asterisk/` altında tanımlı **tek** pbxtr bağlamı `[pbxtr-t0007-local]`.
+- **Sonuç — kartı düzelten kısım:** kartta yazılı *"geri alınabilir emniyet"* (`PBXTR_CTL` sabit
+  `"0"`) **giden aramayı çalıştırmaz**; arızayı **bir satır aşağı taşır** — sessiz asılma yerine
+  "bağlam yok" hatası. **Dış numaraya çağrı bugün iki ayrı sebeple kırık** ve ikisi ayrı işler.
+- **Ve ölçümü ucuzlatan ayrım:** `-out` içindeki
+  `GotoIf(DIALPLAN_EXISTS(pbxtr-t0007-local,…))` dalı **ölü `Goto`'dan önce** geliyor; dahili
+  hedefte akış `-local`'a sapıyor ve orada **gerçek bir `Dial()`** var
+  (`PJSIP/t0007-1042&PJSIP/t0007-wrtc-1042,30,tT`). Yani **dahili panel araması için tek engel
+  Stasis asılmasıdır.**
+  Ş43-1 ölçümü buna göre keskinleştirildi: **ilk originate bir dahiliye (1042) yapılsın** —
+  kartın öncülü **tek değişkenli** doğrulanır, ölü `Goto` karışmaz; dış numara ikinci adım.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`
+- **Commit:** `9d7ba339`
+
+Bu, kullanıcının yapacağı ölçümü hem **ucuzlatıyor** hem de sonucunu **yorumlanabilir** kılıyor:
+dahiliye originate'te asılma görülürse sebep tektir.
