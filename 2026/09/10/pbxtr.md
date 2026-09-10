@@ -2211,3 +2211,29 @@ Yukarıdaki dizin `0278fa58`'de bitiyordu; bugünün toplamı **61 commit**. Son
 cümleydi** — kartın teşhisi, delilin cinsi, sayının alt sınırı, kapının kapsamı, hatta ölçüm
 komutunun kendisi (üç sır sızıntısı). Ölçüm hiçbirinde işi büyütmedi ya da küçültmedi; **yerini
 değiştirdi.**
+
+### `BR-SEC-16` — rotasyon maliyeti iddiam **çok yüksekti**; ölçtüm, ucuz çıktı
+
+- **Neden:** kartı yazarken kullanıcıya *"`ApiKeyPepper` dönerse tüm tenant API anahtarları
+  geçersizleşir ve çağrı akışı durur; pencere planlanmalı"* dedim. **Ölçülmemiş bir tahmindi** ve
+  kullanıcının kararını doğrudan zorlaştırıyordu — bir kararı "pahalı" diye sunup ölçmemek,
+  bugünün deseninin en pahalı hâli.
+- **Ne yapıldı / ölçüm (canlı, salt-okuma):** `api_keys` **6 satır, iptal edilmemiş yalnız 1**.
+  O tek anahtar: `label=confd-cek`, `node=asterisk-01`, **bugün kullanılmış**
+  (`last_used_at` 18:53Z, `last_bundle_served_at` 19:49Z).
+  **Sınıf B uçları için tanımlı aktif anahtar YOK** — `BR-QA-51`'in *"03 Eylül'den beri gerçek
+  çağrı yok"* ölçümüyle tutarlı: duracak akış zaten yok.
+- **Sonuç:** rotasyonun bugünkü bedeli **tek anahtarın yeniden üretilip sunucudaki confd
+  yapılandırmasına yazılması**. Pencere gerekmiyor; **sıra** gerekiyor.
+- **İlk yazımda hiç olmayan ikinci etki:** aynı pepper `PersistentTelephonyProvider.cs:26,63`'te
+  **HMAC anahtarı** olarak da kullanılıyor ve `telephony_provider_effects`'in **idempotans
+  anahtarını** üretiyor (`UNIQUE (tenant_id, correlation_id, operation, target_fingerprint)`,
+  `ON CONFLICT DO NOTHING`). Rotasyondan sonra aynı hedef **farklı parmak izi** üretir; canlıda
+  **4021 satır** var. Dar ama gerçek risk: rotasyon anında **uçuşta olan** bir işlemin tekrarı
+  mükerrer kaydedilebilir. Depoda **çift-pepper / kademeli rotasyon desteği yok** (`PreviousPepper`
+  vb. 0 isabet) — rotasyon **sert geçiştir**.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (`BR-SEC-16` gövdesi ve bedel değerlendirmesi)
+- **Commit:** `716f310b`
+
+Bu, bugün **kendi cümlemi ölçüp çürüttüğüm dokuzuncu** vaka — ve tek "iyi yönde" olanı: kusur
+küçüldü. Ama ders aynı: **ölçmeden "pahalı" demek de bir öncüldür.**
