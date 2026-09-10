@@ -634,6 +634,61 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
   hangi dosyalara kesin, hangilerine kosullu yansiyor).
 - **Dokunulan dosya:** `~/.claude/.../memory/kart-onculu-olculmeden-yazilmaz.md`
 
+
+### Commit dizini — 2026-09-10 (pbxtr deposu, kronolojik)
+
+Gunlugun amaci *"diskteki her sey uctugunda okuyup isi bastan uretebilmek"* oldugu icin gunun
+**tam** commit dizini burada. Denetim: bugun 46 commit atildi; sekizinin metin icinde acik sha
+atfi yoktu ama **hepsi konu olarak yaziliydi** (Karar #39, BR-AST-51, AGENTS.md, A-6, A-5, A-1,
+yapisal kok duzeltmesi). Bu dizin o boslugu kapatiyor.
+
+- `aae46c27` — feat: 09-09 turunun tamami kurtarildi + tsc -b'nin bulduğu iki kirmizi kapatildi
+- `e0b3ba94` — docs: AGENTS.md §3.0 bir gundur CLAUDE.md ile CELISIYORDU — is atlatti
+- `0e2bdd12` — BR-AST-51 (YENI, P1): sir cozumleyici hic yazilmadi — PJSIP urun yolundan HICBIR ZAMAN teslim edilmedi
+- `a309f790` — kurul: Karar #39 — BR-AST-51 RED; brifingimin cekirdek onculu ON UYENIN ONUNDA da curudu
+- `f03006ca` — olcum: Karar #39 A-1 cevaplandi — sahada bekleyen masa telefonu SIFIR, ama 51a yine de oncul
+- `abac92f8` — olcum: A-5 on kosulu — masa endpoint'i HER CAGRIDA Dial() ediliyor, (a) iki dosyalik is
+- `1f66badf` — olcum: A-6 yarisi kapandi — belge kusuru KESIN, davranis kusuru OLCULMEDI
+- `176bfe64` — fix: Karar #39 K-16 + K-18 — ekran numarasi taramasi IKI gercek kusur buldu
+- `5733728f` — kurul: Karar #40 — A-5 yanlis eksende sorulmus; A-6 oncülüm CURUDU
+- `1a46ea65` — olcum: A-7 KAPANDI — canli = lab, yanlis olan DOKUMANDI
+- `6a818d74` — kurul: Karar #41 — tam kurul; iki oncülüm daha curudu, canlida ucuncu ariza
+- `44f575d5` — olcum: A-11 KAPANDI — trunk ref'i uretilen bir sema DEGIL, serbest metin
+- `7972ff12` — olcum: A-12 — sozlesme yanlis degil, ADI yanlis: uc eksen tek kolonda
+- `8080112e` — mimari: ADR-017 + A-8 COZULDU — celiskinin dayandigi onerme YANLISTI (bende)
+- `53a3d48c` — sprint: sprint-44 plani + BESINCI ve ALTINCI onculum curudu
+- `d0e77087` — olcum: BE-00 — A-5(a) "en ucuz secenek" DEGIL, sekiz tuketicisi var
+- `3cce764f` — kurul: Karar #42 (tam kurul 10/10) — A-5 KAPATILDI, cevap depoda yaziliymis
+- `9564217a` — kart: BR-AST-58 — gelen cagri yolu HIC baglanmamis, tek calisan numara ELLE yazilmis
+- `5e85e85d` — olcum: BR-AST-55'in koku DOGRULANDI; ve tek calisan gelen numara BOS KUYRUGA gidiyor
+- `1c11264c` — kart: BR-AST-55 koku dogrulandi (iki aday dustu), BR-AST-58 bos kuyruk bulgusu
+- `9d366e34` — olcum: BR-AST-58(b) envanteri + BR-AST-59 — gelen cagrida ARI kontrolu yapisal olarak yok
+- `c982e893` — clickup: BR-AST-59 karti acildi (fark 0, izde olmayan 0)
+- `d63b9914` — olcum: BR-AST-55 ucuncu aday — hint degil state_interface; dikis hic yok
+- `e49b038b` — kurul: Karar #43 — BR-AST-59 SARTLI ONAY, ama kart iki yerinden duzeltildi
+- `2bfd557e` — clickup: durum eslemesi 'Kurul: Karar #NN SARTLI ONAY' bicimini gormuyordu
+- `46bcb506` — sprint-44: KARAR #43 TADILI — BR-AST-60 olcumu sprintin YENI BIRINCI kalemi
+- `44d73993` — olcum: BR-FE-73 — kapi YOK ve tek ornek DEGIL (en az uc), P3 -> P2
+- `538c80af` — olcum: BR-FE-72 ve BR-BE-122/123 oncullerini kendim dogruladim
+- `60355533` — olcum: BR-AST-58(a) kapsami — sablon YOK, baglamlar PAYLASIMLI, __PBXTR_REC cakisiyor
+- `7f69068f` — olcum: S43-6'nin 'bayt bayt ayni' sarti bugun uygulanamaz — altin dosya yok
+- `31151498` — olcum: BR-SYS-94 — lab fiksturu URETIM IMAJINA gomulu; envanterin siniflandirmasi yanlisti
+- `0ab18f07` — clickup: BR-SYS-94 karti acildi
+- `b1a86e65` — olcum: BR-SYS-94 duzeltme yolu ikiye bolunuyor — depo/imaj + host gecisi
+- `95055f77` — olcum: BR-SYS-92 bagimsiz dogrulandi + sinanabilir kabul olcutu; BR-SYS-91'e gunluk olcumu
+- `501365ea` — olcum: BR-SYS-94 sapmanin cinsi — elle duzenleme DEGIL, bayat imaj
+- `b287e82a` — olcum: BR-SYS-92'nin penceresi 4 dakika 35 saniye
+- `3b321d4c` — olcum: bayatlik sinif hatasi degil — alti imajin yalniz biri sorunlu, o da sha'siz etiketli
+- `3640cc20` — olcum: pbxtr-app'in 2 commit gecikmesi kusur DEGIL — ikisi de bugunden
+- `f38cfcab` — olcum: BR-AST-24 + sablon D5 — MixMonitorMute dialplan uygulamasi olarak YOK
+- `bfdb376b` — olcum: acik P1 govde denetimi — iki kartin kapsami sprint dosyasinda kalmis, karta tasindi
+- `6f78b76c` — olcum: yapisal kok — Asterisk imaji yayin hattinin TAMAMEN disinda
+- `964dfd36` — olcum: BR-SYS-94(c) kurula gitmeden once daraltildi — cevabin yarisi zaten yazili
+- `c22a2fdd` — DUZELTME: 'yapisal kok' yeni degildi — sprint-44 Blok 0 (LX-01..LX-08) bunu zaten tasiyor
+- `b1a92117` — istisare (KARAR DEGIL): Asterisk imaji dagitim politikasi — 4 uye, yeter sayi YOK
+- `7b755f80` — sprint-44 Blok 0: istisarenin uc olcumu ve iki uyarisi kabul kriteri olarak islendi
+- `0278fa58` — duzeltme: BR-SYS-94'teki curutulmus cumle duzeltildi (Sinif A / Sinif B ayrimi)
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
