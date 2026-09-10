@@ -553,3 +553,107 @@ olmayan: 0"*.
 - **Dokunulan dosyalar:** `doc/mimari/asterisk-provisioning.md`,
   `yonetim/kurul-kararlari.md`
 - **Commit:** `1a46ea65` — push edildi.
+
+### 19. Karar #41 — tam kurul; iki öncülüm daha çürüdü ve canlıda ÜÇÜNCÜ arıza çıktı
+
+- **Neden:** Karar #40 altı üyeyle koşulmuştu ve kapsam değiştirmişti. CEO'nun deyimiyle
+  *"eksik üyeyle toplanan kurul karar değil, öneri üretir."* Eksik dört üyeye (CEO, Linux,
+  Frontend, Süpervizör) aynı kapsamı sordum.
+- **Ne yapıldı:** Dördü de **ŞARTLI** oy verdi, HAYIR yok. Karar kaydına şunu açıkça yazdım:
+  **bu tur tek başına 4 oyluktur**; 10 üye ancak #40 + #41 birlikte alındığında bu kapsamı
+  görmüş olur. CEO'nun usul şartını kabul ettim: **6 üyeyle kapsam açan tur bir daha
+  koşulmayacak.**
+- **Commit:** `6a818d74` — push edildi.
+
+#### Canlıda üçüncü arıza — ve A-7'de sebebini aramamışım
+
+Linux uzmanı buldu, ben doğruladım:
+
+```
+pjsip show transports              →  yalnız transport-udp, Objects found: 1
+pjsip show transport transport-ws  →  Unable to find object transport-ws.
+```
+
+Altı endpoint de `pbxtr-ep-webrtc` şablonundan türüyor ve o şablon `transport = transport-ws`
+diyor. **Var olmayan taşımaya bağlı endpoint'e tarayıcı kaydolamaz.**
+
+**Bu, A-7'de kendi ölçtüğüm şeyin sebebi.** Ben *"altı AOR, hiçbirinin altında `Contact` yok"*
+ölçümünü yapıp **"canlıda kayıtlı cihaz sıfır"** diye kaydettim ve **sebebini aramadım**.
+Ölçümü doğru yaptım, **sorguyu bitirmedim.** Ders bu: "sıfır gördüm" bir bulgu değil, bir
+**sorunun başlangıcı**.
+
+Kök sebep imaj sapması ve **depo kendi kendini uyarmış**: `lab-entrypoint.sh:158`
+`bind = 0.0.0.0` yazıyor, `:146-158` yorumu *"BIND SATIRI ZORUNLUDUR — OLCULDU, tahmin degil…
+Tasima HIC YUKLENMEDI"* diyor. Canlıda üretilen dosyada o satır **yok**; canlı imaj düzeltme
+öncesi entrypoint ile pişmiş (depo `917ea946…` ≠ canlı `522688cd…`). Düzeltmeyi getiren commit
+`3f8c51bc`'nin mesajı **"GERCEK KAYITLA dogrulandi"** — *depoda* doğrulanmış, **canlıya hiç
+ulaşmamış**. `kod var, koşan yok` + `karar yazılmış ama uygulanmamış` desenlerinin birleşimi.
+
+→ `BR-SYS-92` (P1 **BLOKLAYICI**) ve `BR-SYS-91` (P1): **santral hiçbir sapma kapısında yok.**
+Üç sapma kapımız var (nginx, confd, compose) ve `asterisk` kelimesi hiçbirinde geçmiyor.
+
+#### Çürüyen öncül 1: "BR-AST-53 teslim edilemeyecek"
+
+Öneri metnimde *"`pjsip` withheld olduğu için düzeltme teslim edilmeyecek"* yazmıştım. Ölçüm:
+**beş yerin hiçbiri `pjsip` türüne yazmıyor.** Zil grubu `Kinds.RingGroups = "ringgroups"`
+altına gidiyor (`ConfigRenderer.cs:109`, atama `:142`); `ProvisioningRevisionService.cs:733`'te
+`PJSIP` **tür adı değil kanal teknolojisi adı** — ikisini karıştırdım. `withheld` **tür bazında**
+kesiyor, `ringgroups` teslim edilir. Yani düzeltme **teslim edilebilir** — ama bunun bedeli:
+reload da **gerçekten koşacak**, risk gerçek.
+
+#### Çürüyen öncül 2: "Config: Üretildi YEŞİL"
+
+`ExtensionsScreen.module.css:250` → `--muted` = **#8a93a3, gri**. `--ok` bu kolonda **hiç**
+kullanılmıyor ve **CSS'in kendi yorumu** tonun neden bilerek nötr seçildiğini zaten yazıyor.
+Ben *"yeşil yalan"*ı hem `BR-FE-71` kartına hem `prototip-urun-farklari.md:1642`'ye yazmıştım —
+**ikisini de düzelttim**, eski metni silmeden.
+
+**Ve aradığım yeşil yalan gerçekten varmış — 40 satır aşağıda:** zil grubu paneli
+(`ExtensionsScreen.tsx:478-482`) `isActive` için **yeşil `StatusLed`** çiziyor. t0007'de panel
+*"Muhasebe · aktif · 3 üye"* diyor, santral kimseyi çalmıyor. Doğru yerde yanlış şeye bakmışım.
+
+#### Süpervizör ölçümü — metrik arızayı ÖDÜLLENDİRİYOR
+
+Üç iddiasını da doğruladım:
+
+| Ölçüm | Sonuç |
+|---|---|
+| `SlaAggregationJob.cs:369` | `WHERE a.queue_id IS NOT NULL` → zil grubu çağrısı `sla_buckets`'a **hiç girmiyor** |
+| `Modules/` altında zil grubu | **tek** dosya (`RingGroupEndpoints.cs`, CRUD); Analytics/Reports/Dashboard/Realtime/CallHistory → **0** |
+| `AlarmEvaluator.cs:207-260` | `AlarmMetrics` **dört metrik**, dördü de kuyruk metriği, dördü de arızada **"iyi" tarafa** sapıyor |
+
+**Muhasebe grubu bir hafta tamamen ölü olsa SLA raporu %100 gösterir** — payda hiç büyümüyor.
+Süpervizörün cümlesi kayda değer: *"Bu 'metrik bozuluyor' değil, metrik arızayı ödüllendiriyor."*
+→ `BR-OPS-02` (P1).
+
+**A-10 ikiye ayrıldı ve öncülü düzeltildi:** BR-AST-53 yolunda haksız RNA **yazılmıyor** (üye
+atlanıyor, `Dial` bacağı hiç kurulmuyor). **Ama kuyruk yolunda gerçek ve bugün canlıda:** kayıtlı
+contact sıfır + `qualify_frequency = 0` → `app_queue` üyeyi müsait sanıyor → hiçbir cihaz
+çalmıyor → `AgentRingNoAnswer` → ekranda **"Agent cevapsız"**. Agent hiçbir şey duymuyor,
+sicilinde "cevaplamadı" yazıyor. → `BR-AST-55` (P1).
+
+#### Kart numarası çakışması fiilen çıktı
+
+`BR-SYS-90` **doluydu** (beyaz-etiket kartı). Defterdeki *"kart numarası önce ölçülür"* kuralını
+**yarım uyguladım**: kontrol grep'ini ekleme komutuyla **aynı satırda** koşturdum, yani kontrol
+çakışmayı ekledikten sonra gördü. Yeni kart `BR-SYS-92` oldu. Kural şöyle sıkılaşıyor: **ölçüm
+ayrı komut olacak, yazma ondan sonra.**
+
+## Kalan iş
+
+`clickup-cikar.js` + `clickup-durum.js` ile: **351 kart = 228 kapalı + 123 kalan.**
+ClickUp: 5 yeni kart açıldı, senkron farkı **0**.
+
+## Açık kalanlar / sonraki adım
+
+- **BLOKLAYICI sıra:** `BR-SYS-92` (imaj yeniden inşa) → `BR-SYS-91` (sapma kapısı) →
+  `BR-AST-51b`/`kv:extwrtc:` → `BR-AST-53` → `BR-QA-49`. CEO'nun teslim tanımı:
+  *"t0007'de bir dahili arandığında WebRTC cihazı çalıyor."*
+- **A-8** (çözülemeyen çelişki) → `yazilim-mimari`.
+- **A-9** `BR-SYS-92` kapanmadan **ölçülemez** (kayıtlı cihaz yok).
+- **A-12 (yeni):** `ExtensionConfigStatus.cs:22-27`'nin *"üçüncü hâl olamaz"* paragrafı iki kez
+  geçersiz kılınıyor — sözleşme bir kez mi yeniden yazılmalı, kolon iki alana mı bölünmeli?
+- **A-13 (yeni, kendi yan bulgum):** `AlarmEvaluator.cs`'in vacuity notu *"Asterisk bagli
+  olmadigi icin"* diyor — **09-03'te kaldırılan §3.0 gerekçesi**, bugün AGENTS.md'de
+  düzelttiğimin aynısı. K-15 gereği **düzeltmedim**; kapı `BR-SYS-92` ile açılınca düzeltilir.
+- **Kullanıcıya ait:** A-2 ve `/sprint-planla pbxtr` → **"başla"**.
