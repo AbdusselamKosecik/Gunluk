@@ -1884,3 +1884,30 @@ yazmak. Kartın açık bıraktığı madde (a) ve (c) hâlâ ölçülmedi ve öy
 `BR-QA-51`'de açık kalan: **(a)** kaynak ayrımının tesadüfi `SIM/` önekine bağlı olmaktan
 çıkarılması, ve **(c′)** üretim veritabanında `seed-sample` koşma **politikası** (kim, ne zaman,
 hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatılmadı.
+
+### 🔴 Kendi kuralımı çiğnedim: üç sır transkripte düştü (üçüncü kez, aynı sınıf)
+
+- **Ne oldu:** `live-*` satırlarının (3698, simülasyon çalışma zamanı) canlıda **nasıl** üretildiğini
+  anlamak için üretimdeki sağlayıcıyı ölçmek istedim:
+  `docker inspect pbxtr-app --format '{{range .Config.Env}}…' | grep -i 'telephony|provider' | cut -c1-60`.
+- **Hata:** **`cut -c1-60` bir DEĞER kesici değil, bir SATIR kırpıcıdır.** Anahtar adları kısa
+  olduğu için değerlerin tamamı 60 karakterin içine sığdı ve
+  `Telephony__ApiKeyPepper`, `Asterisk__AriPassword`, `Asterisk__AmiSecret` açık düştü.
+  Ayrıca `docker inspect` `env`den daha tehlikeli: `grep` deseni ada değil **tüm satıra** uyuyor,
+  niyet edilmemiş anahtarları da getiriyor.
+- **Bu üçüncü kez:** 2026-09-04 (`sed` ad deseni `AmiSecret`i kaçırdı), 2026-09-06
+  (`cut -d=` — dosyada `=` yoktu), bugün (`cut -c`). **Üçünün ortak sebebi aynı: değeri getirip
+  sonra kırpmak.** Hafıza kuralı (`env-okurken-degeri-kes`) buna göre sertleştirildi: filtre
+  **değerden ÖNCE** uygulanır (`… | cut -d= -f1 | grep -i provider`); `head`/`cut -c`/`--format`
+  ile kırpmak ve `grep`ten sonra maskelemek **çürüdü**.
+- **Ne yapıldı:** `BR-SEC-16` açıldı (P2) — rotasyon **kullanıcı işidir** ve ucuz değildir:
+  `ApiKeyPepper` dönerse **tüm tenant API anahtarları geçersizleşir** ve Sınıf B uçları
+  fail-closed olduğu için çağrı akışı durur; pencere planlanmalı. `AriPassword`/`AmiSecret`
+  ayrıca `lab-entrypoint.sh:86,96` tarafından her açılışta yeniden yazılıyor (Sınıf A) — yalnız
+  `.env` güncellemek yetmez. **Rotasyonun bedeli, sızıntının bugünkü riskinden büyük olabilir;
+  bu bir karardır ve tek taraflı kapatmadım.** Karar verilene kadar sırlar **sızmış kabul edilir.**
+- **Ölçümün kendisi (bedeli bu kadar olmamalıydı):** `PBXTR_Telephony__Provider=asterisk` —
+  üretimde **gerçek sağlayıcı** koşuyor, simüle sağlayıcı değil. Yani canlı `call_events`'teki
+  `live-*`/`SIM/` satırları **çalışan bir simülasyondan değil**, tohumdan ve 08-26→08-29
+  penceresindeki eski koşulardan geliyor.
+- **Commit:** `BR-SEC-16` kartı + ClickUp izi (pano: yeni 1, fark 0)
