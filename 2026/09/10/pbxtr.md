@@ -2549,3 +2549,22 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   ubuntu konteyneridir ve o **Docker'a bağlı**; yani "tüm kapılar yeşil mi" sorusu bugün hâlâ
   **cevaplanamaz** ve bu, kullanıcıda bekleyen Docker maddesine bağlı.
 - **Commit:** `gen: system-roles.generated.ts BAYATTI` (tek dosya, iki satır)
+
+### Bayat üretilmiş dosyanın tüketicileri — **yeşil, ama bu bir kanıt değil**
+
+- **Neden:** `system-roles.generated.ts` bayattı; onu **okuyan** yerlerin yanlış bir yetki
+  kümesine göre karar verip vermediğini bilmek gerekiyordu.
+- **Ölçüm:** dosyayı iki yer tüketiyor — `src/Pbxtr.Web/src/app/roleActiveScreenSmoke.test.tsx`
+  (web) ve `tests/Pbxtr.Architecture.Tests/SpaBuildContextTests.cs` (dotnet gerektirir, bugün
+  koşulmadı).
+- **Sonuç:** web smoke koşuldu → **19/19 yeşil** (taze dosyayla). Yani düzeltme bir tüketiciyi
+  kırmadı.
+- **Ve dürüst okuma:** bu test **bayat hâlde de yeşildi** — yani `telephony.dialplan.read`'in
+  eksikliğine **duyarlı değil**. Bayatlığı yakalayan şey test değil, **DM010 tazelik kapısıydı**.
+  Defterdeki *"yeşil test kanıt değildir"* dersinin bir örneği daha: doğru soruyu soran kapı
+  başkaydı.
+- **Ayrıca ölçüldü:** `src/Pbxtr.Web` **dışında** üretilmiş dosya **yok** (`*.generated.*` /
+  `*.gen.*` taraması, `bin/obj` hariç → 0 isabet) ve depoda yalnız **iki üreteç** var
+  (`generate-screens.mjs`, `generate-alarm-metrics.mjs`) — ikisi de DM010 kapsamında.
+  Yani bu sınıf **kapalı**; kapının kendi yazdığı *"src/Pbxtr.Web dışını görmez"* sınırı bugün
+  boş bir kümeye işaret ediyor.
