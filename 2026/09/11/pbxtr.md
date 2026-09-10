@@ -297,3 +297,51 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   `ScreenRegistry.IsVisible` kullanıyor.
 - **`BR-QA-56` kapsamına (e) eklendi.**
 - **Commit:** `8f00b8a3` — *olcum: yetki kuralini cogaltan ikinci yer bulundu — bugun zararsiz, gizil*
+
+### Sınıfı kapattım: envanter artık depo geneli — ve tarayıcım iki kez yanıldı
+
+- **Neden:** bağlanmamış araç kalemleri üç turdur tek tek çıkıyordu (3 → 4 → 8). Kalem
+  toplamayı bırakıp **sınıfı kapatmak** gerekiyordu.
+- **Kapsam hatam:** `BR-QA-56`'nın taraması `deploy/` + `src/Pbxtr.Web/scripts` ile sınırlıydı;
+  **`yonetim/arac/` hiç görünmüyordu.** Depo geneline çıkardım (`node_modules`/`obj`/`bin`/`doc`
+  hariç).
+
+  | | |
+  |---|---|
+  | adı `test\|verify\|dogrula\|kapi\|guard\|check\|olc` içeren çalıştırılabilir doğrulayıcı | **51** |
+  | kapıdan çağrılan | **29** |
+  | hiçbir yerde anılmayan | **8** |
+
+- **Yeni çıkanlar:** `yonetim/arac/clickup-durum.test.js` ve `clickup-kart-farki.test.js` —
+  **bugün koşuldu, 6/6 ve 4/4 YEŞİL**, yani sağlam ama sahipsiz. ClickUp durum eşlemesi
+  (CLAUDE.md §14) bir daha bozulursa kimse ölçmez. Bir de `deploy/e09-yuk-olcum.sh`
+  (yük ölçüm aracı, öz-test değil — elle koşulması meşru).
+- **Kendi tuzağıma da düşmüşüm:** `yonetim/arac/kart-atif-dogrula.js` **yalnız `backlog.md`
+  ve `rows.json`'da anılıyor** — yani bir **kartta yazılı**, hiçbir yerden **çağrılmıyor**.
+  *Belgede anılmak bağlanmak değildir.*
+- **TARAYICIM İKİ KEZ YANILDI — ikisi de kayda değer:**
+  1. **`.cs` dosyalarını çağırıcı saymamıştım.** `s28-acceptance-preflight-test.sh` ve
+     `st48-kilit-test.sh` "sahipsiz" göründü. Yanlış: **ikisi de C# mimari testinden koşuyor**
+     (`S28AcceptancePreflightTests.cs:14`, `St48EgressDeployTests.cs`).
+  2. **"Dosya kendi adını anar" varsayıp `>1` eşiği koymuştum.** Bir `.sh` kendi adını anmaz;
+     tek gerçek çağırıcısı olan dosyalar **sıfır** sayıldı. Düzeltme: dosyanın kendisini
+     metinden çıkar, `>0` ara.
+- **Bunun bir yan faydası var:** **kabuk kapısını xunit'ten koşmak meşru ve mevcut bir bağlama
+  yolu.** `dotnet test` zaten yayın yolunda koşuyor; `BR-QA-56`'nın (c) maddesi uygulanırken
+  `yerel-kapilar.sh` yerine bir `*Tests.cs` de seçenek olarak yazıldı.
+- **Komut:**
+  ```bash
+  node yonetim/arac/clickup-durum.test.js        # pass 6  fail 0
+  node yonetim/arac/clickup-kart-farki.test.js   # pass 4  fail 0
+  ```
+- **Commit:** `4403a1ba` — *olcum: baglanmamis arac sinifi KAPATILDI — envanter artik depo geneli*
+
+## Kararlar (ek 2)
+
+- **Kalem toplamayı bırak, sınıfı kapat.** Aynı sınıftan üçüncü kalem çıktığında doğru hamle
+  dördüncüyü aramak değil, **evreni tanımlayıp tamamını ölçmek**tir. Üç turda 3→4→8 diye
+  büyüyen liste, tek ölçümde 51/29/8 diye kapandı.
+- **Bir envanter aracının kendi evreni de ölçülmelidir.** Tarayıcım iki kez yanlış "sıfır"
+  üretti ve ikisi de **yeşile benziyordu** — defterdeki *"araç yokluğu sıfır gibi görünür"*
+  ile aynı sınıf. Kontrolü, sonucu bildiğim bir dosyayla (`s28`) yaptım; o olmasaydı iki
+  yanlış envanter karta girecekti.
