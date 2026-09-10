@@ -528,6 +528,43 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
 - **Commit:** `964dfd36`
 
+
+### Asterisk imaji dagitim politikasi — TEKNIK ISTISARE (karar DEGIL) ve bes curutulen oncul
+
+- **Surec hatam, once:** CLAUDE.md 6 kurulu **10 uye + en az 7 EVET** sartina bagliyor; ben
+  **4 uye** cagirdim (CEO, CTO, Linux, Seytan). Dordu de SARTLI oy verdi ama **yeter sayi yok** —
+  kayit karar numarasi almadan **istisare** olarak gecti.
+- **Turun en onemli sonucu:** bu is **zaten planli**. `sprint-44` Blok 0 (`LX-01`..`LX-08`) tamamini
+  iciyor ve sprint **"basla" bekliyor**. CEO ve Seytan bagimsiz olarak ayni itirazi yapti:
+  `BR-SYS-94(c)` diye ikinci bir muhasebe hatti acmak, iki yerde durum tutmaktir. **Ayri kart
+  acilmadi.**
+- **BES ONCULUM CURUDU (hepsi benim yazdigim):**
+  1. **(en onemlisi)** *"imaji duzeltmek tek basina canliyi degistirmez"* — **YANLIS**. `bind`
+     duzeltmesi tohumlanan `conf/` yolunda degil; `lab-entrypoint.sh:136-161`
+     `00-transport-ws.conf`'u **her acilista kosulsuz `cat >`** ile yaziyor. Yani **yeniden insa +
+     recreate `BR-SYS-92`'yi TEK BASINA duzeltir.**
+  2. *"Depoda insa/dagitim betigi yok"* — kismen yanlis: betik yok ama **belgelenmis elle
+     prosedur var** (`deploy/asterisk-lab/README.md:251-266`).
+  3. *"Sunucuda kimse elle duzenlememis"* — **tek tarihli gozlem**, kalici ozellik degil.
+  4. *"Yapisal kok"* — `LX-08` bunu **kelimesi kelimesine** yaziyor.
+  5. *"Duzeltme ucuz, desen zaten yazili"* — **olculmemisti**: `pbxtr-asterisk` yerel bir ad,
+     registry hedefi yok, `docker push` calismaz; `staging-yayin.sh` asterisk'i **hic bilmiyor**.
+- **UC YENI OLCUM (Blok 0'a kabul kriteri olarak eklenecek):**
+  1. `deploy/pbxtr-deploy-artifact:115-116,142-143` — dagitici **yalniz app ve nginx**'i recreate
+     ediyor; santral icin **saglik kapisi ve rollback YOK**. *"Etiket uretmek dagitim degildir."*
+  2. `pbxtr-artifact-validate.py:9,38,40` — **tek manifest / tek RepoTag** zorunlu; iki etiketi
+     ayni tar'a koymak kapiyi kirar.
+  3. `Dockerfile:36` ses paketi `-current` (checksum yok) -> **ayni sha farkli imaj uretebilir**;
+     taban imaj da etiketle sabit, **digest** ile sabitlenmeli.
+- **IKI BLOKLAYICI UYARI:** (i) otomasyon `t0007` fiksturunu **sanayilestirir** — once temizle,
+  sonra otomatiklestir; (ii) sha etiketi sapma kapisinin **yerine gecmez** — imaj iki propagasyon
+  sinifi tasiyor (Sinif A recreate ile kesin uygulanir, Sinif B host'ta dosya varsa **sessiz
+  no-op**), etiket Sinif B icin **yaniltici yesildir**.
+- **Fiili bedel duzeltmesi:** *"12 gun bir suredir, bir maliyet degil"* — 0 DID / 0 trunk, WebRTC
+  yolunda trafik yoktu; gorunur bedel **sifir**, asil bedel ilk musteri tanimlandiginda gelir.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md`
+- **Commit:** `b1a92117`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
