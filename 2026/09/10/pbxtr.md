@@ -316,6 +316,33 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Dokunulan dosyalar:** `yonetim/backlog.md`
 - **Commit:** `501365ea`
 
+
+### `BR-SYS-92`'nin penceresi olculdu: **4 dakika 35 saniye**
+
+- **Neden:** imajin bayat oldugu dogrulanmisti; yeniden insanin **baska ne getirecegi** (yani
+  seni bekleyen dagitim kararinin degeri ve riski) olculmemisti.
+- **Olculen:**
+  ```
+  imaj insasi (docker image inspect) : 2026-08-29T14:34:25Z  sha256:799cefe04d32
+  bind duzeltmesi (3f8c51bc)         : 2026-08-29T14:39:00Z
+  fark                               : 4 dk 35 sn
+  ```
+  `lab-entrypoint.sh` o commit'ten beri **hic degismedi**. Yani imaj, duzeltme git'e girmeden
+  dort bucuk dakika once o anki calisma agacindan insa edildi; duzeltme dakikalar sonra commit
+  edildi; imaj bir daha **hic yeniden insa edilmedi**; ariza **12 gun** yasadi.
+- **Yeniden insanin getirecegi:** `git log --since=2026-09-06 -- deploy/asterisk-lab/` -> yalniz
+  `README.md`. Yani dagitim **davranissal olarak tek sey** degistiriyor: `bind` satiri.
+  **Risk dar, kazanc net.**
+- **KENDI OLCUMUMUN DUZELTMESI:** onceki turda imaj tarihini `2026-09-06` yazmistim. O,
+  `docker inspect <konteyner>` ciktisindaki **konteynerin** `.Created`'idir; imajin insa tarihi
+  `docker image inspect` ile **ayri** olculur. Konteyner 09-06'da yeniden yaratilmis ama **ayni
+  bayat imajdan** — yani "yeniden baslattik" bir duzeltme degildi ve olamazdi.
+- **`BR-SYS-91` icin en guclu gerekce:** dort bucuk dakikalik bir yaris, on iki gunluk bir ariza
+  uretti ve **hicbir kapi gormedi**. Sapma kapisinin soracagi soru *"depo dogru mu"* degil —
+  depo bastan beri dogruydu — **"kosan imaj deponun neresinde"**dir.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/kurul-kararlari.md`
+- **Commit:** `b287e82a`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
