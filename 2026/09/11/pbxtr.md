@@ -130,3 +130,30 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   **her yeni işte sessizce birikiyor** ve tek fark eden şey, birinin aracı elle koşturması.
   `BR-QA-54`'ün (bağlanmamış araçlar) kardeşi; oraya not düşülmesi gereken üçüncü araç bu.
 - **Commit:** `f1dbbf46`
+
+### 6. Görsel sadakat kapısı **20 gündür kırık** — ve onu ekleyen commit kırmış
+
+- **Neden bakıldı:** `dotnet format`'tan sonra simetrik soru: web tarafında da elle koşulan,
+  kapıya bağlanmamış bir araç var mı? `package.json` iki tane gösterdi:
+  `test:fidelity:verify` ve `test:fidelity:selftest`.
+- **Öz-test yeşil:** *"visual baseline mutants rejected"* — doğrulayıcı **çalışıyor**.
+- **Doğrulayıcı KIRMIZI:** `content hash mismatch for
+  visual-tests/__screenshots__/dashboard-live-1440x900.png`. Üç tabandan **biri** tutmuyor
+  (`0f3d690db218…` ≠ `bcd2256fbad1…`); diğer ikisi eşleşiyor. `git diff --stat HEAD` boş →
+  sapma **commit'li durumda**, Windows artefaktı değil, Linux'ta da kırmızı verir.
+- **Kronoloji ölçüldü ve öğretici:**
+
+  | saat | commit | ne oldu |
+  |---|---|---|
+  | 16:07 | `d5fee96d` | *"ci: enforce root trust and **visual fidelity gates**"* — manifesto eklendi |
+  | 18:35 | `add3899a` | UI metni işi; ekran görüntüsü **yeniden üretildi**, hash **güncellenmedi** |
+
+  **Kapı, eklendikten iki buçuk saat sonra kırıldı ve 20 gündür kırık.**
+- **Neden kimse görmedi:** `test:fidelity:verify` **hiçbir kapıdan çağrılmıyor** —
+  `deploy/*.sh` + `deploy/ci/*.py` taramasında **0 isabet**. `BR-QA-54`'ün (bağlanmamış araçlar)
+  **dördüncü** kalemi.
+- **Tek taraflı düzeltmedim, sebebi kartta:** çare hash'i güncellemek, ama bu **bugünkü ekran
+  görüntüsünü doğru taban ilan etmek** demek — ve bu bir **görsel yargı**. Doğrulayıcı yalnız PNG
+  imzası, 1440×900 boyut ve >10 KB ölçüyor; görüntünün **doğru render olduğunu** ölçmüyor.
+  Playwright akışı tarayıcı istiyor ve bugün koşulamadı.
+- **`BR-QA-55` (P2) açıldı**, panoya işlendi (`fark: 0`), atıf denetimi temiz.
