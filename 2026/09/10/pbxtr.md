@@ -286,3 +286,36 @@ Linux uzmanının turundan artakalan bir `nginx log_format` ölçümü arka plan
 kalmıştı. Durdurmadan önce gereksiz olduğunu doğruladım: aynı ölçüm zaten oya
 girmişti. Ajan sonradan teyit etti — o ölçümü host mount'undan tamamlamış,
 sonuç değişmemiş (`cache-control: no-store`, nginx gövde/başlık loglamıyor).
+
+### 9. A-6 yarısı kapandı — belge kusuru kesin, davranış kusuru ölçülmedi
+Kendi açtığım soruyu ölçmeden bırakmadım.
+
+| Dal | Kullandığı biçim | Satır |
+|---|---|---|
+| Zil grubu | `Set(RGC=${PJSIP_DIAL_CONTACTS(<endpoint>)})` | `:942`, `:968` |
+| **Extension (doğrudan dahili)** | **çıplak `Dial(PJSIP/x&PJSIP/y,…)`** | `:783` → `:732-739` |
+
+`:833-841` notu *"Şablonun kendi **extension dalı da** bu formu kullanır"* diyor —
+**kullanmıyor.** Belge kusuru **kesin**.
+
+**Ama "davranış da kusurlu mu" ayrı bir soru ve onu ölçmedim:**
+- Notun **2. gerekçesi** (*"kaydı düşmüş tek telefon `&` ile bütün grubu bozar"*)
+  extension dalına **taşınmaz** — o, `PJSIP_DIAL_CONTACTS()`'in boş dize dönmesine
+  özgü. Çıplak biçimde kaydı düşmüş endpoint yalnız **kendi bacağını** düşürür.
+- Notun **1. gerekçesi** (*"çıplak biçimde iki cihazlı kullanıcının yalnız biri
+  çalar"*) **taşınabilir ve ölçülmedi**. Canlıda AOR `max_contacts` = **3**. Üç
+  cihazı kayıtlı bir agent'ın kaçının çaldığı bir **Asterisk davranışıdır**; depo
+  okunarak cevaplanamaz, **gerçek çağrı ister**.
+
+**Kural olarak yazdım:** (ii) doğrulanmadan `LocalDialDevices` değiştirilmemeli —
+bugün çalışan bir çağrı yolunu ölçülmemiş bir gerekçeyle değiştirmek, 09-08'deki
+confd taşımasının aynı hatası olur.
+- **Commit:** `c7d1e58` — A-6 ölçümü.
+
+## Gün sonu durumu
+- Çalışma ağacı **temiz**, pbxtr ve Gunluk **push'lu**.
+- **343 BR kartı: 228 kapalı, 115 açık.** ClickUp senkron doğrulandı (343/343).
+- **Kurula ait:** A-5 (masa endpoint'i koşulsuz üretilsin mi — ön koşulu ölçüldü,
+  karar verilebilir), A-6/(ii) (canlı çağrı ölçümü gerekir).
+- **Kullanıcıya ait:** A-2 (t0012 düğüme pinlensin mi), ve Karar #39'un uygulaması
+  için `/sprint-planla pbxtr` → "başla".
