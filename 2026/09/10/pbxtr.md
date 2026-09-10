@@ -1839,3 +1839,48 @@ edilen CTO kuralının (*"öncül, karar oylanmadan önce ölçülmüş olacak"*
 Ölçüm bu sefer bir kusuru **büyütmedi, küçülttü** — ama yine benim yazdığım çerçeveyi çürüttü.
 Sekizinci öncül. Ortak sebep aynı: *"muhtemelen şöyledir"* cümlesini karta **teşhis** diye
 yazmak. Kartın açık bıraktığı madde (a) ve (c) hâlâ ölçülmedi ve öyle **işaretli** duruyor.
+
+### `BR-QA-51` kapsam (c) — ve bugünkü en kötü türden bulgu: delilimin cinsi yanlışmış
+
+- **Neden:** (c) maddesi *"tohum verisi canlı veritabanında ne arıyor, retention onu kapsıyor mu"*
+  diye açık bırakılmıştı.
+- **Ne yapıldı:** tohumun kaynağı ve canlı `call_events`'in kimlik uzayı ölçüldü.
+  - Tohum bir **kalıntı değil, kasıtlı bakım komutu**: `seed-sample` / `migrate --with-sample`
+    (`MaintenanceCli.cs:122`, `MaintenanceRunner.cs:343`), koşması için
+    `Bootstrap:SampleUserPassword` **zorunlu**.
+  - Tohumlayıcının kendi belgesi (`SampleDataSeeder.cs:19-26`): *"zaman taşıyan alanlar her
+    koşuşta BUGÜNE göre tazelenir"* — `cdr-*` satırları silinip **o günün tarihiyle** yeniden
+    yazılıyor.
+  - Canlı ölçüm (salt-okuma, `postgres` rolü — gerekçe: gerçek satır sayısı, RLS davranışı değil):
+
+    | kimlik uzayı | satır | aralık |  | kanal | satır | aralık |
+    |---|---|---|---|---|---|---|
+    | `cdr-*` (tohum) | 3727 | 09-02→09-08 |  | `SIM/` | 7434 | 08-26→09-08 |
+    | `live-*` (sim. çalışma zamanı) | 3698 | 08-26→08-29 |  | `Local/` | 333 | 08-29→**08-30** |
+    | diğer | 369 | 08-29→09-08 |  | `PJSIP/` | 27 | 08-30→**08-30** |
+
+  - **2026-09-08 tarihli tohum-dışı satır sayısı: 0.**
+- **Sonuç / doğrulama:** **`max(at) = 2026-09-08` bir çağrı değil, `seed-sample`'ın en son koştuğu
+  gündür. Son GERÇEK telefon olayı 2026-08-30.** *"Canlıda çağrı akmıyor"* çıkarımı bundan
+  **zayıflamıyor, güçleniyor** — sessizlik iki gün değil **on bir gün**.
+  Retention `call_events`'i kapsıyor (`deploy/db/README.md:288` purge allowlist, `:533` aylık
+  partition) **ama asla yetişemiyor**: tohum tarihi her koşuda bugüne çekiyor.
+- **Ve asıl ders:** bu delili **iki yerde ben yazmıştım** (`sprint-44.md:18` ve
+  `kurul-kararlari.md`'de iki paragraf). İkisi de düzeltildi — sprintte satır içi DÜZELTME notu,
+  karar defterinde sonuna eklenen DÜZELTME kaydı (silme yok). `BR-QA-51`'in tarif ettiği
+  **veri kimliği kusurunun ilk gerçek kurbanı bu depodur**: bir bakım komutunun zaman damgasını
+  trafik sandım.
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `yonetim/sprintler/sprint-44.md`,
+  `yonetim/kurul-kararlari.md`
+- **Komutlar:**
+  ```bash
+  grep -rn "SampleDataSeeder\|SampleDataSet" src/ --include=*.cs
+  ssh root@176.88.41.220 "docker exec pbxtr-postgres psql -U postgres -d pbxtr -Atc \"select ... from call_events group by 1\""
+  node yonetim/arac/clickup-senkron.js --kuru
+  ```
+- **Sonuç / doğrulama:** ClickUp `fark olan kart: 0, izde olmayan: 0`.
+- **Commit:** `ece34d57` — kapsam (c) + iki düzeltme
+
+`BR-QA-51`'de açık kalan: **(a)** kaynak ayrımının tesadüfi `SIM/` önekine bağlı olmaktan
+çıkarılması, ve **(c′)** üretim veritabanında `seed-sample` koşma **politikası** (kim, ne zaman,
+hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatılmadı.
