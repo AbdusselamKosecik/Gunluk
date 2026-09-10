@@ -403,6 +403,31 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
 - **Sonuc:** negatif bulgu — konvansiyon calisiyor, duzeltilecek bir sey yok. Kayda geciriliyor
   ki bir sonraki denetim ayni ucluyu yeniden arastirmasin.
 
+
+### Acik P1 denetimi basladi — `BR-AST-24` olculdu: sablonun onerdigi satir KOSMUYOR
+
+- **Neden:** bugun actigim kartlarin onculleri olculu ama **eski acik P1'lerinki degil** (52
+  tane). Defterdeki bagimsiz denetim 55 kartta **yedi yanlis teshis** bulmustu. Supervizor bugun
+  `BR-AST-24`'e atif yapti, onunla basladim.
+- **Kart iyi yazilmis:** onculu bir iddia degil **soru** (*"MixMonitor pause / StopMixMonitor var
+  mi — olcum"*). Bugun cevaplanabilir hale geldi.
+- **Olculen (canli Asterisk 22.10.1):** `core show application MixMonitorMute` ->
+  **"Your application(s) is (are) not registered"**.
+- **KONTROL GRUBU ayni turda kostu** (yoksa cevap komut biciminden gelebilirdi):
+  `MixMonitor` **kayitli**, `StopMixMonitor` **kayitli**,
+  `manager show command MixMonitorMute` **kayitli** (*"Mute / unMute a Mixmonitor recording"*).
+  Yani cevap **uygulamanin gercekten yoklugundan** geliyor.
+- **Sonuc 1:** `asterisk-dialplan-sablonu.md:587`'deki `MixMonitorMute(...)` satiri **kosmaz**;
+  tek yol **AMI**'dir — sablonun kendi alternatifi dogru yolmus. `:587` ve D5 satiri olcumle
+  guncellendi, boylece *"yazilmis ama kosmayan dialplan satiri"* tuzagi kapandi.
+- **Sonuc 2 — risk BUGUN LATENT:** kart tahsilat dugumu **hic yok**. `ConfigRenderer`'da PCI /
+  `MixMonitorMute` / `StopMixMonitor` uretimi **sifir isabet** (tek gecen yer `:1365`'te bir
+  yorum); domain'de boyle bir IVR dugum turu yok. Yani *"kart adimi kayda giriyor"* yasanmiyor —
+  cunku kart adimi yok. **PCI yuzeyi, o dugum yazilmadan ONCE kapatilmali** (onu yazan kartin
+  kabul kriterine madde olarak).
+- **Dokunulan dosyalar:** `yonetim/backlog.md`, `doc/mimari/asterisk-dialplan-sablonu.md`
+- **Commit:** `f38cfcab`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
