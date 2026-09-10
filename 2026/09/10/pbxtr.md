@@ -363,3 +363,159 @@ bağlamı, aynı sınıf. **Defterdeki notu güncelledim:** metin backtick/backs
 taşıyorsa kabuktan hiç geçirme — Write tool ile dosyaya yaz, node script
 dosyasından oku, ve **yazdıktan sonra backtick sayısının çift olduğunu ölç**.
 Bu turda K-18 satırında öyle yaptım: 20 backtick, çift, dört anahtar segment yerinde.
+
+### 13. İkinci kurul turu — Karar #40: A-5 yanlış eksende sorulmuş, A-6 öncülüm çürüdü
+
+- **Neden:** Karar #39 iki soruyu açık bırakmıştı. **A-5:** yalnız WebRTC'si olan
+  dahili için masa endpoint'i üretilmeli mi? **A-6:** `ConfigRenderer.cs:833-841`
+  notundaki "şablonun extension dalı `PJSIP_DIAL_CONTACTS()` kullanır" cümlesi bir
+  belge kusuru mu?
+
+- **Ne yapıldı:** Dar tur — **6 üye** (CTO, Asterisk Uzmanı, Backend Lideri, DB
+  Lideri, Çağrı Merkezi Agenti, Şeytan). **CEO, Linux, Frontend, Süpervizör oy
+  vermedi** ve bunu karar kaydının başına açıkça yazdım; skill 10 üye şart koşuyor,
+  saptığım için gerekçesi de yazılı. Sonuç kapsam değiştirdiği için (yeni P1 kart
+  çıktı) uygulamaya geçmeden ya tam kurul toplanmalı ya kapsam #41'e taşınmalı.
+
+- **Turu tek ölçüm belirledi.** Üç kişi (DB Lideri, Backend Lideri, sonra ben)
+  bağımsız ölçtük — canlı `provisioning_revisions`, her tenant'ın **aktif** `pjsip`
+  revizyonunda yer tutucu sayımı:
+
+  ```
+  tenant | kind  | rev | vault: | kv:extwrtc: | TOPLAM
+  t0000  | pjsip |  1  |   0    |      0      |    0
+  t0007  | pjsip |  6  |   6    |      6      |   12
+  t0012  | pjsip |  1  |   3    |      0      |    3
+  ```
+
+  Ve kapı ref şemasına değil **çıplak dizeye** bakıyor
+  (`ProvisioningDeliveryGate.cs:63`, `content.Contains("PBXTR-SECRET(")`).
+
+  **Bu tek tablo üç seçeneği birden öldürdü:** (a) masa üçlüsünü üretmemek 6'yı
+  siler, **6 kalır** → `pjsip` yine withheld, sıfır fayda; CTO'nun `pjsip-webrtc`
+  kind ayrımı da kendi 6 ref'ini taşır → o da teslim edilemez; (c) nesne bazlı
+  fail-closed CTO ve DB Lideri'nden **iki VETO** aldı (kesilen `auth` bloğu
+  `endpoint`'in `auth=` referansını sarkıtır; teslim anında içerik kırpmak saklanan
+  `sha256` kimliğini yalancı yapar).
+
+- **Ayrım masa/WebRTC değil, "sır çözülebiliyor mu".** Birinci eksen bugün
+  **ifade bile edilemiyor**: `Extension.SipSecretRef` `required` (`Extension.cs:31`),
+  yani her satır tanım gereği "masa kimliği var". `HasWebRtc`'nin çalışmasının
+  sebebi tasarım değil, `WebRtcSecretCipher`'ın nullable olması.
+  **`device_model` bu işe kullanılamaz** — kolonun kendi belgesi yasaklıyor
+  (`Extension.cs:80-99`: *"BU BİR BEYANDIR, BİR ÖLÇÜM DEĞİLDİR"*) ve canlı doluluk
+  **0/9**. Config üretimini boş bırakılabilir bir beyana bağlamak, alanı doldurmayı
+  unutan tenant'ta dahiliyi **sessizce yok ederdi**.
+
+- **Turun kazancı — sıra değişti.** `kv:extwrtc:` için **şema değişikliği
+  gerekmiyor**: WebRTC sırrı `extensions.webrtc_secret_cipher`'da zaten saklı
+  (canlıda 6/6 dolu) ve `ISecretProtector` ile bugün çözülebilir. Yani Karar
+  #39/K-1'in *"önce sır deposu (51a)"* sırası **yalnız masa (`vault:`) tarafı
+  için** doğruymuş. `BR-AST-51b`'nin WebRTC yarısı **bugün yazılabilir**.
+
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (A-6 düzeltmesi + Karar #40),
+  `yonetim/backlog.md` (3 yeni kart + 51b sırası).
+- **Commit:** `5733728f` — push edildi.
+
+### 14. Yayımlanmış hatamı düzelttim: A-6'nın "belge kusuru KESİN" iddiası yanlıştı
+
+Karar #39'a *"notun extension dalı hakkındaki cümlesi olgusal olarak yanlıştır —
+belge kusuru kesindir"* yazmıştım ve **push etmiştim**. Şeytan çürüttü, Backend
+Lideri ve CTO doğruladı, ben de kendim ölçtüm:
+
+Nottaki **"şablon"** kelimesi `ConfigRenderer` değil,
+**`doc/mimari/asterisk-dialplan-sablonu.md`**. O dosyanın kendi `exten => extension`
+dalı gerçekten `PJSIP_DIAL_CONTACTS()` kullanıyor (`:311`, `:559`) ve
+`ADR-015-zil-gruplari.md:380-381` bu atfı **dosya:satır ile** zaten vermiş.
+Belge doğru; ben iki ayrı çevirme yüzeyini karıştırdım: şablonun **yönlendirme
+kararı** dalı ile `ConfigRenderer`'ın **dahili başına yerel çevirme** dalı
+(`LocalDialDevices`, çıplak `&`).
+
+**Aynı satırda ikinci hatam:** *"Canlıda AOR'ların `max_contacts` değeri 3"* diye
+blanket yazmıştım. Ölçtüğüm çıktıda **yalnız `t0007-wrtc-*`** AOR'ları vardı
+(canlıda masa AOR'u zaten yok). Bu **A-7**'yi açtı: `pbxtr-aor-base.max_contacts`
+lab'da **1** (`deploy/asterisk-lab/conf/pjsip.conf:32`), dokümanda **3**
+(`doc/mimari/asterisk-provisioning.md:196`). Lab yanlışsa **labda yapılacak her A/B
+canlıyı temsil etmez** — `pjsip reload` dersinin aynı sınıfı.
+
+Düzeltmeyi eski metni **silmeden** ekledim; karar kaydı hatanın kendisini de
+taşıyor.
+
+### 15. A-6'nın altından bugün canlıda süren gerçek bir arıza çıktı — BR-AST-53
+
+Dört üye bağımsız buldu. **Zil grubu üyesi, DID→dahili rotası ve IVR hedefi,
+dahiliyi YALNIZ masa nesnesiyle çözüyor:**
+
+| Yer | WebRTC-only dahilide |
+|---|---|
+| `ConfigRenderer.cs:942` / `:968` zil grubu üyesi | **BOZUK** — üye hiç çalmaz |
+| `CachedInboundRouteSource.cs:393` DID→dahili | **BOZUK** — rota overflow'a düşer |
+| `asterisk-dialplan-sablonu.md:559` IVR `extension` hedefi | **BOZUK** |
+| `ProvisioningRevisionService.cs:733` taşma hedefi | leg CHANUNAVAIL |
+| `IvrTestCaller.cs:107` originate | başarısız |
+
+`PJSIP_DIAL_CONTACTS(<masa>)` boş döner → `RGC=""` → üye atlanır → `RGD` boş →
+çağrı doğrudan taşmaya gider. **t0007 = 6 dahili, 6'sı WebRTC, 0 masa → zil grubu
+kimseyi çalmıyor.** Sahadaki adı: *"Muhasebe grubunu arıyorum, kimse açmıyor, ama
+üçümüz de masadayız."*
+
+**En rahatsız edici kısmı:** bu kusur sınıfı bu depoda **iki kez ölçülüp iki kez
+düzeltilmiş** — `AsteriskObjectName.cs:461-466` (*"tarayıcıdan çalışan agent kuyruğa
+üye YAPILIYOR ama çağrı ona HİÇ ULAŞMIYORDU"*) ve `ConfigRenderer.cs:764-772`. Bu
+beş yer atlanmış. Ve **regresyon bekçisi yok**: `tests/` altında `HasWebRtc`,
+`ForExtensionWebRtc`, `WebRtcSecret` → **0 isabet** (→ `BR-QA-49`).
+
+**Brifingimin bir iddiası daha düştü:** "kuyruk üyeliği aynı adı kullanıyor"
+demiştim — yanlış. Kuyruk üyeliği config'de hiç geçmiyor, AMI ile
+`Local/{ext}@pbxtr-{kod}-local/n` olarak itiliyor (`AsteriskObjectName.cs:490`) ve
+**zaten doğru**. Kuyruk yolu bu arızadan etkilenmiyor.
+
+### 16. Çözülemeyen kurul çelişkisi — A-8 olarak açık bırakıldı
+
+**DB Lideri:** ayrım "sır çözülebiliyor mu" olsun ve karar **render zamanında**
+verilsin (içerik ↔ sha256 ↔ revizyon sözleşmesi korunsun).
+**Asterisk Uzmanı bunu açıkça yasaklıyor:** bu koşul, bugün **gürültülü** olan
+fail-closed'ı **sessiz cihaz silmeye** çevirir — sır deposu bir sabah cevap
+vermezse üretim *"demek ki masa telefonu yok"* der, çalışan endpoint'leri config'ten
+düşürür, `module reload res_pjsip.so` nesneleri **siler**, kayıtlı telefonlar düşer.
+Belirti "provisioning hatası" değil **"sabah telefonlar çalmıyor"** olur ve üretilen
+config geçerli olduğu için §3.1 rollback'i de devreye girmez.
+
+İkisi de kendi alanında haklı ve ikisi de ölçümle konuşuyor. **Çözmedim**,
+`yazilim-mimari`'ye bıraktım. Aday üçüncü yol: nesne üretilmez **ama** eksilme
+`removed.kinds` manifestiyle **açıkça beyan edilir** (BR-AST-31 deseni) — bu,
+"sessiz" itirazını karşılayabilir.
+
+### 17. Kalan iş sayımı ve ClickUp
+
+`clickup-cikar.js` + `clickup-durum.js` ile ölçüldü (elle sayaç yazmadım,
+defterdeki ders):
+
+```
+complete 228 · in progress 14 · karar bekleyen 5 · to do 11 · backlog 88
+toplam 346 — kalan 118
+```
+
+ClickUp: `clickup-olustur.js` **3 yeni kart** açtı (BR-AST-53/54, BR-QA-49),
+`clickup-senkron.js` **fark 0**, `--kuru` doğrulaması *"fark olan kart: 0, izde
+olmayan: 0"*.
+
+## Kararlar (bu tur)
+
+- **Karar #40:** A-5'in üç seçeneği de RED — soru yanlış eksende sorulmuştu.
+  A-6'nın belge kusuru iddiası **iptal**.
+- **K-1 sırası değişti:** `BR-AST-51b`'nin `kv:extwrtc:` yarısı 51a'yı beklemez.
+- Yeni kartlar: `BR-AST-53` (P1), `BR-QA-49` (P1), `BR-AST-54` (P2).
+
+## Açık kalanlar / sonraki adım
+
+- **A-8** (çözülemeyen çelişki) → `yazilim-mimari`.
+- **A-7** `max_contacts` lab=1 / doküman=3 — `pjsip show aor` ile canlıdan ölç.
+- **A-9** çıplak `PJSIP/<endpoint>` kaç contact çalar (iki sekmeli A/B).
+- **A-10** RNA adaleti: çalmayan cihaza giden çağrı agent'a RNA yazıyor ve agent'ın
+  bunu öğrenmesinin hiçbir yolu yok.
+- **A-11** t0007'ye trunk eklendiği an `pjsip` yeniden çözülemez ref taşır;
+  trunk sırrı fiilen çözülüyor mu?
+- **Kullanıcıya ait:** A-2 (t0012 bir düğüme pinlensin mi, yoksa bilerek teslim
+  edilmediği mi yazılsın) ve Karar #39 uygulaması için `/sprint-planla pbxtr` → "başla".
+- Karar #40 kapsam değiştirdiği için **tam kurul** ya da kapsamın #41'e taşınması.
