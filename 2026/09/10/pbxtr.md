@@ -2700,3 +2700,38 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
 - **Toplam tablo (bugün ölçülen 33 kapı):** 23 yeşil, 10 kırmızı → **1 gerçek kusur**
   (`kapi_26`, düzeltildi), 5 ortam (docker/yaml/expect), 2 benim harness'ım, 1 platform (CRLF),
   1 nginx yok. Geri kalan 9 kapı (`ruby`, `gitleaks`, `nginx`, `dotnet`) bugün **ölçülemedi**.
+
+### Kapı turu kapandı — **42/42 ölçüldü, tek gerçek kusur bulundu ve düzeltildi**
+
+- **Son tur:** "ruby/nginx/gitleaks ister" diye ayırdığım 9 kapıyı da koşturdum ve
+  **altısı yeşil çıktı** (`kapi_03`, `kapi_14`, `kapi_15`, `kapi_16`, `kapi_20`, `kapi_25`).
+  Yani bağımlılık sınıflandırıcım **fazla genişti** — araç adını *yorumda* ya da *dizede* gördüğü
+  yerde de "gerekiyor" saymış. Üç turda üç kez aynı şeyi öğrendim: **ölçmeden ayırmak bir
+  varsayımdır.**
+- **`kapi_31` iki katmanlı çıktı:** önce `FAILED (errors=18)` — hepsi
+  `UnicodeEncodeError: 'charmap' codec can't encode '\u015f'`, yani Windows konsol kod sayfası
+  Türkçe `ş`'yi yazamıyor. `PYTHONUTF8=1 PYTHONIOENCODING=utf-8` ile **18 → 1**'e indi. Kalan tek
+  hata `FileNotFoundError: calls.jsonl`: test `bash deploy/test-kos.sh` → `dotnet test` mutasyonu
+  yapıp sahte `dotnet` shim'inin çağrıyı kaydetmesini bekliyor; Windows'ta PATH **gerçek**
+  `dotnet.exe`'yi çözüyor ve shim hiç koşmuyor. **İkisi de platform artefaktı, kusur değil.**
+
+#### Nihai tablo — 42 kapı
+
+| sınıf | sayı | kapılar |
+|---|---|---|
+| **YEŞİL** | **29** | (kalanların tamamı) |
+| ortam — docker kapalı | 5 | `04`, `05`, `06`, `24`, `32` |
+| ortam — `gitleaks` yok | 2 | `08`, `09` |
+| ortam — `python-yaml` yok | 1 | `42` |
+| ortam — `expect` yok | 1 | `38` |
+| **benim harness'ım** | 2 | `27`, `41` (`$0`'a bağlı kapılar) |
+| Windows platformu | 2 | `01` (CRLF), `31` (charmap + PATH shim) |
+| **GERÇEK KUSUR** | **1** | `26` — bayat üretilmiş dosya → **düzeltildi, yeşil** |
+
+- **Okunuşu:** bugün 42 kapının tamamı ölçüldü ve **depoda tek gerçek kusur** çıktı; onu da
+  kapının kendisi buldu. Kırmızıların **12'si** ya ortam ya benim aracım ya platform — yani
+  *"kırmızı = kusur"* varsayımı bugün **12 kez yanlış** olurdu. Defterdeki *"kapının koşmaması
+  bulgu değildir"* dersinin sayısal karşılığı bu.
+- **Kalan gerçek boşluk:** `gitleaks` (2 kapı) ve docker'a bağlı 5 kapı **hâlâ ölçülemedi**;
+  ikisi de kullanıcıdaki Docker maddesine bağlı. Bugünkü üç sır taraması o boşluğun **kısmi**
+  yerine geçiyor ve günlükte tabanı yazılı.
