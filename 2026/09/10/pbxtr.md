@@ -2373,3 +2373,38 @@ dahiliye originate'te asılma görülürse sebep tektir.
 
 Defterdeki kural bir kez daha birebir işledi: **belgede "borç" yazmak, panoda görünür iş
 üretmiyor.** Bugün bu, kartsız kalmış ikinci ve üçüncü ölü hedefi buldu.
+
+### "Belgede borç yazılı ama panoda iş yok" — sınıf ölçüldü, **beş kart açıldı**
+
+- **Neden:** `BR-AST-61` bu sınıfın tek örneğiydi; tek örnek bir sınıf değildir. `doc/` altındaki
+  borç işaretleri tarandı (**21 işaret**, yakınında kart kimliği geçen 6, geçmeyen 15).
+- **En keskin bulgu — `ADR-015`'in kendi tablosu:** `doc/mimari/ADR-015-zil-gruplari.md:807-812`
+  **altı** açık madde sayıyor ve her biri için **açıkça kart istiyor**
+  (*"BORÇ + kart"*, *"BİLİNÇLİ + kart"*, *"Ayrı kart"*). Backlog'da anahtar sözcük sayımı:
+
+  | madde | anahtar | backlog isabeti |
+  |---|---|---|
+  | A1 dış numara üyeliği | "dış numara üyeliği" | **0** |
+  | A2 `rotating` | `rotating` | **0** |
+  | A3 `delay_sec` | `delay_sec` | **0** |
+  | A4 dahili-dahili | `pbxtr-outbound` | bugün `BR-AST-61` ile kapandı |
+  | A5 `last_resort` | `last_resort` | **0** |
+  | A6 `dids` CHECK testi | — | **0** |
+
+- **Açılan kartlar:**
+  - `BR-AST-62` (P2) — dış numara üyeliği: ikinci fail-closed kapı yok ve
+    `Local/<e164>@pbxtr-{tref}-out` biçiminin **`linkedid` etkisi ölçülmedi** (bozulursa timeline
+    korelasyonu kırılır).
+  - `BR-AST-63` (P3) — `rotating`: sayaç sahipliği (AstDB ⇄ pbxtr) kararsız; bugün `422` dönüyor
+    ve **bu doğru cevap** — eksik özellik, kırık değil.
+  - `BR-AST-64` (P3) — `delay_sec` kolonu var, üretim okumuyor, ekran çizmiyor. **Tehlike ölü
+    kolon değil, görünmezliği:** "ayarladım ama çalışmıyor" sınıfı.
+  - `BR-AST-65` (P2) — `last_resort` dalı **hiçbir telemetri üretmiyor**; Karar #15 §E2'nin
+    fallback sayacı bu dalı **görmüyor** → soru sorulduğunda **sıfır** görünüyor. Defterdeki
+    *"sıfır en tehlikeli cevaptır"*ın dialplan karşılığı.
+  - `BR-AST-66` (P3) — `dids` CHECK literalini **parse eden** test: metin çıpası; davranışa
+    çevrilmeli.
+- **Her kartta açıkça yazılı:** öncül **ADR'den alınmıştır, bugün bağımsız ölçülmedi.** Bunu
+  yazmasaydım kartlar ölçülmüş gibi okunurdu — günün tekrarlayan hatası tam olarak budur.
+- **Doğrulama:** atıf denetimi 11 atıf / **satır taşan 0**; ClickUp **yeni 5**, `fark olan kart: 0`.
+  Backlog 366 → **371 kart**.
