@@ -689,6 +689,35 @@ yapisal kok duzeltmesi). Bu dizin o boslugu kapatiyor.
 - `7b755f80` — sprint-44 Blok 0: istisarenin uc olcumu ve iki uyarisi kabul kriteri olarak islendi
 - `0278fa58` — duzeltme: BR-SYS-94'teki curutulmus cumle duzeltildi (Sinif A / Sinif B ayrimi)
 
+
+### `BR-QA-51` — `call_events` canli gorunuyor ama 03 Eylul'den beri TEK GERCEK OLAY YOK
+
+- **Neden:** `BR-AST-60`'i **originate etmeden** cevaplamayi denedim — canlida `call_events`
+  verisi vardi (son olay 2026-09-08), belki gecmis kayitlardan musteri bacaginin hic kurulup
+  kurulmadigi okunabilirdi.
+- **Olculen (canli PostgreSQL, `postgres` rolu — gerekce: gercek satir sayisi, RLS davranisi
+  degil):** `call_events` **7794** satir, **2026-08-26 → 2026-09-08**. §3.0 sonrasi (baglanti
+  GERCEK, 03 Eylul) **3445** olay ve **3445'inin 3445'i `SIM/` onekli**; `SIM/` olmayan **0**.
+  Ornek kanal `SIM/cdr-a-0000`. Gercek kanallar tum zamanlar boyunca yalniz **27 `PJSIP/`** ve
+  **333 `Local/`**, ve **hepsi 03 Eylul ONCESI**.
+- **Sonuc 1 — denemem BASARISIZ:** `BR-AST-60` gecmis veriden cevaplanamiyor, cunku gecmiste
+  gercek giden cagri **yok**. Originate olcumu **hala kullanici onayi bekliyor**.
+- **Sonuc 2 — ve bu daha degerli:** tablo *"son olay 2026-09-08"* diyor ve bu **"canlida cagri
+  akiyor"** diye okunmaya cok musait. Ayni gun olculen bagimsiz olgular bunun **imkansiz**
+  oldugunu gosteriyor (0 DID, 0 trunk, 0 zil grubu, 0 kayitli contact, `transport-ws` yuklu
+  degil). Defterdeki *"sifir en tehlikeli cevaptir"* dersinin **TERSI**: veri **var** ama
+  **yanlis cinsten**, ve sifirdan daha ikna edici gorunuyor.
+- **Mevcut bir cikarimi zayiflatmiyor, GUCLENDIRIYOR:** `sprint-44.md:17-25` `BR-AST-53`'un
+  *"CANLIDA SUREN ARIZA"* cercevesini curuturken kanit olarak *"call_events'te son olay
+  2026-09-08"* diyordu. O curutme **dogruydu ve simdi daha guclu**: yalniz 0 DID / 0 zil grubu
+  degil, **hic gercek cagri yok**.
+- **Kapsam:** (a) simule/gercek ayrimi `SIM/` onegi tesadufune birakilmamali; (b) *"canlida cagri
+  akiyor mu"* sorusunu cevaplayan yuzeylerin (saglik ekrani, wallboard, raporlar) simule satirlari
+  sayip saymadigi **olculmeli** — bu kart yazilirken olculmedi; (c) tohum verisinin canli
+  veritabaninda ne aradigi ve retention'in onu kapsayip kapsamadigi ayri soru.
+- **Dokunulan dosyalar:** `yonetim/backlog.md` (367 kart)
+- **Commit:** `169b75ed`
+
 ## Kararlar
 - **"Kalan ne var" sorusu artık elle sayılmaz.** `node yonetim/arac/kalan-isler.js`
   koşulur; dosya kendi kaynak SHA'sını yazdığı için **tazeliği doğrulanabilir**.
