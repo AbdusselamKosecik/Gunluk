@@ -475,3 +475,51 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   yazıyorum; klavye/kopyalama yoluyla bir Kiril harf sızdığında **hiçbir şey uyarmıyor** ve o
   kart bir daha `grep` ile bulunamıyor.
 - **Commit:** `8e65783e`
+
+### `BR-SEC-16`'nın maliyet öncülleri yenilendi — ve "gerçek çağrı" artık ayırt ediciyle ölçülüyor
+
+- **Neden:** kullanıcının vereceği bir karar (sır rotasyonu) benim beş gün önceki bir canlı
+  ölçümüme dayanıyordu. Tazelik kuralı gereği yeniledim.
+- **Önce bir hatadan döndüm.** `pbxtr-confd.timer` *"son tetik 2026-09-10 23:35"* dedi ve ben
+  yerel tarihime (09-11) bakıp **"10 saattir koşmuyor"** diye okudum. Sunucunun saatini sordum:
+  **`2026-09-10T23:39:55Z`** — timer 4 dakika 45 saniye önce koşmuş, `Result=success`,
+  `OnUnitActiveSec=5min`. **Sağlıklı.** Yerelim UTC+3, sunucu UTC; "kaç saat önce" hesabı
+  sunucunun kendi saatiyle yapılmalı.
+- **(1) Aktif anahtar hâlâ tek.** `api_keys` içinde `revoked_at is null` olan **1** satır
+  (`label=confd-cek`), `last_bundle_served_at` **23:40:13Z** — saniyeler önce. Rotasyonun
+  bedeli değişmedi: *bir anahtar + bir dosya + bir doğrulama turu.*
+  **Yan gözlem, ölçülmedi:** aynı satırda `last_used_at` **22:59:13Z**, yani 41 dakika geride.
+  İki alan aynı çekimde güncellenmiyor; kusur mu bilinçli mi bilmiyorum — karta *"birbirinin
+  yerine okunmamalı"* diye yazdım, uydurmadım.
+- **(2) "Gerçek çağrı yok" doğrulandı — ve artık tarihe değil bir AYIRT EDİCİYE dayanıyor:**
+
+  | gün | olay | çağrı | ilk–son |
+  |---|---|---|---|
+  | 09-08 | 1950 | 225 | 05:30 – 07:57 |
+  | 09-07 | 331 | 39 | 05:30 – 14:16:01.838709 |
+  | 09-06 … 09-02 | **her gün 291** | **her gün 34** | **05:30 – 14:16:01.838709** |
+  | 09-09, 09-10 | **0** | 0 | — |
+  | 08-30 | 345 | 14 | 00:16 – 23:11 |
+
+  Beş gün üst üste **mikrosaniyesine kadar aynı** ilk/son damga organik olamaz — ve o
+  satırların `call_id` değerleri **`cdr-a-0000`, `cdr-a-0001`…**, yani **tohum**. Organik
+  şekle sahip son gün **2026-08-30**. Kartın iddiası ayakta, ama artık gerekçesi
+  *"şu tarihten beri yok"* değil, *"tohum ile gerçeği şöyle ayırıyorum"*.
+- **Ayrı bir bedel kayda geçti:** tohum satırları gerçek olaylarla **aynı tabloda ve
+  işaretsiz**. *"Sistem canlı mı"* sorusunu bu tabloya soran her ölçüm önce tohumu ayırmak
+  zorunda; bugün bunun tek yolu `call_id` önekine ve günlük şeklin tekrarına bakmak.
+- **Ve kendi kartım kendi kapısını kıracaktı:** `BR-SYS-96`'ya homoglif örneklerini **literal
+  Kiril harflerle** yazmışım — yani o kartın önerdiği `[\u0400-\u04FF]` kapısı kurulsaydı
+  **kartın kendi metni yüzünden kalıcı kırmızı** olurdu. Kaçış gösterimine çevirdim;
+  `backlog.md`'de kalan Kiril harf sayısı **0**.
+- **Commit:** `7d5c2d99`
+
+## Kararlar (ek 5)
+
+- **"Kaç saat önce" hesabı sunucunun saatiyle yapılır.** Yerel tarihle uzak zaman damgasını
+  karşılaştırmak, sağlıklı bir timer'ı "durmuş" gösterdi. Uzak ölçümlerde ilk satır
+  `date -u` olmalı.
+- **Bir kuralı belgeleyen metin, o kuralın kapısını kırmamalı.** Yasaklanan deseni örnek
+  olarak yazacaksan **kaçış gösterimiyle** yaz; aksi halde kapıyı kuran gün kendi belgesine
+  takılır. (Bu, bugün erken saatte gördüğüm *"kapının kendi belgesi kapıyı kırıyordu"*
+  vakasının ikinci örneği.)
