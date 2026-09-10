@@ -146,3 +146,77 @@ duruyordu ve `HEAD` hâlâ 9 Eylül'de benim attığım commit'ti.
   **aynen korunur**.
 - **Karar gerekiyor (kullanıcı/kurul):** t0012 bir düğüme pinlensin mi, yoksa
   bilerek teslim edilmediği mi yazılsın (#57).
+
+### 5. Kurul Karar #39 — BR-AST-51 RED; kartı ben yanlış yazmışım
+- **Neden:** BR-AST-51 P1 bir kod işi; CLAUDE.md §7/1 gereği kurul onayı olmadan
+  uygulamaya geçilmez. 10 üye paralel toplandı.
+- **Sonuç:** **9 ŞARTLI + 1 HAYIR → RED.** Dokuz ŞARTLI oyun şartları öneriyi
+  tanınmaz hâle getiriyordu ("bu kart yazılamaz, önce başkası gerekir"), Şeytan'ın
+  iki kritik itirazı da cevaplanamadı.
+
+**Kartın çekirdek öncülü yanlıştı — beş üye bağımsız ölçtü:**
+- *"`sip_secret_ref`'ten gerçek parolaya çöz"* → **çözülecek parola yok.**
+  `sip_secret_cipher` depoda 0 isabet, Vault istemcisi 0 isabet, `SipSecretRef`
+  atayan tek satır seed (`SampleDataSet.cs:512` → `vault:{code}/ext/{no}`).
+- **`ADR-007 §5` bunu ZATEN yazmış:** *"doğrulanma yeri: HİÇBİR YERDE"*.
+  `pbxtr.env.example:233-234` harfiyen *"çözen mekanizma YOK"* diyor.
+- Yani **`ISecretResolver` taramamın 0 isabeti** *"çözümleyici yazılmamış"* değil,
+  ***"arkasında hiç veri olmamış bir referans"*** demekmiş. Aynı kanıt, iki zıt
+  sonuca okunabiliyordu ve ben yanlış olanı seçtim.
+- Ref şeması da yanlıştı: canlı **9/9** satır `vault:`; `kv:ext:` yalnız yorumda.
+
+**Şeytan'ın ikinci öldürücü itirazı:** kart **bildirdiği semptomu de çözmüyor** —
+sahadaki 6 nesnenin hepsi `kv:extwrtc:` ailesinden (`ConfigRenderer.cs:1851`) ve
+kart onu kapsamıyordu. Uygulansa `journalctl` satırı **değişmezdi**, ama
+"çözümleyici var" sanılırdı.
+
+**Üyelerin getirdiği, kartta hiç olmayan bulgular:**
+- **Asterisk uzmanı**, benim *"bölüm sayıyor"* hipotezimi **kontrol grubuyla**
+  çürüttü: doğrulama **CLI çıktı satırı** sayıyor. "Satır" modeli 18/6/6'nın
+  üçünü birden açıklıyor; benim modelim `aors` için 18 tahmin ederdi, ölçüm 6.
+  Sonuç: `endpoints` alanı **matematiksel olarak geçemez** → her tick rollback.
+  **09-08'deki `exit 75` geri almanın sebebi buymuş.** Ve `AsteriskObjectCensus.cs:32-39`
+  bunu öngörmüş: *"kural toplam==beklenen DEĞİL, delta'dır"*.
+- **Frontend uzmanı:** sağlıktaki `PBXTR-SECRET` cümlesi **ulaşılamaz dalda**
+  (çekim başarılı → `Ok` dalı) — 10+ gün boyunca sağlık **yeşildi**. Süpervizörün
+  *"kırmızıydı da kimse mi bakmadı?"* sorusunun ölçülmüş cevabı: hayır, yeşildi.
+- **Linux uzmanı:** confd → pbxtr atlamasında **mTLS değil, hiç TLS yok**
+  (`http://pbxtr-app:5080`). Çözülmüş bundle host `/tmp`'ye **0644** düşüp
+  **public node imajına mount** ediliyor. Düğümde rollback yok, debounce yok.
+  Ve `.yedek-20260830` dosyaları **eski değil**: `diff` yalnız `context` satırında
+  fark veriyor, parola birebir aynı → diskte 6 fazladan **canlı** sır dosyası.
+- **Şeytan'ın en değerli itirazı:** `ProvisioningNodeBundleHttpTests.cs:444`
+  (`DoesNotContain "PBXTR-SECRET("`) çözümleyiciden sonra **yanlış sebeple**
+  yeşile döner — yanıtta yer tutucu yerine **açık parola** vardır.
+
+**Yerine dört kart, sıra bağlayıcı:**
+`BR-AST-51a` (sır üretimi + AES-GCM saklama + rotasyon) + `BR-AST-52` (sayım) →
+`BR-AST-51b` (çözümleyici) → `BR-FE-70` (görünürlük). 18 şart (K-1…K-18) ve
+dört açık soru (A-1…A-4) karar kaydında.
+- **Commit:** `d6b78e5` — Karar #39. ClickUp: 4 kart açıldı, doğrulama 343/343.
+
+## Bugünkü üçüncü ölçüm kusurum
+Backtick'ler çift tırnaklı `node -e` içinde **komut olarak koştu** ve kart notundan
+beş segment sessizce silindi (`extensions`, `sip_secret_cipher`, `SipSecretRef`,
+`kv:extwrtc:`, `journalctl`). Defterdeki *"heredoc içinde backtick yutulur"*
+dersinin aynı sınıfı, farklı kabuk bağlamı. Düzeltme dosya üzerinden yapıldı ve
+**backtick sayısı çift mi** diye ayrıca ölçüldü (82, tamam). Kural: metin backtick
+taşıyorsa **kabuk üzerinden geçirme, dosyadan oku.**
+
+## Kararlar — ek
+- **Kartı ölçmeden yazmak, kurulun bir turunu ölçüme harcatıyor.** BR-AST-51'i
+  "çözümleyici yok" diye yazdım; doğru cümle *"referansın arkasında hiç veri
+  olmamış"*tı. İkisi aynı grep çıktısından okunuyor — ayıran şey **ikinci ölçüm**.
+  Bundan sonra "X yok" kartı yazmadan önce **"X'in beslediği veri var mı"** ayrıca
+  ölçülecek.
+- **Kurul turu ucuz değil ama karşılığını verdi:** on üye, kartta hiç olmayan
+  beş yapısal bulgu çıkardı (sayım kusuru, ulaşılamaz alarm dalı, TLS yokluğu,
+  canlı sır yedekleri, yanlış sebeple yeşilleşecek test).
+
+## Açık kalanlar — güncelleme (gün sonu)
+- **343 BR kartı: 228 kapalı, 115 kapalı olmayan** (+4 yeni kart, BR-AST-51 RED).
+- **A-1 ölçümü sıradaki iş:** canlıda WebRTC'siz `extensions` satırı kaç tane?
+  Sıfırsa BR-AST-51a'nın P1'i düşer. Bu ölçüm 51a başlamadan yapılacak.
+- Kullanıcı kararı bekleyen: **A-2** t0012 düğüme pinlensin mi (BR-AST-49).
+- Karar #39 uygulaması `/sprint-planla pbxtr` bekliyor (kurul skill'i kendiliğinden
+  planlamaya geçmeyi yasaklar).
