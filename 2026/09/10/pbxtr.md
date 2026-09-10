@@ -2143,3 +2143,31 @@ hangi onayla). İkisi de karta **açık** yazıldı, cevaplanmış gibi kapatıl
 - **Dokunulan dosyalar:** `yonetim/arac/clickup-durum.js`, `yonetim/arac/clickup-durum.test.js`,
   `CLAUDE.md` §14
 - **Commit:** `33c9e121`
+
+### `\b` tuzağını depoya taradım — bir gerçek vacuous bekçi çıktı
+
+- **Neden:** eşleme kuralında bulduğum tuzak (`\b` Türkçe harfi görmez) **sınıf** kusurudur;
+  tek yerde kalması beklenemezdi.
+- **Ne yapıldı:** JS/TS regex literalleri ve `new RegExp('…')` çağrıları ayrıştırıldı
+  (**577 dosya, 1019 kalıp**) ve `\b` ile Türkçe harfi **birlikte** taşıyanlar süzüldü.
+  İki aday: biri yanlış pozitif (`kur\b` — `r` ASCII, sorun yok), **biri gerçek.**
+- **Bulgu — `SystemReadOnlySurfaces.test.tsx:178`:**
+  `expect(label).not.toMatch(/kapat|aç\b|yeniden başlat|dhcp/i)` — arayüz ekranının **NIC
+  mutasyonu sunmadığını** iddia eden negatif bekçi.
+
+  | etiket | eski | yeni |
+  |---|---|---|
+  | `Aç` | **kaçırır** | yakalar |
+  | `Arayüzü aç` | **kaçırır** | yakalar |
+  | `Açma` | yakalar (istenmeyen) | kaçırır |
+  | `Kapat` / `Yeniden başlat` | yakalar | yakalar |
+
+  Yani bekçi, **en olası mutasyon düğmesi için vacuous'tu**: ekranda "Aç" düğmesi olsa test yine
+  yeşil verirdi.
+- **Sonuç / doğrulama:** **bugün sonuç değişmiyor** — ekranda öyle bir düğme yok, test önce de
+  sonra da yeşil (3/3, vitest). Değişen şey kapının **gelecekteki** değeri. Kanıtı **regex
+  seviyesinde** ürettim (yukarıdaki tablo), ekrana sahte düğme ekleyerek değil — bunu açıkça
+  yazıyorum çünkü "yeşil test" burada kanıt değil.
+- **Durum sözcüğü `Açık` bilerek dışarıda:** eylem değil durum; yakalamak yanlış kırmızı üretirdi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/system/SystemReadOnlySurfaces.test.tsx`
+- **Commit:** `5fa27483`
