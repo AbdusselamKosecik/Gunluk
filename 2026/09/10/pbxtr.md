@@ -2437,3 +2437,29 @@ Defterdeki kural bir kez daha birebir işledi: **belgede "borç" yazmak, panoda 
   sayısını bugün saymadım.
 - **Doğrulama:** atıf denetimi 4/4 temiz; ClickUp **yeni 2**, `fark olan kart: 0`.
   Backlog **373 kart**.
+
+### `BR-SYS-95` — ADR-005'in **kapatamadığı tek madde** de kartsızmış
+
+- **Neden:** borç-kart taramasının üçüncü ve son adayı `ADR-005`'ti.
+- **Ölçüm:** `ADR-005:763-769` A-1'i açıkça ayırmış: *"Varsayılan 24 aydır ve
+  yapılandırılabilirdir; **canlıya çıkmadan önce hukuki teyit alınmalı** ve gerekiyorsa değer
+  değiştirilmelidir."* `backlog.md`'de `24 ay` **iki** isabet — ikisi de başka konu (`ST-24`
+  ticket retention, `BR-SYS-43` mezar taşı); `hukuk` **iki** isabet, ikisi de alakasız
+  (`BR-DB-36`, `BR-BE-117`). **Madde kartsızdı.**
+- **Ne yapıldı:** `BR-SYS-95` (P2, kullanıcı/hukuk) açıldı. Kart işi kendisi yapmıyor; **canlıya
+  çıkışın önünde duran bir maddeyi görünür kılıyor.**
+- **Bugünkü risk ölçüldü ve düşük:** canlıda gerçek müşteri tenant'ı yok (`BR-QA-51`) ve 03
+  Eylül'den beri gerçek çağrı yok → **saklanan gerçek trafik verisi yok**. Madde **ilk gerçek
+  müşteri** tanımlandığında bloklayıcı olur.
+- **Kapsama CLAUDE.md §13/3 hatırlatması konuldu:** yargı bölgesi koda gömülmez; teyit bir
+  **parametre değeri** belirler, `if (Türkiye)` üretmez.
+- **Doğrulama:** atıf denetimi 2/2 temiz; ClickUp yeni 1, `fark: 0`. Backlog **374 kart**.
+
+#### Bu taramanın toplamı
+
+Bugün **sekiz kart** yalnızca *"belgede yazılı ama panoda yok"* sınıfından çıktı:
+`BR-AST-61` (pbxtr-outbound/dialer-announce), `BR-AST-62…66` (ADR-015 A1/A2/A3/A5/A6),
+`BR-QA-52`/`BR-QA-53` (ADR-012 G1/G2-ii), `BR-SYS-95` (ADR-005 A-1).
+**Hiçbiri yeni bir kusur değildi** — hepsi deponun kendi belgelerinde **yazılıydı** ve hiçbiri
+panoda **yoktu**. Defterdeki kural bugün en pahalı hâliyle doğrulandı: *"bir iş `backlog.md`'ye
+kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önceden yazmıştı**.
