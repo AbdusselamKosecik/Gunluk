@@ -2513,3 +2513,39 @@ kart olarak yazılmadıysa ClickUp'ta hiç yoktur"* — ve ADR-012 bunu **önced
   `deploy/yerel-kapilar.sh` 42 kapı taşıyor, bu tarayıcı orada **yok**. Kapı eklemek CLAUDE.md §7
   kapsamında bir iştir; kart onu **önerir**, tek taraflı bağlamam.
 - **Doğrulama:** atıf denetimi 3/3 temiz; ClickUp yeni 1, `fark: 0`. Backlog **375 kart**.
+
+### Kapıları koşturdum — **bir gerçek kusur**, altı yanlış kırmızı (ve beşi benim)
+
+- **Neden:** defterdeki *"yayın yolu kapıları bayatlar — yalnızca deploy'da koşan kapılar, yayın
+  yapılmayan her gün sessizce kırmızıya döner"* dersi. Bugün yayın yapılmadı; kapılar en son
+  ne zaman koştu belirsizdi.
+- **Ölçüm 1 — hangileri bugün koşabilir:** `yerel-kapilar.sh` **42** kapı taşıyor; gövdeleri
+  ayrıştırıldı. **15'i dış araç istiyor** (python3, ruby, gitleaks, nginx, dotnet), **27'si
+  istemiyor** → Windows'ta Docker olmadan koşabilir.
+- **Ölçüm 2 — 27 kapının sonucu: 20 yeşil, 7 kırmızı.** Triyaj:
+
+  | kapı | kırmızı sebebi | sınıf |
+  |---|---|---|
+  | `kapi_26` | **üretilmiş dosya bayat** | **GERÇEK — düzeltildi** |
+  | `kapi_06`, `kapi_24`, `kapi_32` | docker daemon kapalı | ortam |
+  | `kapi_38` | `expect` yok → fail-closed | ortam (tasarım gereği) |
+  | `kapi_27`, `kapi_41` | **benim harness'ım** | ölçüm kusuru |
+
+- **Gerçek kusur (`kapi_26` / DM010):** `permissions.seed.json` **commitli** ve
+  `telephony.dialplan.read` taşıyor, ama üretilmiş `system-roles.generated.ts` **taşımıyordu** —
+  kaynak commit edilmiş, çıktı edilmemiş. **superadmin ve admin** rollerinin üretilmiş yetki
+  kümesi eksikti (`permissions` + `childTenantPermissions`). Kapının kendi remedy'si
+  (`npm run screens:gen`) çalıştırıldı, çıktı tek dosyada iki satır değiştirdi, commit edildi;
+  kapı **rc=0**. Diğer üretilmiş dosyalar günceldi.
+- **Ve iki yanlış kırmızının ikisi de benim ölçüm kusurumdu:**
+  1. İlk koşuda **22 kapı kırmızıydı**. Sebep: betiğin `cd "$(dirname "$0")/.."` satırı, benim
+     geçici dosyamı esas alıp kapıları **scratchpad'e** götürüyordu. Betiğin **kendi başlığı**
+     bu tuzağı yazıyor: *"hata kapının bulgusu sanılır"*. Düzeltince 22 → 7.
+  2. `kapi_27` (*"koşmayan bekçi bekçi değildir"*) **12 bekçiyi "çağrılmıyor"** diye bildirdi.
+     Sebep: kapı `WF="$0"` ile **kendi dosyasını** grepliyor; benim harness'ımda `$0` geçici
+     dosyaydı. Gerçek betikle tekrarladım: **14 bekçinin 14'ü çağrılıyor, rc=0.**
+- **Sonuç ve dürüst sınır:** harness bir **triyaj aracıdır, kapı koşturucu değildir** —
+  `$0`'a bağlı kapılar onunla ölçülemez. Doğru koşum yolu `deploy/yerel-yayin.sh`'in açtığı
+  ubuntu konteyneridir ve o **Docker'a bağlı**; yani "tüm kapılar yeşil mi" sorusu bugün hâlâ
+  **cevaplanamaz** ve bu, kullanıcıda bekleyen Docker maddesine bağlı.
+- **Commit:** `gen: system-roles.generated.ts BAYATTI` (tek dosya, iki satır)
