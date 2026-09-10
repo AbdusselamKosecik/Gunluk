@@ -553,3 +553,39 @@ kaldı — defterdeki *"tek seferde 7 GB'a çıkıp takılıyor"* eşiğinin alt
   (bu ve `dashboard-live` tabanı); birincisi on dakikalık bir kod okumasıyla kapandı ve
   cevabı **"kusur yok"** çıktı. Kapatılmayan bir "ölçülmedi", bir sonraki turda **arıza gibi**
   okunur ve iki kat pahalıya kovalanır.
+
+### Kendi işimi denetledim — ve mükerrer-kimlik bekçisini mutasyonla doğruladım
+
+- **Neden:** bugün `backlog.md`'yi **çok sayıda node betiğiyle** düzenledim. Bir hücreyi yanlış
+  yere yazmak ya da bir boru işareti kaçırmak, tabloyu sessizce bozar (bu tam olarak defterde
+  yazılı `dize-capasi-bicim-degisince-olur` / `sayac-kismi-satiri-kapali-sayar` sınıfı).
+- **Üç ölçüm, üçü de temiz:**
+  1. `kart-atif-dogrula.js` → **910 atıf denetlendi, satır numarası taşıyan gerçek kusur adayı
+     0.** Kalan 41 "depoda yok" üç meşru sınıfın içinde (sunucu yolu, kısa dosya adı, üretilen
+     config adı) — aracın kendi başlığı bu sınıfları yazıyor.
+  2. **Tablo biçimi:** bugün dokunduğum hiçbir satırın hücre sayısı değişmedi (her betikte
+     hücre sayısını yazmadan önce ve sonra karşılaştırdım; bir kez `hucre bozuldu: 17 != 16`
+     diye **kendi kontrolüme takıldım** ve metni düzelttim).
+  3. **Çıkarıcı sayısı 378 = kaynak.** 381 kart satırı − 3 işaretli eski satır.
+- **Ve bir şeyi yanlış genellemişim.** `BR-QA-56` *"`yonetim/arac` öz-testleri sahipsiz"* diyor.
+  Doğru, ama **hepsi değil**: `clickup-cikar.js:105-125` **her senkronda koşuyor**
+  (`clickup-olustur.js` ve `clickup-senkron.js` onu çağırıyor) ve şunları yapıyor —
+  çözülemeyen kart satırında `exit 1`, `Yerini satır N aldı` işaretlilerini ele, **kalan her
+  mükerrer kimlikte `exit 1`**.
+- **Mutasyonla doğruladım:** `BR-BE-53`'ün *"Yerini satır 4608 aldı"* işaretini geçici olarak
+  bozdum → `HATA: mukerrer kart kimligi: BR-BE-53`, çıkış 1. İşaret geri konunca temiz.
+  **Bu bir kapı ve ısırıyor.**
+- **Bugünkü durum:** üç kimlik iki kez geçiyor (`BR-BE-53`, `BR-SYS-45`, `BR-BE-47`) ve **üçü
+  de** işaretli; 381 → 378 farkı **kural gereği**, sessiz eleme değil.
+- **`BR-QA-56`'nın kapsamı daraldı:** sahipsiz olan şey durum eşlemesinin **birim testleri**,
+  çıkarıcının **yapısal bekçisi** değil.
+- **Commit:** `05a55141`
+
+## Kararlar (ek 7)
+
+- **Kendi düzenlemeni de ölç.** Bugün altı kez `backlog.md`'yi betikle değiştirdim; her
+  betiğe hücre sayısı kontrolü koymasaydım en az bir tablo bozulmuş olacaktı — kontrol
+  gerçekten bir kez ateşledi (`17 != 16`).
+- **"Sahipsiz" iddiası da bir envanterdir ve dar tutulmalı.** `yonetim/arac`'ı toptan
+  "bağlanmamış" diye yazmıştım; içindeki en önemli bekçi aslında her koşuda çalışıyordu.
+  Bir dizini değil, **her bekçiyi tek tek** sınıflandır.
