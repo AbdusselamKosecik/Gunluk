@@ -1046,3 +1046,51 @@ açıklıyor: o kuyruk gerçekten elle yazılmış ve **elle yazılmış bağlam
 
 **Sırada kullanıcı var:** `/basla pbxtr sprint-44` ve **A-2** kararı. §7/3 gereği uygulamaya
 kendim geçemem.
+
+### 26. `queue show` tek komutla iki soruyu birden kapattı
+
+Karar #42 iki ölçümü **"kart yazılmadan"** şart koşmuştu: Asterisk uzmanının kök-neden iddiası
+ve Linux uzmanının ona itirazı. İkisi de tek `queue show` ile kapandı.
+
+**Ölçüm 1 — `app_queue` kayıtsız üyeyi MÜSAİT sayıyor:**
+
+```
+t0007-musteri-hizmetleri  6 üye — altısı da (Not in use)
+t0007-tahsilat            3 üye — üçü de    (Not in use)
+```
+
+Aynı anda `transport-ws` **yüklü değil** ve `pjsip show contacts` → **`No objects found.`**
+Yani hiçbir cihaz çalamaz, ama kuyruk altısını da müsait görüyor → bacak kurar → RNA doğar.
+**`BR-AST-55`'in kök zinciri doğrulandı.**
+
+**Ve Linux uzmanının itirazı da cevaplandı** — o *"`chan_local`'ın device state sağlayıcısı AOR
+contact'ına bakmaz; bu doğruysa `qualify`'ı açmak hiçbir şey düzeltmez ve `hint` önerisi de
+şüpheli"* demişti. Ölçüm onu doğruluyor. İki aday düştü, biri ayakta kaldı:
+
+| Aday | Sonuç |
+|---|---|
+| `qualify_frequency` | **düştü** (ikinci kez) |
+| `-local`'a `hint` | **şüpheli** — `hint` `PJSIP/` izler, üye `Local/` |
+| `BR-AST-57` (`A-5′`) | **en güçlü aday** — `PJSIP_DIAL_CONTACTS()` kayıtsız AOR'a boş döner |
+
+**Ölçüm 2 — beklemediğim ikinci bulgu:** aynı çıktıda `t0007-satis … No Members` vardı. Ve
+`BR-AST-58`'de ölçtüğüm **tek çalışan gelen numara** (`8001`, elle yazılmış) tam oraya gidiyor.
+
+Kaynağını izledim: `t0007-satis` **yalnız** elle yazılmış `queues.conf:10`'da tanımlı; pbxtr'ın
+ürettiği kuyruklar `musteri-hizmetleri` ve `tahsilat`; pbxtr DB'sinde t0007 = 2 kuyruk. pbxtr
+üyeliği **yalnız kendi bildiği kuyruklara** iter → `t0007-satis` **kalıcı olarak boş**.
+
+Yani canlıdaki tek işleyen gelen yol şu:
+
+```
+8001 → elle yazılmış bağlam → Queue(t0007-satis,…,60) → SIFIR ÜYE → 60 sn → Hangup()
+```
+
+**Gelen çağrı yolunun hiçbir dalı bugün bir insana ulaşmıyor** — `_X.` var olmayan bağlama,
+`8001` boş kuyruğa. Bu bir *"yapılandırılmamış"* durum değil: **yapılandırılmış ve bozuk.**
+
+- **Commit:** `5e85e85d` (ölçüm), `1c11264c` (kartlara işlendi)
+
+**Yöntem notu:** ikisi de **kart yazılmadan** ölçüldü ve ikisi de kartların içeriğini değiştirdi
+— `BR-AST-55`'in üç kök adayından ikisi düştü, `BR-AST-58`'in kapsamı büyüdü. Karar #42'de kabul
+edilen CTO kuralının (*"öncül, karar oylanmadan önce ölçülmüş olacak"*) ilk çalışan örneği.
