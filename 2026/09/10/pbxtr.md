@@ -702,3 +702,71 @@ kanal teknolojisini tür adı sandım, ref'i şema sandım, gri rozeti yeşil sa
 Dördü de kurul üyeleri tarafından **ölçümle** yakalandı, ben de her birini kendim doğruladım.
 Defterdeki *"kart öncülü ölçülmeden yazılmaz"* kuralı doğru ama yetersiz: asıl kural
 **"tanıdık gelen ad, ölçülmüş ad değildir."**
+
+### 21. A-12 ve A-8 kapandı — ikisi de "çelişki yok, tarif yanlış" çıktı
+
+#### A-12: sözleşme yanlış değil, ADI yanlış
+
+Frontend uzmanı sormuştu: `ExtensionConfigStatus.cs:22-27` *"üçüncü hâl YOKTUR ve olamaz"*
+diyor ama `BR-FE-70` ve `BR-FE-71` bunu iki kez geçersiz kılacak. Ölçtüm — **dosyanın kendi
+metni okununca çelişki kayboluyor.** `:16-19` ne ölçtüğünü tek cümlede söylüyor: *"nesne **en
+son üretilmiş** revizyonda var mı"*, ve *"üçüncü hâl olamaz"* gerekçesi **tam o soruya**
+dayanıyor. O akıl yürütme kendi ekseni için doğru.
+
+Çelişki **adında**: `configStatus` hangi ekseni ölçtüğünü söylemiyor, bu yüzden üç soru tek
+kolona yığılmış — **A üretim** (doğru sahibi), **B teslim** (sahipsiz, FE-70), **C kayıt**
+(sahipsiz, FE-71). `withheld` A eksenine **ait değil**. Tavsiye: sözleşme yeniden yazılmaz,
+**daraltılır**. Frontend'in "iki dik eksen" şartı doğrulandı ve bir adım ilerledi: **eksen üç.**
+
+- **Commit:** `7972ff12`
+
+#### A-8: çelişkinin dayandığı önerme yanlıştı — ve yanlış tarif BENDEN çıkmıştı
+
+Karar #40'ta A-8'i *"çözülemeyen çelişki"* diye kaydedip mimarîye havale etmiştim. Mimar
+çözmedi — **geçersiz ilan etti**, ve haklı. Karar #40'a DB Lideri'nin *"teslim anında içerik
+kırpmaya VETO"*sunu **A seçeneğinin karşısına** yazmışım. Ölçtüm, **A kırpmıyor, kırpamaz:**
+
+| Ölçüm | Sonuç |
+|---|---|
+| `ProvisioningDeliveryGate.cs:78-88` | yalnız `kind` adı döndürüyor; yorumu *"Donen deger ICERIK TASIMAZ"* diyor |
+| `ProvisioningNodeBundleEndpoints.cs:571` | **revizyonun tamamı** listeden düşüyor |
+| `:573-577` | `Content` ve `Sha256` **değişmeden** taşınıyor |
+
+O VETO **(c) seçeneğinin** kırpmasına aitti; ben ikisini karıştırdım. B'nin tek üstünlüğü diye
+sunduğum *"üretilen metin hep geçerli"* özelliği **A'da da varmış**.
+
+İkinci yanlışım aynı satırda: *"nesne üretilmez ama `removed.kinds` ile beyan edilir"* diye bir
+üçüncü yol önermişim, sanki açık beyan mekanizması yokmuş gibi. **Var, ve adı `withheld`** —
+sebep kodu, yanıt gövdesi, denetim + `LogCritical`, ETag. **A bugün sessiz değil, beyanlı.**
+Üstelik önerdiğim üçüncü yol B'den **kötüymüş**: `removed` manifesti confd'ye bayat dosyayı
+etkisizleştirme **yetkisi** veriyor ve Karar #37/Ş37-38 bu karıştırmayı **zaten yasaklamış**.
+
+**Karar: (A) düzeltilmiş hâliyle.** Karar yeri **ikisi de** — varlık render'da, ikame teslimde;
+düğüm **"kırpma ≠ materyalizasyon"** ayrımıyla çözülüyor. Materyalizasyon render'da yapılırsa
+açık parola `content`'e girer (VETO-2), üçüncü yer yok → **teslim anı zorunlu**.
+
+**A-11'in tasarıma yansıması:** `ISecretResolver` **yanlış soyutlama** — imza *"sır ref'ten
+bulunur"* önermesini sözleşmeye çeviriyor; desk/WebRTC'de çalışır, trunk'ta **sessizce yanlış
+parolayı** yazar. Doğru seam `ProvisioningSecretBinding(Placeholder, SourceKind, SourceRowId)`.
+
+**Tasarım:** `doc/mimari/ADR-017-sir-cozumleme-ve-teslim-birimi.md` — **Commit:** `8080112e`
+
+#### İki ek bulgu
+
+1. **Çözülmüş sır yeni bir enjeksiyon yüzeyi.** ADR-007 §6.2 çıkış kapısı o değeri **hiç
+   görmedi** (bugün metne yalnız yer tutucu giriyor). Sır `\n[t0012-9999]` içerirse materyalize
+   metin **başka tenant'ın bölümünü açar**. Kapı çağrısı ikame **sonrasına** taşınmalı, yoksa
+   bekçi vacuous. → `BR-AST-51b` kapsamına.
+2. **Mimarın "ölçülmemiş tehlike"si ölçüldü, GÜVENLİ çıktı, kart AÇILMADI.** Withheld tür
+   `removed.*` beyanına **girmiyor**: `removed` filtreden **önce** hesaplanıyor
+   (`ProvisioningRevisionService.cs:1049-1052`), `after` tüm revizyonları içeriyor, filtre çok
+   sonra teslim ucunda. **Bilerek kart açmadan önce ölçtüm** — bugün dört öncülüm ölçülmeden
+   yazıldığı için çürümüştü, beşincisini eklemedim.
+
+## Günün kapanışı
+
+Kapanan açık sorular: **A-6, A-7, A-11, A-12, A-8**. Açık kalanlar ölçümle kapatılamaz:
+**A-9** `BR-SYS-92`'ye bağlı (kayıtlı cihaz yok, ölçülemiyor), **A-13** K-15'e bağlı (kapı
+açılmadan ölü gerekçe düzeltilmez), **A-10** `BR-AST-55` kartına dönüştü.
+
+Kullanıcıya ait: **A-2** ve `/sprint-planla pbxtr` → **"başla"**.
