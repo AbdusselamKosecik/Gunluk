@@ -898,3 +898,134 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
   şüphelenmek oldu. Düzeltme **şemayla** adreslendi: *öncelik = son `P<rakam>` ile başlayan
   hücre, durum = ondan sonraki ikinci hücre* (`clickup-cikar.js:71-73` ile birebir).
 - **Beklenmedik bir sıfır bir sonuç değil, doğrulanacak bir iddiadır.** Bugün iki kez kurtardı.
+
+## İkinci uygulama turu — "maddeleri yapalım hızlıca" (§7/4 muafiyeti)
+
+Sabahki turdan kalan dört madde kapatıldı. Sıra yine **dotnet gerektirmeyen** işlerden kuruldu:
+başka bir oturumun Api shard'ları 17:21'den beri koşuyordu ve `testhost` DLL'leri kilitliyordu.
+
+### 0. Derleme "0 exit" dedi ama 6 HATA vermişti — ve sebebi kod değildi
+
+- **Neden önemli:** `dotnet build ... | tail -20` çalıştırıldığında kabuk **tail'in** çıkış kodunu
+  döndürdü (`exited with code 0`), oysa derleme `MSB3027`/`MSB3021` ile **6 hata** vermişti:
+  `testhost (44628)` `Pbxtr.Api.dll`'i kilitliyordu. Defterdeki *"test koşarken build sessizce
+  atlanır"* maddesinin tam olarak bu turdaki hâli — ama bu sefer ters yönden: **hata vardı, çıkış
+  kodu yalan söyledi.**
+- **Kural:** boru hattında ölçülen çıkış kodu **son komutundur**. Derleme ölçümünde `PIPESTATUS[0]`
+  yazılacak.
+- **Kalıntı testhost öldürülmedi:** 17:21'de başlamıştı ve 17:29'da yenisi doğdu — yani koşu
+  **canlıydı**. Başkasının ölçümünü öldürmek bir ölçüm kaybıdır; iş sıraya alındı.
+
+### 1. `visual-tests/` tiplenmeye alındı — ve bir GERÇEK kusur çıkardı · `c4876f2f`
+
+- **Neden:** sabahki turun yan bulgusu açıktı: `src/Pbxtr.Web/tsconfig.json` `include` = `src`,
+  `vite.config.ts`, `vitest.config.ts` → `visual-tests/` ve `playwright.config.ts` **hiç
+  tiplenmiyordu**. `npm run typecheck` yayın yolu adım 3/7'de koşuyor, yani bu bir **kapı deliği**.
+- **Kapsam açılınca çıkan kusur:** `playwright.config.ts:28` `reducedMotion: 'reduce'` anahtarını
+  `use` altına yazıyordu. O anahtar Playwright'ın `TestOptions` tipinde **YOK** —
+  `BrowserContextOptions`a ait ve `use.contextOptions` ile geçirilir (`test.d.ts:7391` doküman
+  örneği birebir bunu gösteriyor). **Playwright bilinmeyen anahtarı sessizce yok sayar** → taban
+  PNG'ler `prefers-reduced-motion` **uygulanmadan** üretilmiş.
+- **Kontrol grubu:** diğer yedi anahtar (`serviceWorkers`, `colorScheme`, `locale`, `timezoneId`,
+  `viewport`, `baseURL`, `trace`) tek tek arandı — **yedisi de `TestOptions`ta tanımlı**. Yani
+  kusur tek, ve "hepsi yanlıştı" gibi bir abartı yok.
+- **Neden köke `"node"` eklemedim:** kök tsconfig `"types": ["vite/client"]` ile globalleri
+  **kasıtlı** daraltıyor; oraya `node` eklemek `process`/`Buffer`/`__dirname`i **tarayıcı kodunda**
+  da görünür yapardı — kapsam açarken başka bir kapıyı kapatmak olurdu. Ayrı proje dosyası:
+  `tsconfig.visual-tests.json`, `typecheck` = `tsc -b --noEmit && tsc -p tsconfig.visual-tests.json`.
+- **`@types/node@22.20.2`** devDependency olarak eklendi (yoktu).
+- **Mutasyon:** `visual-tests/login.visual.spec.ts`'e tip hatası eklendi → **TS2322 kırmızı**;
+  geri alındı → yeşil. Yani yeni proje fiilen ölçüyor, vacuous değil.
+
+### 2. `kapi_46` — `BR-QA-56 (d)` kapandı · `9e54e72a` · **45 → 46 kapı**
+
+- **Önce ÖLÇÜLDÜ, sonra bağlandı.** İki POSIX bağımlı öz-test `python:3.13-slim` konteynerinde
+  (Linux, uid 0) koşuldu: `s30-build-live-config-test.py` → **Ran 2, OK**,
+  `s30-live-proof-test.py` → **Ran 11, OK**. Yani Windows kırmızısı **bulgu değildi**, ölçüm
+  ortamıydı (`os.geteuid`, dosya sahipliği, 0700 modları, `/` ayracı).
+- **Windows'ta üçüncü yol:** kapı **yeşil demiyor**, `rc=3` ile *"POSIX YOK … ölçemedi"* diyor ve
+  gerçek evinin ubuntu konteyneri olduğunu yazıyor. Gerekçe açıkça dosyaya yazıldı: Windows'ta
+  koşup kırmızı yanmak *"hep kırmızı kapı"*yı, sessizce geçmek *"atlanan kapı yeşildir"* yalanını
+  üretirdi.
+- **Vacuity kapısı:** çıkış kodu tek başına yetmiyor — kapı ayrıca `Ran [1-9]…` arıyor; boş bir
+  takım da `OK` yazıp 0 döner.
+- **Dört ölçüm:** Linux `rc=0` · mutasyon (+1 kasıtlı FAIL) `rc=1` (`Ran 12, FAILED`) ve geri
+  alındı · boş takım `rc=1` (`Ran 0` yakalandı) · Windows `rc=3`.
+- **Mutasyonun KENDİSİ de doğrulandı:** ilk denemede çapa tutmadı (`unittest.main()` öncesi
+  boşluk farkı) ve koşu **yeşil kaldı**. Çapa düzeltilmeden *"mutasyon geçti"* denmedi — defter:
+  *"mutasyon yeşilse fikstürü sorgula"*.
+- **Kalan sahipsizler kapı işi değil** ve kartta kapatıldı: `deploy/e09-yuk-olcum.sh` (yük ölçüm
+  aracı), `deploy/ci/api-test-shards.sh` (koşucu), `br-db-34-…-taslak.sh` (adı taslak).
+
+### 3. `BR-QA-55 (f)` kurula gitti → **Karar #44: (B) ŞARTLI ONAY, 10/10 üye ŞARTLI**
+
+- Kartın kendisi *"bu bir kurul sorusudur"* diyordu; kullanıcıya değil kurula soruldu.
+- **Kurul üç önermemi düzeltti** — üçü de ölçümle:
+  1. **(B) imajı şişmek zorunda değil.** Depoda zaten geçici-konteyner deseni var
+     (`yerel-kapilar.sh:152/157/162`). Yani *"872 MB → 1,7 GB"* bedeli **hiç ödenmez**; sabah
+     yazdığım maliyetlendirme bu noktada **yanlıştı**.
+  2. **"Linux'ta npm yok" yanlış.** Kök `Dockerfile` zaten `node:22-bookworm-slim` ile SPA
+     derliyor. Eksik olan **ortam değil**, kapının o ortama bağlanmamış olması.
+  3. **DB kapıları 872 MB'lık kapı imajında koşmuyor**, `postgres:16-alpine`de; `kapi_17` yalnızca
+     çağrının *yazılı olduğunu* grep'liyor.
+- **Üç yeni kusur ölçüldü** (hiçbiri (f)'nin parçası değildi, üçü de doğrulandı):
+  - `dashboard-prototype` tabanı **hiçbir ürün regresyonu yakalayamaz** — spec `pathToFileURL` ile
+    **prototipin kendisini** çizdiriyor ve o dosya dokunulmaz. Üstelik `dc.html`
+    **`fonts.googleapis.com`** çekiyor (3 isabet): `display=swap` + `fonts.ready` = ağ yoksa
+    fallback fontla **hatasız ama yanlış** taban. → taban silinecek, yerine `dc.html` sha256'sı.
+  - `deploy/yerel-kapilar.Dockerfile:11` `FROM ubuntu:24.04` **sabitlenmemiş**, ama aynı dosyanın
+    31-33. satırları gitleaks'i `8.24.0`a çiviliyor ve gerekçesini *"'latest' bir tedarik zinciri
+    riskidir"* diye yazıyor — aynı gerekçe font/freetype için **daha güçlü**.
+  - **12 glif `unicode-range` dışında** (`→ ⏸ 🎙 ⇄ ⧉ ⌨ ⏺ ≤ ↔ ← ≠ ☎`): webfont'tan çizilmiyor,
+    `system-ui` fallback'ine düşüyor. **Windows kullanıcısı, Linux kiosk'u ve wallboard TV'si
+    farklı ikon görüyor** — bu bir **ürün** kusuru.
+- **Şeytan (D) dedi**, ama (D) ölçüldüğünde (B)'nin **reddi değil, (B) + dört ek şart** olduğu
+  görüldü: D-1 Frontend'in Ş7'siyle, D-2 Linux'un Ş7'siyle, D-3 dört üyenin şartıyla, D-5
+  Frontend'in Ş9'uyla **birebir aynı**. Bu yüzden ayrı seçenek olarak oylanmadı, şart listesine
+  katıldı. Tek gerçek ayrım D-6 (3 aylık deneme süresi) ve o da Ş10 olarak kabul edildi.
+- **Tek gerçek çelişki `{platform}`'du** (CTO "eklenmez" ↔ Linux + Şeytan "geri konsun") ve Ş9'da
+  çözüldü: CTO'nun itirazı **yola değil ikinci kanona**ydı; yol şablonu tek başına ikinci kanon
+  üretmez — onu **commit edilen ikinci PNG seti** üretir. `{platform}` geri konur, ikinci set
+  commit **edilmez** ve bunu bir bekçi zorlar. Kazanç: Windows'ta "eksik taban / koşmadı" ile
+  "piksel uyuşmuyor" **iki ayrı renk** olur.
+
+### 4. Kartlar ve pano
+
+- `BR-QA-56` → **Bitti** (a·b·c·d·e), `BR-QA-55` → **Kurul: ŞARTLI ONAY**.
+- Üç yeni kart: **`BR-FE-74`** (12 glif — ürün kusuru), **`BR-QA-57`** (kapsam tersine kurulmuş:
+  wallboard 1920×1080, canlı izleme, agent eylem çubuğu, gündüz teması), **`BR-QA-58`**
+  (dondurulmuş fikstür kayıt defteri — aynı hata üç kez tekrarladı).
+- Pano: 3 kart açıldı, 2 durum yazıldı, doğrulama **`fark: 0, izde olmayan: 0`**.
+- Bekçi: `kart-atif-dogrula` 952 atıf, Kiril homoglif **0**, satır taşan **0**.
+  (Kart metnini yazarken **kendi elimle üç Kiril harfi** kaçırdım — `gorul` + U+0434 U+0443, `kiosk` + U+0443 — kaçak harfleri buraya BİREBİR yazmıyorum, çünkü o zaman bu satır bekçiyi kendisi kırardı. Commit'ten
+  önce tarandı ve düzeltildi; yani bu turda o bekçi **kendi yazarını** yakaladı.)
+
+### 5. Derleme ölçümü — sabah açık kalan madde kapandı
+
+- Shard'lar bitince koşuldu: **0 Warning, 0 Error**, 34,6 sn, `PIPESTATUS[0]=0`.
+- **"0 Errors" tek başına kanıt değil** (defter). İkilinin gerçekten yeni olduğu ayrıca ölçüldü:
+
+  | | |
+  |---|---|
+  | `RoleScreenProofPlan.cs` (2b54f69a'nın dokunduğu dosya) | 2026-09-11T14:11:52Z |
+  | `Pbxtr.Integration.Tests.dll` | 2026-09-11T14:52:30Z |
+
+  İkili kaynaktan **41 dk yeni** → `ScreenRegistry.IsVisible` çağrısı (satır 174) gerçekten
+  derlenmiş.
+
+## Kararlar (ek 12)
+
+- **Boru hattındaki çıkış kodu son komutundur.** `dotnet build … | tail` bugün **6 hatayı**
+  "exit 0" diye raporladı. Derleme/test ölçümlerinde `PIPESTATUS[0]` yazılacak. Bu, defterdeki
+  *"test koşarken build sessizce atlanır"* maddesinin **ikinci yüzü**: orada build atlanıyordu,
+  burada build **patladı ve çıkış kodu bunu sakladı**.
+- **Kapsam açmak bir ölçüm yöntemidir.** `visual-tests/` tiplenmeye alınır alınmaz, aylardır
+  sessizce yok sayılan bir yapılandırma anahtarı ortaya çıktı. "Hiç ölçülmemiş bir alan" ile
+  "ölçülmüş ve temiz bir alan" aynı görünür — ikisini ayıran tek şey kapsamı **açıp bakmaktır**.
+- **Kendi maliyetlendirmene de kontrol grubu koy.** Sabah (f)'yi *"üç seçenek, üç bedel"* diye
+  yazdım ve (B)'yi *"imaj 1,7 GB'a şişer"* diye fiyatladım. Kurul bunu **depodaki mevcut desenle**
+  çürüttü: geçici konteyner zaten kullanılıyordu. Maliyet tahminleri de bir iddiadır ve **depoda
+  aranmadan** yazılmamalı.
+- **"Şeytan karşı çıktı" ile "Şeytan farklı paketledi" ayrı şeylerdir.** (D) bir ret gibi
+  duruyordu; maddeleri diğer dokuz üyenin şartlarıyla eşleştirince dördünün **birebir aynı** olduğu
+  çıktı. Muhalefeti saymadan önce **içeriğini eşleştir**.
