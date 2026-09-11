@@ -722,3 +722,26 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
   (`yonetim/`, `.cs` çağırıcılar, `.service` çağırıcılar, belge anması). "Sınıfı kapat"
   dersi doğru ama **yeterli değil**: kapatırken evrenin **her iki ucunu** da (neyi tarıyorum
   / neyi çağırıcı sayıyorum) ayrı ayrı yazmak gerekiyor.
+
+### Kuralı ölçen araca koydum — homoglif taraması, pozitif kontrol + mutasyonla
+
+- **Neden:** bir önceki maddede *"bir kuralı karta yazmak onu uygulamaz; kural ölçen araca da
+  konmalı"* diye yazdım. Yazıp bırakmak, bu projenin baskın hata deseninin (karar yazıldı,
+  uygulanmadı) ta kendisi olurdu — aynı turda uyguladım.
+- **Ne eklendi:** `yonetim/arac/kart-atif-dogrula.js`'e **Kiril homoglif taraması**.
+  Kapsam bilinçli olarak dar: **yalnız Kiril bloğu** (U+0400–U+04FF). Yunan bloğu dışarıda —
+  depoda meşru Yunan harfi geçebilir (`μs`, `Δ`), Kiril geçmez.
+- **Kapı kurmadan önce mevcut veriyi ölçtüm** (defterde yazılı ders): bugün `backlog.md`'de
+  **2 kaçak** vardı, önce ölçüldü, sonra temizlendi. Vacuous bir kapı kurmadım.
+- **Boş olmadığını İKİ yolla gösterdim:**
+  1. **Pozitif kontrol** (`PBXTR_HOMOGLIF_DENE=1`): sentetik bir kaçak enjekte eder ve sayımın
+     **tam bir** arttığını bekler → `POZITIF KONTROL: GECTI (beklenen 1, olculen 1)`.
+     Artmazsa çıkış 1.
+  2. **Mutasyon:** `BR-QA-56`'nın `A`'sını U+0410 yaptım →
+     `! 4787: U+0410  ...| BR-QА-56 | **CI KAL`. Geri alınca **0**.
+
+     Çıktının kendisi sorunu gösteriyor: `BR-QА-56` ile `BR-QA-56` ekranda **ayırt edilemiyor**.
+- **Bugünkü tam koşu:** 921 atıf, satır taşıyan gerçek kusur adayı **0**, homoglif **0**.
+- **Not:** araç hâlâ bir kapıya bağlı değil (`BR-QA-56` bunu zaten sayıyor); bugün eklenen şey
+  **ölçümün kendisi**, bağlanması ayrı iş.
+- **Commit:** `5fb4eb3b`
