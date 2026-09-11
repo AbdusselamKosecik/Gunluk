@@ -838,3 +838,63 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
 - **Sonuç:** bugünkü HEAD derleniyor ve mimari bekçileri yeşil. Kalan iki takım (web, Api)
   `f1dbbf46`'dan önce yeşildi ve o commit yalnız boşluk/biçim değiştirdi; yine de
   **ölçülmemiş olan ölçülmemiştir** — yayın turunda ikisi de yeniden koşacak.
+
+## Uygulama turu — kullanıcı "maddeleri bitirelim" dedi (§7/4 muafiyeti)
+
+Ölçümle hazırlanmış maddeler uygulandı. Api test shard'ları arkada koştuğu için sıra
+**dotnet gerektirmeyen** işlerden kuruldu (defter: eşzamanlı yük testhost'u düşürüyor).
+
+### 1. `BR-SYS-96` — imaj ölçümü düzeltildi · `98129c38` · **KAPANDI**
+- `tr -d NUL | grep -c` kalıbına çevrildi; her ölçüm **pozitif** (`ProvisioningNodeBundle`)
+  **ve negatif** (`ZZZ_OLMAYAN_KONTROL_DIZESI`) kontrolle koşuyor.
+- Pozitif 0 ya da negatif ≠0 ise sonuç *"imaj taşımıyor"* **değil** `KONTROL_BOZUK` —
+  yani **yöntem bozuk, imaj değil**.
+- **Canlıda doğrulandı:** yeni ölçüm **2**; pozitif kontrol olmayan bir dizeye çevrilince
+  **`KONTROL_BOZUK`**.
+
+### 2. `BR-QA-56` (a)+(b) — üretici + fikstürler · `d33c2809`
+- `s30-canonical-fixtures.py` görünürlüğü artık `permission` **VE** `permissionsAll`
+  üzerinden hesaplıyor.
+- **Negatif test** eklendi, **iki vacuity kapısı** taşıyor (hedef ekran kümesi boş olamaz;
+  ölçülen rol/ekran çifti 0 olamaz). **Mutasyon:** kural `return True` → **kırmızı**.
+- İki fikstür yeniden üretildi; takım **4/5 → 5/5**.
+
+### 3. `BR-QA-55` (e) yarısı — spec artık kaynaktan okuyor · `73163de0`
+- `dashboard-live.visual.spec.ts` beklentiyi `tr.json`'daki `dashboard.reorderHint`'ten
+  okuyor; anahtar yoksa **açıkça patlıyor**.
+- **Prototip spec'i bilinçli olarak değiştirilmedi** — o cümleyi haklı olarak bekliyor.
+- **Yan bulgu:** `tsconfig.json` `include` = `src`, `vite.config.ts`, `vitest.config.ts` →
+  **`visual-tests/` hiç tiplenmiyor**; `npm run typecheck`'in yeşili bu dosyaları
+  kapsamıyordu. Düzeltilen spec ayrıca tek başına derlendi (rc=0).
+
+### 4. Sekiz doğrulayıcı kapıya bağlandı · `c9631632` · **42 → 45 kapı**
+
+| kapı | ne koşuyor |
+|---|---|
+| `kapi_43` | `clickup-durum.test.js`, `clickup-kart-farki.test.js`, `kart-atif-dogrula.js` (`PBXTR_HOMOGLIF_DENE=1`) |
+| `kapi_44` | üç ST-44 öz-testi (kanonik fikstür · telefon kanıt paketi · TRX birleştirme) |
+| `kapi_45` | görsel sadakat manifestosu + doğrulayıcının öz-testi |
+
+- `kapi_43` **yalnız çıkış koduna bakmıyor**: pozitif kontrolün geçtiğini, homoglif ve
+  satır-taşan atıf sayısının **0**, denetlenen atıf sayısının **0 olmadığını** ayrı ayrı arıyor.
+- **Manifesto hash'i düzeltildi.** Önceki değer depodaki **hiçbir dosyayla** eşleşmiyordu.
+  Manifestonun işi **bütünlüktür, tazelik değil** — bu ayrım dosyanın içine, tabanın bayat
+  olduğu tarihli kanıtıyla birlikte yazıldı.
+- **Üçü de mutasyonla doğrulandı** (durum eşlemesi bozuldu · `permissionsAll` geri alındı ·
+  taban PNG'de tek bayt çevrildi → üç kırmızı), üç mutasyon geri alındı.
+
+### 5. `BR-QA-56` (e) — kural çoğaltması kaldırıldı · `2b54f69a`
+- `RoleScreenProofPlan.cs` artık `ScreenRegistry.IsVisible` çağırıyor.
+- **Derleme henüz ölçülmedi** — shard'lar bitince koşacak. Tipler elle doğrulandı.
+
+### 6. Kartlar gerçek duruma çekildi · `334466e4`
+- `BR-SYS-96` → **Bitti**, `BR-QA-55` ve `BR-QA-56` → **Kısmen**. Pano yazıldı, `fark: 0`.
+
+## Kararlar (ek 11)
+
+- **`kapi_41`'in doğduğu hatayı bugün ben tekrar yaptım.** Durumu `h[n-3]` gibi bir **konum**
+  ifadesiyle yazdım; çıkarıcı eski durumu okumaya devam etti ve senkron **"fark: 0"** dedi —
+  yani iş bitmişken pano bunu **hiç görmeyecekti**. Yakalayan şey, beklemediğim bir sıfırdan
+  şüphelenmek oldu. Düzeltme **şemayla** adreslendi: *öncelik = son `P<rakam>` ile başlayan
+  hücre, durum = ondan sonraki ikinci hücre* (`clickup-cikar.js:71-73` ile birebir).
+- **Beklenmedik bir sıfır bir sonuç değil, doğrulanacak bir iddiadır.** Bugün iki kez kurtardı.
