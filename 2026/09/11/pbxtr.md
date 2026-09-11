@@ -1112,3 +1112,123 @@ git archive --format=tar HEAD deploy/asterisk-lab | ssh root@… 'tar -xf - -C /
 - Canlı **host** `/etc/asterisk` hâlâ lab bağlamları taşıyor (`extensions.conf`, `pjsip.conf`,
   `queues.conf`); imaj temizlendi ama host dosyaları ayrı bir kart ister.
 - `/home/vuo/asterisk-lab/.env` ve `pbxtr-demo/.env` yedekleri `sifreler` deposuna kopyalanmalı.
+
+## Sprint-44 başladı ve Blok 0 PRODUCTION'A İNDİ
+
+Kullanıcı önce "başla" dedi, sonra hedefi netleştirdi: *"maddeleri en hızlı production'a alacak
+şekilde ayarla, bu akşam bitmesi lazım, bana sorma en mantıklı neyse onu yap."*
+
+Sprint-44 ile Karar #44 ikisi de "başla" bekliyordu; kullanıcı **önce sprint-44** dedi (bir gündür
+bekliyordu), Karar #44 sprint-45'e alındı.
+
+### Neden Blok 0 seçildi
+
+Sprint hedefi: *"bayinin önünde tarayıcıdan açılan bir dahili çalar."* `LX-01` ölçümü o cümlenin
+**bugün yapısal olarak imkânsız** olduğunu gösterdi — canlıda `transport-ws` yoktu. Yani Blok 0,
+"altyapı işi" değil, **sprint hedefinin kendisiydi**. Kod blokları onun arkasındaydı.
+
+### 1. dalga — ölçümler (koddan önce, sprintin kendi kuralı)
+
+**`LX-01` — sapma iki değil ÜÇ katmanlı çıktı.**
+
+| Katman | sha256 | `bind = 0.0.0.0` |
+|---|---|---|
+| depo | `917ea946…` | **1** |
+| sunucu inşa kaynağı `/home/vuo/asterisk-lab` | `f3debeaa…` (= 19 gün önceki commit) | 0 |
+| imaj içi | `522688cd…` | 0 |
+
+Kartta yazmayan iki şey: (1) **imaj içi sha git geçmişinin hiçbir commit'ine karşılık gelmiyor** →
+imaj commit edilmemiş bir çalışma ağacından pişmiş ve o ağaç sunucuda yok; yani kaynak bayat değil
+**izlenemez**. (2) README `/opt/asterisk-lab` diyor, o dizin **yok**.
+
+"Sunucuda build al" refleksi üç ayrı sebeple çürütüldü: inşa kaynağı eski → aynı arızayı yeniden
+pişirir; canlı servis `image:` ile koşuyor, `build:` yok → lab build'i canlıya hiç ulaşmaz; dosya
+her açılışta yeniden üretiliyor → elle düzeltme ezilir.
+
+**`BE-00` — hüküm KIRAR.** Masa endpoint adı **on** yerde tüketiliyor: üçü çıplak `PJSIP/<ad>` ile
+çağrıyı kırıyor, üçü `PJSIP_DIAL_CONTACTS` sayesinde **sessizce boşaltıyor** — çağrı kesilmiyor,
+telefon çalmıyor, **hiçbir hata üretilmiyor**. Kurulun "ölçülmemiş" bıraktığı iki kalem ölçüldü,
+ikisi de KIRMAZ; birinde kurulun öncülü doğrudan yanlıştı (kapı nesne aramıyor, adları hesaplıyor).
+Maliyet sekiz değil **altı** tüketici; hüküm değişmedi.
+
+**`K-9` — cevap beklenenden farklı.** Provider `asterisk`, AMI bağlı, ARI Stasis açık. Ama
+`telephony_provider_effects`'teki tick'ler 60 sn'de değil **tam 5 dakikada bir** (`15:06:09`,
+`15:11:09`, … saniyesi sabit) ve `PlatformRollupJob` tick'ten **bir saniye sonra** koşuyor → o
+satırlar türeticinin değil rollup'ın. `QueueMetricDeriver`'ın 60 sn turu **gözlemlenebilir hiçbir iz
+bırakmıyor** (log yok, ledger yok, `job_runs` tablosu zaten yok). Sonuç: *"koşuyor"* ile
+*"koşmuyor"* bugün **ayırt edilemiyor**; `OPS-01-c`'nin tamamı bu ayrıma dayandığı için alarm bu
+hâliyle kodlanırsa canlıda **kör** olur.
+
+### Production yayını
+
+`LX-02` kaynak eşitlendi (depo ≡ sunucu, 33/33 satır fark yok). Yan bulgu: git index modu `100644`
+olduğu için **her teslimat çalıştırılamaz entrypoint gönderiyordu**; imaj yalnızca Dockerfile'daki
+`chmod +x` sayesinde açılıyordu.
+
+`LX-04` yanında **gerçek bir güvenlik kusuru** çıktı: `pbxtr-ep-base` şablonunun context'i
+laboratuvar bağlamıydı — provision edilmemiş bir endpoint üretimde **tek bir tenant'ın kuyruğuna**
+düşerdi. Artık `pbxtr-unprovisioned` → `Hangup(38)`.
+
+**Canlı önce/sonra:**
+
+| | Önce | Sonra |
+|---|---|---|
+| `pjsip show transports` | `Objects found: 1` | **`Objects found: 2`**, `transport-ws 0.0.0.0:5060` |
+| `Maximum calls` | `Not set` | **150** |
+| `Maximum open file handles` | 1024 | **32768** (`/proc/1/limits` 32768/32768) |
+| Arıza imzası | — | **0** |
+
+`LX-07` rollback provası: geri dönüş **20 sn**, ileri alma **20 sn** (hedef < 60) ve **ayırt
+edici** — eski imajda `Objects found: 1`, yani arıza geri geldi. Geri dönmeyip yine `2` görseydik
+prova vacuous olurdu.
+
+### `BR-SYS-93` imaja yazmak ETKİSİZDİ — turun en önemli dersi
+
+Yayından sonra tavanlar **hâlâ eskiydi**. Sebep: `/etc/asterisk` **host bind mount** ve imajın conf
+ağacını **gölgeliyor**; entrypoint yalnızca **eksik** dosyaları tohumluyor.
+
+Depoda commit vardı, imajda dosya vardı, **canlıda hiçbir etkisi yoktu.** Ölçmeseydim bu kalem
+"yapıldı" diye kapanacaktı. Host'a yazıldı, yedeğiyle, ve doğrulandı. `maxfiles` yazılınca
+`/proc/1/limits` kendiliğinden 32768 oldu → **compose `ulimits` gerekmiyor** (varsayım değil, ölçüm).
+
+### Kod işleri
+
+- **`AST-53-a`** — tek yardımcı; WebRTC üyesi artık çalıyor. Düz `&` **kullanılmadı** (masası
+  kayıtlı/tarayıcısı kapalı üye `…&` üretir, `Dial()` boş hedef görürdü). Masa-only çıktı **bayt
+  bayt** kilitlendi. Mutasyon: yardımcı eskiye döndü → **tam olarak** üç WebRTC testi kırmızı,
+  masa-only kilitleri yeşil → fikstür ayrıştırıyor.
+- **`AST-53-c`** — kartın harfi harfine dediği *"`PJSIP/` önekini sil"* **yanlış olurdu**:
+  `t0007-1042` değeri `-local` bağlamında **var olmayan bir uzantıya** giderdi. Çıplak numara
+  verildi.
+- **`AST-56`** — eşzamanlı dala `ANSWER` çıkışı. **İki strateji için ayrı test**; birleşik tek
+  assert, korumanın bir dalda olup ötekinde olmamasını **yeşil gösterirdi** — arızanın hâli tam buydu.
+- **`BR-FE-72`** — kartın bildirdiğinden kötüsü: `LiveFailureMessageSurfaces` **hiçbir `[Fact]`
+  tarafından çağrılmıyordu**, yani "kapsamda" sanılan üç yüzey de ölçülmüyordu. Altı mutasyon, her
+  biri önce *"uygulandı mı"* diye ölçüldü; M5 **vacuity kapısının kendisinin** vacuous olmadığını
+  gösterdi (harita okunamayınca "ihlal yok" değil **ÖLÇÜLEMEDİ** diyor).
+- **`BR-FE-73`** — 9 katalog (8 dil + kaynak `tr`); sekizde bırakmak katalog bütünlüğü bekçisini
+  kırardı.
+
+## Kararlar (ek 13)
+
+- **Bir hücrenin anlamı konumundan değil BAŞLIKTAN okunur.** Durum yazarken metni "öncelikten
+  sonraki iki hücreye birden" yazdım; tablo başlığı `| ID | Story | Öncelik | Sprint | Durum | Şart |`
+  — yani **Sprint kolonunu ezmişim**. On satırda geri alındı. Çıkarıcı `P+2` okuduğu için ClickUp
+  etkilenmedi (`fark: 0` ile doğrulandı). Bu, `kapi_41`'in doğduğu hatanın **aynı sınıfı**: konum
+  ifadesiyle yazmak.
+- **Aynı turda ÜÇ "yanlış sıfır" çıktı ve üçü de kontrol tekrarıyla çürütüldü.** (1) Sorgudaki
+  `operation = 'QueueSummary'` **yanlış addı**, gerçeği `QueueStatus`; ilk sorgu 0 satır döndü.
+  (2) `grep -c "AMI"` **37** dedi, kelime sınırıyla **5** — aradaki 32 isabet `ATANMAMIS` kelimesinin
+  **içinden**. (3) `set -e` altında `grep -c → 0` **çıkış 1** verip prova betiğini sessizce kesti ve
+  çıktının yarısı kayboldu; bir an "tavanlar uygulanmadı" sanıldı. Üçü de **bulgu olarak
+  raporlanmadı** çünkü beklenmedik sıfır önce doğrulandı.
+- **Ajanın mutasyonu "geçti" demesi yetmez; mutasyonun UYGULANDIĞI ayrıca ölçülmeli.** Bugün iki
+  ajan da bunu kendiliğinden yaptı ve biri ilk denemede çapanın tutmadığını yakaladı. `BR-FE-72`
+  ajanı altı mutasyonun **her biri için** "uygulandı kanıtı" sütunu yazdı — bu artık standart olmalı.
+- **Ajana "commit etme" demek, global push kuralıyla çelişebiliyor.** Linux ajanı `LX-06/07` kodunu
+  talimatıma rağmen commit etti ve gerekçesi doğruydu: *"commit etmek koşmak değildir"* — koruduğum
+  şey canlıya dokunmaktı, o dokunulmadı. Bundan sonra talimat *"canlıya dokunma"* olarak yazılmalı,
+  *"commit etme"* olarak değil.
+- **`Write`-only ajan büyük belgeyi baştan yazmak zorunda kalıyor ve diff'ini doğrulayamıyor.**
+  Mimar yardımcısının iki belgesini ben ölçtüm (149 ekleme / 12 silme, kayıp yok). Bu ajan sınıfına
+  ya `Bash` verilmeli ya da çıktısı **her zaman** diff ile doğrulanmalı.
