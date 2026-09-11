@@ -812,3 +812,29 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
 - **Ve (e) ile (f) ayrılamaz:** hangi seçenek alınırsa alınsın taban PNG yeniden üretilecek ve
   **üretimin hangi platformda yapıldığı A/B seçimini belirliyor**.
 - **Commit:** `f1966c5b`
+
+### Kapanmamış bir doğrulama boşluğu: günün son `src/` commit'i ölçülmemişti
+
+- **Nasıl fark ettim:** durum raporunu yazarken sırayı kontrol ettim — takımlar
+  (web 1725, mimari 446, Api 4864) koşturulduktan **sonra** `f1dbbf46` (`dotnet format`,
+  8 dosya / 112 sapma) geldi. Yani günün **son kod commit'i** hiçbir ölçümün kapsamında değildi.
+  Biçimlendirme riski düşüktür ama "düşük risk" ölçüm değildir.
+- **Derleme:** `dotnet build pbxtr.sln -c Debug` → **0 Warning, 0 Error**, 31 sn.
+- **"0 Errors" tek başına kanıt değil** (defter: *"test koşarken build sessizce atlanır"*).
+  İkilinin gerçekten yeni olduğunu ayrıca ölçtüm:
+
+  | | |
+  |---|---|
+  | `f1dbbf46`'nın dokunduğu en yeni `.cs` | 2026-09-10T22:57:04Z |
+  | `Pbxtr.Infrastructure.dll` | 2026-09-11T13:57:08Z |
+  | `Pbxtr.Api.dll` | 2026-09-11T13:57:16Z |
+
+  İkililer kaynaktan **~15 saat yeni** → biçimlendirilmiş kod gerçekten derlenmiş.
+- **Mimari takımı:** `446/446 geçti`, 0 başarısız, 1 dk 25 sn. Sayı beklenenle birebir
+  (defter: *"koşan test sayısını beklenenle karşılaştır"*). Biçimlendirmenin dokunduğu
+  `SystemAgentCallSiteTests.cs` bu takımın içinde.
+- **Docker ölçüldü, gerçekten kapalı:** `docker info` → *"failed to connect… dockerDesktopLinuxEngine"*.
+  Yani `Pbxtr.Integration.Tests` + 7 kapı **ölçülemiyor** — bu bir bulgu değil, ortamın eksiği.
+- **Sonuç:** bugünkü HEAD derleniyor ve mimari bekçileri yeşil. Kalan iki takım (web, Api)
+  `f1dbbf46`'dan önce yeşildi ve o commit yalnız boşluk/biçim değiştirdi; yine de
+  **ölçülmemiş olan ölçülmemiştir** — yayın turunda ikisi de yeniden koşacak.
