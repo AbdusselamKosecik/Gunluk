@@ -785,3 +785,30 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
   ilk hâlinde yanlıştı (fazla geniş, fazla dar, kör nokta). Üçünü de yakalayan şey hep aynı
   oldu: **cevabını önceden bildiğim bir öğe**. Bundan sonra her tarayıcı, bilinen bir doğru
   pozitifle birlikte yazılacak.
+
+### `BR-QA-55` (f) maliyetlendirildi — "`{platform}` geri koy" sanıldığı kadar ucuz değil
+
+- **Neden:** (f)'yi *"tek satırlık config düzeltmesi"* gibi bırakmak yanıltıcı olurdu. Kapının
+  **nerede koşabileceğini** ölçtüm.
+- **İki sert ölçüm:**
+  1. **Kapı konteynerinde `npm` YOK.** `deploy/yerel-kapilar.Dockerfile` yalnızca `nodejs`
+     kuruyor — `npm`, Playwright, Chromium ve tarayıcı sistem kütüphaneleri **yok**.
+  2. **`yerel-kapilar.sh` içinde `npm`/`npx`/`playwright` geçen tek satır bile yok.**
+
+  Buna karşılık `npm` **yayın yolunda** var: `yerel-yayin.sh:374-388` adım 3'te
+  `npm ci` → `npm test` → `npm run build`, **host üzerinde** — yani geliştirici makinesinde,
+  **Windows'ta**. Ve `playwright.config.ts` kendi dev sunucusunu açan bir `webServer` tanımlar;
+  bu `npm`'siz bir konteynerde mümkün değil.
+- **Üç seçenek, ölçülmüş bedelleriyle:**
+
+  | seçenek | bedel | kazanç |
+  |---|---|---|
+  | **A** — `{platform}` geri + Windows tabanı da üret | **iki taban seti**; yenilenmeyen taraf sessizce bayatlar (bu kartın kendisi o hatanın örneği) | kapı bugünkü yayın yolunda koşar, `npm` zaten orada |
+  | **B** — tek taban, fidelity kapı konteynerine taşınır | konteynere `npm` + Playwright + Chromium + bağımlılıklar; **imaj boyutu ve kapı süresi** | tek ve kanonik taban |
+  | **C** — tek taban, yalnız Linux'ta koş, Windows'ta bilinçli atla | en ucuz **görünen** ama en tehlikelisi: *"atlanan kapı yeşil değildir"* gereği iz düşer, ama kapı geliştirici makinesinde **hiç** koşmaz → pratikte *"koşmayan kapı"* | — |
+
+- **Bu bir kurul sorusudur** (görsel sadakat bir ürün şartı, CLAUDE.md §1); kart tek taraflı
+  seçmiyor.
+- **Ve (e) ile (f) ayrılamaz:** hangi seçenek alınırsa alınsın taban PNG yeniden üretilecek ve
+  **üretimin hangi platformda yapıldığı A/B seçimini belirliyor**.
+- **Commit:** `f1966c5b`
