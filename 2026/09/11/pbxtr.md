@@ -1029,3 +1029,86 @@ başka bir oturumun Api shard'ları 17:21'den beri koşuyordu ve `testhost` DLL'
 - **"Şeytan karşı çıktı" ile "Şeytan farklı paketledi" ayrı şeylerdir.** (D) bir ret gibi
   duruyordu; maddeleri diğer dokuz üyenin şartlarıyla eşleştirince dördünün **birebir aynı** olduğu
   çıktı. Muhalefeti saymadan önce **içeriğini eşleştir**.
+
+---
+
+## Sprint-44 Blok 0 — LX-01 → LX-05 + BR-SYS-93 (linux-uzmani)
+
+### Bağlam
+Canlıda `pjsip show transports` → `Objects found: 1`: `transport-ws` yok, yani "tarayıcıdan açılan
+dahili çalsın" cümlesi bugün imkânsız. Kök sebep imaj sapması. Kullanıcı: "bu akşam production'a
+alalım". `LX-06` (yayın) ve `LX-07` (rollback provası) bilerek koşulmadı — canlı konteyneri düşürürler.
+
+### 1. LX-01 — üç-katman sha ölçümü (salt-okuma)
+- **Neden:** "sunucuda build al" denince neyin üretileceğini kimse ölçmemişti.
+- **Ne yapıldı:** `lab-entrypoint.sh` üç katmanda ölçüldü.
+  | Katman | sha256 | bind satırı |
+  |---|---|---|
+  | depo (HEAD) | `917ea946…` (7903 B) | 1 |
+  | sunucu inşa kaynağı `/home/vuo/asterisk-lab` | `f3debeaa…` (2193 B) | 0 |
+  | imaj içi `pbxtr-asterisk:22` | `522688cd…` (7221 B) | 0 |
+- **Sonuç:** üçü de farklı. `f3debeaa` = commit `3c2b7c3d` (23 Ağu) → sunucu ağacı 19 gün geride.
+  `522688cd` **hiçbir commit'e karşılık gelmiyor** → imaj commit edilmemiş bir çalışma ağacından
+  pişmiş, o ağaç sunucuda **yok**. README'nin dediği `/opt/asterisk-lab` **mevcut değil**.
+- **Bu yüzden "sunucuda build koşmak tek başına düzeltmez":** eski ağaçtan alınan build `bind`
+  satırı olmayan dosyayı kopyalar; ayrıca canlı servis `pbxtr` compose projesinden `image:` ile
+  koşar (`build:` yok), lab dizinindeki build canlıya hiç ulaşmaz.
+
+### 2. Depo düzeltmeleri (LX-03 + LX-04 a/b/c + BR-SYS-93) — commit `c4cbe04a`
+- **Neden önce depo:** `git archive HEAD` sunucuya **commit edilmiş** içeriği taşır; düzeltmeler
+  eşlemeden önce commit edilmezse sunucu yine sapar.
+- `Dockerfile`: `ARG PBXTR_GIT_SHA`/`PBXTR_BUILD_AT` + `io.pbxtr.git.sha`/`io.pbxtr.build.at`
+  etiketleri; taban imaj `@sha256:5933f0f3…` digest'ine sabitlendi; ses paketi `sha256sum -c` ile
+  doğrulanıyor (`d79c3d20…`). Sürümlü ses URL'si **denendi ve yok** (1.6.1/1.6.2/1.5.2 → HTTP 404),
+  bu yüzden pinleme checksum ile yapıldı.
+- Fikstür temizliği: lab bağlamları ve tenant fikstürleri `conf/` → `fixtures/`; lab onları
+  **dosya bazlı** bind mount ile alır (dizin mount'u placeholder'ı gizlerdi).
+- Yan bulgu (fail-closed): `pbxtr-ep-base` context'i lab bağlamıydı → provision edilmemiş endpoint
+  üretimde **yanlış tenant'ın** kuyruğuna düşerdi. Artık `pbxtr-unprovisioned` → `Hangup(38)`.
+- BR-SYS-93: `maxfiles = 32768`, `maxcalls = 150`. Ölçüm: `Maximum calls: Not set`, soft 1024 /
+  hard 524288, taban 18 fd. fd bütçesi dosyada yazılı; çağrı başı fd ve CPU **ölçülmedi**, bu
+  açıkça not edildi ve tavan ~5 kat boşlukla seçildi.
+
+### 3. LX-02 — kaynak eşitlemesi (sunucu, yazma)
+```bash
+cp -a /home/vuo/asterisk-lab/.env /root/asterisk-lab.env.yedek-20260911   # sha bb25af38… korundu
+mv /home/vuo/asterisk-lab /home/vuo/asterisk-lab.yedek-20260911
+git archive --format=tar HEAD deploy/asterisk-lab | ssh root@… 'tar -xf - -C /home/vuo/asterisk-lab --strip-components=2'
+```
+- **Kabul:** 33 dosya, `diff` → **fark yok**; `lab-entrypoint.sh` → `917ea946…`, `bind` → 1.
+- **Yan bulgu:** ilk açılışta entrypoint `664` geldi. Sebep: git index modu `100644`
+  (`core.filemode=false`, Windows'taki `rwx` bir yanılsama). Düzeltildi (`ff4869d2`) ve ağaç
+  yeniden gönderildi → `775`.
+
+### 4. LX-04 — sürüm etiketli inşa
+`docker build --build-arg PBXTR_GIT_SHA=… -t pbxtr-asterisk:22-ff4869d26af3 .`
+- entrypoint sha = `917ea946…`; `^bind = 0.0.0.0` → **yeni 1 / eski 0**
+- fikstür grep'i → **boş**; kontrol grubu eski imajda **4 isabet** (yöntem ayrıştırıcı)
+- iki etiket `docker inspect`'te dönüyor; `:22` ezilmedi, eski imaj duruyor.
+- **İzole ön prova** (geçici konteyner, port yayınlanmadı): `Objects found: 2` (`transport-ws`
+  yüklendi), `Maximum calls: 150`, `Maximum open file handles: 32768` ve `/proc/1/limits` soft
+  **1024 → 32768** → compose `ulimits` **gerekmiyor** (varsayım değil, ölçüm).
+
+### 5. LX-05 — `.env`
+`PBXTR_ASTERISK_IMAGE=pbxtr-asterisk:22-ff4869d26af3` eklendi (önce `.env.yedek-lx05-20260911`).
+`docker compose config` → `image: pbxtr-asterisk:22-ff4869d26af3`.
+
+### 6. LX-06/LX-07 hazırlığı (yazıldı, koşulmadı) — `f4f02be4`
+`santral_healthy()`, `santral_kanal_kapisi()`, `write_asterisk_image()` ve `rollback()` genişletmesi.
+**Sunucudaki kurulu dağıtıcıya dokunulmadı** (`/usr/local/sbin/pbxtr-deploy-artifact`, `e0cff4ec…`).
+
+## Kararlar
+- Sağlık kapısında (c) kriteri **düz "ERROR yok" olamaz**: sağlıklı açılışta 61 iyi huylu ERROR var
+  (noload modüller + opsiyonel conf). Ölçülmüş arıza imzası aranır; ayrıştırıcılığı kontrol grubuyla
+  doğrulandı (yeni imaj 0 / bozuk canlı 40).
+- Fikstürler imajdan çıkar ama silinmez; lab mount ile alır.
+- `maxcalls`/`maxfiles` tahmindir ve **tahmin olduğu dosyada yazılıdır**; ilk yüklü günde ölçülüp
+  güncellenecek.
+
+## Açık kalanlar / sonraki adım
+- `LX-06` yayın + `LX-07` rollback provası (koordinatörde; canlı konteyner düşer).
+- Kurulu dağıtıcı (`e0cff4ec…`) depo HEAD'inden farklı — **ikinci sapma vakası**; santral kapısı
+  kurulmadan devreye girmez.
+- Canlı **host** `/etc/asterisk` hâlâ lab bağlamları taşıyor (`extensions.conf`, `pjsip.conf`,
+  `queues.conf`); imaj temizlendi ama host dosyaları ayrı bir kart ister.
+- `/home/vuo/asterisk-lab/.env` ve `pbxtr-demo/.env` yedekleri `sifreler` deposuna kopyalanmalı.
