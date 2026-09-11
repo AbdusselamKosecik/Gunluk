@@ -745,3 +745,43 @@ Bugün birkaç engel ya **ucuzladı** ya **çözüldü**. Kullanıcının bilmes
 - **Not:** araç hâlâ bir kapıya bağlı değil (`BR-QA-56` bunu zaten sayıyor); bugün eklenen şey
   **ölçümün kendisi**, bağlanması ayrı iş.
 - **Commit:** `5fb4eb3b`
+
+### "Arayüz metni sapmış test" sınıfı tarandı — ve `BR-QA-55` için kesin tarih kanıtı çıktı
+
+- **Neden:** `dashboard-live.visual.spec.ts`'in var olmayan bir metni beklemesi tek vaka mı,
+  yoksa sınıf mı? 188 test dosyasında, üründe ve `tr.json`'da **bulunmayan** Türkçe iddiaları
+  aradım.
+- **Tarayıcım üç kez daraltıldı ve bir kez KÖR NOKTASI bulundu:**
+  - İlk hâl 26 isabet verdi; çoğu test fikstürü (`Yaz Kampanyası`, `Tahsilat Eylül`).
+  - Daraltınca 6 kaldı; hepsi şablondan üretiliyordu (`{digit} tuşunu gönder`,
+    `En fazla {max} alıcı seçilebilir.`).
+  - **Ama kontrol grubum (`dashboard-live`) listede YOKTU.** Sebep: karakter sınıfım
+    `[^'"]` idi ve dizedeki **düz kesme işareti** (`Widget'ları`) eşleşmeyi kesiyordu — yani
+    tarayıcı **tam da aradığım şeyi** kaçırıyordu. Tırnak okumasını elle yazdım.
+- **Düzeltilmiş sonuç: sınıfın gerçek üyesi TEK** — `dashboard-live.visual.spec.ts:74`.
+- **Ve tarama bir şey daha buldu:** aynı cümle `dashboard-prototype.visual.spec.ts:13`'te de
+  var — **ama orada DOĞRU.** O spec **prototipi** çizdiriyor ve prototip
+  (`PBXTR Cagri Merkezi.dc.html`) o cümleyi hâlâ taşıyor (grep = 1).
+  **İki spec, iki ayrı doğru cevap.** "Tutarlılık" adına birleştirmek prototip spec'ini kırar
+  — düzeltme yapılırken bu tuzak karta açıkça yazıldı.
+- **Sapma zaten yazılı ve BİLİNÇLİ:** `doc/prototip-urun-farklari.md:734` madde 7 —
+  *"…açıklama satırı (dc.html:731) → **VAR ama metni farklı** → KAPANDI (2026-08-23) ·
+  FID-SCR-01"*, gerekçesiyle. Yani **süreç işledi**; kaçan tek şey görsel kapının tabanı.
+- **KESİN KANIT — ve bu, bugünün en net ölçümü:**
+
+  | | |
+  |---|---|
+  | taban PNG commit'i | `add3899a` — **2026-08-22** |
+  | metin değişikliği | **2026-08-23** |
+
+  **Taban, kasıtlı sapmadan BİR GÜN ÖNCEKİ arayüzü gösteriyor.** Sabahki *"taban eskimiş
+  olabilir"* çıkarımı artık **tarihli bir ölçü**: taban **kesinlikle** yeniden üretilmeli ve
+  manifesto hash'ini bugünkü PNG'ye çekmek **yanlış** olurdu.
+- **Commit:** `bb2e91e2`
+
+## Kararlar (ek 10)
+
+- **Kontrol grubu, tarayıcının kendisini ölçer.** Bugün üç ayrı tarayıcı yazdım ve **üçü de**
+  ilk hâlinde yanlıştı (fazla geniş, fazla dar, kör nokta). Üçünü de yakalayan şey hep aynı
+  oldu: **cevabını önceden bildiğim bir öğe**. Bundan sonra her tarayıcı, bilinen bir doğru
+  pozitifle birlikte yazılacak.
