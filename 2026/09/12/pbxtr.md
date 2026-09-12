@@ -351,3 +351,141 @@ Kapatıldı ve **mutasyonla ayrıştırdığı kanıtlandı**:
   ajan da kendi işlerindeki deliği kendileri raporladı ve ikisi de gerçekti.
 - **Ortam kaynaklı yeşil/atlama, kod kaynaklı olandan daha sinsi.** `Skipped 4` ve
   *"No test matches"* çıktılarının ikisi de `RC=0` ya da "0 Error" ile birlikte geldi.
+
+---
+
+## Günün üçüncü yarısı — OPS-01 "koşan" hâle geldi, homoglif kapısının evreni açıldı
+
+### 13. `OPS-01` artık üretimde bir şey yapıyor
+
+Sabahki commit (`92b12017`) kendi kendine dürüst bir uyarı taşıyordu:
+
+> *"OPS-01 BUGÜN ÜRETİMDE HİÇBİR ŞEY YAPMAZ: tablo yok, iş yok, uç yok, çağıran yok."*
+
+`SilenceMetric` çağıranı olmayan bir kütüphaneydi — defterdeki **"kod var, koşan yok"** sınıfı.
+Bu turda üçü de indi.
+
+- **Neden:** `OPS-01-a`'nın kabul kriteri *"çapraz-tenant hedef imkânsız"*dı ve **karşılanmıyordu**;
+  `OPS-01-d`'nin `400`'ü hiç ölçülmemişti.
+- **Ne yapıldı:**
+  - **Migration** `20260912162924_SilenceThresholds` — üç hedef kolonunun üçü de **bileşik FK**
+    (`(tenant_id, queue_id) → queues(tenant_id, id)` ve zil grubu/DID için aynısı). `dids` için
+    gereken `ak_dids_tenant_id` aynı adımda açıldı.
+  - RLS **elle yazılmadı**: `SELECT pbxtr_apply_tenant_rls(...)`. **Bayi scope'u verilmedi.**
+  - `last_open_minutes` **NULLABLE, `DEFAULT 0` yok** → *null = ölçülemedi*, `0` değil.
+  - **Örnekleyici** `SilenceSamplerJob`: `IBackgroundJob` + advisory lock 34, ayrı worker/cron yok.
+    Akış canlılığı `pbxtr_sys.job_runs`'taki son *leader* satırından okunuyor; tolerans
+    `3 × ReconcileEvery` ve bu sayı **tek yerden türetiliyor** — iki yerde yazılsaydı biri
+    değişince öteki sessizce anlamsızlaşırdı.
+  - **Uç** `/api/v1/silence/thresholds`, `Program.cs:948`'e **fiilen bağlı**. `1..1440` dışı → `400`,
+    `Math.Clamp` **yok**. Ürün **seed etmez**; opt-in bedeli `enabledCount` olarak görünür (#26).
+- **Komutlar:**
+  ```bash
+  dotnet build pbxtr.sln --no-incremental        # 0 Warning / 0 Error, PIPESTATUS[0]=0
+  dotnet test tests/Pbxtr.Architecture.Tests/... # 454/454
+  PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test tests/Pbxtr.Integration.Tests/... \
+    --filter "...Silence...|...ReconcileTick...|...BackgroundJobLocks..."   # 12/12, Skipped 0
+  dotnet test tests/Pbxtr.Api.Tests/... --filter "~SilenceThresholdEndpointTests"  # 18/18
+  python3 deploy/migration-compatibility-guard.py  # OK
+  ```
+- **Sonuç / doğrulama:** yukarıdakilerin hepsi **ajan raporuna güvenilmeden** yeniden koşuldu.
+- **Commit:** `1c918ba9`
+
+#### Kendi koştuğum mutasyon — `OPS-01-d`'nin `400`'ü
+
+Geçen bir test, bekçinin **taşıdığını** göstermez. Uçtaki `IsValid` kapısını etkisizleştirdim:
+
+| Adım | Sonuç |
+|---|---|
+| çıpa `grep` önce/sonra | `1 → 0` (mutasyon **uygulandı**) |
+| koşu | **tam 4 kırmızı** — `1441`, `10000`, `-5`, `0` |
+| geri alma + **yeniden derleme** | 18/18 yeşil, kalıntı 0 |
+
+`if (false)` **derlenmedi** (CS0162, uyarılar hata sayılıyor). Mutasyonu sabit olmayan ama
+hep-yanlış bir koşulla yazmak gerekti — bu, bu depoda mutasyon yazarken tekrar edilecek bir not.
+
+#### Ajanın kendi bulduğu iki kusur — ikisi de defterde zaten yazılı
+
+1. **"Test ikizi üretimden müsamahakâr"** birebir tekrarladı: ilk e2e koşuda iş `processed = 0`
+   dedi ve **hiç hata üretmedi**. Sebep: test DI'sinde `TransactionGuard`/`TenantSession`/
+   `TenantStamp` yoktu → `app.tenant_id` GUC'u yazılmıyor → RLS fail-closed → 0 satır; ve işin
+   *"bir tenant'ın hatası diğerlerini düşürmez"* `catch`'i onu **yutuyordu**.
+2. **"Sahip rolü RLS bypass'ı değil"**: `ReadObservationAsync` owner bağlantısıyla GUC'suz okuyor
+   ve 0 satır dönüyordu.
+
+### 14. `BR-QA-61` — homoglif kapısı bozuk değildi, **dardı**
+
+- **Neden:** kapı `yonetim/backlog.md`'den başka **hiçbir şeyi** taramıyordu ve bu darlık hiçbir
+  yerde yazılı değildi. Buldukları kadarıyla "temiz" diyordu — bir ölçüm değil, bir yanıltma.
+- **Ne yapıldı:** tarama `yonetim/arac/homoglif-tara.js`'ye taşındı, eski yerde **kopya
+  bırakılmadı** (iki tarayıcı olsaydı biri gevşerken öteki yeşil kalırdı).
+  Kural **kelime bazlı**: bir kelime hem Latin hem Kiril harf taşıyorsa kaçaktır.
+  - **Dil-farkında:** kartın korktuğu `bg.json` seli **olmadı** (0 kaçak) — JSON anahtarları saf
+    Latin, değerleri saf Kiril; kelime birimi eşik gerektirmeden ikisini ayırıyor.
+  - **Çift yönlü:** Kiril kelime içindeki Latin `o` da görülüyor. O yön bugüne kadar **hiç**
+    ölçülmemişti.
+- **Kaçış farkındalığı zorunlu çıktı:** ilk geniş koşuda `bg.json` **üç sahte** kaçak verdi — JSON
+  satır sonu kaçışının `n` harfi Kiril kelimeye yapışıyordu. Ayıklanmasaydı kapı **ilk günden hep
+  kırmızı** olurdu.
+- **Tarayıcı ilk koşuda kendini yakaladı:** 12 bulgunun 7'si kendi kaynağıydı. Dosyayı evrenden
+  **muaf tutmadım** — muafiyet tam da kapatmaya çalıştığım kör noktayı geri açardı. Bunun yerine o
+  dosyada Kiril harfler `String.fromCharCode` ile üretiliyor; karakter sınıfları da öyle, çünkü düz
+  yazılmış bir aralığın iki ucu (`U+1EFF` + `U+0400`) bitişik durunca "karışık kelime" görünüyordu.
+- **Bulunan gerçek kaçak: 5 — kart yalnız ikisini biliyordu.** Üç yenisi darlığın bedeli:
+
+  | Dosya | Kelime | Kaçak |
+  |---|---|---|
+  | `deploy/pbxtr-confd-dugum.sh:16` | `dugume` | U+043C, U+0435 |
+  | `az.json:1549` | `kova` | U+0430 *(biliniyordu)* |
+  | `az.json:3892` | `mükəlləfi` | U+04D9 → U+0259 *(biliniyordu)* |
+  | `ContactTransfer.test.tsx:90` | `Ice` | U+0435 |
+  | `CallDataRetentionRowFairnessTests.cs:332` | `deftere` | U+0435 |
+
+- **Dört mutasyon, dördü de kırmızı:** düz yön, **ters yön**, evren çökertme (→ `VACUITY: KALDI`),
+  kural etkisiz (→ **iki** pozitif kontrol de kaldı).
+- **Commit:** `b49018d5`
+
+#### Ölçüm kaybı — dürüstçe
+
+M3 ve M4'ü ilk denemede `git checkout` ile **geri alamadım**: dosya henüz izlenmiyordu, komut
+sessizce hiçbir şey yapmadı. M4 böylece M3'ün kalıntısıyla ölçüldü ve kırmızıyı **yanlış sebepten**
+aldı. M4'ü yalıtılmış olarak yeniden koştum ve o koşuda vacuity'nin **geçtiğini** ayrıca doğruladım
+— yani kırmızı çöküşten değil pozitif kontrolden geldi.
+
+**Ders:** `git checkout --` **izlenmeyen dosyada bir geri alma aracı değildir** ve başarısızlığını
+çıkış koduyla bağırmaz. Yeni dosyada mutasyon yapılacaksa önce `cp` ile yedek alınır.
+
+### 15. İki sözleşme belgesi
+
+- **`asterisk-dugum-paketi-sozlesmesi.md`** (commit `9ccc1dd7`): `files[].sha256` **tel sha'sıdır**
+  ve `revision` ile **bağımsız** değişir. Bağlayıcı istemci kuralı yazıldı: *"değişti mi" kararı
+  `sha256`'dan verilir, `revision`'dan değil* — ters kuran istemci **sır rotasyonunu kaçırır** ve
+  kaçırdığını hiçbir yerde göremez (belirti *"telefon kayıt olmuyor"*).
+- **`asterisk-transport-ve-kayit-gozlemi-sozlesmesi.md`** (commit `360f18b2`, 489 satır): C ekseni.
+  Başlıkta **"SÖZLEŞME — henüz uygulanmadı"** diyor; kardeş belgenin tersi ve bu fark bilerek orada.
+
+Üç bulgusu kart oldu; ikincisi **`BR-AST-69`**: `#37`'nin kayıt sayısı bugünkü okuma portundan
+**çıkamaz**, çünkü port aktif tenant'ın anahtarını okur ve `#37`'yi açan `superadmin`'in aktif
+tenantı **sistem tenantı**dır. Kart, öncülünün **ölçüm değil çıkarım** olduğunu açıkça taşıyor.
+
+## Kararlar (ek)
+
+- **Bir kapı "bozuk mu" diye değil, "evreni ne" diye sorulur.** `BR-QA-61`'de kapı çalışıyordu;
+  sorun ölçtüğü kümenin yazılı olmamasıydı. Evreni yazılmamış her tarama, bulduğu kadarıyla
+  "temiz" der.
+- **Bir tarayıcıyı kendi kuralından muaf tutmak, kapatmaya çalıştığın kör noktayı geri açar.**
+- **Geçen bir test bekçinin taşıdığını göstermez.** `OPS-01-d`'nin `400`'ü yeşildi; mutasyon
+  koşulana kadar taşıyıp taşımadığı bilinmiyordu.
+- **Ölçüm kaybını sonuç diye raporlamak, yanlış sonuç raporlamaktan farksızdır.** M4 kirlendiğinde
+  tabloya "kırmızı" yazmak kolaydı; doğru olan yeniden koşmaktı.
+
+## Açık kalanlar / sonraki adım
+
+- **C ekseni sunucu zinciri koşuyor:** `M1 → LX-18 → LX-19 → D-10 → LX-20`. Bu zincir bitince
+  Blok 4 UI (`FE-01`..`FE-16`) **tek turda** yazılabilir (Ş-FE8).
+- **`BR-BE-126`** (yeni): sessizlik alarmı **ekranda otomatik yanmıyor** — WS yayını yok. Kesme
+  bilinçliydi: `AlarmRaised` payload allowlist'i **kuyruk anahtarı** istiyor ve üç hedef türünü
+  oraya sokmak #14'ün alarm **kimliğini** değiştirir; bu bir **kurul** işi.
+- **`BR-QA-62`** .NET yuvasını bekliyor (PCI kapısının ham alt-dize taraması → sembol bazlı).
+- `OPS-01`'in `ring_group`/`did` dalları **gerçek veriyle koşmadı** (canlıda 0 zil grubu / 0 DID).
+- **Canlıya dokunulmadı** — ne örnekleyici ne uç staging/üretimde koşturuldu.
