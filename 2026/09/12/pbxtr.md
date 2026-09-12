@@ -489,3 +489,123 @@ tenantı **sistem tenantı**dır. Kart, öncülünün **ölçüm değil çıkar�
 - **`BR-QA-62`** .NET yuvasını bekliyor (PCI kapısının ham alt-dize taraması → sembol bazlı).
 - `OPS-01`'in `ring_group`/`did` dalları **gerçek veriyle koşmadı** (canlıda 0 zil grubu / 0 DID).
 - **Canlıya dokunulmadı** — ne örnekleyici ne uç staging/üretimde koşturuldu.
+
+---
+
+## Günün dördüncü yarısı — C ekseni uçtan uca: sunucu, ön yüz, ve aradaki eksik halka
+
+### 16. C ekseni sunucu zinciri (`LX-18`/`19`/`20`/`21` + `D-10`)
+
+- **Neden:** Blok 4 ön yüzü `FE-01`'in *"sunucu alanları gelmeden başlamaz"* şartı yüzünden
+  başlayamıyordu; ölçüm netti — `registeredContacts`/`transportWs` → `src/` içinde **0 isabet**.
+- **Ne yapıldı:** `RegistrationSamplerJob` (`IBackgroundJob` + `LeaderElectedJobRunner` → `job_runs`
+  kanıtı, kilit 35), `AmiTenantCode` kaynak 7 + öneksiz nesnenin **düşürülmesi**,
+  `RegistrationSnapshotStore` + özet deposu (`ITenantCache` arkasında), `#37`'ye iki bileşen ve
+  `RegistrationSingleSourceTests`.
+- **Commit:** `b4ca6b93`
+
+#### `BR-AST-69`'un öncülü artık çıkarım değil, **ölçüm**
+
+`TenantResolutionMiddleware.cs:172-179` → `requested := header X-Tenant-Id ?? homeTenantId`.
+`#37` hiçbir tenant argümanı almıyor, `SystemHealthProbe` tenant bağlamını kendisi kurmuyor ve
+`superadmin`'in ev tenantı `t0000` — onun hiç PJSIP nesnesi yok. Yani aktif tenant anahtarını
+okuyan bir port orada **her zaman boş dönerdi**. Ajan teşhisi bir adım genişletti: `X-Tenant-Id`
+gönderilirse port *o tenant'ı* okur, ki bu da "santral geneli toplam" değildir.
+
+#### İki kırmızıyı ben kapattım — ikisi de dersin tekrarı
+
+1. **`HealthComponentLabelPairingTests` kırmızıydı** (456/457): sunucuda tanımlı iki bileşenin
+   istemcide etiketi yoktu. Ajan `src/Pbxtr.Web/` sınırı yüzünden girmedi — **doğru davranış**, ama
+   *kırmızıyı dürüstçe belgelemek kırmızıyı kapatmak değildir*. İki etiket + dokuz dil eklendi;
+   diff 9 dosyada 18 satır (JSON anlamsal düzenlendi, girinti/satır sonu ham dosyadan ölçüldü).
+   **Mutasyon:** bir etiket silindi → 456/457; geri alındı → **457/457**. Bekçi çift yönlü.
+2. **`BackgroundJobLocksTests.Kilit_listesi_birebir` kırmızıydı:** kilit 35 tanımlanmış, altın liste
+   güncellenmemişti. Bu, ajanın **koşmadığı** testte çıktı — Docker gerektirdiği için atlamıştı.
+   *"`Skipped` yeşil değildir"* bir kez daha ısırdı: atlanmasaydı ajan kendi kırmızısını görürdü.
+
+### 17. Blok 4 ön yüzü — tek turda, 13 kart
+
+- **Neden:** Ş-FE8 UI'ı **tek turda** istiyor; bölmek, yarım bir eksen bırakmak demekti.
+- **Ne yapıldı:** kayıt ekseninin **tek sözlüğü** (`REGISTRATION_TEXT`, 4 hâl, 9 dil), üç değerli
+  alanlar için `TRISTATE_FIELDS`, `configStatus` artık union, softphone rozetine altıncı hâl
+  (`unmeasured`), sınırlı backoff, `registered === false` → **yalnız "Müsait"** kapanır.
+- **Sonuç / doğrulama:** `tsc -b` RC=0 (yayın kapısı, `--noEmit` **değil**), vitest
+  **1764/1764 · 0 atlanan**, Architecture **457/457**.
+- **Commit:** `273937d3`
+
+> Sprint-44'te **`FE-12`/`FE-13`/`FE-14` diye kart yok** — tablo `FE-11`'den `FE-15`'e atlıyor.
+> Var olan 13 kartın hepsi indi.
+
+**Ajanın yol üstünde kapattığı kırmızı benim ürettiğimdi:** `auditTargetParity.test.ts`.
+`git stash` ile **temiz HEAD'de de** kırmızı olduğunu ölçmüş — sebep akşamki `OPS-01` commit'imdi
+(sunucuda yeni denetim hedefi türü açıldı, `#38` filtresi güncellenmedi). Fark etmemiştim.
+
+### 18. Aradaki eksik halka — ve bugünün en öğretici anı
+
+Ön yüz indi, sunucu indi. **Arada tek bir okuma yolu eksikti:**
+
+```
+grep -rn "IRegistrationView" --include=*.cs src/ tests/
+  -> arayüz · depo · DI kaydı · mimari bekçi        (HTTP tüketicisi YOK)
+```
+
+`/users/extensions` ve `/agent/state` `registration` alanını üretmiyordu. Yani bu akşam yazılan
+`registered`/`registeredDevices`/`notRegistered` dallarının **üçü de üretimde hiç koşmuyordu**;
+her yüzey "Ölçülemedi" diyordu. **Bu, aynı günün sabahında `OPS-01` için kapattığım
+"kod var, koşan yok" sınıfının bir kat yukarıdaki aynısıydı.**
+
+- **Ne yapıldı:** `RegistrationAxis` (domain birleştirme), `AsteriskObjectName.IsExtensionObject`,
+  `RegistrationAxisDto` (**tek DTO iki yüzeyde**), iki uca opsiyonel `IRegistrationView?`
+  enjeksiyonu — tenant başına **tek** Redis okuması, N+1 yok, santral çağrısı yok.
+- **Birleştirme önceliği `true > null > false`** ve bu bir tercih değil: bir cihazı **ölçemediysek**
+  "kayıt yok" denmez, çünkü o cümle `FE-11`'de agent'ı **Müsait olmaktan alıkoyar**. Yanlış taraf
+  seçilseydi bir ölçüm boşluğu agent'ı sessizce çağrı dışı bırakırdı.
+- **Sonuç / doğrulama:** `RegistrationAxisHttpTests` gerçek `Program.cs` + gerçek PostgreSQL + **gerçek
+  Redis** + gerçek HTTP; anahtarı test elle yazmıyor, **örnekleyicinin kendisi koşuyor**.
+- **Commit:** `a619391e`
+
+#### Kendi koştuğum mutasyon — turun en sinsi riski
+
+Risk: sunucu alan adı ön yüzün beklediğinden saparsa ön yüz **sessizce** "ölçülemedi" demeye devam
+eder ve **hiçbir test kırılmaz**.
+
+| Adım | Sonuç |
+|---|---|
+| DTO alanı `ContactCount` → `ContactCountX` (çıpa 1→0) | derleme **0 hata** — yani sessiz sapma gerçekten mümkün |
+| koşu | `RegistrationWireContractTests` **iki** testi kırmızı (460 → 458) |
+| geri alma + yeniden derleme | **460/460** |
+
+Bekçinin kendi vacuity kapısı da yerinde: `Assert.NotEmpty(client)` + `server.Count == 3`.
+
+**Ajan kendi bekçisinin bir kolunun vacuous olduğunu kendisi buldu:** `M2` (`?? 0` düzleştirmesi)
+ilk koşuda mimari bekçiyi **kırmıyordu**, çünkü test DTO'yu elle kuruyor ve `From`'u hiç
+çağırmıyordu. Bekçiyi `From` üzerinden geçecek şekilde düzeltip `M2`'yi **tekrar** ölçtü.
+
+#### Bir sayı farkı ve nasıl çözüldü
+
+Ajan Integration tabanını 22 sanıp benim "19" dediğimi düzeltmeye çalıştı. Ölçtüm: toplam **22**,
+yeni sınıf **3** → taban gerçekten **19**'du. Ajanın "25" ölçümü yanlıştı; **düşen test yok.**
+Ders: bir ajanın düzeltmesi de bir iddiadır, ölçülene kadar doğru değildir.
+
+## Kararlar (ek)
+
+- **Bir eksen üç parçadan oluşur: üretici, taşıyıcı, tüketici.** İkisini yazıp üçüncüyü atlamak,
+  "bitti" hissi veren ama üretimde hiçbir dalı koşturmayan bir sonuç üretiyor. Bugün bu hata **aynı
+  gün içinde iki kez** (OPS-01 ve C ekseni) ortaya çıktı ve ikisi de aynı `grep` ile görüldü:
+  *bu arayüzün tüketicisi kim?*
+- **Ölçüm boşluğunda hangi tarafa yuvarlandığı bir güvenlik kararıdır.** `null → false` yuvarlaması
+  burada agent'ı çağrı dışı bırakırdı; `false → null` yuvarlaması gerçek bir kopuşu gizlerdi.
+  İkisi de "küçük bir varsayılan" gibi görünüyor.
+- **Bir ajanın "senin sayın yanlış" demesi, sayının yanlış olduğunu göstermez.** Ölçtüm, benimki
+  doğruydu — ama ölçmeden kabul etseydim sahte bir taban yazmış olacaktım.
+
+## Açık kalanlar / sonraki adım
+
+- **`BR-QA-62`** hiç başlamadı: PCI kapısı ham alt-dize arıyor, sembol bazlı olmalı.
+- **`BR-AST-70`** (yeni): örnekleyicinin gruplama dalı **yalnız `asterisk` bileşiminde** var;
+  `simulated` konakta DI hatasıyla düşüyor. Bugün üretimde zararsız (`simulated` sağlayıcı `null`
+  döndüğü için dal hiç girilmiyor) ama **gerçek santrale karşı hiç koşmadı**.
+- **`BR-BE-126`**: sessizlik alarmı ekranda otomatik yanmıyor (WS yayını yok).
+- **`M1-a..d` laboratuvar bekliyor** → `contactCount` üretimde hâlâ daima `null`, yani
+  *"Kayıtlı — n cihaz"* metni hiç çizilmiyor; `transportWs`'in `Down` dalı **erişilemez**.
+- **Gerçek Asterisk'e karşı bu akşam hiçbir şey doğrulanmadı; canlıya hiç dokunulmadı.**
