@@ -135,6 +135,36 @@ Düzeltildi ve gerekçesi belgeye yazıldı.
   (*H1 ölçülemez*) **hâlâ bağlayıcı**. Metin silinmedi.
 - `yonetim/backlog.md` — `BR-AST-71` kapandı; `BR-AST-72` ve `BR-AST-73` açıldı.
 
+### 8. ClickUp eşleme kusuru — kendi kartım yakaladı
+
+- **Nasıl çıktı:** `BR-AST-71`'i kapatıp senkronu koşturunca kart `to do` göründü. Oysa
+  kartın kendi işi **aynı gün bitmiş ve push edilmişti**; kalan tek şey `BR-AST-72`'ye
+  devredilmişti.
+- **Birinci kusur:** durum metni hem `Kurul: ŞARTLI ONAY (Karar #46)` hem
+  `Bitti (2026-09-13)` taşıyordu ve eşlemede `Kurul: … ONAY → to do` kuralı `Bitti →
+  complete` kuralından **önce** geliyordu. Yani onaylanmış **ve bitmiş** her kart panoda
+  açık görünüyordu.
+- **İkinci, daha eski kusur (düzeltirken çıktı) — ikisi birbirini örtüyordu:**
+  - Kural 6 (*"ortadaki `bitti` → in progress"*) `!/^Bitti/i` kullanıyordu. JS'te ``
+    **yalnız ASCII harf tanır**: `Bittiği` metninde `Bitti`den sonra gelen `ğ` ASCII'de
+    harf olmadığı için **sınır üretiyor** ve kural 6 metni **kaçırıyordu**. Bu, dosyanın
+    kendi yorumlarının 2026-09-10'da uyardığı tuzağın ta kendisi — **uyarı yazılmış, aynı
+    satırda uygulanmamıştı.**
+  - Kaçan metin sonra çıpasız `/Bitti|Kapandı/` alt dize testine düşüp **`complete`**
+    yazılıyordu. Yani *"Bittiği sanılıyordu ama değil"* panoda **KAPALI** görünüyordu —
+    deponun en pahalı yönü (**açık işi kapalı göstermek**).
+- **Ne yapıldı:** `SON` ileri-bakışı fonksiyonun başına alındı, `BASTA_BITTI` tek yerde
+  tanımlandı, çıplak `Bitti` alt dize testi kaldırıldı. **Ters yön korundu:** onaylanmış
+  ama **başlamamış** kart hâlâ `to do`.
+- **Mutasyonla doğrulandı:** düzeltme geri alınınca 8 testin **2'si kırmızı**, geri
+  getirilince **8/8 yeşil**, kalıntı `0`.
+- **Senkron:** `BR-AST-72` ve `BR-AST-73` panoda açıldı; `fark olan kart: 0, izde olmayan: 0`.
+- **Commit:** `e57bdfdd`
+
+**Ders:** *bir uyarıyı yazmak, onu uygulamak değildir.* Aynı dosyanın yorumları ``
+tuzağını isim isim anlatıyordu ve **bir satır yukarıda** o tuzağa düşülmüştü. Uyarı yazılan
+dosyada, uyarının kendi kuralına uyulup uyulmadığı ayrıca ölçülmeli.
+
 ## Kararlar
 
 - **Ölçülmemiş bir seçeneği "yol" diye sunmak, kurulu yanlış soruya oy verdirir.** Kurula üç
@@ -150,6 +180,9 @@ Düzeltildi ve gerekçesi belgeye yazıldı.
 - **Bir arıza "yavaşlık" kılığında geliyorsa, hiç kimse onu arıza diye aramaz.** `Permission
   denied` 10 saniyelik bir zaman aşımı olarak yaşanıyordu; bu yüzden düzeltme karardan bağımsız
   bir şart olarak yazıldı.
+- **Bir uyarıyı yazmak, onu uygulamak değildir.** ClickUp eşlemesinin yorumları ``
+  tuzağını isim isim anlatıyordu; **bir satır yukarıda** o tuzağa düşülmüştü ve kusur iki
+  yıl değil, iki kural boyunca birbirini örterek saklanmıştı.
 - **Bir yasağın en güvenilir hâli bir cümle değil, bir kapıdır** — ve kapı kurulduğu ilk koşuda
   yasağın **zaten çiğnendiğini** gösterdi (belgede). Yorum satırı olsaydı hiç görülmezdi.
 
