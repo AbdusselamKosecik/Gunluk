@@ -238,3 +238,116 @@ sayı korundu.
   tanımladıktan sonra ölçülebilir.
 - `LX-08`'in 4b santral dalı, dağıtıcı kurulumu ve gölgeleme raporu **gerçek sunucuda henüz
   koşmadı**; ilk koşu izlenerek yapılmalı.
+
+---
+
+## Günün ikinci yarısı — Blok 2, Blok 4 ve ana dalın kırmızıya düşüp geri dönmesi
+
+### 8. Ana dal KIRMIZIYA DÜŞTÜ ve sebebi benim commit'imdi
+
+Sabah `D-01` migration'ını *"yeşil değil"* diye **dürüstçe** commit'lemiştim (`8b79693b`). O commit
+zincirin sonuncusu olunca iki mimari test kırıldı (`456/458`):
+
+```
+MigrationAssertionSeparationTests.Iddia_migrationi_zincirin_SONUNCUSU_olmali   [FAIL]
+GuardAssertSingleSourceTests.Terminal_migration_listesi_tek_kaynakla_AYNI_olmali [FAIL]
+```
+
+**Ders: dürüst bir commit mesajı yazmak kırmızıyı meşru yapmıyor.** Mesaj "neden yeşil değil"i
+doğru anlatıyordu ama yayın kapısı o gün fiilen kapalıydı.
+
+**Çıkış:** A seçeneği — iddia bataryasını migration zincirinden tamamen çıkarmak. Devir yolu
+`Terminal_migration_DEVREDILEMEZ` ile zaten kapalıydı ve gerekçesi ölçülmüş: *17 günde 32 ayrı
+dosya sırayla terminal ilan edilmiş, sabit 37 kez değişmiş, bunun 31'i devir.* Kural kendi
+ihlalini üretiyordu.
+
+**Bekçi kaldırmadığımı UYGULAMADAN ÖNCE ölçtüm** — batarya iki yolda da duruyor:
+
+| Yol | Kanıt |
+|---|---|
+| Üretim/açılış | `MaintenanceRunner.cs:237` `MigrateDatabase` → `:238` `RunGuardAssertsAsync` → `:299` `foreach (GuardAsserts)` — **her `migrate`'te 27/27** |
+| DB kapısı | `ci-check.sh:258-281` listeyi `MaintenanceRunner.GuardAsserts`'ten **türetiyor**, `DERIVED_COUNT < 25` → fail |
+
+Kalkan yalnızca migration içindeki **kopya**.
+
+### 9. `db-dev` bir mutasyonun yakalanmadığını buldu ve DURDU — doğru davranış
+
+Silinen `Terminal_migration_listesi_tek_kaynakla_AYNI_olmali` **küme eşitliği** ölçüyordu, yani
+`GuardAsserts`'ten **herhangi** bir adın silinmesini yakalıyordu. Kaybolunca 27 adın **dördü**
+korumasız kaldı (`ci-check.sh`'te elle de çağrılmayanlar), çünkü `DERIVED_COUNT ≥ 25` eşiği iki
+adlık silmeye izin veriyordu.
+
+**Kapatma biçimi:** `ci-check.sh`'e **şema taraflı ters yön** adımı — `pg_proc`'ta tanımlı her
+`pbxtr_assert_*` fonksiyonu tek kaynakta da olmak zorunda. **İkinci bir elle liste yazılmadı;
+ikinci kaynak şemanın kendisi**, yani kopya yok. Eşiği 25→27 çekmek çözüm değildi: yeni bekçi
+eklenince aynı devretme döngüsü doğardı.
+
+Gerçek PostgreSQL'e karşı: temiz → **TÜM KAPILAR YEŞİL** + *"semadaki 27 bekcinin tamami tek
+kaynakta"*; mutasyon (eskiden **kaçan** ad silindi) → `::error::` ve **RC=1**; geri alma temiz.
+Architecture **454/454** — düşüş tam 4, silinen `[Fact]` sayısıyla birebir.
+
+### 10. Blok 2 (`BE-02`→`BE-09` + `D-05`) — kartlarda yazmayan üç şey koşarken çıktı
+
+1. **`MaterializeAsync` transaction'sız koşunca TÜM düğüm paketi düşüyordu** (her tenant
+   `render_failed`). Uç `SelfManagedTransaction`, `GetBundleAsync` kendi transaction'ını **commit
+   ederek** dönüyor, sonraki okuma `TenantSessionInterceptor`'a takılıyor. **Yalnızca gerçek
+   PostgreSQL'e karşı görünür** — fikstür seviyesinde yeşil kalırdı.
+2. Bileşik FK EF modelinden çıkarıldı, **kısıt veritabanında duruyor** (asıl kapı o). Migration'a
+   dokunulmadı.
+3. `PciScopeGuardTests` **"Collect" alt dizesi** arıyor; `SecretBindingCollector` adı kapıyı
+   kırmızı yaptı. Kapı **gevşetilmedi**, ad değişti → `BR-QA-62`.
+
+**İki yayın uyarısı, ikisi de ölçülü ve biri sprintin kendi öncülünü doğruluyor:** mevcut
+revizyonların bağ satırı yok (bir render tetiklenmeden düzelmez) ve `extension.desk` her zaman
+`secret_not_stored` dönüyor; kesme birimi dosya olduğu için **`pjsip` yine withheld kalıyor**.
+Yani WebRTC yarısı tek başına canlı semptomu **kapatmıyor**.
+
+### 11. Blok 4 backend — ve "yeşil yalan"ın bir kat yukarıdaki aynısı
+
+`BE-20`/`BE-21`/`BE-22` indi. `BE-22`'nin öncülünün bir parçası **bayattı** (`#680 → #57` zaten
+`176bfe64` ile kapanmış) ama asıl öncül doğrulandı ve mekanizması ölçüldü.
+
+**Asıl olay:** ajan kendi raporunda *"yazma yolu uçtan uca ölçülmedi, bu iki satır bugün vacuous
+koşuyor olabilir"* dedi. Ölçtüm, **doğruydu**:
+
+```
+grep -rn "IProvisioningDeliveryObservations" tests/
+  -> TEK isabet: ProvisioningWithheldHealthTests.cs:186   (OKUMA tarafi)
+```
+
+Gözlemi **yazan** iki satır hiçbir testte koşmuyordu. Yani `BE-22`'nin kapattığı yeşil yalanın
+**bir kat yukarıdaki aynısı**: o satırlar yanlış tenant yazsa ya da hiç çağrılmasa sağlık sonsuza
+dek `Ok` derdi.
+
+Kapatıldı ve **mutasyonla ayrıştırdığı kanıtlandı**:
+
+| Mutasyon | Sonuç |
+|---|---|
+| A — düğüm paketi ucunda `NoteAsync` dalı kapatıldı | **tam 1** kırmızı |
+| B — Mod A ucunda `NoteAsync` dalı kapatıldı | **tam 2** kırmızı |
+| geri alma | kalıntı 0, temiz koşu **4/4** |
+
+### 12. İki ortam tuzağı, ikisi de "yeşil görünen ölçüm kaybı"
+
+- **`Skipped` yeşil değildir.** İlk koşumda 4 test **atlandı**; sebep Docker Desktop daemon'ının
+  düşmesiydi (oturum boyunca konteyner koşturmuştum). `RequiresDockerFact` sessizce atlıyor.
+  `PBXTR_REQUIRE_DOCKER_TESTS=1` ile zorlandı, Docker yeniden başlatıldı ve ölçüm **gerçekten**
+  yapıldı. Bu bayrağın varlığı deponun bu dersi daha önce de aldığını gösteriyor.
+- **`bin` bozuk olabilir ve build yine "0 Error" der.** Kesilen bir koşu
+  `Pbxtr.Integration.Tests/bin` içindeki `Pbxtr.Domain.dll`'i yüklenemez bırakmıştı; xunit
+  **keşifte** patlıyor ve `dotnet test` *"No test matches"* diyordu. `bin`+`obj` silinip yeniden
+  derlendi → keşfedilen test **0 → 736**.
+
+## Kararlar (ek)
+
+- **Kırmızıyı dürüstçe belgelemek, kırmızıyı kapatmak değildir.** Bir commit'in mesajı ne kadar
+  doğru olursa olsun, ana dalı kırmızı bırakıyorsa iş yarımdır.
+- **Bir bekçiyi kaldırmadan önce, koruduğu şeyin başka nerede koşduğunu ÖLÇ.** Bu turda iki yolu
+  da ölçtüm ve ancak ondan sonra uyguladım; ölçmeseydim 27 bekçilik bir bataryayı körü körüne
+  taşımış olacaktım.
+- **Silinen bir bekçinin bıraktığı boşluk, silme anında ödenmeli.** `db-dev` dört adın korumasız
+  kaldığını buldu ve bunu **gizlemedi**; bedeli aynı turda ödendi.
+- **"Ajan yeşil dedi" bir ölçüm değildir — ama "ajan boşluk bildirdi" çok değerlidir.** Bugün iki
+  ajan da kendi işlerindeki deliği kendileri raporladı ve ikisi de gerçekti.
+- **Ortam kaynaklı yeşil/atlama, kod kaynaklı olandan daha sinsi.** `Skipped 4` ve
+  *"No test matches"* çıktılarının ikisi de `RC=0` ya da "0 Error" ile birlikte geldi.
