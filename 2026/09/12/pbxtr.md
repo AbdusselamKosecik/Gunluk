@@ -659,3 +659,81 @@ pozitifin kalktığı tahmin edilmedi, **ölçüldü**.
 - **Bir kapıyı keskinleştirmek ile daraltmak ayrı şeylerdir.** Ölçülmesi gereken soru aynı kaldı;
   yalnızca soruyu soran mercek değişti. Daraltma olsaydı, yanlış negatif riski yanlış pozitiften
   daha kötü olurdu.
+
+---
+
+### 20. `M1` ölçüldü — ve C ekseninin üretimde **boş** kalacağını gösterdi
+
+**Önce bir düzeltme:** *"`M1` canlı gerektiriyor, sana bırakıldı"* demiştim. **Yanlıştı.**
+`M1` canlı değil, **gerçek bir Asterisk** gerektiriyor — ve depoda `deploy/asterisk-lab`
+var: Docker, `127.0.0.1`, kendi kendine yeten, pbxtr üretimine bağlı olmayan bir laboratuvar.
+Üstelik **çalışıyordu**. Üretim santraline dokunulmadı.
+
+- **Tutanak:** `doc/mimari/m1-kayit-envanteri-olcumu.md`
+- **Commit:** `79299d06`
+
+#### Bulgu 1 (en önemlisi) — PJSIP AMI eylemleri bugünkü yetkiyle **reddediliyor**
+
+```
+Action: PJSIPShowEndpoints  ->  Response: Error / Message: Permission denied
+Action: PJSIPShowEndpoint   ->  Response: Error / Message: Permission denied
+```
+
+Gereken yetki üçü için de `system,all`. **Kullanıcıda `system` zaten `read` içinde var ve
+yine reddediliyor.** Sebep ölçüldü: AMI, eylem yetkisini **`write`** kümesine karşı
+denetliyor. Laboratuvarda `write`'a `system` eklenince **aynı iki eylem aktı**, geri alınınca
+**red geri geldi** — nedensel bağ kuruldu, tesadüf değil.
+
+**Bunun anlamı:** bu akşam yazdığım C ekseninin tamamı üretimde **hiçbir veri üretmeyecekti.**
+Ve arıza **sessiz**: iş `job_runs`'a satır yazmaya devam eder (tur koşmuştur), depo boş kalır,
+her yüzey *"Ölçülemedi"* der — ve *"ölçülemedi"* bugün **doğru ve beklenen** bir cevap olduğu
+için **kimse bir arıza görmez.**
+
+**Karar kurula gider, bana değil:** `write`'a `system` eklemek bir yetki yükseltmesidir ve
+doğrudan CLAUDE.md §3.1'in konusu — `system` yazma sınıfı `Reload`/`ModuleLoad`/`ModuleCheck`
+açar, reload'un **kapalı liste** disiplini tam da bunun için var. Üç seçenek ölçülüp belgeye
+yazıldı, **değişiklik yapılmadı**. Kart: **`BR-AST-71`** (P1).
+
+#### Bulgu 2 — `TransportDetail` çerçevesi **yok**
+
+`PJSIPShowEndpoint` yalnızca `AuthDetail`, `EndpointDetail`, `AorDetail`,
+`ContactStatusDetail`, `EndpointDetailComplete` üretti. Sözleşme bu çerçevenin
+**başlıklarını** soruyordu; cevap, çerçevenin bu yolda **hiç var olmadığı**.
+
+Yani `transportWs` bu yoldan **ölçülemez**. Bugünkü kodun daima `null` üretmesi ve `Down`
+dalının erişilemez olması bir eksiklik değil — **var olmayan bir veri kaynağının** sonucu.
+
+`pjsip show transports` gerçek sütunları: `TransportId · Type · cos · tos · BindAddress`.
+**"Dinliyor" diye bir sütun yok** — sözleşmenin iddiası doğrulandı.
+
+#### Bulgu 3 — `contactCount` **ölçülebilir**, ve ayrı bir eyleme gerek yok
+
+`AorDetail` toplamı (`TotalContacts`, `ContactsRegistered`), `ContactStatusDetail` ise
+contact **başına** bir satır veriyor (17 başlık).
+
+**Sayının fiilen saydığı ölçüldü** — alanın varlığı yetmez. Laboratuvara geçici bir
+endpoint yazıldı ve **gerçek bir SIP REGISTER** gönderildi (UDP digest, `401` → `200 OK`):
+
+| An | `TotalContacts` | `ContactsRegistered` | `ContactStatusDetail` |
+|---|---|---|---|
+| REGISTER öncesi | 0 | 0 | üretilmedi |
+| REGISTER sonrası | **1** | **1** | **üretildi** |
+
+Alan sabit `0` dönseydi ikinci satır da `0` gösterirdi ve fark görünmezdi.
+
+**Geri alma ölçüldü:** laboratuvardaki iki değişiklik (geçici endpoint, `write += system`)
+geri alındı ve geri alma ayrıca doğrulandı — endpoint dosyası yok, yetki eski hâlinde, iki
+eylem yine `Permission denied`.
+
+## Kararlar (ek)
+
+- **"Bunu yapamam" da bir iddiadır ve ölçülmeden doğru değildir.** `M1`'i canlı gerektirdiği
+  için kullanıcıya devretmiştim; oysa depoda çalışan bir laboratuvar vardı. Bir engeli kabul
+  etmeden önce, engelin gerçekten orada olup olmadığına bakmak gerekiyor.
+- **Bir eksenin en pahalı kusuru, en sonda ölçülen varsayımda çıkıyor.** C ekseninin kodu,
+  ön yüzü ve uçları yazıldı; hepsi *"AMI çerçeveleri bugünkü yetkiyle akar"* varsayımının
+  üzerinde duruyordu ve o varsayım **yanlıştı**. Ölçüm zincirin başında yapılsaydı tasarım
+  farklı olurdu.
+- **Sessiz arızanın en sinsi biçimi, doğru cevabın arkasına saklanandır.** Burada
+  *"ölçülemedi"* hem gerçek arızanın hem de beklenen durumun cevabıydı; ikisi aynı karakteri
+  bastığı için arıza görünmez olurdu.
