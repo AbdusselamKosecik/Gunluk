@@ -609,3 +609,53 @@ Ders: bir ajanın düzeltmesi de bir iddiadır, ölçülene kadar doğru değild
 - **`M1-a..d` laboratuvar bekliyor** → `contactCount` üretimde hâlâ daima `null`, yani
   *"Kayıtlı — n cihaz"* metni hiç çizilmiyor; `transportWs`'in `Down` dalı **erişilemez**.
 - **Gerçek Asterisk'e karşı bu akşam hiçbir şey doğrulanmadı; canlıya hiç dokunulmadı.**
+
+---
+
+### 19. `BR-QA-62` — PCI kapısı ham metin yerine IL tarıyor
+
+- **Neden:** kapı `ConfigRenderer.cs`'in **tamamını** ham metin olarak tarayıp `Collect` alt
+  dizesini arıyordu ve bugün **fiilen ısırdı**: `BE-02` için yazılan `SecretBindingCollector`
+  kapıyı kırmızı yaptı — `IvrNodeTypes.Collect` ile hiçbir ilgisi yok. Kapı böylece dosya üzerinde
+  **hiçbir yerde yazılı olmayan** bir adlandırma kısıtı kuruyordu.
+- **Ne yapıldı:** tarama `TypeReferenceScanner.ScanCallsAndLiterals` ile **IL**'e taşındı
+  (`AST-53-e` ile aynı araç). **Kapı daraltılmadı, keskinleştirildi** — ölçtüğü şey aynen duruyor.
+- **Commit:** `54f4aa81`
+
+#### Kartın istediği çözüm yanlıştı ve ölçüm bunu düzeltti
+
+Kart *"Roslyn ile `IvrNodeTypes.Collect` **sembol referansı** aransın"* diyordu. Uygulanamaz:
+`Collect` bir **`const string`**'tir, derleyici onu **satır içi gömer** ve IL'de geriye yalnızca
+`"collect"` dizesi kalır — **aranacak bir sembol referansı yoktur**. Yani dize sabitini aramak
+burada bir taviz değil, doğru ölçümün kendisi. Ve tam da bu yüzden bir yardımcı sınıf adı ya da
+bir yorum bu taramada **hiç görünmez**: ikisi de IL'e dize sabiti bırakmaz.
+
+#### Kapı kurulmadan önce mevcut veri ölçüldü
+
+Geçici bir ölçüm testiyle (sonra silindi): **57 üye, okunamayan IL 0**, `play` 2 üye ·
+`hangup` 1 · `menu` 1 · `collect` **0**.
+
+#### Vacuity kapısı üç ayrı çöküş biçimini ayrı ayrı ölçer
+
+Üçü de "0 bulgu" üretir ve hiçbiri kendini göstermez: (1) üye sayısı 0, (2) **okunamayan IL > 0**
+— *"okuyamadım" ile "yok" aynı sayıya yazılamaz*, (3) `play`/`hangup` çapalarının kaybolması.
+
+#### Üç kollu mutasyon
+
+| Kol | Ne yapıldı | Sonuç |
+|---|---|---|
+| A | gerçek `IvrNodeTypes.Collect` render dalı eklendi | **KIRMIZI** |
+| B | `SecretBindingCollector` sınıfı **+** içinde `IvrNodeTypes.Collect` geçen bir yorum | **YEŞİL KALDI** |
+| C | tarama çökertildi (hedef tür değiştirildi) | **KIRMIZI** (çapalar) |
+
+B kolunda aynı ağaçta `grep -c Collect` = **3**; yani **eski kapı orada kırmızı verirdi**. Yanlış
+pozitifin kalktığı tahmin edilmedi, **ölçüldü**.
+
+## Kararlar (ek)
+
+- **Bir kartın önerdiği çözüm de bir öncüldür ve ölçülmeden doğru değildir.** `BR-QA-62` "Roslyn
+  sembol referansı" istiyordu; `const` semantiği yüzünden böyle bir referans hiç yok. Kartı körü
+  körüne uygulasaydım çalışmayan bir bekçi yazmış olurdum.
+- **Bir kapıyı keskinleştirmek ile daraltmak ayrı şeylerdir.** Ölçülmesi gereken soru aynı kaldı;
+  yalnızca soruyu soran mercek değişti. Daraltma olsaydı, yanlış negatif riski yanlış pozitiften
+  daha kötü olurdu.
