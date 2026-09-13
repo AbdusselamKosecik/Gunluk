@@ -832,3 +832,104 @@ okumuştum. Yanlış okumaydı; hafızaya yazıldı (`asterisk-olcumu-sunucuda-y
   - `BR-OPS-07` — compose ↔ nginx yerleşimi
 - **Doğrulama:** ClickUp senkronu `fark olan kart: 0, izde olmayan: 0` verdi. `kalan-isler.md` yeniden üretildi (452 kart).
 - **Ders:** Kurul oylaması, kartın öncülünü kaynakla yeniden ölçen tek adım oldu. Altı maddenin ikisinde gündem metni bayattı.
+
+### 12. Canlı yayın — `tekbirsoft/pbxtr:demo-5ac884c7533b` (Karar #48 uygulandı, `3faa18b8`)
+
+**Neden:** Bugünkü kodların hiçbiri canlıda değildi (`BR-OPS-05`). Canlı imaj 2026-09-08 tarihliydi.
+
+**Yayın #6 kapıları (`scratchpad/yayin48/yayin6.log`):**
+- 1/7 kapılar geçti.
+- 2/7 backend geçti: format, Architecture ve Integration.
+- 3/7 frontend geçti.
+- 4/7 API shard'ları geçti: 1267/1267, 1267/1267, 1266/1266.
+- 5/7 DB kapıları geçti.
+- 6/7 imaj üretildi ve push edildi.
+
+**Ş48-7 yayın öncesi kontroller (23:23 TR):**
+- aktif kanal 0
+- kuyrukta bekleyen 0 (W:0)
+- kampanya 0
+- aktif sorgu 0
+- retention kapalı
+- disk %19
+
+**7/7'de durdu:** `nginx: konteynerde /etc/nginx/pbxtr YOK -- YENI MOUNT DUZENI KURULU DEGIL`.
+- Betik uygulamayı eski imaja geri aldı.
+- **Migration geri alınmadı.** Eski imaj yeni şemayla healthy kaldı (`/health` 200).
+- Bu, `BR-OPS-07` kartında yazılı olan sapmanın ta kendisiydi.
+
+**`BR-OPS-07` geçişi (sunucuda `/root/nginx-duzen-gecis.sh`):**
+- **Ölçüm:** depo compose'u ile sunucu compose'u arasındaki tek fark, nginx bloğu ve 8443 portuydu.
+- **Adımlar:**
+  1. Yedek alındı: `docker-compose.yml.yedek-20260913T202725Z` ve `/root/nginx-dizin-yedek-…tgz`.
+  2. `nginx/bootstrap`, `.rev/<ts>-gecis` ve `current` symlink'i kuruldu (`mv -T`).
+  3. Geçici konteynerde, aynı ağ ve yeni mount'larla `nginx -t` koşuldu: **yeşil**.
+  4. Compose kopyalandı.
+  5. `docker compose up -d --force-recreate nginx` koşuldu.
+  6. Kontroller: konteyner içinde `current/conf.d` var, `nginx -t` yeşil, `/health` 200, SPA 200.
+- Kırmızı olsaydı otomatik geri alma devreye girecekti; gerekmedi.
+
+**7/7 yeniden koşuldu:**
+- **Neden tüm hat baştan koşulmadı:** `git diff 5ac884c7 HEAD -- src tests deploy pbxtr-demo` boş, sonraki commit'ler yalnız `doc/` ve `yonetim/`.
+- Aynı imaj ve aynı argümanlarla doğrudan sunucuda koşuldu:
+  ```bash
+  ssh root@176.88.41.220 "PBXTR_DAGITICI_SHA=… PBXTR_DOGRULAYICI_SHA=… PBXTR_SANTRAL_IMAJ='' PBXTR_SANTRAL_ZORLA=0 PBXTR_CONFD_KUR=0 /root/staging-yayin.sh 5ac884c7533b"
+  ```
+- Sonuç `STAGING_EXIT=0`. nginx revizyonla reload edildi, konteyner yeniden yaratılmadı.
+
+**Ş48-8 yayın sonrası ölçümler:**
+- migration 176, son migration `20260913161315`
+- `silence_thresholds` ve `silence_observations` tabloları var
+- `sms_templates.trigger` kolonu var
+- `purge_call_data` prosrc md5 = `298567d8…`; tüm `pbxtr_sys` fonksiyonlarında beklentiden fark 0
+- bekçi assert 27/27
+- AMI bağlandı, ARI Stasis açık
+- WS 101 döndü, gerçek istemci yeniden bağlandı
+- son 10 dakikada exception 0
+- sessizlik, SMS ve wallboard uçları 200
+- nginx ve compose sapma kapıları **bayraksız** yeşil
+
+**Ölçülemeyenler:**
+- `ruleSource` gözlenemedi: aktif alarm 0 olduğu için kontrol vacuous.
+- #14 VERİ EKSİK smoke koşulmadı.
+- Ş48-9 koşulmadı: retention kapalı ve 30 sn sınırları var. Kontrol `BR-DB-52`'ye devredildi.
+- `smoke.sh` yanlış porta (5080) bağlandığı için 62 kontrol "token yok" diye KALDI. Bu bir ölçüm değildir.
+
+### 13. `BR-BE-138` (P0) — üretimde sessizlik alarmı hiç yanmıyordu (`558cfaac`)
+
+**Bulgu:** ADR-016 hizalamasında (`BR-AST-76`, `ca37fb6c`) çıktı, canlı log ile doğrulandı.
+- Konak tick'i 5 dakika (`tick=00:05:00`).
+- Örnekleyici boşluk toleransı 180 sn.
+- Her tur boşluk sayılıyor, ölçüm `null` dönüyor ve alarm yanmıyor.
+
+**Düzeltme:**
+- Tolerans formülü: `max(180 sn, 2,5 × TickInterval)`; üretimde 750 sn.
+- Canlıda ölçülen en büyük tur aralığı 728,7 sn; yeni tolerans bunu kapsıyor.
+- Olay akışı toleransı 180 sn olarak kaldı. Onu yazan `QueueMetricDeriver`'in kendi 60 sn'lik döngüsü.
+
+**Doğrulama:**
+- birim testler 8/8
+- gerçek PG testleri 10/10, 5 dk tick ile iki yeni test dahil
+- **mutasyon** (toleransı eski sabite çekmek) 2 testi kırmızıya çevirdi; geri alınınca 10/10
+- Architecture 479/479
+- Api Platform + Live 1350/1350
+- kapılar 52/52
+
+### 14. `BR-QA-75` — kapılarda grep çıkış 2 artık "temiz" sayılmıyor (`447ca902`)
+- 15 çağrı noktası düzeltildi.
+- Yeni `kapi_52` öz-testi eklendi; mutasyon 9/9 kırmızı.
+- **Kartın teşhisi yanlıştı:** `kapi_25` CRLF kontrolü `head -c 2` ile yalnız `#!` karakterlerine bakıyordu, yani hiç tetiklenemiyordu.
+- `saglayici-sirri-kontrol.sh`: sahnelenip diskten silinmiş sır dosyasında "sır YOK" deyip çıkış 0 veriyordu.
+
+### 15. `BR-DOC-14` — ADR-005 kilit kuralı 2a/2b (`696ffbf1`), db-lider onayı
+- **2a:** liderlik kilidi yalnız `try_` ile alınır.
+- **2b:** serileştirme kilidi bloklayan kilitle alınır ve Ş1–Ş9 şartlarına tabidir.
+- Açılan kartlar: `BR-BE-137` (`lock_timeout` üç yerde yok) ve `BR-BE-142` (lider transaction açıkken ikinci bağlantı).
+
+### 16. Yayın #7 ilk denemesi — iki yanlış kırmızı
+1. **confd sapma kapısı:** Bilinen `BR-SYS-101` sapması. Karar #53 gereği `/node-bundle` daraltması inmeden bu geçiş yapılmaz. Kapı `PBXTR_CONFD_SAPMA=0` ile, izli olarak atlandı.
+2. **`capture-topology-guard` (BR-QA-34):** Paralel ajan worktree'leri `.claude/worktrees/` altına compose kopyası bırakınca compose envanteri değişmiş sayıldı.
+   - `.claude` hariç tutuldu (`d10369e4`).
+   - Öz-test 16/16.
+   - Negatif kontrol: depo içindeki yeni compose dosyası hâlâ yakalanıyor.
+   - **Ders:** Worktree izolasyonu depo ağacının içinde yaşar. Dizin yürüyen her kapı onu da görür.
