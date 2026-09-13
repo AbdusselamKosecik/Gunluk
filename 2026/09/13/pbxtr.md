@@ -570,3 +570,115 @@ allowlist kayıtları) artık **fiilen ölçüldü**.
 - Kart numarası bu turda **ikinci kez çakıştı** (`BR-SYS-98` doluydu); çıkarıcı mükerrer kimlikte
   durdu ve kart `BR-SYS-99`'a alındı. *"Kart numarası önce ölçülür"* kuralı yazılı olmasına rağmen
   iki kez ısırdı — numara, metni yazmadan **önce** sorgulanmalı.
+
+---
+
+# Beşinci tur — tam doğrulama, `npm test`'in yayını durdurması ve kapıların gerçek evi
+
+## Bağlam
+
+Tüm ajanlar bitti, ağaç sessiz. Bu turun amacı tek şeydi: **iki commit'in test koşturulmadan
+atılmış olması** eksiğini kapatmak. Kapatırken üç gerçek bulgu çıktı ve **ikisi benim
+yazdığım kapı/testteydi**.
+
+## Yapılanlar
+
+### 1. Tam doğrulama
+
+```
+dotnet build pbxtr.sln            -> 0 Warning, 0 Error
+Architecture.Tests                -> 476/476, Skipped 0
+Api.Tests (4 kume)                -> 5019/5019  (--list-tests toplami: 5019 — BIREBIR)
+tsc -b                            -> temiz
+db-kapilari-docker.sh             -> TUM KAPILAR YESIL
+vitest                            -> 1786/1786 test yesil, KOSU exit 1   (asagida)
+yerel-kapilar.sh (gercek evinde)  -> 1 kapi kaldi                        (asagida)
+```
+
+`Architecture` yeşili bu turun en önemli doğrulaması: `1cbf7dfb`'de atladığım
+`CrossTenantScopeSurfaces.cs` + `RawSqlAllowlistTests.cs` (yani `CampaignSmsRunJob`'ın **zorunlu**
+allowlist kayıtları) artık **fiilen ölçüldü**.
+
+**Kendi ölçümümde "0 mı, ölçülemedi mi" tuzağına düştüm:** Api.Tests'i üç filtreye bölmüştüm,
+üçüncüsü **hiçbir teste uymadı** ve komut yine `exit 0` verdi; grep'im `No test matches` satırını
+da yakalamıyordu. "Üç küme koştu, hepsi yeşil" diye okunabilirdi. `--list-tests` ile toplam
+ölçülüp koşan sayılarla karşılaştırıldı.
+
+### 2. `npm test` yayını durduruyor — ve sebebi bir test değil (`BR-QA-70`)
+
+```
+npx vitest run -> Test Files 191 passed · Tests 1786 passed · Errors 1 error · EXIT=1
+Error: [vitest-worker]: Timeout calling "onTaskUpdate"
+```
+
+- **Kozmetik değil:** `deploy/yerel-yayin.sh:42` `set -euo pipefail`, `:414` `npm test` →
+  **yayın tam bu satırda durur**, durma sebebi *"bir test kırmızı"* değil, **"kırmızının sahibi
+  okunamaz"**.
+- **Sebep izole edildi:** `src/Pbxtr.Web/src/test/viMockTargets.test.ts` içinde üç test
+  **19,1 / 19,2 / 19,3 sn** (dosya 58,6 sn); `vitest.config.ts` `testTimeout: 20_000` → sınıra
+  **~800 ms (%4)** kala.
+- **Kontrol grubu:** dosya **tek başına** 13/13, `EXIT=0`. Hata yalnız **tam koşuda**.
+- **İlk hipotezim ("paralel yük") ölçüldü ve çürüdü:** üç tam koşunun üçünde de tekrarladı, ikisi
+  sessiz makinede. Düzeltmeyi ona dayandırsaydım **yanlış yeri tamir edecektim**.
+- İkinci risk: bir ekran daha eklendiğinde `exit 1` yerine **gerçek kırmızı** gelecek ve sebebi
+  *"bekçi bozuldu"* gibi görünecek.
+
+### 3. Kapılar **gerçek evinde** koşturuldu — ve tablo tamamen değişti (`BR-QA-71`)
+
+| Koşu | Kalan kapı |
+|---|---|
+| Windows host | **7** |
+| konteyner, docker soketi **bağlanmadan** | **8** |
+| konteyner, `yerel-yayin.sh`'ın kendi çağrısıyla | **1** |
+
+Windows'taki 7'nin **beşi araç/ortam yokluğuydu** (`gitleaks` yok, `No module named 'yaml'`,
+cp1252 `UnicodeEncodeError`, *"POSIX YOK … ölçemedi"*) — yani o kapılar **hiçbir şey ölçmedi**.
+`deploy/yerel-kapilar.Dockerfile` bu dersi zaten **adıyla** yazıyor. İlk konteyner koşumda
+**soketi ben bağlamadım** ve beş kapı yine ölçemedi; o çıktıyı da neredeyse "kırmızı" diye
+raporlayacaktım.
+
+**Düzeltme 1 — `kapi_49` ortama bağlı YANLIŞ KIRMIZI veriyordu (kendi kapım):**
+`grep -v … | grep -q 'GOLGELEME/IMAJ'` — `grep -q` eşleşmeyi bulur bulmaz çıkıyor, üstteki
+`grep -v` **SIGPIPE (141)** alıyor ve `pipefail` altında boru hattı **başarısız** sayılıyor.
+Yani `staging-yayin.sh`'teki `exit 1` dalı **yerinde dururken** kapı *"YOK, kapı yine yalnızca
+raporluyor"* diyordu. Zamanlamaya bağlı olduğu için **Windows'ta geçiyor, konteynerde
+kalıyordu** — kapı ölçtüğü şeyi değil **koştuğu makineyi** ölçüyordu. `grep -c` + sayı
+karşılaştırmasına çevrildi; **aynı dosyadaki diğer iki kontrol zaten öyleydi**, hata benim
+onlarla tutarsız yazmamdı. Mutasyon iki yönlü, geri alma `git diff` boş.
+
+**Düzeltme 2 — `clickup-durum.test.js` canlı bir kartı çıpa yapıyordu:**
+`rows.find(r => r.id === 'BR-BE-64').durum` → o kartı bugün kapattım, test kırmızı yandı. Oysa
+eşlemede hiçbir şey bozulmamıştı: kırmızı bir kusuru değil, bir **fikstür tercihini**
+gösteriyordu — canlı veri çıpa yapılırsa test, ölçmesi gereken **kuralla** birlikte ölçmemesi
+gereken **iş durumuna** da bağlanır ve iş ilerledikçe kendiliğinden kırılır. Çıpa
+sentetikleştirildi, canlı envanterden yalnız **biçimsel** bir şey (en az 3 kova) doğrulanır.
+
+### 4. Kalan tek gerçek kapı bulgusu — `BR-DB-48` (kurula)
+
+`20260913120000_CallDataRetentionPartitionBatch` normal deploy'da **reddediliyor** (DROP/ALTER
+deseni + **ham SQL fail-closed**). Kapının öz-testi **OK**, yani bulgu gerçek.
+
+**Neden görülmedi:** `BR-DB-42` turunda *"db kapıları EXIT=0"* raporlandı — ama o
+`db-kapilari-docker.sh`'tır, **başka bir kapı**; `kapi_07` o turda **hiç koşmadı**. İki kapının
+adı birbirine benziyor ve biri diğerinin yerine sayıldı.
+
+**Kapsam ölçüldü:** ledger dışı **dört** migration var ve **yalnız bu** düşüyor (benim
+`20260913150000`'im dahil diğerleri geçiyor). **Ledger bir kaçış yolu değil:** dosyanın kendi
+başlığı *"yeni migration'lar listeye eklenmez … bir satırı değiştirmek kurul/maintenance
+kararıdır"* diyor. **Karar alınmadan ledger'a dokunulmadı.**
+
+## Kararlar
+
+- Yanlış kırmızı, yanlış yeşil kadar zararlıdır: sahibi *"kapı bozuk"* deyip devre dışı bırakmaya
+  yönelir. `kapi_49` düzeltilirken kapının **ölçüm gücü** korundu (mutasyon iki yönlü).
+- `BR-DB-48` **kurula gidiyor**; üç seçenek yazıldı (bakım penceresi · ham SQL istisnasının
+  fonksiyon yeniden-tanımı için dar genişletilmesi · migration'ın bölünmesi) ve hangisi seçilirse
+  seçilsin kapının **gerçek** bir contract değişikliğini hâlâ yakaladığı mutasyonla gösterilecek.
+
+## Açık kalanlar / sonraki adım
+
+- `BR-QA-70` (vitest `exit 1`) ve `BR-DB-48` (kurul) inmeden **yayın koşamaz**.
+- `BR-QA-71`: kapıların yalnız konteynerde koşması **yazılı** hale gelmeli — bugün
+  `yerel-yayin.sh` doğru yapıyor ama elle `bash deploy/yerel-kapilar.sh` diyen biri **sessizce
+  eksik ölçüyor** ve çıktı *kırmızı gibi* görünüyor. Ayrıca `grep -q` + `pipefail` deseni depoda
+  **taranmalı**; aynı sınıf başka kapılarda da olabilir.
