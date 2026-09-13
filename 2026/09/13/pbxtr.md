@@ -800,3 +800,35 @@ okumuştum. Yanlış okumaydı; hafızaya yazıldı (`asterisk-olcumu-sunucuda-y
 ## Açık kalanlar (tur sonu)
 - **Yayın engeli:** yeni kodların hiçbiri canlıda değil (`BR-OPS-05`). Önündeki tek engel `BR-DB-48` (migration kapısı), kurula gidiyor.
 - **Kurul bekleyenler:** `BR-DB-48`, `BR-FE-80`, `BR-AST-74`, `BR-AST-55` (`joinempty`), `BR-AST-80`.
+
+### 11. Kurul Karar #49–#54 — altı açık kararın toplu oylaması (`917c11e1`)
+- **Neden:** Kullanıcı kararları kullanıcıya değil kurula göndermemi istiyor. Karar bekleyen altı kart iş listesini tıkıyordu.
+- **Ne yapıldı:**
+  - Gündem dosyası yazıldı.
+  - 10 üye paralel oyladı. Her üye kart metnini ve kaynağı kendisi okudu.
+  - Kararlar `yonetim/kurul-kararlari.md` dosyasına eklendi.
+  - Altı kartın durumu `Kurul: (ŞARTLI) ONAY` olarak güncellendi. 8 yeni kart açıldı.
+- **Sonuçlar:**
+  - **#49 `BR-AST-49`:** t0012 bugün pinlenmiyor.
+    - Gerekçe: canlı unit `pbxtr-confd-cek.sh`, tek tenantlık `/bundle` ucunu kullanıyor. PJSIP de teslim edilmiyor. Pin yapılırsa `Queue()` üyeleri `NOT_INUSE` görünür ve çağrı sessizce boşa çalar.
+    - Niyet DB kolonunda tutulacak. Susturma koşulu: niyet var **VE** pinli anahtar yok.
+  - **#50 `BR-AST-74`:** Kısa vadede DND kaynağı teslim gözlemi olacak (`null` disiplini).
+    - Hedef yol ARI `deviceStates`. Önce santralde ölçülecek (`BR-AST-81`).
+    - `DBPut` yolu reddedildi, çünkü `system` sınıfını istiyor.
+  - **#51 `BR-SEC-08`:** İlke: "global roller platformu yönetir, tenant'ı işletmez."
+    - Admin rolüne de uygulanıyor, ama Ş36-31 impersonation ölçümü yapılmadan tek bir yetki bile kaldırılmayacak.
+    - Şeytan bunun kullanıcı kararını yeniden açmak olduğunu söyleyerek itiraz etti. Cevabı karar kaydına yazıldı.
+  - **#52 `BR-FE-80`:** 55. ekran açılmıyor. SMS şablonları #49 Ayarlar ekranının SMS bölümüne giriyor. `campaign.write` için dar bir seçici ucu eklenecek.
+  - **#53 `BR-AST-40`:** Kısıt yalnız `/node-bundle` kipinde daraltılıyor.
+    - Kartın "canlı `Have` göndermiyor" öncülü bu akşamki kurulumla bayatlamıştı.
+  - **#54 `BR-BE-115`:** Seçenek (c). Her revizyonun bir denetim satırıyla eşleştiği testle kanıtlanacak.
+- **Yeni kartlar:**
+  - `BR-SYS-101` — canlı unit sapması
+  - `BR-AST-81`, `BR-AST-82`
+  - `BR-DB-51`
+  - `BR-DB-52` — retention 30 sn sınırları ile 50 sn bütçesi çelişiyor
+  - `BR-QA-76` — `TelephonyEventPipelineTests` kalıntı bırakıyor
+  - `BR-QA-77` — iki fikstürde secretRef sabit kalmış
+  - `BR-OPS-07` — compose ↔ nginx yerleşimi
+- **Doğrulama:** ClickUp senkronu `fark olan kart: 0, izde olmayan: 0` verdi. `kalan-isler.md` yeniden üretildi (452 kart).
+- **Ders:** Kurul oylaması, kartın öncülünü kaynakla yeniden ölçen tek adım oldu. Altı maddenin ikisinde gündem metni bayattı.
