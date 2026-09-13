@@ -767,3 +767,36 @@ okumuştum. Yanlış okumaydı; hafızaya yazıldı (`asterisk-olcumu-sunucuda-y
 - `BR-OPS-05`: canlı imaj eski → yayın; engel `BR-DB-48` (kurul).
 - Kurul bekleyen: `BR-DB-48`, `BR-FE-80`, `BR-AST-74`, `BR-AST-55` (`joinempty=no` etkileşimi).
 - Sunucuda kalan: `/root/olcum-20260913/` (yedek tgz, `call_events` dump — chmod 600).
+
+### 10. Sunucu bulgularından doğan dört kart paralel kapandı
+
+**`BR-QA-72` (`86f832f9`) — SMS şablon kapısı gerçek PG'de**
+- `SmsTemplateBindingTenantLeakTests`, `PBXTR_REQUIRE_DOCKER_TESTS=1` ile koştu; 18/18.
+- **Bulgu:** `.IgnoreQueryFilters()` mutasyonu **2/2 yeşil** kaldı. Bu yolu bugün yalnız RLS koruyor.
+- `sms_templates_tenant` politikasında çapraz-tenant dalı yok. Bu yüzden EF filtresinin katkısı tek bir mutasyonla ölçülemiyor.
+- İkinci mutasyon (`IsActive` koşulu kaldırıldı) kırmızı yandı. Bu, koşunun yeni DLL'i kullandığını kanıtlıyor.
+
+**`BR-DB-49` (`e19340ff`) — DID / zil grubu dalının indeksi**
+- Kartın öncülü kısmen yanlıştı: numara indeksi vardı, ama `started_at` taşımıyordu.
+- Yeni indeks `ix_cdr_tenant_called_started_inbound`: 9,258 ms → 0,138 ms.
+- İlk hâliyle test dalı hiç koşturmuyordu (`GapTolerance`); düzeltildi. Numara koşulu mutasyonu 2 kırmızı verdi.
+- **Canlı ölçüm (salt-okuma):** `dids` 0, `ring_groups` 0, `silence_thresholds` tablosu **yok**. Canlı DB sessizlik migration'larından önce kalmış.
+
+**`BR-SYS-100` (a) (`b5d6a43f`) — confd reload disiplini, canlıya kuruldu**
+- Tür bazında sha256 ve yükleme defteri eklendi.
+- Canlıda aynı içerikle **0 reload**; tek bir türün defter satırı silinince yalnız o türün reload'u koştu. Önce günde ~846 reload vardı.
+- Sunucudaki betik depodan 3 commit gerideydi.
+- `kapi_50` gate konteynerinde 13/13 geçti.
+- **Düzeltme:** `Last reload` damgası `dialplan reload` ve `queue reload all` komutlarını görmüyor. Kanıt olarak santral logu kullanıldı.
+
+**`BR-AST-78` (a) (`fb4f851e`) — tenant çelişkisi**
+- **Teşhis:** `AmiTenantCode.Resolve` değişken yoksa ikincil kaynağı sorgusuz kabul ediyor; linkedid belleği yok.
+- **Çözüm:** `AmiTenantConsistencyGuard` hem çerçeve içi hem linkedid içi çelişkiyi yakalıyor. Çelişkide olay yazılmıyor, 4803 alarmı basılıyor ve linkedid karantinaya alınıyor.
+- Test vakasında kayıtlı `t0012` seçildi; kayıtsız bir kod kontrol olmadan da düşerdi ve test hiçbir şey ölçmezdi.
+- **Temiz worktree ölçümü:** Architecture 479/479, Api Telephony 947/947, Integration 10/10.
+- **Mutasyon:** 8/14 + 2/3 kırmızı; linkedid dalı ayrıca 5/14 + 1/3.
+- **Yeni kart `BR-AST-80`:** ilk olay yalnız context ile yazıldıktan sonra gelen geç çelişki. O satır geri alınmıyor.
+
+## Açık kalanlar (tur sonu)
+- **Yayın engeli:** yeni kodların hiçbiri canlıda değil (`BR-OPS-05`). Önündeki tek engel `BR-DB-48` (migration kapısı), kurula gidiyor.
+- **Kurul bekleyenler:** `BR-DB-48`, `BR-FE-80`, `BR-AST-74`, `BR-AST-55` (`joinempty`), `BR-AST-80`.
