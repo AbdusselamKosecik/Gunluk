@@ -682,3 +682,88 @@ kararıdır"* diyor. **Karar alınmadan ledger'a dokunulmadı.**
   `yerel-yayin.sh` doğru yapıyor ama elle `bash deploy/yerel-kapilar.sh` diyen biri **sessizce
   eksik ölçüyor** ve çıktı *kırmızı gibi* görünüyor. Ayrıca `grep -q` + `pipefail` deseni depoda
   **taranmalı**; aynı sınıf başka kapılarda da olabilir.
+
+---
+
+# Altıncı tur — paralel kartlar, sunucudaki gerçek Asterisk ve canlıda 20 satırlık kaza + kurtarma
+
+## Bağlam
+
+Kullanıcı: *"maddeleri paralelde yapamaz mısın hızlıca"*. Beş ajan paralel koştu; süreç
+yarıda çıktı ve üçü yarım kaldı. Tur ortasında kullanıcı ikinci bir düzeltme verdi:
+*"asterisk sunucuda var. neden localdeki dockere asterisk kurma ihtiyacı ediniyorsun, config
+için oradan yap"* — önceki *"canlıdan onay alma"* talimatını ben **"canlıya dokunma"** diye
+okumuştum. Yanlış okumaydı; hafızaya yazıldı (`asterisk-olcumu-sunucuda-yapilir`).
+
+## Yapılanlar
+
+### 1. `BR-QA-70` — `npm test` EXIT=0 (`aeb54b11`)
+- **Neden:** `viMockTargets.test.ts` üç testi 19,x sn (sınır 20 sn) → tam koşuda `Errors 1`, yayın `npm test` satırında duruyordu.
+- **Ne yapıldı:** `mockGraph.ts` saf fonksiyonları bellekli; her giriş **kaynak metnini** saklayıp `===` ile doğruluyor (aksi hâlde vacuity testleri körleşir). `GRAPH_GATE_TIMEOUT_MS = 120_000` muafiyeti kaldırıldı.
+- **Sonuç:** dosya 37,25 sn → 0,52 sn; `vitest` 1787 passed, Errors satırı yok, EXIT=0.
+- **Ders:** ajanın kendi eklediği doğrulama ilk mutasyonda **hiçbir testi kırmızı yapmadı** → yeni test yazıldı, sonra kırmızı görüldü.
+
+### 2. `BR-FE-77` bloke → `BR-FE-80` açıldı
+- Kartın öncülü yanlıştı: üç alanın **HTTP sözleşmesi sıfırdı** (`src/Pbxtr.Api` taraması 0). "#09 SMS Şablonları" diye ekran yok (#09 = Agent Çalışma Merkezi). Sözleşme işi `BR-BE-130`'a eklendi.
+
+### 3. Yarım kalan ajanlar ve NUL dosyası
+- Süreç çıkışında `SilenceSamplerJob.cs` silinmiş, yerinde **23 137 baytı tamamen NUL** `dHYiSr5g` kalmıştı (yarım atomik yazma). HEAD'den geri yüklendi, NUL dosyası silindi, `src/**/*.cs` NUL taraması (tek eşleşme `PermissionRequirement.DenyAll` — commit'li, bilinçli `"\0deny-all"`).
+- Üç ajan `SendMessage` ile devam ettirildi.
+
+### 4. `BR-DB-47` — iki kısmi indeks (`625c1d1d`)
+- `ix_cdr_tenant_queue_started_inbound` → 14,772 ms / 82 888 buffer → **0,175 ms / 12 buffer** (394 508 cdr, `pbxtr_app` + RLS).
+- `ix_silence_observations_tenant_alarm` → 1,576 ms → 0,105 ms.
+- İlk fikstür geçersizdi (kuyruk sessiz değildi); yeniden ölçüldü.
+- `observed_since` yön mutasyonu ilk hâlde **5/5 yeşil** → saklanan kolonu okuyan test eklendi → 1 kırmızı → 6/6.
+- Yeni kart `BR-DB-49` (DID/zil grubu dalı indekssiz, hiç koşmamış).
+
+### 5. `BR-BE-132` — `/alarms/active` PG+Redis okuma birleşimi (`17af452a`)
+- Gerçek PG, EF'in çeviremediği bir sorguyu yakaladı (sahte testler görmedi).
+- **Bilinçli sözleşme değişikliği:** 503 yalnız iki kaynak birden düşükken.
+- Mutasyon 6/6 kırmızı. **Temiz worktree'de commit tek başına:** build 0/0, Architecture 479/479, Api `Live|Alarm|Silence` 299/299.
+
+### 6. `DeployPrivilegeTests` makineye bağlı kırmızı (`a223ec4c`)
+- Kapı betiklerini yerelde koşturmak `deploy/__pycache__/*.pyc` üretiyor (gitignore'da); bekçi diski taradığı için derlenmiş dize sabitlerini ayrıcalık artışı saydı.
+- `__pycache__` muafiyeti; mutasyon: klasör `__pycachX__` → kırmızı, geri → 28/28.
+
+### 7. `BR-BE-130` — SMS sözleşmesi + trigger doğrulaması (`8eaec04b`)
+- Öncül yanlıştı: işaretçiyi yazan **hiçbir uç yoktu**. Sözleşme indi (alan adları kartta).
+- NULL trigger reddedilir (bugün her şablon NULL; kabul edilseydi hepsi otomatik gönderime uygun olurdu).
+- Mutasyon → 14 testten tam 5 kırmızı. Ajan 13 dosyaya BOM eklemişti, geri alındı.
+- Temiz worktree: Architecture 479/479, Api `Sms|Campaign|TenantSettings|Live|Alarm` 655/655.
+- `BR-QA-72` açıldı (gerçek PG testi yok).
+
+### 8. Sunucudaki gerçek Asterisk'te ölçüm (`30c5e23b`)
+- **Erişim:** `root@176.88.41.220`, Asterisk 22.10.1 `pbxtr-asterisk` konteynerinde.
+- `BR-AST-77` **Bitti:** `pjsip show contacts` rakam dizisini açık basıyor (2/2).
+- `BR-AST-72` Kısmen: ARI açık; `unknown` 10 hâlde hiç üretilmedi; statik contact `online` görünüyor.
+- `BR-AST-55` Kısmen: RNA **anında** ve retry periyoduyla doğuyor (20 sn'de 10); `state_interface`/`hint:` → 0. Canlıda tek çağrıdan 42 haksız RNA.
+- `BR-AST-74`: DND'nin PJSIP'te çalışma-anı karşılığı yok; `DNDState` **chan_dahdi** olayı (kart düzeltildi).
+- `BR-SEC-17`: trunk yok → "açık değil" denemez.
+- **Yeni kartlar:** `BR-AST-78` (P0 — tek çağrının olayları farklı tenant'lara bölünüyor), `BR-AST-79`, `BR-SYS-100` (confd pjsip teslim etmiyor, günde ~860 koşulsuz reload), `BR-OPS-05` (canlı imaj 2026-09-08).
+- Ajan test nesnelerini `t9001` önekiyle kurdu, yedekledi, sildi, geri dönüşü ölçtü.
+
+### 9. KAZA: canlı `call_events`'ten 22 yerine 42 satır silindi — ve 20'si geri alındı
+- **Neden silme:** ölçüm çağrısının 22 `Newchannel` satırı t0007 adına yazılmıştı (`BR-AST-78`'in kanıtı).
+- **Hata:** `DELETE ... WHERE ctid IN (select ctid ...)` — `call_events` **bölümlü**, `ctid` yalnız bölüm içinde tekil. Guard **seçim** sayısına konmuştu (22), silinen sayıya değil → `DELETE 42`. `call_events_2026_08` blok 0'daki 20 gerçek satır da gitti. WAL arşivi yok (`archive_mode=off`).
+- **Kurtarma:**
+  1. Beş bölümde `autovacuum_enabled=false`.
+  2. `pageinspect`: silen xid **244617** → `_09`'da 22 (test), `_08`'de 20 (blok 0, lp 1–20).
+  3. Güvenlik yedeği için `pg_dump` alındı — **bu sıralı tarama fırsatçı budamayı tetikledi**, satır işaretçileri `LP_DEAD` / uzunluk 0 oldu.
+  4. Blokta canlı tuple olmadığı için baytlar boş alanda duruyordu: `get_raw_page` hex'i indirildi, tuple'lar `t_xmax=244617` + `t_ctid=(0,lp)` ile bulundu (20/20), `xmin=2`, `xmax=0`, `XMIN_COMMITTED|XMAX_INVALID` yapılarak yeni sayfa kuruldu (`scratchpad/sayfa_kur.py`).
+  5. Yerel `postgres:16-alpine`'de aynı şemalı tablonun dosyasına yazıldı (sunucu durdurulup `docker cp`), Postgres `jsonb` dahil çözdü.
+  6. `jsonb_to_recordset` ile canlıya geri yazıldı: guard "zaten var" + eklenen = 20 + payload dahil geri okuma = 20 → **59 → 79**.
+  7. autovacuum `reset`, `pageinspect` drop, yerel konteyner silindi.
+- **Kurtarılan satırlar:** 19'u tenant `1111…` 2026-08-29 simülasyon kuyruk olayları, 1'i 2026-08-30 `Newchannel`.
+- **Hafıza:** `bolumlu-tabloda-ctid-tekil-degil`.
+
+## Kararlar
+- Asterisk ölçümü ve config işi sunucudaki gerçek santralde yapılır; onay sorulmaz. §3 sınırları aynen geçerli.
+- Canlıda silme: bölümlü mü bak, guard `returning` sayısına, yedek **silmeden önce**.
+- Paralel ajanlarla ortak ağaçta commit, **temiz worktree'de tek başına** doğrulanıp push'lanır.
+
+## Açık kalanlar / sonraki adım
+- Koşan ajanlar: `BR-AST-78` (P0), `BR-SYS-100` (a) confd debounce + sunucuya kurulum, `BR-QA-72`, `BR-DB-49`.
+- `BR-OPS-05`: canlı imaj eski → yayın; engel `BR-DB-48` (kurul).
+- Kurul bekleyen: `BR-DB-48`, `BR-FE-80`, `BR-AST-74`, `BR-AST-55` (`joinempty=no` etkileşimi).
+- Sunucuda kalan: `/root/olcum-20260913/` (yedek tgz, `call_events` dump — chmod 600).
