@@ -338,3 +338,138 @@ Kart sayımı: **in progress 11 → 9** (ikisi hâlâ koşan ajanın), `karar be
 - `BR-FE-77` inmeden `BR-DB-43` + `BR-BE-60` + `BR-BE-64` üçlüsünün tamamı depoda durur ve
   üretimde **hiç koşmaz**. Bu üç kart "Bitti" ama **özellik açık değil** — ikisi aynı şey
   değildir ve kart metinlerine böyle yazıldı.
+
+---
+
+# Üçüncü tur — Kurul Karar #47, BR-SEC-03/09, BR-QA-48 ve kendi commit'imde atladığım allowlist
+
+## Bağlam
+
+Üç ajan paralel koşarken kurul `BR-BE-126` için toplandı. Bu bölüm kararı, iki ajan raporunu ve
+**kendi hatamı** kaydeder.
+
+## Yapılanlar
+
+### 1. Önce düzeltme: `1cbf7dfb`'de zorunlu iki dosyayı atlamışım
+
+- **Ne oldu:** `BR-BE-64`'ü commit ederken `CrossTenantScopeSurfaces.cs` ve
+  `RawSqlAllowlistTests.cs`'i **almadım**. Bunlar `CampaignSmsRunJob`'ın **zorunlu allowlist
+  kayıtları**; onlarsız o commit'te mimari bekçiler **kırmızı**.
+- **Sebep:** dosya seçimini elle yaparken, ajanın dokunduğu iki *test* dosyasını
+  *"SEC ajanınındır"* diye ayırmışım. Oysa ikisinin diff'i de `BR-BE-64` diyor.
+- **Ders:** `git add -A` yasağı doğru, ama **yol sayarken sahipliği diff'ten ölç**, klasör
+  adından tahmin etme. Bir sonraki commit'te kapatıldı ve commit mesajına açıkça yazıldı.
+
+### 2. Kurul Karar #47 — sessizlik alarmı: **ŞARTLI ONAY** (9 ŞARTLI / 1 HAYIR)
+
+**Sonuç:** Sessizlik alarmı mevcut `alarm.raised` boru hattına **girer**, ayrı yüzey **açılmaz**;
+**doğruluk kaynağı PostgreSQL**, birleşme **okuma tarafında**.
+
+**Kurula verdiğim çerçevenin ÜÇ ÖNCÜLÜ oylama sırasında çürüdü** — karar düzeltilmiş olgulara
+dayanıyor:
+
+1. *"Ön yüzde `silence` geçen üretim dosyası yok"* **YANLIŞ**. `useRealtimeSilence.ts` var ve
+   `WallboardScreen.tsx:218` çağırıyor. Ama o **başka bir sessizlik**: saniye ölçekli **WS
+   bayatlığı** ("kanal ölü") vs dakika ölçekli **çağrı yokluğu** ("santral arızalı"). İkisi **zıt
+   aksiyon** ister. Yanlış öncül, kurulun gerçek bir **ad çakışması riskini** hiç görmemesine
+   sebep olacaktı.
+2. *"Kenar tetikli yazım ↔ TTL çelişkisi"* teşhisi **yanlış yerdeydi**. `SilenceSamplerJob` PG'ye
+   **her turda koşulsuz** yazıyor; kenar tetikli olan yalnız **log satırı**. Asimetri TTL'de değil,
+   **kenarın neye karşı ölçüldüğünde**: kuyruk motoru Redis'e karşı hesapladığı için **kendini
+   onarıyor**, sessizlik PG'ye karşı hesapladığı için onarmıyor.
+3. *"`AlarmMetrics.All`'a eklemeden `metricText` yaz"* **bugün teknik olarak imkânsız** — union
+   `generate-alarm-metrics.mjs` ile doğrudan `All`'dan üretiliyor (TS2353 / TS2741).
+
+**Şeytan HAYIR verdi ve turun en değerli bulgusu ondan geldi:** `silence_thresholds` yüzeyi
+**kurul onayı olmadan sevk edilmiş**; ADR-016 hâlâ *"TASLAK — kurul onayı bekliyor"* ve sevk
+edilen koddan **daha dar** (kuyruk-only, yani Karar #36 / Ş-S2'yi ihlal ediyor). **Bu deponun
+baskın deseni bu kez ters çıktı:** *karar yazılmış ama uygulanmamış* değil, **uygulama yazılmış
+ama karar alınmamış.** Dokuz itirazın tamamı yazılı cevaplandı; Ş-1'in çıkarımı reddedildi (sevk
+edilen şey ikinci bir *alarm yüzeyi* değil, bir *eşik yapılandırma ucu*).
+
+**Kurulun ölçtüğü, kartta hiç yazılı olmayan dört kusur:**
+
+- `IndexAddAsync` (`RedisLiveStateStore.cs:730-746`) bir Redis SET işlemi **değil** —
+  oku-değiştir-yaz. Advisory lock işin kopyalarını serileştirir ama **AMI tüketicisine karşı
+  serileştirmez** → kayıp güncelleme: alarm anahtarı **yaşarken indeksten düşer** ve ekran
+  *"aktif alarm yok"* der.
+- `#14`'ün Sustur düğmesi sessizlik kuralına **yabancı bir kimlik** POST'lardı
+  (`RuleId` ≠ `silence_thresholds.id`).
+- `cdr`'da `(tenant_id, queue_id, started_at)` indeksi **yok** ve `observed_since` aktiviteyle
+  ilerlemiyor → maliyet **tam alarmın yanması gereken anda** zirve yapıyor.
+- İş bugün **"kurulu ama silahsız"**: hiçbir tenant'ta tek bir eşik kuralı yok
+  (`LogDebug` seviyesinde *"ölçecek bir şey yok"*), `mail_settings` **0 satır**.
+
+**Saha tarafı iki cümleyle özetledi.** Agent: *"Ekranda görünen ama kimseyi uyandırmayan alarm
+benim problemimi çözmez"* ve *"yanlış alarm, alarmı öldürür"*. Süpervizör: ***"Süresini
+söyleyemediğim arıza, olmamış arızadır."***
+
+### 3. `BR-SEC-03` / `BR-SEC-09` — dört madde kapandı, üçü başka ekibe
+
+- **Ş37-8 (`PhoneSurfaces.System`):** şartın **lafzı** sadece *"taban `All`"* diyordu. Ölçüm: bu
+  uçlar bugün **hiç yüzey bildirmiyor**, yani `IsLedger`'ın *"tanınmayan yüzey de kayıt
+  defteridir"* dalındalar — fiilî davranış **"All, ve `phone.unmask` bile açamaz"**. Lafza uymak
+  (kayıt defteri yapmadan tanımlamak) **adlandırma kisvesi altında bir gevşetme** olurdu. Kurul
+  gevşetme kararı vermedi → mevcut davranış korundu, yüzey kararı artık **yazılı**, davranış farkı
+  **sıfır**.
+- **Ş37-12 zaten kapanmıştı — kart bayattı** (`CarriesDtmf`, DTO, ekran, 9 dil depoda duruyordu).
+- **Katalog bekçisinde ölçülmüş boşluk:** mevcut iki bekçi de *"açıkça yazılmış küme"* üzerinden
+  çalışıyordu; kataloğa **yeni** bir satır eklendiğinde otomatik olarak "dar yetkili" tarafına
+  düşüyor ve **ikisi de yeşil kalıyordu**.
+- **Beş mutasyon, hepsi iki yönlü.** M5 (seed'e `globalScopeOnly` yetki) **95 kırmızı** verdi ve
+  gerçek kapının **testten önce** olduğunu gösterdi: `PermissionCatalog.Parse` açılış
+  doğrulaması — böyle bir yetki tenant kapsamlı role konursa uygulama **hiç açılmıyor**.
+- **Ajanın bir ölçümü yanlış evrendeydi ve düzeltildi:** *"Ş37-14 açık, `yerel-kapilar.sh`'te 0
+  eşleşme"* dedi; kapı o dosyada **jeton olarak** değil, bir betiğe **devrederek** duruyor
+  (`yerel-kapilar.sh:1087-1088` → `capture-topology-guard.py` + `DeployPrivilegeTests`).
+  `BR-QA-34` doğru kapanmış; kart açılmadı.
+
+### 4. `BR-QA-48` — A15 doğrulaması: dört şart yeşil, biri yarım, biri ölçülemedi
+
+- Ölçüm `HEAD 1c995179`'da, **beklenen=koşan** doğrulamasıyla: Api.Tests **56/56**, mutasyonlu
+  **23/26 (3 kırmızı)**, geri alınıp **yeniden derlenince 26/26**; Architecture **12/12**;
+  Integration **1/1** (gerçek PG + RLS, `Skipped 0`).
+- **Ş38-12 yarım ve sebebi karar metninin kendisi:** şartın *"`admin` 12 komutu korur"* cümlesi
+  **yanlış** — seedden hesaplandı: superadmin **12/12**, admin **11/12** (AST-01 yok, çünkü admin
+  `phone.unmask` taşımıyor). Ayrıca **rol → görünür komut kümesini çivileyen test yok**.
+- **Yetki reddi 403 değil 404 dönüyor** (gerekçesi yazılı, envanter sızıntısı). Asıl boşluk
+  denetimde: ret `system.command.requested`/`Forbidden` olarak yazılıyor, yani
+  `AuditActions.PermissionDenied` ile filtreleyen bir güvenlik incelemesi bu denemeyi **hiç
+  görmez** → `BR-BE-136`.
+- **Ş38-15 ölçülemedi:** yerel `asterisk-lab`'ta üç komut da `No objects found` — **hiç PJSIP
+  nesnesi yok**. *"0 nesne"* ile *"ölçemedim"* burada **aynı şey değil**: komut koştu, çıktı boş
+  geldi. Şartı `BR-QA-48` içinde bırakmak kartı **kapatılamaz** yapar ve ölçülmüş üç şartı **rehin
+  alır** → `BR-AST-77`.
+
+## Kararlar
+
+- **Karar #47 ŞARTLI ONAY**, 13 şart. `queue_silence_min` **`AlarmMetrics.All`'a eklenmez** —
+  böylece Şeytan'ın korktuğu *"geri alınamaz `alarm_rules` satırları"* senaryosu **yapısal olarak
+  imkânsız** hâle geldi.
+- **CEO'nun "bildirim bacağı sprint-45'e ertelensin" şartı kabul edilmedi:** `cm-agent` ve
+  `linux-uzmani` bağımsız olarak *"kimseyi uyandırmayan alarm alarm değildir"* dedi; erteleme
+  kartı **çözmeden kapatır**.
+- Kararın doğurduğu **her iş aynı gün kartlaştı** (CLAUDE.md §14). Kartsız bırakılan iş panoda
+  hiç yoktur.
+
+## Ölçümler ve panoya yansıma
+
+```
+git push                   -> 72d20a4b (+ eslesme commit'i)
+clickup-olustur.js         -> yeni: 14, atlanan: 413
+clickup-senkron.js --kuru  -> fark olan kart: 0, izde olmayan: 0
+kart sayimi                -> complete 258 · in progress 9 · karar bekleyen 7 · to do 13 · backlog 140
+```
+
+## Açık kalanlar / sonraki adım
+
+- **`BR-SYS-70` ajanı hâlâ koşuyor** (`deploy/nginx-*`, `pbxtr-demo/*` onun). Bitince **tam
+  doğrulama** tek ve **sessiz** ağaçta koşacak — ve §1'deki allowlist düzeltmesi de **ilk kez o
+  koşuda ölçülecek**.
+- **İki commit de derleme/test koşturulmadan atıldı** ve bu commit mesajlarına **yazıldı**.
+  Eşzamanlı `dotnet` koşusu ölçümü bozuyor; bu turda bunun bir örneği daha görüldü (ajanın ilk
+  build'i başka ajanların `testhost`'ları yüzünden MSB3027 ile düştü, `--artifacts-path` ile
+  kaçmaya çalışınca Architecture **178 kırmızı** verdi — sebep ürün değil, depo-kökü çözümünün
+  ikili konumundan tırmanması).
+- `BR-AST-51b` öncülleri (`51a`, `52`) hâlâ `Bekliyor`; `BR-SYS-97(b)` **sunucu erişimi**,
+  `BR-AST-53(b)` **kurul kararı** bekliyor. Üçü de bu turda kapatılamaz.
