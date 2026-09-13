@@ -473,3 +473,100 @@ kart sayimi                -> complete 258 · in progress 9 · karar bekleyen 7 
   ikili konumundan tırmanması).
 - `BR-AST-51b` öncülleri (`51a`, `52`) hâlâ `Bekliyor`; `BR-SYS-97(b)` **sunucu erişimi**,
   `BR-AST-53(b)` **kurul kararı** bekliyor. Üçü de bu turda kapatılamaz.
+
+---
+
+# Dördüncü tur — BR-SYS-70, Karar #35 EKİ-3 ve tam doğrulama
+
+## Bağlam
+
+Son ajan (`BR-SYS-70`) bitti, ağaç sessizleşti ve **tam doğrulama** ilk kez tek başına koşabildi —
+bu turun iki commit'i test koşturulmadan atılmıştı ve o eksik burada kapandı.
+
+## Yapılanlar
+
+### 1. `BR-SYS-70` kapandı — ve kurulun Ş35-1 metni **ikinci kez** çürüdü
+
+- **Ne ölçüldü:** EKİ (2026-09-07) Ş35-1'i *"`.rev/` altına yazılır, `conf.d` ve `snippets` için
+  **ayrı iki hedef dizin** kullanılır ve symlink çevrilir"* diye yeniden yazmıştı. **Bu hâl de
+  çalışmıyor** ve sebebi tek-dosya mount'unun sebebiyle **aynı sınıftan**: bind mount kaynağı
+  **açılırken** çözülür.
+- **Gerçek Docker bind mount ile A/B, aynı symlink:**
+
+  | Kurulum | `current` çevrildi | Konteynerin okuduğu |
+  |---|---|---|
+  | `mount --bind /x/current /y` — symlink'in **kendisi** | evet | **`A`** — swap **ULAŞMADI** |
+  | `mount --bind /x /y` — **ebeveyn dizin** | evet | **`B`** — **ULAŞTI** |
+
+- **Neden kritik:** kurulun yazdığı gibi yapılsaydı symlink çevirme **sessizce hiçbir şey
+  yapmazdı** — `.rev` yazılır, symlink çevrilir, `nginx -t` **yeşil** yanar, reload koşar ve nginx
+  **eski config'i servis etmeye devam ederdi**. Belirti *"yayın çalışmıyor"* değil, **"yayın
+  çalışıyor gibi görünüyor"** olurdu.
+- **Çözüm:** mount **ebeveyn dizin**, symlink **konteyner içinde** çözülür. Sıra: yaz → symlink
+  çevir (`mv -T`, atomik) → **konteyner içi `readlink`** → `nginx -t` → kırmızıysa symlink geri
+  alınır, **reload hiç koşmaz**. Ş35-2'nin sırası bu sunucuda uygulanamaz (kendi şartı olan gerçek
+  konteynerdeki `nginx -t` yalnız `current`'ı okur) ama **koruduğu şey korunuyor**.
+- **Yan ölçüm:** 2026-09-13'e kadar **yayın nginx config'ini sunucuya hiç göndermiyordu.**
+- **Gerçek körlük, sayıyla:** `telefon-kanali-kontrol.sh` kanal **açıkken bile** *"8443 listen
+  YOK"* diyordu (`nginx -T` → **1 eşleşme**, eski glob → **0**). Kaynak `nginx -T` yapıldı; boş
+  dönerse artık *"yok"* değil **`RC=2` (ölçemedim)**.
+- **`kapi_24` dokunulmadan önce zaten kırmızıydı** — demo profili **var olmayan bir düzeni**
+  doğruluyordu.
+- **Ş35-30 konusuz kaldı:** yeni düzende `.conf` ile biten bir yedek **çift server bloğu
+  yükletmiyor** (`nginx -T` 0 eşleşme). Tarif edilen arıza **yapısal olarak yok**.
+- **Telefon kanalı OPT-IN ve bu zorunluydu:** 8443 bloğu koşulsuz eklenseydi PKI olmadığı için
+  `nginx -t` **her yayında kırmızı** yanar, Ş35-2 gereği hiçbir şey değişmez ve nginx taşıması
+  **kalıcı olarak kilitlenirdi**.
+- Kayıt: `Karar #35 EKİ-3`. **Canlıya hiç dokunulmadı** (ajan `ssh` yerine **çıkış 255 dönen sahte
+  bir `ssh`** kullandı).
+
+### 2. Tam doğrulama — sessiz ağaçta, `f2bd28dc`
+
+```
+dotnet build pbxtr.sln              -> 0 Warning, 0 Error (EXIT=0)
+Architecture.Tests                  -> Failed 0, Passed  476, Skipped 0
+Api.Tests ~Platform                 -> Failed 0, Passed 1188, Skipped 0
+Api.Tests ~Live|Realtime|Telephony  -> Failed 0, Passed 1171, Skipped 0
+yayin-nginx-kontrol.sh (kapi_40)    -> 20 iddia, 20 gecti, EXIT=0
+nginx-dogrula.sh (kapi_24)          -> uretim + demo, EXIT=0
+dash -n (alti betik)                -> hepsi OK
+```
+
+**Architecture'ın yeşil olması bu turun en önemli doğrulaması:** `1cbf7dfb`'de atladığım
+`CrossTenantScopeSurfaces.cs` + `RawSqlAllowlistTests.cs` (yani `CampaignSmsRunJob`'ın **zorunlu**
+allowlist kayıtları) artık **fiilen ölçüldü**.
+
+### 3. Kendi ölçümümde "0 mı, ölçülemedi mi" tuzağına düştüm
+
+- **Ne oldu:** Api.Tests'i üç filtreye böldüm; üçüncüsü (`Sms|Campaign|Messaging`) **hiçbir şey
+  basmadı** ve komut yine **exit 0** verdi. Filtreyi kurarken `FullyQualifiedName~Pbxtr.Api.Tests.`
+  önekini yanlış çoğalttım, yani filtre **hiçbir teste uymadı**.
+- **Neden tehlikeli:** `grep`'im `No test matches` satırını da yakalamıyordu. Sonuç, "üç küme
+  koştu, hepsi yeşil" gibi **okunabilirdi** — oysa üçüncü küme **hiç ölçülmemişti**. Bu, defterin
+  en çok tekrarlayan kusuru: **`0` ile "ölçülemedi" aynı çıktıyı üretti.**
+- **Düzeltme:** `--list-tests` ile toplam ölçüldü (**5019**), koşan kümeler sayıldı ve **kalan
+  namespace'ler ayrı kümeler hâlinde** koşuldu. Kural: *koşan test sayısı beklenenle
+  karşılaştırılmadan hiçbir koşu yeşil sayılmaz.*
+
+## Kararlar
+
+- **Ş35-1 ikinci kez yeniden yazıldı** (EKİ-3): mount **ebeveyn dizin**, symlink **konteyner
+  içinde** çözülür.
+- **Ş35-30 konusuz ilan edildi** (ölçümle), sunucudaki altı yedek dosyanın arşive alınması
+  taşımanın **ön koşulu değil**, ayrı bir temizlik.
+- `BR-SYS-99` açıldı: Ş35-4'ün WebSocket **101** ölçümü — yerelde ölçülemez, çünkü `/ws/`
+  upgrade'ine cevabı veren şey nginx değil **arkadaki uygulamanın kimlik doğrulamasıdır**.
+
+## Açık kalanlar / sonraki adım
+
+- **Devreye alma şartı:** compose değişikliği için bakım penceresinde **tek seferlik**
+  `docker compose up -d --force-recreate nginx` gerekir (Karar #35'te yazılı istisna). O yapılmadan
+  `nginx_tasi` yayını **`exit` ile durdurur** — sessizce etkisiz kalmaz.
+  `nginx-sunucu-sapma.sh` ve `compose-sunucu-sapma.sh` **ilk koşuda kırmızı yanacak ve bu
+  doğrudur**: depo ileride, sunucu geride.
+- **8443 artık compose'da yayınlanıyor.** Dışarıya açılması nftables ile `@asterisk_hosts`'a
+  kısıtlıdır ve **o kural seti sunucuda yüklü değildir** (2026-08-18 ölçümü). Kanalı açan kişi
+  firewall'u **aynı pencerede** yüklemek zorundadır.
+- Kart numarası bu turda **ikinci kez çakıştı** (`BR-SYS-98` doluydu); çıkarıcı mükerrer kimlikte
+  durdu ve kart `BR-SYS-99`'a alındı. *"Kart numarası önce ölçülür"* kuralı yazılı olmasına rağmen
+  iki kez ısırdı — numara, metni yazmadan **önce** sorgulanmalı.
