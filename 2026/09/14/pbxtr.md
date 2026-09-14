@@ -217,3 +217,32 @@
   ```sql
   select case when call_id ~ '^[0-9]+\.[0-9]+' then 'asterisk-epoch' else split_part(call_id,'-',1) end p, count(*) from call_events group by 1 order by 2 desc;
   ```
+
+### 33. Kurul #64 — BR-DB-61/63 `tenants.dealer_id`/`status` tek yazma kapısı: ŞARTLI ONAY
+- **Neden:** Karar #61 Ş61-7 ve #62 Ş62-6: istek yolundaki GUC daraltması geçiciydi; `pbxtr_app` `dealer_id`/`status`'u DB'de serbestçe yazabiliyordu.
+- **Ne yapıldı:** db-lider tasarımı (`scratchpad/kurul64.md`) 10 üyeye paralel verildi; 10/10 ŞARTLI. Şeytan'ın 7 itirazı tasarımı değiştirdi: `FOR UPDATE` → `FOR NO KEY UPDATE` + tenant başına advisory lock (81 FK KEY SHARE'i bekletmesin); kolon yetkisi birinci hat, üyelik ölçütlü tetikleyici ikinci hat; owner policy platform tenant'ını literal dışarıda bırakır; `tenants_seed_update` ayrı adımda (BR-DB-69); Ş62-5 `session_user` açılış kapısı bu değişikliğe alındı.
+- **Kurulda çıkan bulgu:** askıya almak santrali durdurmuyor (dialer/geri arama originate, kuyruk üyeleri Asterisk'te kalıyor) → yeni P1 **BR-AST-90**.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (Karar #64), `yonetim/backlog.md`.
+- **Commit:** `eb5028c9`.
+
+### 34. BR-BE-152 ölçümü + yeni kartlar
+- **Sonuç:** KRİTİK yok; 7 yolun hiçbiri yabancı tenant satırına yazdırmıyor. RLS WITH CHECK'teki `OR app_is_cross_tenant()` dalı ilk commit'ten beri var, ADR-002 aksini söylüyor → kurul kartı BR-SEC-19. Kurul gerektirmeyenler: BR-BE-154 (`TENANT_MISMATCH`), BR-BE-155 (#52 önizleme HitCount), BR-BE-156, BR-FE-85, BR-QA-85.
+- **Commit:** `8caa990d`.
+
+### 35. Paralel worktree ajanları — yamalar (derlenmedi, entegrasyon bekliyor)
+- **Kural:** ajanlara git yazma ve dotnet/vitest yasak (Entegrasyon 5 koşuyor); yama `git -C $W add -N . && git -C $W diff HEAD > scratchpad/X.patch`, sonra `git worktree remove --force` + `git branch -D`.
+- **Yamalar:** `qa73.patch` (migration kapısı `DeployDbScripts.Read` çözümlemesi, selftest +23/4 mutasyon), `qa82.patch` (UserAdmin fikstürleri platform oturumu), `qa84.patch` (SMS red gerçek PG + bekçi yeniden tanımı), `fe85.patch` (denetim eylemi etiketi + parite testi; 230 eylemin 199'u etiketsiz → BR-FE-86), `be154.patch` (BE-154+155), `ast80.patch` (AMI tenant erteleme tamponu, 4807/4808), `ast90.patch` (askı: `CallPermissionGate` `TENANT_SUSPENDED`, `QueuePause(pbxtr-suspended)`), `fe87.patch` (askı metni 9 dil), `db66.patch` (users/user_roles veri kuralı), `db61.patch` (SQL adım 0-2).
+- **Entegrasyon uyarıları:** FE-85 parite testi BE-154'ün yeni eylemiyle kırmızı yanar; FE-87 AST-90'dan önce girmez; DB-66 ile DB-61 01/02 şablonlarında çakışır; DB-66 `system` kullanıcısı (global, rolsüz) kuralı ihlal eder.
+- **Commit'ler:** `8690041f`, `26c4ce9b`, `a97825e7`.
+
+### 36. Canlı ölçümler (salt-okuma / ROLLBACK, root@176.88.41.220)
+- **Komutlar:** betik scp → `docker exec -i pbxtr-postgres psql -U postgres -d pbxtr -At` → rm.
+- **BR-DB-61 açığın kaydı (ROLLBACK):** `SET LOCAL ROLE pbxtr_app`; t0007 oturumundan `SET dealer_id=<başka bayi>` UPDATE 1, `SET dealer_id=NULL` UPDATE 1; bayi oturumundan t0012 `SET status` UPDATE 1; geri okumada satırlar değişmedi.
+- **BR-DB-66:** 7 sistem rolü `scope=single`; platform dışı global kullanıcı 0; sistem kodlu özel rol 0; `system` kullanıcısı global + rolsüz.
+- **BR-BE-158:** yayın #14 logunda `NoAmbientTransactionException` 0, `PostCallSms` 0 (kural tanımlı tenant ölçülmedi).
+- **BR-DB-61 adım 0 (geçici PG16):** (A') GUC yan tümcesi owner'a `42501 permission denied to set parameter` → eklenmedi; taşıma kilidi altında `call_attempts` INSERT p99 0,060 ms.
+
+## Açık kalanlar / sonraki adım (15 Eylül gecesi)
+- Entegrasyon 5 (BE-153) → yayın #15; ardından 11 yamanın seri entegrasyonu (tek dotnet yükü).
+- BR-DB-61 adım 3 C# ajanı çalışıyor.
+- BR-AST-90 (e) route-decision kurul sorusu; BR-DB-66 iki sapma db-lider onayı; migrate `lock_timeout` panel bekletmesi (3,7 sn).
