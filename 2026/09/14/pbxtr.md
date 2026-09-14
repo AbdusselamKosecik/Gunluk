@@ -206,3 +206,14 @@
 - **Neden:** `UnitOfWorkMiddleware` yalnız 2xx commit ediyor; `ImpersonationEndpoints` (403) ve `SmsEndpoints` kara liste/İYS/arama saati reddi (409) denetim satırını transactional `IAuditLog` ile yazıyordu → satır kayboluyordu. Bellek içi denetim ikizi bunu göremiyordu.
 - **Düzeltme (yama, entegrasyon 4'te):** red satırları `IAuditSink` kuyruğuna; bekçi `DeniedAuditOutsideTransactionTests` (Api'de transactional Forbidden/Rejected/Failed yazımı yasak, gerekçeli izin listesi, bayat liste kırmızı).
 - **BR-FE-82** yaması aynı entegrasyonda (oturum reddi ekranları; wallboard/masaüstü şeridindeki ham i18n anahtarı ve eksik `kapsam-tutarsiz` sebebi düzeltmeleri). Yeni kart BR-FE-84.
+
+### 31. Entegrasyon 4 + yayın #14 — `tekbirsoft/pbxtr:demo-fc4e54560ad6`
+- **BR-QA-83** (`d599fa3b`) ve **BR-FE-82** (`fc4e5456`): Arch 554, Api 5231, Integration 935, vitest 1860, `tsc -b` 0; mutasyon 11/11. Q1 mutasyonunda taklit red satırı gerçek PG'de geri alındı — eski kusur gerçek DB'de ölçülmüş oldu. Tek yama dışı düzeltme `SmsEndpoints.cs` format girintisi.
+- **Canlı (21:26 UTC):** sağlık ok, loglar temiz, t0012 `not_delivered` üçüncü yayında da korundu. Kapanan: BR-QA-83, BR-FE-82. Yeni borç kartı BR-QA-84 (SMS red kalıcılığı gerçek PG'de ölçülmedi; bekçi yalnız literal biçim + yalnız Api).
+
+### 32. BR-BE-153 — seeder operasyon verisi (yama, entegrasyon 5 koşuyor)
+- **Karar:** tenant-sahipli operasyon verisi yalnız tenant o koşuda oluşturulduysa yazılır (silinen satır geri gelmez; aynı numaralı yeni kuyrukta migrate düşmez); kullanıcılar yoksa ekle; çağrı geçmişi tazeleme kalır.
+- **Canlı ölçüm (dayanak):** `call_events` önek dağılımı — cdr 3727, live 3698, Asterisk epoch 293, demo 9 → `cdr-` yalnız tohum, silme gerçek çağrıya dokunmaz.
+  ```sql
+  select case when call_id ~ '^[0-9]+\.[0-9]+' then 'asterisk-epoch' else split_part(call_id,'-',1) end p, count(*) from call_events group by 1 order by 2 desc;
+  ```
