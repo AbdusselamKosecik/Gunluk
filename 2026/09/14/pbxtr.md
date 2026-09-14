@@ -195,3 +195,14 @@
 - **BR-SYS-103** (`af179302`): confd medya yolu doğrulaması + konumsal argüman; selftest 170/0, HEAD ajanı 21 KALDI (enjeksiyon gerçekten koştu).
 - **BR-BE-151** db-lider kararı (a): bayi personeli barındıran tenant taşıması 409 `TENANT_HAS_DEALER_STAFF`; (b) otomatik personel taşıma yeni yetki davranışı olduğu için reddedildi. Yama ana ağaçta, entegrasyon 3 koşuyor. Yeni kartlar BR-FE-83, BR-DB-67 (bayi ev tenant'ı yok).
 - **Canlı ölçüm:** `roles.scope` tüm sistem rollerinde `single` → BR-DB-66 kuralı kapsamı bu kolondan okuyamaz (kart güncellendi `e44192d0`).
+
+### 29. Entegrasyon 3 + yayın #13 — `tekbirsoft/pbxtr:demo-af8b059d8ee7`
+- **BR-BE-151 + BR-FE-83** (`af8b059d`): bayi personeli barındıran tenant taşıması 409 `TENANT_HAS_DEALER_STAFF`. Entegrasyonda senaryo 5'in boş geçtiği (erken dönüş, M2 yeşil) yakalandı ve karışık istekle düzeltildi. Arch 552, Api 5231, Integration 933, vitest 1839; mutasyon 5/5.
+- **Ölçüm:** kural dışı SQL ile `tenants.dealer_id` değişince A personeli B listesinde görünür; B bayisinin parola sıfırlaması 403 (`PERMISSION_DENIED`).
+- **Canlı (18:04 UTC):** t0012 yayın #13 migrate sonrasında `not_delivered` KALDI → BR-BE-148 son kabul. Sağlık provisioning ok ("1 tenant BİLEREK TESLİM EDİLMİYOR"), session-scope ok, loglar temiz.
+- **Kapanan:** BR-BE-148, BR-BE-151, BR-FE-83.
+
+### 30. BR-QA-83 — KRİTİK: reddedilen taklit ve SMS red denetim satırları geri alınıyordu
+- **Neden:** `UnitOfWorkMiddleware` yalnız 2xx commit ediyor; `ImpersonationEndpoints` (403) ve `SmsEndpoints` kara liste/İYS/arama saati reddi (409) denetim satırını transactional `IAuditLog` ile yazıyordu → satır kayboluyordu. Bellek içi denetim ikizi bunu göremiyordu.
+- **Düzeltme (yama, entegrasyon 4'te):** red satırları `IAuditSink` kuyruğuna; bekçi `DeniedAuditOutsideTransactionTests` (Api'de transactional Forbidden/Rejected/Failed yazımı yasak, gerekçeli izin listesi, bayat liste kırmızı).
+- **BR-FE-82** yaması aynı entegrasyonda (oturum reddi ekranları; wallboard/masaüstü şeridindeki ham i18n anahtarı ve eksik `kapsam-tutarsiz` sebebi düzeltmeleri). Yeni kart BR-FE-84.
