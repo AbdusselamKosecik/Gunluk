@@ -66,3 +66,44 @@
 - Ana ağaçta uygulanmış, testi koşan üç yama: `BR-FE-80` (SMS şablonları ekranı), `BR-DB-52` (retention zaman aşımı hiyerarşisi 50<80<90<150 sn), `BR-BE-137` (serileştirme kilitlerinde `lock_timeout=2s`, 55P03 → 503 `RESOURCE_BUSY`) — yeşil gelince ayrı commit'ler.
 - `BR-AST-49` ajanı Karar #58 şartlarını uyguluyor.
 - Yayın #9 sonrası: Ş59-4/5 canlı ölçümleri, Ş49-4, 24 saat sonra Ş59-6 defter büyümesi.
+
+---
+
+## Devam (2026-09-14 ~02:00–05:00 TR)
+
+### 12. Karar #59 kaydı ve kartlar (`5188174d`)
+- 10/10 ŞARTLI. Şeytan'ın 5 itirazı yazılı cevaplandı (çağıranlar tek tek sayıldı; defter-sonrası hata ayrı kart; büyüme ölçülecek; `NOT VALID`+`VALIDATE`+`lock_timeout`; kapı hem liste hem gerçek `Record` satırı).
+- Kartlar: `BR-DB-54` (P0), `BR-BE-144` (P1), `BR-DB-55` (P2).
+
+### 13. Üç yamanın testi ve bir fikstür kusuru (`798efda1`, `2a0bd756`, `e8d137d3`)
+- Arch 479, Api 1560, vitest 88, `tsc -b` 0 yeşil; Integration'da `SerializationLockWaitBoundTests` 2 kırmızı.
+- **Kök sebep:** fikstür bayi+tenant'ı sabit kimlikle açıp siliyordu; `tenants` üzerinde DELETE policy bilinçli olarak YOK (`01-rls-template.sql` "DELETE: policy YOK"), FORCE RLS altında owner silmesi sessizce 0 satır → sonraki koşuda `DELETE FROM dealers` 23503. Düzeltme: kimlikler test örneği başına `Guid.NewGuid()`, kod eki rastgele; temizlik kaldırıldı. 26/26.
+- Üç kart ayrı commit.
+
+### 14. `BR-DB-54` entegrasyonu (`0166cac8`)
+- Worktree ajanının yaması: migration `20260914100000_TelephonyEffectOperationCheckWiden` (SET LOCAL lock_timeout 5s → DROP → ADD ... NOT VALID → VALIDATE → DO bloğu 24 değer + convalidated doğrulaması; Down 18'lik NOT VALID), onay satırı `Karar#59`, st44 json son migration adı, `EnumMirrorCheckConstraintTests` (28 enum-aynası CHECK için kurulu DB eşitliği + her `TelephonyOperation` için gerçek `Record` satırı).
+- Ajan ölçümü: 1,05M satırda Up 0,46 sn; başka oturum tabloyu tutarken 5,2 sn'de lock timeout. Diğer 27 kısıtta uyuşmazlık YOK.
+- Doğrulama: guard `ONAYLI (Karar#59)`; 28/28; **mutasyon** enum'a `MutantX = 24` → 2 kırmızı; geri alınıp `touch` + rebuild, DLL'de `MutantX` 0 → 28/28; Arch 479/479.
+
+### 15. Yayın #9 — `tekbirsoft/pbxtr:demo-0166cac8669a`
+- Önce tüm ajan worktree'leri kaldırıldı (değişiklikleri ana ağaçla `cmp` ile karşılaştırıldı, hepsi entegre).
+- `PBXTR_CONFD_SAPMA=0 bash deploy/yerel-yayin.sh --yayinla` → 52/52 kapı, Integration 868, Api 1278 yeşil, yedek `pre-0166cac8669a.dump`.
+- **Canlı ölçüm (60 dk):** kısıt `convalidated=t` 24 değer; 23514 = 0; "Arka plan isi hata verdi" = 0; defter satır/saat: QueueSummary 84, QueueStatus 24, RegistrationInventory 12 (~2.900/gün → `BR-DB-55`).
+- Ş59-5 ölçülemedi: `/trunks/health` trunk yok (boş küme); `admin/overview.channelUsageAt=null` çünkü ChannelUsage AMI `CoreShowChannels` ile okunuyor ve canlıda Permission denied → `BR-AST-84`. Kalan canlı ölçüm kartı `BR-QA-79`.
+- **Yan bulgu:** `registration-sampler` her turda 503 nesne düşürüyor. ARI `/endpoints` sınıflandırması: 500 `t9001-olcek-*`, 3 `t9001-olcum-*`, 6 `t0007-wrtc-*`; `t9001` tenant'ı yok, `/etc/asterisk`'te tanım yok → eski ölçek ölçümünün bellekteki kalıntısı → `BR-AST-87`.
+- ARI `GET /channels` canlıda `200 []` (aktif kanal 0), `ari.conf`'ta `channelvars` YOK — `BR-AST-84`'ün linkedid ölçümü gerçek çağrı ister.
+- Ölçüm betikleri sırrı yazmaz: ARI kimliği `docker exec pbxtr-app printenv` ile değişkene, curl'e stdin'den (`read -r A`).
+- Kartlar kapandı (`50a039b8`): BR-DB-54, BR-FE-80, BR-BE-137. Yeni: BR-QA-79, BR-AST-87, BR-DB-56.
+
+### 16. Paralel tur — dört worktree ajanı (yayın koşarken, derleme yasak)
+- `BR-BE-144`: etki başarılı + defter düştü → sonuç aynen, Error log + `pbxtr.telephony.effect_ledger.write_failed` sayacı.
+- `BR-BE-139`: kapalı saatte sessizlik metriği 0 (taban korunur, açılışta kaldığı yerden), alarm kapanışta `alarm.cleared`; ADR-016 K-2a.
+- `BR-DB-53`: iki migration (bekçi tazeleme `20260914105000` + `ALTER FUNCTION ... SET lock_timeout='2s'` `20260914110000`, md5 gövde doğrulaması), Down yalnız `RESET lock_timeout`, üç yazma yolunda 55P03 → 503; kapsam dışı bulgu → `BR-DB-56`.
+- `BR-AST-85`: `QueueRemove` kilitten önce, taze sayım kilit altında, telafi `OnCompleted` ile commit/rollback sonrası.
+- `BR-AST-49` yaması (Karar #58) da aynı turda.
+- Entegrasyon: beş yama `git apply --3way`; iki çakışma (`TenantLimitsEndpoints.cs` niyet bloğu + 55P03 catch birleşti; ADR-005 iki durum notu birlikte). `BR-AST-49` migration'ı `20260914090000` → `20260914120000` (canlıda uygulanmış `100000`'dan eski olmasın), Designer attribute + st44 json.
+- Build: tek hata (eksik `using Microsoft.Extensions.DependencyInjection`) → 0. Arch 479, Api 5159, vitest 192 dosya, `tsc -b` 0; **Integration 894'te 6 kırmızı** (DB-53 iki test 500, AST-85 bir test 403 yetki, QueueMembershipSyncAlarmTests 3 test yalnız tam takımda) — düzeltme sürüyor.
+
+## Açık kalanlar / sonraki adım
+- 6 Integration kırmızısı → yeşil, mutasyonlar, beş kart ayrı commit, yayın #10.
+- Yayın #10 sonrası: BR-AST-49 Ş49-4, BR-QA-79 gerçek çağrı ölçümleri, 24 saat sonra BR-DB-55.
