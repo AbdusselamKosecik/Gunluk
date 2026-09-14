@@ -183,3 +183,15 @@
 
 ### 26. Entegrasyon 2 başladı — BE-147/148/149/150 yamaları ana ağaçta
 - Dört worktree yaması (`scratchpad/be147|148|149|150.patch`) `git apply --3way` ile çakışmasız uygulandı, tüm worktree'ler kaldırıldı. Derleme/test/mutasyon backend-lider ajanında; BE-150 `permissions.seed.json` değiştirdiği için st44 sha yeniden üretilecek.
+
+### 27. Entegrasyon 2 + yayın #12 — `tekbirsoft/pbxtr:demo-70f3eb309db1`
+- **Entegrasyon 2 (BE-147/148/149/150):** yama dışı düzeltmeler: `PbxtrExceptionHandler` saat `TimeProvider` (AmbientClock bekçisi), fikstürler `Tenant.Create`'e, M5 şekilli test aktörleri platform oturumuna; st44 `permissionsSha256` yeniden üretildi. Arch 552, Api 5230 (= list-tests), Integration 926, vitest 1838, `tsc -b` 0. Mutasyon 8/8 kırmızı.
+- **Commit:** `8cc49f99` (BE-148), `70f3eb30` (BE-147+149+150, ortak hunk'lar tek commit).
+- **Yayın:** `PBXTR_CONFD_SAPMA=0 bash deploy/yerel-yayin.sh --yayinla` exit 0.
+- **Canlı doğrulama (14:43–14:46 UTC):** `migrate --with-sample` sonrası t0007/t0012 `updated_at` 08:57'de kaldı (seeder artık ezmiyor); 23514/42501/`fail:` 0; `session-scope-consistency` ok; t0012 niyeti süper admin API ile yeniden `not_delivered` (PUT 200, retention alanı gönderilmeden). API erişimi sunucuda `https://127.0.0.1/api/v1` (`-k`), parola `/home/vuo/pbxtr-demo/.env`'den değişkene okunur (konteyner env'inde yok).
+- **Kapanan kartlar:** BR-QA-80, BR-DB-60, BR-BE-146, BR-BE-115, BR-BE-111, BR-BE-147, BR-BE-149; BR-BE-148 son kabul bir sonraki yayında; BR-BE-150 `audit` kipinde.
+
+### 28. BR-SYS-103, BR-BE-151 kararı, BR-DB-66 öncülü
+- **BR-SYS-103** (`af179302`): confd medya yolu doğrulaması + konumsal argüman; selftest 170/0, HEAD ajanı 21 KALDI (enjeksiyon gerçekten koştu).
+- **BR-BE-151** db-lider kararı (a): bayi personeli barındıran tenant taşıması 409 `TENANT_HAS_DEALER_STAFF`; (b) otomatik personel taşıma yeni yetki davranışı olduğu için reddedildi. Yama ana ağaçta, entegrasyon 3 koşuyor. Yeni kartlar BR-FE-83, BR-DB-67 (bayi ev tenant'ı yok).
+- **Canlı ölçüm:** `roles.scope` tüm sistem rollerinde `single` → BR-DB-66 kuralı kapsamı bu kolondan okuyamaz (kart güncellendi `e44192d0`).
