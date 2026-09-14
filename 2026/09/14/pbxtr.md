@@ -107,3 +107,30 @@
 ## Açık kalanlar / sonraki adım
 - 6 Integration kırmızısı → yeşil, mutasyonlar, beş kart ayrı commit, yayın #10.
 - Yayın #10 sonrası: BR-AST-49 Ş49-4, BR-QA-79 gerçek çağrı ölçümleri, 24 saat sonra BR-DB-55.
+
+### 17. Integration kırmızıları — iki gerçek ürün kusuru (`d5f887bc` içinde)
+- **55P03 hiç 503'e çevrilmiyordu:** Npgsql 55P03'ü geçici hata sayıyor, EF yürütme stratejisi `InvalidOperationException → DbUpdateException → PostgresException` diye sarıyor; `catch (DbUpdateException) when IsLockNotAvailable` hiç eşleşmiyordu. `PostgresErrors` bu tek sarmalayıcıyı açar. Mutasyon: 2 kırmızı.
+- **`POST /api/v1/dealers/{id}/tenants` gerçek PG'de HER ZAMAN 500'dü:** `tenants_update` policy çapraz kipte yazmaz; bayi dalı eski+yeni bayiyi tek GUC ile karşılayamaz → UPDATE 0 satır → `DbUpdateConcurrencyException`. Bu uç için hiç entegrasyon testi yoktu. Düzeltme: satır başına `set_config('app.tenant_id', <tenant>, true)`. Desen incelemesi `BR-DB-57`.
+- Test tarafı: AST-85 aktörüne `owner` rolü (extension.write); `QueueMembershipSyncAlarmTests` başka sınıfın bıraktığı pinli anahtara karşı kendini korur (kaynak `BR-QA-80`).
+- Tam Integration 894/894. Mutasyon koşucusu (`scratchpad/mut10.py`: çıpa → build iki proje → filtreli test → baytları geri yaz + utime → rebuild → temiz koşu): BE-144 2+1, BE-139 4+1, AST-49 1, AST-85 4 kırmızı; temiz koşuda hepsi yeşil.
+- Commit'ler: `51ef5bad` (BE-144), `876da7cd` (BE-139), `d5f887bc` (AST-49+DB-53+AST-85 — ortak dosyalar yüzünden birlikte).
+
+### 18. Yayın #10 — iki deneme, canlı `tekbirsoft/pbxtr:demo-f10d1cbf096c`
+- **Deneme 1 KALDI:** ST-44 öz-testleri (BR-QA-56) — `deploy/st44/st44-role-matrix.json` `sources/permissionsSha256` bayat (AST-49 `permissions.seed.json` açıklamalarını değiştirdi; yetki kümesi aynı). dotnet takımları bunu görmez.
+  ```bash
+  python deploy/st44/s30-canonical-fixtures.py --root . --matrix $S/m.json --seed $S/s.json
+  # alan alan fark: yalniz /sources/permissionsSha256
+  cp $S/m.json deploy/st44/st44-role-matrix.json && python deploy/st44/s30-canonical-fixtures-test.py  # 6/6
+  ```
+  Commit `f10d1cbf`. Hafızaya eklendi (yetki-seedi-iki-namespace-ister: üçüncü yüzey).
+- **Deneme 2:** 52/52 kapı, testler yeşil, yedek `pre-f10d1cbf096c.dump`.
+- **Canlı doğrulama:** 4 yeni migration; `pbxtr_dealer_quota_reject.proconfig = {app.cross_tenant=on,lock_timeout=2s}`; 20 dk logda 23514=0, iş hatası=0, `fail:`=0, "defter yazilamadi"=0.
+- **Karar #49 uygulandı:** superadmin `PUT /api/v1/tenant` (X-Tenant-Id t0012; ad/limitler aynen gönderildi — uç hepsini zorunlu istiyor, ilk deneme 400) + gerekçe → 200; `provisioning_delivery_intent=not_delivered`; denetim `tenant.provisioning_delivery.changed`.
+- **Ş49-4 ölçüldü:** `/api/v1/system/health` provisioning satırı önce "1 tanesi hicbir pbxtr-confd dugumune ATANMAMIS" (03:50 UTC), sonra `state=ok` "1 tenant BILEREK TESLIM EDILMIYOR (Karar #49) — ariza degil" (04:31 UTC).
+- Ders: sunucuda `pkill -f <betik adı>` ssh'nin kendi `bash -c` komut satırını da eşler ve oturumu öldürür (exit 255) — PID ile öldür ya da hiç öldürme.
+- Kartlar kapandı (`683bdd1a`): BR-AST-49, BR-DB-53, BR-AST-85, BR-BE-144, BR-BE-139. Yeni: BR-BE-145, BR-DB-58.
+
+## Günün sonu durumu
+- Canlı: `demo-f10d1cbf096c`. Bugün canlıya çıkan kartlar: AST-83, AST-40, BE-140, BE-141, QA-76/77, DB-54, FE-80, BE-137, DB-52 (kod), AST-49, DB-53, AST-85, BE-144, BE-139.
+- ClickUp: fark 0; 189 açık kart.
+- Sıradaki: BR-AST-84 (ARI `/channels`, gerçek çağrı ölçümüyle BR-QA-79), BR-DB-56, BR-DB-57 incelemesi, BR-DB-55 24 saat ölçümü (2026-09-15 ~00:30 UTC), BR-AST-87 t9001 temizliği.
