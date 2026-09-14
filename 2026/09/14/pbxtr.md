@@ -134,3 +134,28 @@
 - Canlı: `demo-f10d1cbf096c`. Bugün canlıya çıkan kartlar: AST-83, AST-40, BE-140, BE-141, QA-76/77, DB-54, FE-80, BE-137, DB-52 (kod), AST-49, DB-53, AST-85, BE-144, BE-139.
 - ClickUp: fark 0; 189 açık kart.
 - Sıradaki: BR-AST-84 (ARI `/channels`, gerçek çağrı ölçümüyle BR-QA-79), BR-DB-56, BR-DB-57 incelemesi, BR-DB-55 24 saat ölçümü (2026-09-15 ~00:30 UTC), BR-AST-87 t9001 temizliği.
+
+---
+
+## Devam (2026-09-14 gündüz)
+
+### 19. BR-AST-87 ölçüldü — t9001 kayıtları PJSIP nesnesi değil (`d74e55a3`)
+- ARI `/endpoints` 500 `t9001-olcek-*` + 3 `t9001-olcum-*` gösteriyor; `pjsip show endpoint t9001-olcek-137` → "Unable to find object"; `GET /ari/asterisk/config/dynamic/res_pjsip/endpoint/t9001-olcek-137` → 404 (kontrol `t0007-wrtc-1042` → 200); `grep -r t9001 /etc/asterisk` boş. Bayat endpoint anlık görüntüleri; reload silmez, `core restart` yasak → temizlik YAPILMADI.
+- Ders: `pjsip show endpoint <tahmin>` ad biçimini listeden al (ilk tahmin `-001` yanlıştı, gerçek `-137`).
+
+### 20. Paralel tur: BR-DB-56, BR-DB-58 (WS), BR-FE-81, BR-BE-145 + Kurul #60/#61
+- Worktree ajanları derlemeden yazdı; yamalar `git -C $W add -N . && git -C $W diff HEAD > patch` ile alındı.
+- **Kurul #60** (BR-DB-58 (1)): 10/10 ŞARTLI (d) — DB bekçisi BİLİNÇLİ yok (uygulama GUC'larında kapsam yok; admin ve owner aynı GUC'larla gelir). Şeytan itiraz 2 ölçüldü: `tenant.suspend` `bundle.tenant` içinde, `CustomRolePolicy` reddetmiyordu. **Kurul #61** (BR-DB-57): 10/10 ŞARTLI (a) geçici tek uç istisnası; Şeytan itiraz 2 (EF otomatik savepoint GUC'u geri almaz) kaynakta doğrulandı. Kayıt `821c32df`, kartlar BR-DB-59/60/61.
+- Şartları uygulayan ajan (ana ağaç): `Tenant` setter'ları private + tek-yazıcı bekçisi; `CustomRolePolicy` `platform_only` (mutasyonda HTTP 201/200 → açık GERÇEKTİ); `SaveTenantRowAsync(Tenant)` izleyici kapısı, geri yükleme `finally` + 25P02 yutma; istek yolu `set_config` kapalı listesi; dört taşıma hâli + havuz GUC testi. Mutasyon: geri yükleme silinince taşıma YİNE 200, GUC son tenant'ta — sessiz kusur.
+- Tam koşu: Arch 489, Api 5172 (6 parça — Modules tek parça 8 GB'a çıkıp 5 test TaskCanceled ile kesildi), Integration 907, vitest 1801, tsc 0. Commit `885074a0`.
+- BR-FE-81 (`ed4725ec`): wallboard testi aynı metni rozet+şeritte buldu (multiple elements) → iddia `role=status` içine daraltıldı; mutasyon `isDeliveryWithheld` hep false → 4 dosya kırmızı.
+
+### 21. Yayın #11 — `tekbirsoft/pbxtr:demo-457ae80d8db0`
+- **Deneme 1 EXIT=2:** 52/52 kapıdan sonra `dotnet format --verify-no-changes` (ajan dosyalarında using sırası + boşluk). Betik biçimi kopyaya uyguladığı için depo temiz görünüyordu → yerelde `dotnet format pbxtr.sln --include <dosyalar>`, `git diff -w` yalnız biçim, commit `457ae80d`. Hafıza: format-kapisi-yayinda.
+- **Deneme 2:** 52/52, Arch 489, Integration 907, Api 1293×4 parça yeşil; yedek `pre-457ae80d8db0.dump`.
+- **Canlı ölçüm:** superadmin `POST /api/v1/roles/custom` (X-Tenant-Id t0007, `tenant.suspend`) → **409 `platform_only`**, rol oluşmadı; sağlık `telephony-effect-ledger` `ok`, `provisioning` `ok`; 20 dk 23514=0, fail=0.
+- Kartlar kapandı (`c370bd25`): BR-DB-56, BR-DB-57, BR-DB-58, BR-BE-145, BR-FE-81. Yeni: BR-AST-88 (Ş58-4), BR-BE-147 (X-Cross-Tenant yazma 500), BR-QA-81 (St44 seeder sessiz yeşil), BR-SYS-102 (confd curl kararı).
+
+### 22. Sonraki paralel tur (yamalar hazır, entegrasyon sürüyor)
+- BR-QA-80 (test anahtar kalıntısı; TOTP `000000` flake kök sebebi: rastgele sırda ±1 pencere 3/10⁶), BR-BE-146 (`/queues` deliveryState; #03 "Kuyruk varlığı" satırı teslim edilmeyen tenant'a "Hepsi yerinde" yazıyordu), BR-BE-115 (Karar #54 testleri + saklama bekçisi), BR-BE-111 (`NODE_NOT_PINNED` + ajan üç yönlü 403), #57 PİNSİZ rozeti, BR-DB-60 envanteri (7 yol, 3'üne test), **confd komut enjeksiyonu:** nginx kipinde ETag/mediaId `sh -c` metnine gömülüyordu, `x$(touch /tmp/PWNED1)` nginx konteynerinde çalıştı → konumsal argüman; BusyBox wget 4xx gövdesi yazmıyor (ölçüldü) → "OKUNAMADI" mesajı.
+- confd ile BR-BE-111 aynı üç bash dosyasında çakıştı; birleştirme + tam test ana ağaçta ajan ile.
