@@ -47,3 +47,15 @@ Jenkins `Vuo-Dev` job'u (1.0.2.14) API imajı build'inde başarısız: `csc exit
 - **GÜVENLİK:** Jenkins log'unda Docker Hub PAT ve GitHub PAT düz metin göründü → iki token iptal edilip yenilenmeli; Jenkinsfile'da `withCredentials` ile maskelenmeli.
 - Jenkins build'i yeniden tetikle, `dmesg -T | grep -i oom` ile doğrula.
 - Migration squash önerisini kurula götür; API→Migrator referansını gözden geçir.
+
+---
+
+### 5. DEV pipeline dosyası + token'ların credentials'a taşınması
+- **Neden:** Jenkins job'unda Docker Hub ve GitHub PAT düz metin (log'a düşüyordu); repo'daki eski `Jenkinsfile` de Docker PAT içeriyordu.
+- **Ne yapıldı:**
+  - `Jenkinsfile.dev` (yeni, Linux agent `docker`): GitSCM shallow checkout (`github-vuoapp` credential), build'den önce `withCredentials` ile docker login (`dockerhub-tekbirsoft`), 90 dk timeout, `buildDiscarder`, post'ta `docker logout` + prune. Build/push/deploy adımları kullanıcının verdiği pipeline ile aynı.
+  - `Jenkinsfile` (eski Windows/main): hardcoded Docker PAT kaldırıldı → `withCredentials`.
+- **Dokunulan dosyalar:** `Jenkinsfile`, `Jenkinsfile.dev`
+- **Commit:** `26795345` — ci: add DEV Linux pipeline and move registry/git tokens to Jenkins credentials
+- **Jenkins tarafı (elle):** Credentials'a `github-vuoapp` ve `dockerhub-tekbirsoft` (Username with password) eklenmeli; job → "Pipeline script from SCM", branch `dev`, Script Path `Jenkinsfile.dev`.
+- **Not:** Eski PAT git geçmişinde (`Jenkinsfile`) duruyor → token iptali şart.
