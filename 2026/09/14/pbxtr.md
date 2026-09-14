@@ -159,3 +159,27 @@
 ### 22. Sonraki paralel tur (yamalar hazır, entegrasyon sürüyor)
 - BR-QA-80 (test anahtar kalıntısı; TOTP `000000` flake kök sebebi: rastgele sırda ±1 pencere 3/10⁶), BR-BE-146 (`/queues` deliveryState; #03 "Kuyruk varlığı" satırı teslim edilmeyen tenant'a "Hepsi yerinde" yazıyordu), BR-BE-115 (Karar #54 testleri + saklama bekçisi), BR-BE-111 (`NODE_NOT_PINNED` + ajan üç yönlü 403), #57 PİNSİZ rozeti, BR-DB-60 envanteri (7 yol, 3'üne test), **confd komut enjeksiyonu:** nginx kipinde ETag/mediaId `sh -c` metnine gömülüyordu, `x$(touch /tmp/PWNED1)` nginx konteynerinde çalıştı → konumsal argüman; BusyBox wget 4xx gövdesi yazmıyor (ölçüldü) → "OKUNAMADI" mesajı.
 - confd ile BR-BE-111 aynı üç bash dosyasında çakıştı; birleştirme + tam test ana ağaçta ajan ile.
+
+### 23. Kurul #62 — BR-DB-59 `tenants` platform kolonları (ŞARTLI ONAY, (c) karışık)
+- **Neden:** Karar #60 Ş60-4/5 — owner oturumunun DB düzeyinde hangi `tenants` kolonlarını yazabildiği ölçülmemişti.
+- **Ölçüm:** db-lider (kaynak) — `tenants_update` owner'a `id` dışında 13 kolonu açıyor; `dealer_id = NULL` kota tetikleyicisinin erken dönüşüyle koşulsuz geçer. **Canlı (salt-okuma, 09:12 UTC):** yayın #11 `migrate --with-sample` t0007/t0012 satırlarını ezmiş, t0012 niyeti `not_delivered` → `deliver` geri dönmüş (`pbxtr-demo/docker-compose.yml:113` + `deploy/staging-yayin.sh:408` — her yayında).
+  ```bash
+  ssh root@176.88.41.220 "echo 'select code,status,provisioning_delivery_intent,created_at,updated_at from tenants' | docker exec -i pbxtr-postgres psql -U postgres -d pbxtr -At"
+  ```
+- **Karar:** 10/10 ŞARTLI. `pbxtr_app` için yazılamaz kolonlara rol tetikleyicisi (`BR-DB-62`), değişebilir platform kolonlarına tek-yazıcı bekçisi + seeder düzeltmesi (`BR-BE-148`, P0), `PUT /tenant` saklama alanını bırakır (`BR-BE-149`), `dealer_id`/`status` tetikleyicisi `BR-DB-61` ile (`BR-DB-63`), `users` ölçümü (`BR-DB-64`).
+- **Commit:** `b422e502` (karar + kartlar).
+
+### 24. BR-DB-64 ölçümü + Kurul #63 — `users`/`user_roles` yetki kaynağı (ŞARTLI ONAY)
+- **Ölçüm (canlı DB, tek transaction + ROLLBACK, sonra geri okundu):** `SET LOCAL ROLE pbxtr_app`, `app.tenant_id=t0007`, cross off → M1 `demo.sahip` `scope=dealer` 1 satır, M2 `scope=global` 1 satır, M5 `INSERT user_roles(superadmin)` geçti; kontrol M3 23514, M4 0. Betik scp → çalıştır → sil (`/root/db64.sql`).
+- **Karar:** 10/10 ŞARTLI; gündemdeki GUC tabanlı DB tetikleyicisi REDDEDİLDİ (meşru süper admin/bootstrap yolları cross off ile koşuyor). İki katman: jeton tutarlılık kapısı taklit dahil (`BR-BE-150`, `audit`→`enforce`), aktörden bağımsız veri kuralı (`BR-DB-66`). Canlı sayım: platform dışı global kullanıcı 0.
+- **BR-DB-65 (kod okuması, pbxtr-qa):** M5-only kullanıcı superadminin tüm yetkilerini alıyor; `globalScopeOnly` istek anında denetlenmiyor; `POST /users {roles:[superadmin]}` ile tek istekte global superadmin üretilebiliyor; `SystemCommandRunner` kapsamı yalnız AST-CLI için; SMTP ayarı kapsamsız → `BR-BE-150`'ye (A) yazma kapısı, (B) merkezi filtre, (C) uç kontrolleri eklendi.
+- **Commit:** `7e1468b0`, `80ff5efe`, `fcac3020` (BR-BE-153: seeder kullanıcı durumu/kara liste/operasyon verisi ezmesi).
+
+### 25. Entegrasyon 1 — yedi yama (QA-80, BE-146, BE-115, DB-60, FE-57, BE-111, confd) commit
+- **Çakışma çözümü:** confd 403 dalı önce `RED_KODU` okur, sonra BR-BE-111 üç yönlü yönlendirme; nginx kipinde gövde okunamaz → selftest'te sahte `curl` shim ile curl kipi fikstürleri (F28–F31), BusyBox gövde taklidi kaldırıldı. Selftest 144 geçti; HEAD ajanı yeni selftest ile 19 KALDI.
+- **Sonuç:** format 0, build 0/0, Arch 506, Api 5177 (6 parça, `--list-tests` ile eşit), Integration 914, vitest 1836, `tsc -b` 0. Mutasyon 4/4 kırmızı.
+- **Bulgu:** confd medya hedef yolu enjeksiyonu → `BR-SYS-103` (P1).
+- **Commit:** `44f7f98d`, `91688270`, `2f57f8ba`, `a7b8c35e`, `a155f81f`; kartlar `afe171cd`.
+
+### 26. Entegrasyon 2 başladı — BE-147/148/149/150 yamaları ana ağaçta
+- Dört worktree yaması (`scratchpad/be147|148|149|150.patch`) `git apply --3way` ile çakışmasız uygulandı, tüm worktree'ler kaldırıldı. Derleme/test/mutasyon backend-lider ajanında; BE-150 `permissions.seed.json` değiştirdiği için st44 sha yeniden üretilecek.
