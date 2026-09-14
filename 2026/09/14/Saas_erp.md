@@ -59,3 +59,16 @@ Jenkins `Vuo-Dev` job'u (1.0.2.14) API imajı build'inde başarısız: `csc exit
 - **Commit:** `26795345` — ci: add DEV Linux pipeline and move registry/git tokens to Jenkins credentials
 - **Jenkins tarafı (elle):** Credentials'a `github-vuoapp` ve `dockerhub-tekbirsoft` (Username with password) eklenmeli; job → "Pipeline script from SCM", branch `dev`, Script Path `Jenkinsfile.dev`.
 - **Not:** Eski PAT git geçmişinde (`Jenkinsfile`) duruyor → token iptali şart.
+
+### 6. Yerel DEV paketi 1.0.2.16 + build-dev.cmd
+- **Neden:** Jenkins agent OOM ile düşüyor; paket yerelden (32 CPU / 31 GB Docker Desktop) çıkarıldı.
+- **Ne yapıldı:** `tools/build-dev.cmd <build-no> [nodeploy]` eklendi (git pull → API build → SPA build → 4 push → deploy curl). `.gitattributes`'a `*.cmd text eol=crlf`.
+- **Commit:** `8e0c0b80` — chore(tools): add build-dev.cmd
+- **Sonuç:**
+  - `tekbirsoft/vuoapp-api-dev:1.0.2.16` / `:latest` → `sha256:422798b5...` push edildi
+  - `tekbirsoft/vuoapp-spa-dev:1.0.2.16` / `:latest` → `sha256:b933b946...` push edildi
+  - Deploy: `http://217.131.14.57/abdusselam.kosecik/1.0.2.16` → **301** → `https://217.131.14.57/...`; HTTPS sertifikası IP için doğrulanamıyor → deploy **tetiklenmedi**.
+- **Bulgu:** Jenkins'teki `curl --fail` 3xx'i hata saymaz → pipeline deploy yapmadan "başarılı" görünebilir.
+
+## Açık kalanlar (ek)
+- Deploy URL'si: https + geçerli sertifikalı alan adı mı kullanılmalı, yoksa `-k` ile mi çağrılmalı → kullanıcı kararı.
