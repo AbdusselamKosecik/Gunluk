@@ -246,3 +246,28 @@
 - Entegrasyon 5 (BE-153) → yayın #15; ardından 11 yamanın seri entegrasyonu (tek dotnet yükü).
 - BR-DB-61 adım 3 C# ajanı çalışıyor.
 - BR-AST-90 (e) route-decision kurul sorusu; BR-DB-66 iki sapma db-lider onayı; migrate `lock_timeout` panel bekletmesi (3,7 sn).
+
+### 37. Entegrasyon 5 + yayın #15 — BR-BE-153 canlıda (`demo-d151999623b3`)
+- **Neden:** SampleDataSeeder her yayında tenant operasyon verisini ve kullanıcı durumunu geri alıyordu.
+- **Ne yapıldı:** insert-only kapı; entegrasyon ilk kurulum eksiksizlik kontrolünü (8 tablo × 2 tenant) ekledi.
+- **Sonuç:** Arch 588, Api 5231, Integration 936, vitest 1860. Canlı: seed sonrası `tenants`/`demo.*` `updated_at` değişmedi, t0012 `not_delivered` korundu.
+- **Commit:** `d1519996`, kart `ace56fc4`.
+
+### 38. Kurul #65 — dört açık karar
+- **Karar:** (1) askıdaki tenant'a gelen çağrı `announce_hangup` (BR-AST-91); (2) BR-DB-66 yeniden çalışma; (3) migrate yeniden deneme + KRİTİK bulgu: `MaintenanceCli` bakım kilidini alamayınca 0 ile çıkıyordu (BR-OPS-08); (4) BR-SEC-19 (B) şimdi, (A) BR-DB-70 ölçümüne bağlı.
+- **Kurulda canlı ölçüm:** `has_parameter_privilege('pbxtr_owner','app.tenant_id','SET')` = f → BR-DB-66 yamasındaki `SET "app.tenant_id"` yan tümcesi canlı migrate'i düşürecekti. Snapshot yazıcısı yok; kuyruk `joinempty=no`; `ensure_future_partitions` kendi `lock_timeout=5s`'ini taşıyor.
+- **Commit:** `6baf04ac`.
+
+### 39. Entegrasyon 6 + yayın #16 (`demo-4cb4fcfa9de8`)
+- **Kartlar:** BR-QA-73/82/84, BR-AST-80/89/90, BR-BE-154/155, BR-FE-85, BR-FE-87 (metin).
+- **Olay:** entegrasyon ajanı Api parça 5'te ~4 saat takıldı (testhost 3,8 GB); süreç öldürüldü, `--blame-hang` ile yeniden koşuda takılma tekrarlamadı. Derleme 09:04'te ikiliyi yeniden ürettiği için Api 6 parça TAZE ikiliye karşı yeniden koşuldu (5262/5262). Parça 6'da tek seferlik testhost çökmesi (blame toplayıcı), blame'siz yeniden koşu 84/84.
+- **Sonuç:** Arch 595, Api 5262, Integration 948, vitest 1866. Canlı: `DECISION_UNAVAILABLE` 0, `pbxtr_app` kendi tenant satırını RLS altında görüyor. BR-DB-69 ön koşulu: `tenants` n_tup_upd yayın #16 seed'inden sonra 79→79.
+- **Commit'ler:** `e146ba6a`, `78a6882c`, `ba470ef8`, `a653bb15`, `4cb4fcfa`; kartlar `47cd5343`.
+
+### 40. Entegrasyon 7 — BR-DB-61/63 + BR-DB-66 + BR-OPS-08 + BR-AST-91
+- **Ön birleştirme (worktree, db-lider):** migration sırası 120000 → 121000 → 122000; personel sayımı tek fonksiyon (`pbxtr_tenant_dealer_staff_count`), kilit anahtarı tek fonksiyon (`pbxtr_tenant_staff_lock_key`); gerçek owner rolüyle Up→Down→Up md5 birebir.
+- **Entegrasyonda bulunan 9 kusur:** 02-guards dondurulmuş hash bayattı (626 Integration kırmızı, canlı migrate düşerdi); `CALLER-CROSS` sınıflandırıcı; `pg_stat_activity` başka rolün `wait_event`'ini göstermiyor → `pg_locks`; `text || "char"`; oracle geometrisi; `53300 too many clients` (test PG `max_connections=200`, kart BR-QA-87).
+- **Canlı ön kontrol S1–S12 (salt-okuma):** system hesabı inert, S2–S6 ihlal 0, backfill 3 rol satırı, son migration `20260914120000`.
+- **Sonuç:** Arch 605, Api 5311, Integration 967, vitest 1870, kapi_53 16/16.
+- **Yayın #17:** mesai içinde `PBXTR_MESAI_ICI_YAYIN=1` ile (kullanıcının "onay almadan en hızlı üretime" talimatı; Ş65-3.7 açık onay bayrağı).
+- **Commit:** `37276de1`, kartlar `5e3584e6`.
