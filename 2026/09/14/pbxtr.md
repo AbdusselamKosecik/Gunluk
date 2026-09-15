@@ -271,3 +271,17 @@
 - **Sonuç:** Arch 605, Api 5311, Integration 967, vitest 1870, kapi_53 16/16.
 - **Yayın #17:** mesai içinde `PBXTR_MESAI_ICI_YAYIN=1` ile (kullanıcının "onay almadan en hızlı üretime" talimatı; Ş65-3.7 açık onay bayrağı).
 - **Commit:** `37276de1`, kartlar `5e3584e6`.
+
+### 41. Yayın #17 canlıda (`demo-ea567d11bb2e`)
+- **İlk deneme kapılarda düştü (canlıya dokunmadan):** kapi_10 yorum satırlarındaki `SET "app.` desenini yakaladı → yorumlar yeniden yazıldı, 122000 blob'u `migration-contract-onay.blobs`'ta yeniden hesaplandı; `pbxtr-demo/db/00-roles.sql` bayattı → `deploy/db/00-roles.sql`'den kopyalandı. Commit `ea567d11`.
+- **Canlı doğrulama:** yeni migrate adımı "bekleyen 3 → deneme 1/3 başarılı → bekleyen 0"; `pbxtr_app` `SET dealer_id=NULL` → permission denied, `SET name=name` → UPDATE 1; `POST /tenants/t0007/status` aynı değer → 204 denetimsiz; `roles.scope` backfill; `pbxtr_user_scope_guard()` 0; log 23514/42501/55P03 0.
+- **Kapanan:** BR-DB-61/63/66, BR-OPS-08, BR-AST-91. Kartlar `8c1940c3`.
+
+### 42. Yedi paralel worktree ajanı → Entegrasyon 8
+- **Neden:** kalan maddeleri tek entegrasyon + tek yayında toplamak (worktree ajanları derleme/test koşmaz, eşzamanlı yük yasağı).
+- **Yamalar (scratchpad, `git add -N . && git diff HEAD`):** qa87 (ClearPool, max_connections 100), ops10 (`deploy/lib/pbxtr-migrate-adimi.sh`, kapi_54), db69 (`20260915123000_TenantsSeedUpdatePolicyRemoval`), fe87c (`suspension-impact` + `TenantSuspendDialog`), be157 (BE-157/158/161), db71 (`TenantAnnouncementLanguage`), be156 (çapraz kip yazma reddi).
+- **Ajan ölçümleri:** BE-157 kısmen doğru — sahip rolü 403, açık yol özel rol (`tenant.write` platforma özel değil); BE-158 doğru — adım 5c commit edilmiş DbContext'i kullanıyordu; BE-161 kartın saydığından geniş — Sınıf B `call-permission` da sayacı geri alıyordu; BE-156 — superadmin başlıklı SMTP/SMS/parola/TOTP yazımları 200 dönüyordu; DB-69 — `tenants_sys_update` seed_update'in üst kümesi, kaldırma owner yüzeyini daraltmıyor.
+- **Birleştirme:** altı yama `git apply --3way` ile çakışmasız; DB-69 ve DB-71 aynı migration zaman damgasını (123000) taşıyordu → DB-71 `20260915124000`'e yeniden adlandırıldı (Designer, TenancyConfigurations yorumu, st44 kanonik/rapor JSON). BE-156 index uyuşmazlığı yüzünden düz `git apply` ile.
+- **Ara ölçüm (ilk 6 yama):** `dotnet build pbxtr.sln` 0 uyarı/0 hata, `tsc -b` 0, vitest 208 dosya / 1884 test.
+- **Pano:** "Kod yazildi" durum eşlemesinde `backlog` çıkıyordu → "Kod bitti (…, entegrasyon 8 bekliyor)" kullanıldı (in progress). Yeni kartlar BR-DB-72 (sys_update daraltma), BR-OPS-12 (artifact yolunda mesai kapısı), BR-BE-162 (`queueMembersOnPbx` null), BR-BE-163 (edge retry çift sayım, çift SMS riski, adım 5c maliyeti), BR-AST-92 (santralde `hizmet-disi-<dil>` dosyaları yok). Kartlar `ad75a0f1`, `a10a3d30`; ClickUp fark 0.
+- **Sonraki:** Entegrasyon 8 (backend-lider, ana ağaç) → commit → yayın #18 (ortak migrate kütüphanesinin ilk gerçek kullanımı).
