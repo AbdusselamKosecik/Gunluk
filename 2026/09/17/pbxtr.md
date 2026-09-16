@@ -349,6 +349,29 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   yoktu; mutasyon yeşil kalınca iddia eklendi.)
 - **Commit:** `20d18c4a`
 
+### 14. `BR-BE-127` — `provisioning.updated` kapısı **çalışma zamanında** ölçülüyor
+
+- **Neden:** mevcut bekçi bir **site** bekçisiydi — üç uçta yayın çağrısının *var olduğunu*
+  doğruluyordu. Çağrıyı **koşullu** etkisizleştiren bir değişikliği (değişiklik kapısının
+  daima `false` dönmesi) **görmüyordu**: çağrı yeri yerinde durur, bekçi yeşil kalır, ekran
+  sessizce tazelenmez olur. Bu, *"kod var, koşan yok"* deseninin bir kat aşağısı.
+- **Ne yapıldı:** kaydeden bir `IRealtimePublisher` ikizi + üç çekimlik vaka:
+  1. **Çekim 1** (önceki gözlem yok) → kapı **bilerek** sessiz; gözlem yazılır. *(Bu bir iddia
+     değil, bir kayıt: ilk çekim bir değişiklik değil, bir tanışmadır.)*
+  2. **Çekim 2** (hiçbir şey değişmedi) → **sıfır olay**. Kartın asıl iddiası bu; **ETag
+     bilerek gönderilmiyor**, çünkü ölçülen şey 304 kısayolu değil **kapının kendisi**.
+  3. **Çekim 3** (temiz tenant'a yeni tür eklendi) → **olay var**. Pozitif kontrol olmasaydı
+     *hiçbir şey yayınlamayan* bir kod da "ikinci çekimde 0 olay" iddiasını geçerdi.
+- **Yan düzeltme (ölçüldü):** `RecordingObservations.ReadAsync` koşulsuz `null` dönüyordu — o
+  hâlde kapının B kolu **hiç ölçülemezdi** (önceki gözlem hep yok → kapı hep kapalı). İkiz
+  artık üretimdeki Redis gibi **yazdığını geri okuyor** ve hâlâ hiçbir **karar** vermiyor.
+- **Sonuç / doğrulama:** **mutasyon 2/2** — kapı daima `false` → kırmızı (site bekçisi bunu
+  görmez); kapı daima `true` (koşulsuz yayın) → kırmızı. Kontrol **5/5**, `dotnet format` temiz.
+- **Tuzak yine ısırdı:** ilk mutasyon `if (1 == 1) return false;` idi, **CS0162 ile derlenmedi**
+  ve `--no-build` koşusu eski ikiliye giderek **yeşil** dedi. Derleme çıktısı sayılmadan
+  mutasyon sonucu okunmaz.
+- **Commit:** `554de240`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -362,6 +385,8 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
 - **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
   konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
+- **Bir çağrı yerinin varlığı, çalıştığının kanıtı değildir.** Site bekçisi ucuzdur ve
+  gereklidir, ama koşullu bir susturmayı yalnızca çalışma zamanı ölçümü yakalar.
 - **Bir "temizledim" iddiası, temizliğin dışından ölçülmeli.** Aynı transaction'dan
   okunan sayım, kendi yazdığını görür ve hiçbir şey kanıtlamaz.
 - **Bir bekçinin mesajı, bekçinin yarısıdır.** Ne yapılacağını söylemeyen kırmızı,
