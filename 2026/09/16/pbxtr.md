@@ -515,3 +515,53 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   çağrıda süfle verilir, müşteri süpervizörü duymaz) — gerçek santralde koşar; bu oturumda
   canlı erişim **salt-okunur**. Bacak doğuş sırası hâlâ **AMI telinde doğrulanmadı**;
   `BR-AST-60` originate ölçümüyle **aynı koşuda** doğrulanmalıdır.
+
+## Yapılanlar (altıncı tur)
+
+### 19. `BR-AST-67` — çağrı yönü üretiliyor, **okunuyor** ve eşleşiyor
+
+- **Neden:** kusur üç katlıydı — (1) `__PBXTR_DIR` yalnızca `[pbxtr-{t}-local]` bağlamında
+  yazılıyordu, (2) onu **okuyan hiçbir satır yoktu** (`PBXTR_DIR` → `Telephony/` altında 0
+  isabet), (3) bağlansa bile dialplan `int` yazarken sözlük `"internal"` bekliyordu.
+- **Vakum kapısı önce koştu (canlı, salt-okunur, `postgres` rolü — sebep: yön dağılımı
+  sayımı):** `call_events`'te **7798 satırın sıfırı** `direction` taşıyor; gerçek AMI biçimli
+  `linkedid` (`<epoch>.<n>`) taşıyan **99 `cdr` satırının tamamı `Inbound`**.
+  **Kartın iddiası bir yerde fazlaydı:** tabloda 140 `Outbound` satır var ama **hiçbiri
+  santralden gelmiyor** (`cdr-…` 138, `bloc…` 2 = tohum/demo). Yani *"her çağrı Inbound
+  yazılıyor"* gerçek yol için doğru, tablo geneli için değil.
+- **Ne yapıldı:**
+  - Yön **her giriş bağlamında** damgalanır: `-in`→`in`, `-out`→`out`, `-int`→`int`,
+    `[pbxtr-dialer]`→`out`.
+  - `AmiEventMapper` `PBXTR_DIR`'i okur; `PBXTR_ORIGIN` ile aynı sözleşme (başlık yoksa olay
+    düşmez, küme dışı değer yazılmaz). `direction` **`SharedOriginKeys`e eklendi** — yoksa
+    `Newchannel` dışındaki her olayda alan `Sanitize`'de sessizce düşerdi.
+  - Yeni `CallDirectionTokens`: jeton ↔ `CallDirection` eşlemesi **tek yerde**, ve
+    `ConfigRenderer` jetonu **oradan** yazıyor → iki kopyanın ayrışması yapısal olarak
+    imkânsız.
+  - Ölçülemedi artık **`Unknown`** (enum değeri zaten vardı, kullanılmıyordu).
+  - Geçmiş veri: `20260916200000_CallDirectionUnmeasured` yalnızca **santral biçimli**
+    `linkedid` taşıyan `Inbound` satırları `Unknown`'a çevirir; tohum/demo dokunulmaz.
+    `Down()` **bilerek boş** — silinen şey bir değer değil, bir **uydurma**.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/CallDirectionTokens.cs` (yeni),
+  `ConfigRenderer.cs`, `AmiEventMapper.cs`, `TelephonyEventPipeline.cs`, yeni migration,
+  `CallDirectionStampTests.cs` (yeni), `AmiEventMappingTests.cs`, `TelephonyEventPipelineTests.cs`
+- **Sonuç / doğrulama:** `CallDirectionStampTests` 14, `AmiEventMappingTests` 42/42,
+  entegrasyon 14/14, Api.Tests `Telephony|Provisioning` **1235/1235**, Architecture 615/615,
+  `dotnet format` temiz. **Mutasyon 4/4 kırmızı** (M1 damga yok, M2 okuma yok, M3 ölçülemedi
+  yine `Inbound`, M4 göç deseni her şeyi kapsıyor); dördü de geri alındı.
+- **Commit:** `aae34f73`
+
+## Kararlar (altıncı tur)
+
+- **Bir jetonu üreten ve tüketen taraf aynı tipten okumalı.** İki kopya "aynı kümeyi sayıyor"
+  diye bırakılırsa, ayrıştıkları gün hata **sessizdir**: kanal değişkeni okunmaya başlasa bile
+  dahili çağrı `Internal` olmayacaktı.
+- **Göç, kasıtlı veriyi düzeltmeye kalkmaz.** Daraltma `linkedid` biçiminden okunur; tohum/demo
+  satırlarının yönü ölçülmemiş bir alan değil, **bilerek yazılmış** veridir.
+- **Desen teste kopyalanmaz.** Göç dosyasından okunur ve **PostgreSQL'in kendi regex motorunda**
+  koşar; C#'ta taklit etmek başka bir motoru ölçmek olurdu.
+
+## Açık kalanlar (altıncı tur)
+
+- Gerçek santralde bir çağrının `PBXTR_DIR`'i **fiilen taşıyıp taşımadığı telde doğrulanmadı** —
+  dialplan yeniden üretilip teslim edilmeli; `BR-AST-60` / `BR-OPS-09` koşusunda doğrulanır.
