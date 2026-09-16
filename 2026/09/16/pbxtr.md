@@ -630,3 +630,30 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   yazdırmaz.
 - **Ölçülemedi ile sıfır aynı piksele düşmez** — bu turda üçüncü kez: sayım ucu patlarsa
   kart sıfır yazmaz, "ölçülemedi" der ve kart düşmez.
+
+### 22. `BR-FE-78` — 403 eksik yetkiyi **adıyla** söylüyor
+
+- **Neden:** kullanıcı 403 görüyor ama hangi yetkinin eksik olduğunu öğrenemiyordu; destek
+  çağrısı *"giremiyorum"* diye geliyor ve yönetici hangi satırı açacağını bilemiyordu.
+  Sunucu veriyi zaten üretiyordu (`ScreenRegistry.MissingPermissions`) — eksik olan yalnızca
+  ön yüzdeki kullanımdı.
+- **Kartın dar şartı ölçülerek genişletildi:** kart *"ad yalnızca temel `permission` zaten
+  varsa yazılır, yoksa keşif yüzeyi olur"* diyordu. Ölçüm: `HIDDEN_SCREENS` **beş aktif
+  satır** ve rota + yetki adıyla **SPA paketine derleniyor** (yani kullanıcının elinde
+  zaten var); ayrıca yalnızca ikisinde `permissionsAll` dolu. Dar şart en sık hâlde mesajı
+  hiç göstermezdi — `sys-audit-purge`'de eksik olan şey **temel yetkinin kendisidir**.
+- **Korunan yarı:** yol bilinen bir satıra eşleşmiyorsa hiçbir ad yazılmaz; orada ad yazmak
+  onu **uydurmak** olurdu.
+- **Dokunulan dosyalar:** `registry.ts` (+test), `ForbiddenScreen.tsx` (+yeni test),
+  `AppRoutes.tsx`, 9 dil
+- **Sonuç / doğrulama:** SPA tam takım **1921/1921** (212 dosya), `tsc -b` temiz.
+  **Mutasyon 2/2 kırmızı.** `viMockTargets` bekçisi testimdeki **ölü bir `vi.mock`**
+  ezmesini yakaladı (ekran o modülü ithal etmiyordu) — ezme silindi.
+- **Commit:** `d31b96f8`
+
+## Kararlar (sekizinci tur)
+
+- **Bir "güvenlik" şartı, koruduğu şey ölçülmeden uygulanmaz.** Gizlenen ad zaten istemci
+  paketindeydi; şart uygulansaydı kartın şikâyet ettiği destek çağrısı aynen kalırdı.
+- **Test kendi ezdiği şeyi ölçmeli.** Ölü `vi.mock` bekçisi, ölçmediğim bir bağımlılığı
+  ezdiğimi gösterdi — testin ne ölçtüğü hakkında yanlış bir izlenim bırakıyordu.
