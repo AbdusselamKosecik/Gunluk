@@ -100,6 +100,30 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kaldı. Üçü de geri alındı, kontrol yeşil (`rc=0`).
 - **Commit:** `58ba5c7f`
 
+### 4. `BR-QA-64` — ortak graf üç kapıyı **tek kapıya indirmedi** (ölçüldü)
+
+- **Kartın kalıcı işi zaten inmişti:** ithal grafiği `BR-QA-70` ile bir kez kurulup
+  paylaşılıyor (`mockGraph.ts` içinde `memoBySource` / `GRAPH_CACHE` / `RESOLVE_CACHE`),
+  geçici `120_000 ms` muafiyeti geri alınmış. **Bugün ölçüldü:** en ağır kapı testi
+  **297 ms**, dosya toplamı **< 1 sn** — kart "20 sn eşiğinin %95'i" diyordu.
+- **Kalan iş kartın kendi vacuity uyarısıydı:** *"ortak graf, üç kapıyı sessizce tek kapıya
+  indirmenin en kolay yoludur"* — ve bu çöküş **görünmez** olurdu, üç yeşil satır aynen
+  kalırdı.
+- **Ne yapıldı:** yeni test ayrımı **ölçüyor**. Aynı dosyaya iki mutasyon uygulanır ve her
+  seferinde **yalnızca bir** kural kırmızı olur: ölü ezilen isim → yalnız `deadOverrides`;
+  `...actual` yayılımının silinmesi → yalnız `unspreadGaps`. Üçüncü kural (`arityGaps`) için
+  iddia **"sıfır" değil "DEĞİŞMEDİ"**: o dosyada dondurulmuş iki bilinen daralma var ve
+  cebren sıfır yazmak testi kırmızı doğar bir hâle sokardı.
+- **Dokunulan dosyalar:** `src/test/viMockTargets.test.ts`, `yonetim/backlog.md`
+- **Sonuç / doğrulama:** testin kendisi **mutasyonla** doğrulandı — birinci kural
+  susturulunca **2 kırmızı**; ikinci kural birincinin cevabını döndürünce (çökme senaryosu)
+  **3 kırmızı**; kontrol yeşil. Tam takım **1937/1937**, `tsc -b` temiz.
+- **İki tuzak bu turda ısırdı ve ikisi de ölçümle bulundu:** (1) düz dize ile satır eşleme
+  CRLF'te **sessizce hiçbir şey değiştirmedi** → mutasyon uygulanmamış olduğu hâlde test
+  kırmızı verdi (regex'e çevrildi, emsal aynı dosyadaki eski test); (2) girinti tahmini
+  (4 boşluk) tuttu sanıldı, gerçekte 2'ydi.
+- **Commit:** `c5475d58`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -113,6 +137,8 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
 - **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
   konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
+- **Paylaşılan bir önbellek, bekçilerin en sessiz düşmanıdır.** Hız kazancı alınır ama
+  "üç ayrı soru" iddiası ölçülmezse kapılar tek kapıya çökebilir ve bunu kimse görmez.
 - **Parite bekçisinin yönü tutucudur.** Kaçan ölü satır riski alınır, yanlış alarm
   alınmaz — çünkü yanlış alarm veren bir kapı kaçınılmaz olarak silinir.
 
