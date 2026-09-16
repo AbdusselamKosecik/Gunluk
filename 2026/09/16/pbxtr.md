@@ -305,6 +305,34 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   Integration `PlatformRollupJobDbTests` **2/2**, vitest **1899/1899**, format temiz.
 - **Commit:** `91ed1da5`
 
+### 14. BR-QA-69 — cross-tenant turda eşzamanlı izolasyon + maskeleme telde (`564e531a`)
+
+- **(a)** `Eszamanli_iki_tur_tenant_sinirini_KORUR`: iki tur `Task.WhenAll` ile **aynı
+  anda**. Mevcut test aynı sınırı **sıralı** ölçüyordu; defterdeki kural açık —
+  *"tek aktörlü test yarış deliğini görmez"*. Risk artık **hipotetik değil**: `BR-OPS-04`
+  ile cross-tenant turun içine **üçüncü bir yüzey** (bildirim kuyruğu) eklendi. Test üçünü
+  birden ölçer: kalıcı yazım, WS odası, bildirim isteği.
+  **Mutasyon (kartın açıkça istediği):** `tenantScope` yayından **önce** kapatılınca iki
+  test de kırmızı. Yayın commit'ten sonra olduğu için DB yazımı etkilenmez — mutasyon
+  **yalnız yayını** hedefler, "her şeyi kırdım" değil.
+- **(b)** `Aktif_alarm_yanitinin_HICBIR_alani_DID_numarasini_tasimaz`: gerçek E.164,
+  **gövdenin tamamı** rakam dizisi olarak taranır (ayraçlı yazım da aynı diziyi taşır).
+  Üç ön koşul testin **içinde**: DID gerçekten o numarayla duruyor; etiketi numarayı
+  **gerçekten** taşıyor; ve **kontrol grubu** olarak aynı tenant'ın kuyruk alarmı yanıtta
+  **görünüyor** (tarama boş gövde üzerinde değil).
+- **Beklenmedik bulgu — mutasyon sınırı çizdi.** Yalnız salım kapısı kaldırılınca test
+  **YEŞİL** kaldı: DID satırı uca çıktı ama `SilenceAlarmLabel` numarayı **tek başına**
+  sildi. Kapı **ve** maske birlikte kaldırılınca **KIRMIZI**. Yani yüzeyde **iki bağımsız
+  savunma** var ve **her biri tek başına yetiyor**; bu bir *derinlemesine savunma* testidir,
+  katman testi değil. Sınır testin belgesine **yazıldı** — yoksa bir gün maske kaldırılıp
+  *"test yeşil, sorun yok"* denirdi. (İlk mutasyonun yeşil kalması defterdeki
+  *"mutasyon yeşilse fikstürü sorgula"* maddesinin tam karşılığı: bu kez sebep fikstür
+  değil, **ikinci bir savunma katmanıydı**.)
+- **Ölçüm kaybı notu:** ilk koşu `Test host process crashed` ile düştü ve sarmalayıcı yine
+  de `exit 0` döndü (`BR-QA-26`'nin konusu). `--blame-crash` ile ikinci koşu 4/4 yeşil —
+  çökme bu testten değil.
+- **Sonuç:** Integration `~Silence` **25/25**, format temiz. **Commit:** `564e531a`
+
 ## Kararlar (üçüncü tur)
 
 - Bir kuyruğa **kimlik** bırakılıyorsa, o kimliğin **hangi tabloya** ait olduğu da
