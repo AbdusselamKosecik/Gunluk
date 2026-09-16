@@ -184,3 +184,111 @@ Dosya zaman damgaları 14:54–15:07Z aralığında kümelenmişti, hiçbir `dot
   değil) — başlık+durum birlikte okunarak düzeltildi.
 - Sıradaki yerel kartlar: `BR-FE-79` (eşik yüzeyi + üç değerli görünüm + aria-live),
   `BR-OPS-04` (bildirim bacağı — teslim kanıtı staging gerektirir, kod yarısı yapılabilir).
+
+---
+
+## Üçüncü tur
+
+### 10. BR-FE-79 — sessizlik eşiği yüzeyi `#14` içinden (`5aa13f81`, `bf645efb`)
+
+- **Neden:** ürün eşik **seed etmiyor** (bilinçli). Opt-in bir özelliğin opt-in yüzeyi
+  yoksa özellik **sonsuza kadar kapalıdır** — ve ölçüldü: hiçbir tenant'ta tek bir kural
+  yoktu, iş `LogDebug` seviyesinde *"ölçecek bir şey yok"* basıyordu.
+- **Ne yapıldı:** `SilenceThresholdPanel.tsx` (yeni) `#14`'ün içine indi: liste + ekle/
+  düzenle/sil, `enabledCount === 0` **warn** tonuyla *"Hiçbir hedef izlenmiyor — sessizlik
+  alarmı KURULU DEĞİL"*, ölçüm **üç değerli** (`null` = ölçülemedi, `0` = gerçek sıfır),
+  sınır/tür/şiddet kümeleri **sunucudan**. Alarm satırına yapılandırılmış hedef
+  (`alarmTargetText`), `aria-live="polite"`, kararlı ikincil sıralama.
+- **Yakalanan kendi kusurum:** `5aa13f81` bir typecheck hatası taşıyordu — yeni testler
+  `AlarmRuleListResponse` için `{ items: [] }` veriyordu (`metrics`/`severities` eksik).
+  vitest geçiyordu, `npm run typecheck` kırmızıydı (6 yer). Ders defterdeki
+  `tsc --noEmit yayın kapısı değil` maddesinin tersi: **vitest de kapı değildir**.
+- **Borç kaydı:** `doc/prototip-urun-farklari.md` → *"#14 alarm satırında yapılandırılmış
+  hedef — prototipte YOK, üründe VAR (BORÇ)"*.
+
+### 11. BR-OPS-04 — bildirim bacağı (`3abb21d7`) — **kod yarısı; kart AÇIK kalıyor**
+
+- **Neden:** Karar #47 / Ş47-13, *"kimseyi uyandırmayan alarm alarm değildir."* Ölçülen
+  hâl: `SilenceSamplerJob` yükselen kenarda yalnızca `LogWarning` ediyordu.
+- **Kartta yazılı olmayan tıkaç — işi tek başına vacuous bırakacaktı:**
+  `AlarmNotificationDrainService` susturma penceresini
+  `IAlarmNotificationGate.TryClaimAsync(ruleId, …)` ile **yalnızca `alarm_rules`**
+  üzerinde kapatıyordu. Sessizlik kuralının kimliği `silence_thresholds.id`'dir ve o
+  tabloda **hiçbir zaman bulunmaz** → naif bir `TryEnqueue`, isteği drenajda *"kural
+  yok/kapalı"* diye **sessizce düşürürdü**: kuyruk dolu, gönderim sıfır, günlükte hiçbir
+  arıza yok. Yani "bildirim bacağı kuruldu" denip **hiçbir şey göndermeyebilirdi**.
+- **Ne yapıldı:**
+  - `AlarmNotificationRequest` **`Source`** taşıyor — **varsayılanı YOK** (zorunlu konum
+    parametresi), böylece yeni bir çağıran onu *unutamaz*; kapı isteğin **tamamını** alıyor
+    ve `AlarmRule` yerine nötr bir `AlarmNotificationClaim(NotifyChannel, NotifyEmail)`
+    dönüyor. Drenaj **tek yol** kaldı.
+  - `silence_thresholds` üç kolon kazandı (`notify_channel`/`notify_email`/
+    `notify_muted_until`) — göç `20260916163502_SilenceThresholdNotifyChannel`.
+    Susturma penceresi `silence_observations`'a **yazılmadı**: gözlem satırı her turda
+    yeniden yazılır, pencere ise operatörün kurduğu kuralın özelliğidir.
+  - **`email_off_hours` fiilen `400`** → `BR-OPS-01`'in şartı **vacuous olmaktan çıktı**
+    (bugüne kadar sessizlik tarafında **hiç kanal kolonu yoktu**, yani reddedilecek bir şey
+    de yoktu). Gerekçe çeviri değil **ölçülmüş bir çelişki**: sessizlik **AÇIK DAKİKA**
+    sayar (takvim kapalıyken sayaç ilerlemez) → alarm yalnızca çalışma saati **İÇİNDE**
+    yanabilir; o kanal ise yalnızca **DIŞINDA** gönderir. Kesişim **boş kümedir**.
+  - Yasak **üç yerde** durur: `AlarmNotifyChannels.SilenceAllowed`, uç doğrulaması
+    (400 + gerekçe **yanıtın içinde**), `ck_silence_thresholds_notify_channel`.
+  - Mail ön koşulu (`mail_settings` = 0 satır) liste ucunda `mailConfigured` olarak
+    **üç değerli** döner ve panelde uyarı olur — ama **kural yazımını engellemez**: ayar
+    sistem genelindedir, alarm kuralını yazan kişi onu düzeltemez ve yarın girilebilir.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Live/AlarmNotification.cs`,
+  `…/Silence/SilenceThresholdRule.cs`, `…/ISilenceThresholdAdministration.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfAlarmRuleAdministration.cs`,
+  `…/EfSilenceThresholdAdministration.cs`, `…/Configurations/SilenceConfigurations.cs`,
+  `…/BackgroundJobs/SilenceSamplerJob.cs`, `…/Pipeline/TelephonyEventPipeline.cs`,
+  `src/Pbxtr.Api/Modules/Realtime/SilenceThresholdEndpoints.cs`,
+  `src/Pbxtr.Api/Platform/Realtime/AlarmNotificationDrainService.cs`,
+  `src/Pbxtr.Web/src/app/screens/live/SilenceThresholdPanel.tsx`, `…/api/opsContracts.ts`,
+  9 dil dosyası, 4 test dosyası.
+- **Komutlar:**
+  ```bash
+  dotnet ef migrations add SilenceThresholdNotifyChannel \
+    --project src/Pbxtr.Infrastructure --startup-project src/Pbxtr.Infrastructure \
+    --context PbxtrDbContext
+  dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~SilenceThresholdEndpointTests"
+  dotnet test tests/Pbxtr.Integration.Tests --filter "FullyQualifiedName~SilenceSamplerJobTests"
+  dotnet test tests/Pbxtr.Architecture.Tests
+  npx vitest run && npm run typecheck
+  dotnet format Pbxtr.sln --verify-no-changes --no-restore
+  ```
+- **Sonuç / doğrulama:** Api.Tests **27/27**, Architecture.Tests **615/615** (önce 611 —
+  4 yeni sözleşme testi), Integration `SilenceSamplerJobTests` **15/15** (`Skipped: 0`,
+  docker gerçekten ayakta — `docker ps` ile teyit edildi, `RequiresDockerFact` atlamadı),
+  vitest **1899/1899**, typecheck rc=0, `dotnet format` temiz.
+- **İki mutasyon kontrolü:**
+  1. `ck_silence_thresholds_notify_channel` kısıtına `email_off_hours` eklendi →
+     sözleşme testi **kırmızı** (4'ten 1'i); geri alındı.
+  2. Örnekleyicide kanal `none`'a sabitlendi (derlenen değişiklik) → pozitif test
+     **kırmızı**, kontrol grubu **yeşil**. Beklenen asimetri.
+- **Commit:** `3abb21d7`
+
+### 12. Format kapısı — kendi eski dosyalarım
+
+`dotnet format --verify-no-changes` **7 dosyada** CHARSET/IMPORTS hatası verdi; hepsi bu
+günün **önceki turlarına** aitti (python ile yazılan dosyalara ASCII dışı içerik girince
+BOM gerekiyor). Bu turda kapatıldı — bırakılsaydı `yerel-yayin.sh` sessizce kırmızıya
+dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
+
+## Kararlar (üçüncü tur)
+
+- Bir kuyruğa **kimlik** bırakılıyorsa, o kimliğin **hangi tabloya** ait olduğu da
+  bırakılmalıdır ve bu alanın **varsayılanı olmamalıdır**. Varsayılanı olan bir kaynak
+  alanı, yeni bir çağıranın bacağı sessizce kesmesine izin verir.
+- Bir kısıt üç yerde yazılıysa (kod listesi, uç, DB CHECK), **üçünün aynı kümeyi
+  saydığını ölçen bir test** şarttır; yoksa biri değişince diğerleri sessizce eskir ve
+  sonuç ya `500` ya "hiç göndermeyen kural" olur.
+- Teslim kanıtı üretilemiyorsa **yerine bir şey konmaz, daha dar bir iddia yazılır** ve
+  kartta hangi kanıtın eksik olduğu açıkça durur.
+
+## Açık kalanlar (üçüncü tur)
+
+- `BR-OPS-04` **açık**: staging'de gerçek bir sessizlik alarmının `#14`'te görünmesi ve
+  `mail_settings`'in doldurulması gerekiyor (SPF relay'i kapsamıyor, DKIM selector
+  bilinmiyor). Üçü de **sunucu işi**; canlı erişim bu oturumda **salt-okunur**.
+- `#37`'de `enabledCount = 0` olan tenant sayısı hâlâ yok (adet `#14` içinde görünüyor,
+  `#37` toplamı görmüyor).
