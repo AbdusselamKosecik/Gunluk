@@ -124,6 +124,28 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   (4 boşluk) tuttu sanıldı, gerçekte 2'ydi.
 - **Commit:** `c5475d58`
 
+### 5. `BR-DOC-16` — sessizlik alarmının iki **bilinçli** asimetrisi yazıldı
+
+- **Neden:** Karar #47 iki asimetriyi bilinçli kabul edip `doc/prototip-urun-farklari.md`'ye
+  yazılmasını istemişti (ADR-016 **AÇIK-7**); dosyada sessizlik alarmına ait **tek satır
+  yoktu**. Orada yazılı olmayan bir sapma "unutulmuş"tur.
+- **Ne yazıldı:** (i) takvim **kural başına seçilemez** — yalnız `did` kendi profilini
+  (`dids.working_hour_profile_id`), **kuyruk ve zil grubu tenant varsayılanını** kullanır
+  (`SilenceSamplerJob.cs:457-470`); (ii) `silence_*` tablolarında **bayi kapsamı yok**, RLS
+  yalnız `_tenant_isolation` taşır → bayi kullanıcısı `#14`'te sessizlik alarmlarını görmez.
+- **Kayıtlar ADR'nin cümlesini tekrar etmiyor, gerekçeyi taşıyor:** kuyruğun kendi çalışma
+  saati kavramı **üründe yoktur** (kolon açmak, karşılığı olmayan bir ayar eklemek olurdu);
+  bayi dalı bir **okuma genişlemesidir** ve ayrı bir yetki kararı ister (§4 `dealers` notu:
+  izolasyon bayide ilişki üzerinden kurulur).
+- **Ayrıca kayda geçen ayrım:** *"varsayılan takvim"* ≠ *"takvimi uydurmak"* — snapshot yoksa
+  ya da saat dilimi çözülemezse ölçüm `null` olur, sessizce UTC'ye düşülmez (`:472-490`).
+- **Dokunulan dosyalar:** `doc/prototip-urun-farklari.md`,
+  `doc/mimari/ADR-016-kuyruk-sessizligi-alarmi.md` (AÇIK-7'ye **KAPANDI** notu),
+  `yonetim/backlog.md`
+- **Sonuç / doğrulama:** vacuity kapısı yok (belge işi). Durum **iki yerde tutulmuyor**: ADR
+  geri işaret ediyor, içerik tek dosyada.
+- **Commit:** `59c6b482`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
