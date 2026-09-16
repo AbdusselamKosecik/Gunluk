@@ -274,6 +274,37 @@ günün **önceki turlarına** aitti (python ile yazılan dosyalara ASCII dış�
 BOM gerekiyor). Bu turda kapatıldı — bırakılsaydı `yerel-yayin.sh` sessizce kırmızıya
 dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
 
+### 13. BR-OPS-04 (e) — opt-in bedelinin adedi `#37`'de (`91ed1da5`)
+
+- **Neden:** tenant kendi adedini `#14`'te görüyordu; *"kaç müşterimiz bu alarmı hiç
+  kurmamış"* sorusunu **hiçbir yüzey** cevaplamıyordu.
+- **Ne yapıldı:** `silence-alarm-coverage` sağlık satırı. Sayım `PlatformRollupJob`'ta
+  (`app.cross_tenant='on'` + denetim satırı) üretilir, yoklama yalnızca **taşır** — her
+  sağlık isteğinde üretilseydi 30 saniyede bir çapraz-tenant okuma denetim günlüğünü
+  kullanılamaz hâle getirirdi (`provisioning-pull` ile birebir aynı gerekçe, o satırın
+  belgesinde zaten yazılı olan karar).
+- **Satır hiçbir zaman KIRMIZI olmaz.** Kural açmamış tenant bir **arıza değil tercihtir**;
+  kırmızı yapmak bir ürün kararını kesinti gibi raporlar ve gerçek kesintilerin arasında
+  kaybederdi. `Ok` + `Warning` (Ş35-22'nin dar yüklemi: *ölçüldü, çalışıyor, sayısal eşiği
+  aştı*) ve detay **hem eşiği hem miktarı** yazar. `null` (rollup koşmadı) `0`'a
+  **düşürülmez**.
+- **Asıl incelik `enabled`:** kural satırı VAR ama hepsi kapalı olan tenant da *"kurulu
+  değil"*dir — örnekleyici pasif kuralı hiç ölçmez. `EXISTS(… FROM silence_thresholds)`
+  yazılsaydı o tenant KURULU sayılır ve eksiklik sessizce kaybolurdu. Entegrasyon testi
+  bunu üç adımda ölçer (**fark ölçülür, mutlak sayı değil**: paylaşılan fikstürde tenant
+  sayısı bu testin denetleyebileceği bir şey değil) ve **mutasyonla doğrulandı** —
+  `AND s.enabled` kaldırılınca kırmızı.
+- **Kapı kendi kusurumu yakaladı:** bileşeni `HealthComponents.All`'a eklemeyi unuttum;
+  `HealthComponentInventoryTests` kırmızı yandı. Listeyi gezen her tüketici o satırı
+  **sessizce atlayacaktı** — `BR-SYS-71`'deki `sysagent` kaçağının birebir tekrarı. Bu,
+  o kapının tam olarak var olma sebebi.
+- **Dokunulan dosyalar:** `ISystemHealthProbe.cs`, `IPlatformCounters.cs`,
+  `PlatformRollupJob.cs`, `SystemHealthProbe.cs`, `platformApi.ts`, 9 dil dosyası,
+  `SilenceCoverageHealthTests.cs` (yeni), `PlatformRollupJobDbTests.cs`.
+- **Sonuç:** Architecture.Tests **615/615**, Api.Tests SystemAdmin **454/454**,
+  Integration `PlatformRollupJobDbTests` **2/2**, vitest **1899/1899**, format temiz.
+- **Commit:** `91ed1da5`
+
 ## Kararlar (üçüncü tur)
 
 - Bir kuyruğa **kimlik** bırakılıyorsa, o kimliğin **hangi tabloya** ait olduğu da
@@ -290,5 +321,4 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
 - `BR-OPS-04` **açık**: staging'de gerçek bir sessizlik alarmının `#14`'te görünmesi ve
   `mail_settings`'in doldurulması gerekiyor (SPF relay'i kapsamıyor, DKIM selector
   bilinmiyor). Üçü de **sunucu işi**; canlı erişim bu oturumda **salt-okunur**.
-- `#37`'de `enabledCount = 0` olan tenant sayısı hâlâ yok (adet `#14` içinde görünüyor,
-  `#37` toplamı görmüyor).
+- ~~`#37`'de `enabledCount = 0` olan tenant sayısı~~ → **kapandı** (madde 13).
