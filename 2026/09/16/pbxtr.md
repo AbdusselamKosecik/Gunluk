@@ -363,6 +363,35 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
 - **Sonuç:** 4/4 yeşil (`Skipped: 0`), format temiz. Üç mutasyonun üçü de yakalandı.
   **Commit:** `93e0af89`
 
+### 16. BR-QA-15 — node-bundle yolunda iki GUC **adıyla** (`26435b92`)
+
+- **Kart daraltılmıştı:** *"hiç koşmadı"* önculü 2026-09-07'de çürümüştü; kalan iş,
+  `app.cross_tenant` ve `app.tenant_id` varsayımlarını **GUC adıyla** iddia etmekti.
+  Dolaylı ölçüm (*"iki tenant da paketini aldı"*) GUC'lar hiç yazılmasa da aynı çıkardı.
+- **İki tasarım denedim, ikisi de ölçümle çürüdü — ve testin ilk satırı ikisini de
+  yakaladı:**
+  1. `DbCommandInterceptor` ile `TenantSessionWriter.CommandText`'i yakalamak: yazıcı GUC
+     komutunu **ham bağlantı üzerinde kendisi** oluşturuyor (`connection.CreateCommand()`),
+     yani EF'in komut interceptor'undan **hiç geçmiyor**.
+  2. Dinleyiciyi DI'ya `IInterceptor` olarak kaydetmek: bu bileşimde **hiç çağrılmadı** —
+     `AddDbContext` interceptor listesini **açıkça** veriyor ve DI'daki kayıtlar
+     keşfedilmiyor.
+  **İki hâlde de dinleyici sessizce boş kalır ve test "GUC yazılmış" diye GEÇERDİ.**
+  Testin ilk satırı olan *"hiç yakalanmadı"* iddiası tam olarak bunun için vardı ve iki
+  kez kırmızı yanarak beni durdurdu. Bu, defterdeki *"kapı kurmadan önce mevcut veriyi
+  ölç"* maddesinin tersten çalışan hâli: **önce ölçüm aletinin kendisini ölç**.
+- **Bugünkü sekme üretim portudur** (`IUnitOfWork` dekoratörü): transaction açıldıktan
+  **sonra** — yani `TenantSessionInterceptor` GUC'ları yazdıktan sonra — **aynı transaction
+  içinde** `current_setting(...)` okunur. Bu, *"yazıcı şu komutu koştu"*dan **daha güçlü**
+  bir iddiadır: **ucun gerçek sorguları o değerleri görüyor**, ve RLS'in okuduğu şey de tam
+  olarak budur. Üretim interceptor zinciri **değiştirilmedi**.
+- **Kontrol grubu:** başka düğüme pinli tenant C'nin kimliği **hiç** yazılmaz — *"her
+  tenant yazılıyor"* diyen bir uygulama ilk iki iddiayı geçerdi.
+- **Mutasyon — ada bağlılık ispatlandı:** `app.cross_tenant` → `app.cross_tenant_x`
+  kırmızı; `app.tenant_id` → `app.tenant_id_x` kırmızı.
+- **Sonuç:** `~ProvisioningNodeBundleHttpTests` **7/7**, `~Provisioning` **64/64**, format
+  temiz. **Commit:** `26435b92`
+
 ## Kararlar (üçüncü tur)
 
 - Bir kuyruğa **kimlik** bırakılıyorsa, o kimliğin **hangi tabloya** ait olduğu da
