@@ -75,6 +75,31 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kontrol yeşil. Tam takım **1936/1936 yeşil**, `tsc -b` temiz.
 - **Commit:** `2720648d`
 
+### 3. `BR-QA-54` — Türkçe regex sınırı tarayıcısı artık **bir kapı**
+
+- **Neden:** JS'te `\b` sınırı yalnız `[A-Za-z0-9_]` üzerinden tanımlıdır; Türkçe harfle
+  biten bir sözcüğün sonunda sınır **üretilmez** ve kalıp **hiç eşleşmez**. Arıza sessizdir —
+  çıktı `0` olur, yani kusur bir hata gibi değil **temiz bir sonuç** gibi görünür. Tarayıcı
+  2026-09-10'da yazılmıştı ama **hiçbir kapıya bağlı değildi**: koşmayan kapı bulgu değildir.
+- **Ne yapıldı:** `deploy/yerel-kapilar.sh` → yeni **`kapi_56`**. Araç önce **her zaman 0 ile
+  çıkıyordu**; artık bulguda 1 döner ve içinde üç ölçüm taşır: **vacuity eşiği** (dosya ≥ 400,
+  kalıp ≥ 1000 — bugün 621/1779), **POZİTİF** kontrol (Türkçe harfe bitişik sınır
+  yakalanmalı) ve **NEGATİF** kontrol (ASCII sınır işaretlenmemeli). Kapı bu üç satırı **ayrı
+  ayrı** okur; `RISKLI: 0` satırına tek başına güvenmez. Aracın bilinen sınırı (regex
+  literallerini kaba bir kalıpla ayıklar, `new RegExp(değişken)` görmez) kapı metnine yazıldı.
+- **Kartın diğer iki kalemi ölçüldü ve ZATEN BAĞLIYDI** — kart bayattı:
+  `kart-atif-dogrula.js` **`kapi_43`** içinde koşuyor; `dotnet format --verify-no-changes`
+  **`deploy/yerel-yayin.sh:292`**'de, backend adımının içinde.
+- **Format kapısı bilerek TAŞINMADI:** kapı konteyneri `ubuntu:24.04` ve .NET SDK yok —
+  taşınsaydı her koşuda *"ölçemedi"* derdi, yani çalışan bir kapıyı **işlevsiz** yapardı.
+- **Dokunulan dosyalar:** `deploy/yerel-kapilar.sh`, `yonetim/arac/regex-turkce-sinir-tara.js`,
+  `yonetim/backlog.md`
+- **Sonuç / doğrulama:** **mutasyon 3/3 kırmızı** — (1) gerçek bir dosyaya tuzak kalıp
+  konuldu → kapı kırmızı, aday listesi basıldı; (2) bitişiklik şartı kaldırıldı (gürültülü
+  tarayıcı) → **NEGATİF kontrol** kaldı; (3) eşik çökmüş tarama gibi ayarlandı → **VACUITY**
+  kaldı. Üçü de geri alındı, kontrol yeşil (`rc=0`).
+- **Commit:** `58ba5c7f`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -84,6 +109,10 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Yanlış yerde duran doğru sayı, yanlış sayıdır.** Tenant geneli rakam satıra
   konduğunda okuyan kişi onu satırın konusu sanıyor; çözüm rakamı silmek değil, ait
   olduğu seviyede bırakmaktır.
+- **Bir aracın "yazılmış" olması ölçüm değildir.** Üç kalemden ikisi zaten bağlıydı ve
+  kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
+- **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
+  konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
 - **Parite bekçisinin yönü tutucudur.** Kaçan ölü satır riski alınır, yanlış alarm
   alınmaz — çünkü yanlış alarm veren bir kapı kaçınılmaz olarak silinir.
 
