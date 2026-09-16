@@ -185,6 +185,31 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kaldı. "Mutasyon yeşilse önce fikstürü sorgula" defterdeki hâliyle tekrar doğrulandı.
 - **Commit:** `5a3cb96e`
 
+### 7. `BR-QA-63` — kırmızı artık **iki listeyi de adıyla** söylüyor
+
+- **Neden:** bir migration eklemek **iki ayrı mimari envanterini** birden istiyor ve biri
+  ötekini yeşil yapmıyor. Bu bir kusur değil **tuzaktı**: eksik adı gören geliştirici
+  kırmızıyı *"bekçi bozuk"* diye okur ve en kolay çözüme — listeyi *"geçsin diye"*
+  güncellemeye — gider. O anda bekçi bir **onay kutusuna** döner.
+- **(a) Ne yapıldı:** `RaporlaVeKarsilastir` yardımcısı; kırmızı artık hangi listenin **hangi
+  dosyada** olduğunu, **eksik** ve **fazla** adları ayrı ayrı, iki listenin **ayrı ayrı**
+  güncellenmesi gerektiğini ve *"listeyi geçsin diye güncellemek bu bekçiyi bir onay
+  kutusuna çevirir"* uyarısını **mesajın içinde** yazıyor.
+- **(b) Türetilebilirlik ölçüldü → TÜRETİLEMEZ:** `ExpectedMigrationSecurityDefiners` **37**
+  satır ve anahtarı `dosya:ad`; `ElevatedFunctionNames` **32** ad ve anahtarı yalnız `ad`.
+  Aynı fonksiyon birden çok migration'da **yeniden tanımlanıyor**
+  (`pbxtr_write_license_notices`, `ticket_purge_candidates`). Kümeler de tutmuyor:
+  `upsert_sms_provider_account` **SECURITY DEFINER'dır ama çapraz kip AÇMAZ**; tersine
+  `SET app.cross_tenant` ile kapsam açan **definer olmayan** bir gövde definer listesine
+  girmez, `DatabaseSites`'a girer. **Neden ayrı oldukları iki listenin de başına yazıldı.**
+- **Kartın sınırına uyuldu:** listeler **otomatik doldurulmadı** — bekçinin bütün değeri, bir
+  insanın o migration'ı çapraz-tenant açısından **okuduğunu** zorlamasıdır.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Architecture.Tests/CrossTenantScopeGuardTests.cs`,
+  `…/CrossTenantScopeSurfaces.cs`, `yonetim/backlog.md`
+- **Sonuç / doğrulama:** **mutasyon 2/2** — her listeden bir satır silindiğinde o listenin
+  **adıyla** teşhisli kırmızı. Architecture takımı **615/615** yeşil, `dotnet format` temiz.
+- **Commit:** `98d1b26c`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -198,6 +223,8 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
 - **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
   konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
+- **Bir bekçinin mesajı, bekçinin yarısıdır.** Ne yapılacağını söylemeyen kırmızı,
+  "geçsin diye" güncellenen bir listeye dönüşür.
 - **"Kuyruğa girdi" bir teslim kanıtı değildir.** Denetim iddiaları, incelemecinin
   okuyacağı yerden — tablodan — geri okunmalı.
 - **Paylaşılan bir önbellek, bekçilerin en sessiz düşmanıdır.** Hız kazancı alınır ama
