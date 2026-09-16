@@ -28,3 +28,25 @@ kartına bağlanıyor. Branch: `feat/sentez-planing-ayrimi`. Kod değişikliği 
   from sv_CustomerOrder o left join sv_Style s on s.RecId=o.StyleId where o.OrderNo='91760'`
   ve `select RecId,StyleNo,StyleName,IsDeleted from sv_Style where StyleNo like '2332%'`.
 - Kullanıcı onaylarsa: PO import'ta StyleId'yi PDF'teki modele göre her zaman güncelle (+ test).
+
+### 3. Kullanıcı teyidi + düzeltme: 91760 canlıda `2320-1904/CRM`'e bağlıymış
+- **Neden:** Kullanıcı bildirdi: 91760 → `2320-1904/CRM`; olması gereken `2332/WNWHT`.
+- **Teşhis (simülasyon):** Scratchpad'de `sim` konsol projesi (Selvedge.Infrastructure referansı +
+  `Microsoft.EntityFrameworkCore.InMemory` 10.0.8). `SelvedgeDbContextAdapter` + sahte `IAttachmentService` ile
+  gerçek `CustomerOrderService.ImportFromPdfAsync` PO066 üzerinde koşuldu.
+  - Boş DB (4 model var): 91760 → `2332/WNWHT` (doğru). `2332/WNWHT` yoksa 91760 atlanıyor.
+  - 91760 önceden `2320-1904/CRM` ile varken: ESKİ kod `2320-1904/CRM`'de bıraktı → hata birebir tekrarlandı.
+- **Kök neden:** `ImportSingleOrderAsync` içinde `if (entity.StyleId is null) entity.StyleId = style.RecId;` —
+  mevcut siparişte model hiç güncellenmiyordu. Sipariş ilk nasıl yanlış modelle oluştu bilinmiyor
+  (web formundan elle giriş/düzenleme en olası yol; kod tarafında başka yazan yer yok).
+- **Ne yapıldı:** `CustomerOrderService.cs` — marka/sezon atamasının yanına: `styleChanged` hesapla,
+  `entity.StyleId = primaryStyle.RecId` her zaman; model değiştiyse BrandId/SeasonId de yeni modelden.
+  Döngüdeki `if (entity.StyleId is null)` satırı kaldırıldı.
+- **Doğrulama:** Aynı simülasyonda yeni kod 91760'ı `2332/WNWHT`'e taşıdı. `dotnet build src/Selvedge.Api -c Release`
+  OK, `dotnet test tests/Selvedge.PdfImport.Tests` 33/33.
+- **Commit:** `529d8f2` — fix(selvedge/po-import): PO yeniden import edilince siparis modeli PDF'teki modele guncellenir
+
+## Açık kalanlar (güncel)
+- Docker API imajı henüz build edilmedi (yeni sürüm bat'ı yok). Deploy sonrası müşteri PO066'yı tekrar yüklemeli
+  → 91760 kendiliğinden `2332/WNWHT`'e geçer. Acil ise canlıda web formundan modeli elle değiştirmek de yeter.
+- 91760'a bağlı QC raporlarında `sv_QaReport.StyleId` eski modelde kalmış olabilir (EnrichAuditCounts `??=`) — kontrol et.
