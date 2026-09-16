@@ -409,3 +409,46 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   `mail_settings`'in doldurulması gerekiyor (SPF relay'i kapsamıyor, DKIM selector
   bilinmiyor). Üçü de **sunucu işi**; canlı erişim bu oturumda **salt-okunur**.
 - ~~`#37`'de `enabledCount = 0` olan tenant sayısı~~ → **kapandı** (madde 13).
+
+---
+
+## Yapılanlar (dördüncü tur)
+
+### 16. `BR-FE-77` — çağrı sonrası + kampanya SMS şablonu **seçicileri**
+
+- **Neden:** `BR-DB-43` üç kolonu **bilerek NULL varsayılanlı** indirdi (bir DB varsayılanı
+  konsaydı mevcut her tenant bir dağıtımla **sessizce SMS göndermeye başlardı**). Dolayısıyla
+  özellik ancak kullanıcı işaretçiyi **açıkça** yazarsa koşar — ve onu yazacak yüzey yoktu.
+  `BR-DB-43` + `BR-BE-60` + `BR-BE-64` zinciri depoda duruyor, üretimde **hiç koşmuyordu**
+  (defterdeki *"kod var, koşan yok"* sınıfı).
+- **Kartın üçüncü maddesi zaten inmişti:** `#09 sms_templates.trigger` alanı `BR-FE-80` ile
+  2026-09-14'te `#49 → SMS` sekmesine girmiş. Kalan iş **iki** seçici.
+- **Ne yapıldı:**
+  - `#49 → SMS`: yeni `PostCallSmsPane.tsx`. Liste `?trigger=post_call` ile **sunucuda**
+    süzülür; istemcide sabit liste ve `items.filter` **yok**.
+  - `#06 Kampanya`: `CampaignEditDialog` içine `?trigger=campaign` seçici; gövde
+    `smsTemplateId` / `clearSmsTemplate` (`clearRetryInterval` deseni).
+  - `postCallSmsInput()` **değişmeyen seçim için gövdeye hiçbir şey yazmaz**.
+  - Üç değerli okuma: alan **hiç gelmezse** (`undefined`) seçici yerine *"ölçülemedi"*
+    yazılır ve `clearSmsTemplate` **gönderilmez**; `null` ise *"Kapalı — SMS gönderme"*.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/settings/PostCallSmsPane.tsx` (+test),
+  `settingsApi.ts`, `smsTemplatesApi.ts`, `SettingsScreen.tsx`,
+  `screens/campaigns/CampaignEditDialog.tsx`, `campaignsApi.ts`, `CampaignsScreen.test.tsx`,
+  9 dil `i18n/messages/*.json`
+- **Mutasyon (3/3 kırmızı):** M1 kampanya seçimi gövdeye hiç girmiyor → 1/25 kırmızı;
+  M2 `postCallSmsInput` hiçbir şey yazmıyor → 3/8; M3 `?trigger=post_call` gönderilmiyor → 1/8.
+  Üçü de geri alındı (`grep -c MUTASYON` = 0).
+- **Sonuç / doğrulama:** `tsc -b --noEmit` + `tsconfig.visual-tests.json` temiz;
+  vitest tam takım **1910/1910** (210 dosya), yeni 11 test. C# dosyasına dokunulmadığı için
+  `dotnet format` kapısı bu kartın kapsamında değil.
+- **Commit:** `aefa1876`
+
+## Kararlar (dördüncü tur)
+
+- **Süzme sunucuda kalır.** İstemci `items.filter(...)` yazsaydı aynı kümeyi ikinci kez tarif
+  etmiş olurdu; iki tarif ayrıştığı gün kullanıcı listeden seçtiği şablonla 400 yer ve sebebini
+  **ekranda göremez**.
+- **Görmediğimiz bir değer kapatılmaz.** Alan sunucudan hiç gelmiyorsa `clearSmsTemplate`
+  gönderilmez — göndermek, kullanıcının vermediği bir kararı ona atfetmek olurdu.
+- **Yetki yoksa seçici gizlenmez.** Liste 403 dönerse alan yerinde durur ve "yetki yok" yazılır;
+  gizlenseydi kullanıcı alanın **varlığını** hiç öğrenemezdi.
