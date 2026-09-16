@@ -603,3 +603,30 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
 - **Bir mutasyon yeşil kalırsa önce mutasyonun hedefini sorgula.** M1 ilk turda yeşil
   kaldı; sebep testin zayıflığı değil, mutasyonu **mapper'ı ölçmeyen** bir takıma
   yöneltmemdi. Doğru takımla kırmızı yandı.
+
+### 21. `BR-FE-88` — zil grubunun üç sayısı **ekranda**
+
+- **Neden:** sunucu tarafı (madde 20) üç sayıyı üretiyordu ama hiçbir ekran göstermiyordu;
+  yani zil grubu hâlâ bir **ayar nesnesiydi** ve kartın tarif ettiği körlük kullanıcı
+  tarafında aynen duruyordu.
+- **Pencere sözleşmesi değişti — sebebi ölçüldü:** kart *"pencere zorunludur"* diyordu; o
+  hâlde tek kaynak **tarayıcı saati** olurdu ve CLAUDE.md §11 istemciden zaman üretmeyi
+  **yasaklar**. Uç artık `from`/`to` verilmediğinde pencereyi kendi kurar: **"bugün" değil
+  son 24 saat** ("bugün" bir gün sınırı hesabıdır, tenant zaman diliminde yapılır ve depoda
+  o hesabın **iki kopyası zaten var** — üçüncüsü üçünün ayrışması demekti). Tek uç
+  reddedilir. Kural saf bir fonksiyonda (`RingGroupActivityWindow.Resolve`).
+- **Dokunulan dosyalar:** `RingGroupActivityWindow.cs` (yeni), `RingGroupEndpoints.cs`,
+  `ringGroupActivityApi.ts` (yeni), `ExtensionsScreen.tsx`, `.module.css`,
+  `RingGroupCounts.test.tsx` (yeni), `RingGroupActivityWindowTests.cs` (yeni), 9 dil
+- **Sonuç / doğrulama:** SPA tam takım **1913/1913** (211 dosya), `tsc -b` temiz,
+  Api.Tests `RingGroup` 47/47, `dotnet format` temiz. **Mutasyon 2/2 kırmızı.**
+- **Commit:** `6c965963` — kalan: canlı izleme (#12/#17) bölümü.
+
+## Kararlar (yedinci tur — ek)
+
+- **"Pencere zorunlu" kararı geri alındı, çünkü tek uygulaması yasak olan bir kaynağa
+  dayanıyordu.** İstemcinin `now - 24h` hesaplaması CLAUDE.md §11 ile çelişir; sunucunun
+  son 24 saati kurması hem o yasağı korur hem gün sınırı hesabının üçüncü kopyasını
+  yazdırmaz.
+- **Ölçülemedi ile sıfır aynı piksele düşmez** — bu turda üçüncü kez: sayım ucu patlarsa
+  kart sıfır yazmaz, "ölçülemedi" der ve kart düşmez.
