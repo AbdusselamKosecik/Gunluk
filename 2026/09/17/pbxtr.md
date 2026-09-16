@@ -372,6 +372,41 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   mutasyon sonucu okunmaz.
 - **Commit:** `554de240`
 
+### 15. `BR-QA-53` — query filter artık **gerçek model** üzerinde ölçülüyor
+
+- **Neden:** ADR-012 §G2 iki şey istiyordu; (i) kapalıydı
+  (`TenantIsolationSurfaceTests`), (ii) **hiç yapılmamıştı**. Filtrenin fiilen takıldığı
+  tek yer `TenantIsolationPersistenceTests`'ti ve oradaki model **sentetiktir**
+  (`TenantRow`/`GlobalRow`). Yani "arayüzü uyguladın mı" sorusu gerçek model üzerinde,
+  "filtre gerçekten takıldı mı" sorusu **sahte** model üzerinde cevaplanıyordu — aradaki
+  boşluk tam olarak `OnModelCreating`'in kendisi, yani kusurun oluşabileceği tek yer.
+- **Ne yapıldı:** `TenantQueryFilterModelTests` gerçek `PbxtrDbContext` modelini kurar
+  (`UseNpgsql` yalnızca sağlayıcı kurallarını yükler — **hiçbir bağlantı açılmaz**, bu
+  yüzden bekçi mimari takımında ve Docker'sız koşar) ve her `ITenantOwned` kök için
+  `GetDeclaredQueryFilters()` okur. Beş vaka: (1) her kök filtreli, (2) döngünün
+  **atladığı** dallar (TPH türevi / sahipli tip) kök veya sahip üzerinden korumalı,
+  (3) vacuity tabanı, (4) dedektörün **pozitif kontrolü**, (5) global tabloların filtre
+  **taşımadığı** — negatif kontrol.
+- **Ölçüm:** gerçek modelde **87 varlık**, **80** filtre bekleyen `ITenantOwned` kök,
+  **80/80 filtreli**. Muafiyet yok → onay listesi de yazılmadı (boş bir onay listesi,
+  ileride oraya gerekçesiz satır atmayı kolaylaştırır). ADR'nin "33 tip" sayısı **bayat**;
+  kartın "tip sayısı bugün ayrıca sayılmadı" maddesi böylece kapandı.
+- **Aday kümesi bugün boş:** modelde TPH türevi **0**, sahipli tip **0**. Bu yazılmasaydı
+  2. vaka "yeşil" görünür ve bir şey ölçtüğü sanılırdı. Vaka bir ölçüm değil **tetiktir**;
+  dedektörün çalıştığını ayrı bir pozitif kontrol kanıtlar — sentetik, kasten kusurlu bir
+  model (kök `ITenantOwned` **değil**, türev `ITenantOwned`, ikisi de filtresiz) kurulur ve
+  dedektör orada **1 yetim** bulur.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Architecture.Tests/TenantQueryFilterModelTests.cs`
+  (yeni), `yonetim/backlog.md`
+- **Mutasyon (2 kırmızı):**
+  1. Döngüye `ClrType.Name.StartsWith("Contact")` atlaması eklendi →
+     `Bulunanlar: Contact, ContactNote` ile kırmızı.
+  2. Filtre çağrısı tamamen atlandı → kırmızı.
+  Her ikisinde de diğer dört vaka yeşil kaldı.
+- **Sonuç / doğrulama:** Mimari takım **620/620 yeşil** (önceki 615 + 5 yeni).
+  `dotnet format --verify-no-changes` temiz.
+- **Commit:** `ee2db51a` — BR-QA-53 bitti: query filter artik GERCEK model uzerinde olculuyor
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -395,6 +430,14 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   okuyacağı yerden — tablodan — geri okunmalı.
 - **Paylaşılan bir önbellek, bekçilerin en sessiz düşmanıdır.** Hız kazancı alınır ama
   "üç ayrı soru" iddiası ölçülmezse kapılar tek kapıya çökebilir ve bunu kimse görmez.
+- **Boş bir aday kümesi, yeşil bir testin en sessiz hâlidir.** "0 TPH türevi" ölçüldüğünde
+  seçenek ikidir: vakayı silmek ya da tetik olduğunu **yazmak** ve dedektörü ayrı bir
+  pozitif kontrolle kanıtlamak. Yazılmayan üçüncü yol — sessizce yeşil bırakmak — bu
+  deponun baskın hata deseninin ta kendisidir.
+- **Bir bekçi "veritabanı ister" diye mimariden kaçırılmaz.** EF modeli kurmak bağlantı
+  açmaz; soru gerçek modele sorulabiliyorsa sentetik modele sorulmaz.
+- **Boş onay listesi yazılmaz.** Muafiyet yokken açılan liste, ilk gerekçesiz satırın
+  davetiyesidir.
 - **Parite bekçisinin yönü tutucudur.** Kaçan ölü satır riski alınır, yanlış alarm
   alınmaz — çünkü yanlış alarm veren bir kapı kaçınılmaz olarak silinir.
 
