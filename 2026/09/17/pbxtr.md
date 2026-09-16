@@ -265,6 +265,33 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   alınmadı — yani "benim değil" demek için de ölçüm yok.
 - **Commit:** `30804d10`
 
+### 10. `BR-QA-67` — kanonik şema artefaktı tazelendi **ve kuralı yazıldı**
+
+- **Neden:** `doc/st44-final-delivery-canonical.json` içindeki `databaseSchemaRevision`
+  zincirin sonuncusu değildi; fark tam koşuda **2 migration**'a çıkmıştı ve
+  `FinalDeliveryReportTests` **kırmızı** yanıyordu. Bayat kaldığında rapor, üreten kişinin
+  **hiç görmediği** bir şemayı *"doğrulanmış"* gösterir.
+- **Ne yapıldı:** revizyon `20260916200000_CallDirectionUnmeasured`'a çekildi; türeyen
+  `doc/st44-final-delivery-report.json` **`PBXTR_WRITE_DOCS=1`** ile yeniden üretildi (elle
+  düzenlenmedi).
+- **Kartın asıl istediği — "yenilemenin ne zaman zorunlu olduğu" teste yazıldı:** `Migrations`
+  altına `^[0-9]{14}_` desenli **yeni bir migration** eklendiğinde; kural **tarih sırasıdır**
+  ve migration'ın *"küçük"* olması, yalnız veri güncellemesi taşıması ya da `Down()`'unun boş
+  olması bu yükümlülüğü **kaldırmaz**.
+- **Ve yenilemenin bir ONAY olmadığı yazıldı:** artefaktı güncellemek *"bu migration
+  incelendi"* demez; yalnızca teslim iddiasının **hangi şemaya bağlı** olduğunu tazeler.
+  Migration'ın kendisi ayrı bekçilerle ölçülür (BR-QA-63).
+- **İki kırmızı mesajı da teşhisli hale getirildi:** hangi dosya, hangi revizyon, ondan sonra
+  gelen migration'lar ve ne yapılacağı.
+- **Sonuç / doğrulama:** **vacuity 2/2** — artefakt eski revizyona çekilince *"KANONİK ARTEFAKT
+  BAYAT"*, var olmayan bir revizyona işaret edince *"KANONİK REVİZYON ZİNCİRDE YOK"* ile
+  kırmızı. Kontrol **26/26**, `dotnet format` temiz.
+- **Tuzak tekrar ısırdı:** heredoc içindeki `\n` kaçışları tek seviye yenildi ve C# kaynağına
+  **gerçek satır sonu** yazıldı (CS1039). Build kırmızıyken `--no-build` koşusu yine
+  *"Passed!"* dedi — defterdeki **"test koşarken build sessizce atlanır"** dersi birebir.
+  Kaçış içeren yamalar artık heredoc yerine dosyaya yazılıp çalıştırılıyor.
+- **Commit:** `af8338ec`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
