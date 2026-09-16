@@ -146,6 +146,45 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   geri işaret ediyor, içerik tek dosyada.
 - **Commit:** `59c6b482`
 
+### 6. `BR-QA-85` — çapraz kip reddi artık **gerçek PostgreSQL'de** ölçülüyor
+
+- **Neden:** `BR-BE-152` turunda iki boşluk kalmıştı. (i) Çapraz kipte yazım reddinin
+  **denetim satırı** yalnızca **bellek içi yakalayıcı bir sink** ile ölçülüyordu — yani
+  *"kayıt kuyruğa girdi"* ölçülüyordu, *"tabloya indi"* değil. Güvenlik incelemesinin okuduğu
+  şey ise **o tablodur**. (ii) `03-smoke` TEST 10/10b yalnız **okuma** ölçüyordu; çapraz
+  kipte **yazmanın** DB katmanında ne yaptığı hiçbir yerde kayıtlı değildi.
+- **Ne yapıldı (1):** yeni entegrasyon testi 403'ten sonra `audit_log`'ta
+  `tenant.crosstenant.write.denied` satırını **artış** olarak ölçüyor ve `result='denied'`
+  doğruluyor — enum adı (`Forbidden`) değil, `AuditLogWriter.ResultOf` sözleşmesi.
+- **Ölçüm sırasında iki şey öğrenildi ve teste yazıldı:** fikstür arka plan işlerini **DI'dan
+  kaldırıyor** (teşhis: kuyrukta `pending=3` kayıt bekliyordu, `audit_log` boştu) — bu yüzden
+  **üretimin kendi `AuditDrainService` sınıfı**, üretimdeki bağımlılıklarıyla elle kuruluyor;
+  davranış ikizi yazılmadı ("test ikizi üretimden müsamahakâr" dersi). Ayrıca başarısızlık
+  mesajı artık kuyruk sayaçlarını (`dropped/repaired/pending`) basıyor: *"yazılmadı"* ile
+  *"kuyruğa hiç girmedi"* ayrılabiliyor.
+- **Ne yapıldı (2):** `03-smoke` **TEST 10c** — çapraz kipte `UPDATE`/`INSERT`'in RLS
+  tarafından **reddedilmediği** (CLAUDE.md §4 / Karar #65 Ş65-4.5) kayda bağlandı, **kontrol
+  grubuyla**: kip kapalıyken aynı iki yazım **reddediliyor**. Test bir onay değil bir
+  **kayıt**tır; `BR-SEC-19` kararı daraltma getirirse sessizce geçmez, **adıyla** kırmızı yanar.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Tests/CrossTenantVersionGateOracleTests.cs`,
+  `deploy/db/03-smoke-tenant-isolation.sql`, `yonetim/backlog.md`
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Integration.Tests --filter "FullyQualifiedName~CrossTenantVersionGateOracleTests"
+  docker run -d --name pbxtr-qa85-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=pbxtr postgres:16
+  psql -f /db/00-roles.sql ; -f /db/01-rls-template.sql ; -f /db/03-smoke-tenant-isolation.sql
+  ```
+- **Sonuç / doğrulama:** **Mutasyon 4/4.** Middleware'in çapraz-yazım dalındaki `EnqueueAudit`
+  silinince **yalnız yeni test** kırmızı (1 kırmızı / 7 yeşil) — iddia gerçekten denetimi
+  ölçüyor. Şablonun `WITH CHECK` dalı daraltılınca TEST 10c **teşhisli** kırmızı;
+  `app_is_cross_tenant()` hep açık yapılınca TEST 1 kırmızı; kontrol grubu çapraz kipte
+  bırakılınca kontrol iddiası kırmızı. Kontrol koşuları yeşil: **8/8** test, smoke **40 OK**,
+  `dotnet format` temiz.
+- **Yol boyunca ısıran tuzak:** `docker cp deploy/db <konteyner>:/db` ikinci kez koşunca
+  `/db/db` üretti; mutasyon uygulanmış dosya konteynere **hiç gitmedi** ve kapı **yeşil**
+  kaldı. "Mutasyon yeşilse önce fikstürü sorgula" defterdeki hâliyle tekrar doğrulandı.
+- **Commit:** `5a3cb96e`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -159,6 +198,8 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
 - **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
   konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
+- **"Kuyruğa girdi" bir teslim kanıtı değildir.** Denetim iddiaları, incelemecinin
+  okuyacağı yerden — tablodan — geri okunmalı.
 - **Paylaşılan bir önbellek, bekçilerin en sessiz düşmanıdır.** Hız kazancı alınır ama
   "üç ayrı soru" iddiası ölçülmezse kapılar tek kapıya çökebilir ve bunu kimse görmez.
 - **Parite bekçisinin yönü tutucudur.** Kaçan ölü satır riski alınır, yanlış alarm
