@@ -657,3 +657,28 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   paketindeydi; şart uygulansaydı kartın şikâyet ettiği destek çağrısı aynen kalırdı.
 - **Test kendi ezdiği şeyi ölçmeli.** Ölü `vi.mock` bekçisi, ölçmediğim bir bağımlılığı
   ezdiğimi gösterdi — testin ne ölçtüğü hakkında yanlış bir izlenim bırakıyordu.
+
+### 23. `BR-FE-76` — `dnd` olay sözleşmesi çıpalandı (**tüketici yok çıktı**)
+
+- **Kartın varsayımı ölçüldü ve yanlış çıktı:** kart *"WS tüketicisinde `'dnd' in payload`
+  ayrımını doğrula"* diyordu; ölçüm (`grep payload.dnd` → **sıfır isabet**, tüm SPA): WS
+  gövdesinden `dnd` okuyan **hiçbir yer yok**. `#12`/`#13` olayı yalnızca bir **yeniden
+  yükleme tetiği** olarak kullanıyor ve DND'yi REST anlık görüntüsünden okuyor — orada
+  sözleşme zaten üç değerli. Yani bugün kırık bir okuma yok; korunması gereken şey bu hâlin
+  **kalması**.
+- **İnen iş:** `dndEventContract.ts` (alan yoksa `undefined` = dokunma, varsa `boolean`,
+  bozuksa `null`) + **depo geneli bekçi** (`payload.dnd ??` deseni).
+- **Bekçi vacuous değil, üç kez ölçüldü:** satır içi pozitif kontrol, tarama tabanı
+  (`SOURCES.size > 200`) ve **M3 mutasyonu** — yasak desen **gerçek bir ekrana** sokuldu ve
+  bekçi yakaladı.
+- **Sonuç / doğrulama:** yeni 6 test, SPA tam takım **1927/1927** (213 dosya), `tsc -b`
+  temiz. **Mutasyon 3/3 kırmızı.**
+- **Commit:** `07866ce9`
+
+## Kararlar (dokuzuncu tur)
+
+- **Kuralı metin olarak anan dosya, kuralın ihlali sayılmaz.** Sözleşme modülü ve kendi
+  testi tarama dışında bırakıldı; bırakılmasaydı kapı kendi tarifini ihlal sayar ve
+  kaçınılmaz olarak silinirdi.
+- **Bir bekçinin en güçlü kanıtı, ihlali gerçek bir dosyaya sokup yakalatmaktır** — satır içi
+  pozitif kontrol tarayıcıyı ölçer, gerçek dosya mutasyonu ise kapının **kapsamını** ölçer.
