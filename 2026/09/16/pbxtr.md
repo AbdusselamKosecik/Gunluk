@@ -452,3 +452,66 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   gönderilmez — göndermek, kullanıcının vermediği bir kararı ona atfetmek olurdu.
 - **Yetki yoksa seçici gizlenmez.** Liste 403 dönerse alan yerinde durur ve "yetki yok" yazılır;
   gizlenseydi kullanıcı alanın **varlığını** hiç öğrenemezdi.
+
+## Yapılanlar (beşinci tur)
+
+### 17. `BR-BE-123` — `Newchannel` dalı canlı kaydın **tamamını** eziyordu
+
+- **Neden:** `AmiEventMapper` her bacağın `Newchannel`'ını **aynı** `CallId = linkedid` ile
+  üretir. Boru hattı o dalda **baştan kurulmuş** bir `LiveCallState` yazıyordu; yani ikinci
+  bacak doğduğu anda yön varsayılana (`inbound`) düşer, kuyruk boşalır, cari `null` olur,
+  `OnHold`/`OnHoldSince`/`ParkedSlot`/`ParkedSince` silinir ve `StartedAt` **resetlenirdi**.
+  Son madde dosyanın **kendi yazılı kuralını** çiğniyordu: *"süre çizilir, sıfırdan
+  başlatılmaz; sıfırdan başlatmak dört dakikadır bekleyen bir çağrı için `00:00` yazmaktır."*
+- **Ne yapıldı:** dal `existing with { … }` desenine geçti (Hold ve Park dalları zaten onu
+  kullanıyordu; `Newchannel` kullanmayan **tek** daldı). Kayıt yoksa açılır — varsayılanlar
+  yalnız ilk bacakta koşar. Kanalsız olay artık eski `ChannelId`'yi **silmez**.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Telephony/Pipeline/TelephonyEventPipeline.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/TelephonyEventPipelineTests.cs`
+- **Sonuç / doğrulama:** 3 yeni entegrasyon testi, gerçek PG + gerçek Redis, 10/10
+  (`Skipped: 0`). Mutasyon 2/2 kırmızı (M1 eski hâl, M2 `StartedAt` ileri), kontrol testi
+  ikisinde de yeşil. **Testin kendisi bir fikstür kusuru yakaladı:** payload'a ham `Guid`
+  konunca `PayloadReader.GetString` onu okumaz, alan sessizce `null` kalır — düzeltilmeseydi
+  "cari korundu" iddiası `null == null` üzerinde vakum olurdu.
+- **Commit:** `7fe3af41`
+
+### 18. `BR-BE-122` — süfle sesi müşteriye gidiyordu (kod yarısı)
+
+- **Neden:** hedef `live:call:{linkedid}.ChannelId`'den okunuyordu ve o alan **"en son doğan
+  bacak"**tır. Agent'ın başlattığı normal giden çağrıda (`OnAnswer` yok) önce agent bacağı,
+  sonra müşteri bacağı doğar → hedef **müşteridir**. `ChanSpy`'in süfle seçeneği (`w`) sesi
+  **dinlenen kanala enjekte eder**. Gelen çağrıda kusur koşulluydu, **giden çağrıda
+  koşulsuzdu**.
+- **Ne yapıldı:** hedef ayrı bir alana taşındı — `LiveCallState.AgentChannelId`, kaynağı
+  `AgentConnect`'in `DestChannel` başlığı. Taşıma `CallerE164` deseniyle: alan
+  `TelephonyEvent.AgentChannel` init özelliğidir ve **payload'a konmaz** (kanal adı numara
+  içerir, numara bekçisi olayı tümden düşürürdü — aynı gerekçe allowlist satırında zaten
+  yazılıydı). Yazım `switch`'in **önünde**: bir `case` yazmak `return` ile agent durum bloğunu
+  atlar ve agent'ı canlı grid'de meşgul göstermeyi bırakırdı.
+- **Dokunulan dosyalar:** `TelephonyEvent.cs`, `ILiveOperationsView.cs`, `AmiEventMapper.cs`,
+  `AgentMonitoringService.cs`, `RedisLiveOperationsView.cs`, `RedisLiveStateStore.cs`,
+  `TelephonyEventPipeline.cs`, `SimulatedTelephonyProvider.cs` + 24 test dosyasındaki ikizler
+- **Sonuç / doğrulama:** `AmiEventMappingTests` 39/39 (hedef **gerçek laboratuvar kaydındaki**
+  `DestChannel`'dan okunuyor), `AgentMonitoringTests` 16/16, entegrasyon boru hattı 12/12,
+  `Architecture` 615/615, Api.Tests telefon dilimi 1723/1723, `dotnet format` temiz.
+  Mutasyon 3/3 kırmızı.
+- **Commit:** `1e5df44c`
+
+## Kararlar (beşinci tur)
+
+- **Fail-closed bütün kipler için.** Agent bacağı ölçülemediyse dinleme kipinde müşteri
+  bacağını yedek almak teknik olarak çalışırdı; alınmadı — hedef kipe göre değişseydi denetim
+  kaydındaki "dinlenen kanal" aynı çağrıda iki farklı şey olur ve **aynı oturum içinde süfleye
+  geçiş sessizce yanlış bacağa düşerdi**.
+- **Simülasyonda alan boş bırakılmaz.** Bıraksaydık simülasyon bileşiminde izleme hiç açılmaz;
+  kusur "düzelmiş" görünür, **özellik sessizce ölürdü**.
+- **Bir dosyanın kendi standardı, düzeltmenin biçimini tartışmasız kılar.** `Newchannel`
+  dalının nasıl yazılacağı sorusu, aynı dosyadaki Hold/Park dalları tarafından zaten
+  cevaplanmıştı.
+
+## Açık kalanlar (beşinci tur)
+
+- `BR-BE-122`'nin kabul şartının ikinci yarısı bir **ses testidir** (gelen **ve** giden
+  çağrıda süfle verilir, müşteri süpervizörü duymaz) — gerçek santralde koşar; bu oturumda
+  canlı erişim **salt-okunur**. Bacak doğuş sırası hâlâ **AMI telinde doğrulanmadı**;
+  `BR-AST-60` originate ölçümüyle **aynı koşuda** doğrulanmalıdır.
