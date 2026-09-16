@@ -327,6 +327,28 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Kod değiştirilmedi** — sebep ölçülmeden değiştirmek bu kartın kendi yasağı. Kart
   **Kısmen**.
 
+### 13. `BR-BE-125` — teslim ekseni projeksiyonu **gerçek PG'de** ölçülüyor
+
+- **Neden:** birim testleri `ExtensionDeliveryStatus` sınıfının **kendisini** ölçüyordu
+  (`bool?` → üç değerli çıktı). Ölçülmeyen şey **projeksiyonun satıra ne yazdığıydı**: kesme
+  birimi **dosyadır**, yani karar **tür bazında** okunup **her dahili satırına** dağıtılır —
+  bu dağıtım yanlışsa ekran **her** dahiliyi yanlış gösterir ve sınıf testlerinin hiçbiri
+  bunu görmez.
+- **Ne yapıldı:** `ExtensionDeliveryProjectionTests` (3 vaka): gözlem **kesilmiş** derse her
+  satır `withheld` + doğru sebep kodu; gözlem **yokken** `unknown` (**`delivered` değil**);
+  tür `ServedKinds`'te ise `delivered` ve sebep `null` (pozitif kontrol — bu olmasaydı
+  "her zaman unknown dönen" bir projeksiyon da yeşil kalırdı).
+- **Ne gerçek, ne ikiz:** EF, interceptor'lar, RLS ve `EfUserAdministration` **üretimdeki**
+  sınıflar; yalnızca gözlemin **kaynağı** ikiz — ve ikiz **hiçbir kural taşımıyor** (kural
+  projeksiyondadır; ikiz karar verseydi ölçülen şey ikizin kararı olurdu).
+- **Sonuç / doğrulama:** kartın yazdığı **iki mutasyon** — projeksiyon sabit `delivered`
+  dönünce **2 kırmızı**; `Of` içinde `null => Delivered` (üç değerliliğin ezilmesi) yapılınca
+  **1 kırmızı**. Kontrol 3/3, `dotnet format` temiz.
+- **Aynı turun dersi hemen uygulandı:** vaka kendi dahililerini siliyor **ve silmeyi
+  ölçüyor** — silme satırı kaldırılınca 3 kırmızı. (İlk hâlinde silme vardı ama iddiası
+  yoktu; mutasyon yeşil kalınca iddia eklendi.)
+- **Commit:** `20d18c4a`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
