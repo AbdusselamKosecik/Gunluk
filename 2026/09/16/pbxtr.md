@@ -565,3 +565,41 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
 
 - Gerçek santralde bir çağrının `PBXTR_DIR`'i **fiilen taşıyıp taşımadığı telde doğrulanmadı** —
   dialplan yeniden üretilip teslim edilmeli; `BR-AST-60` / `BR-OPS-09` koşusunda doğrulanır.
+
+## Yapılanlar (yedinci tur)
+
+### 20. `BR-OPS-02` (kısmen) — zil grubunun **üç sayısı** ölçülüyor
+
+- **Neden:** zil grubu çağrısı `QueueCallerJoin` üretmez, `queue_id` taşımaz ve
+  `SlaAggregationJob`'un `WHERE a.queue_id IS NOT NULL` şartı yüzünden `sla_buckets`'a
+  **hiç girmez**. Bir grup bir hafta tamamen ölü olsa SLA raporu **%100** gösterir —
+  payda hiç büyümez, yani **metrik arızayı ödüllendirir**.
+- **(a) zaten inmişti:** sessizlik metriğinin kapsamı kuyrukla sınırlı değil
+  (`SilenceTargetKind` = `Queue` | `RingGroup` | `Did`), yani *"N dakikadır çağrı
+  düşmüyor"* bu üründe artık **ölçülebilir** bir durum.
+- **(b) ölçülen hal:** `PbxtrRingGroupEnter` ve `...Overflow` dialplan'de **zaten**
+  üretiliyor ve `call_events`'e satır olarak da iniyordu — ama **hangi grup** olduğu
+  payload'a hiç girmiyordu. **"Cevaplandı" kenarı ise hiç yoktu:** iki strateji de `done`
+  bölümüne varır ve orada yalnızca `Hangup()` vardı.
+- **Ne yapıldı:** `done` bölümü `PbxtrRingGroupAnswer` üretir (tek bölüm, grup
+  `${PBXTR_RG}`'den); mapper üç olay için `Group` (+taşmada `Status`) taşır ve anahtarlar
+  **allowlist'e** eklendi; `IRingGroupActivityView` + `GET /ring-groups/activity?from&to`.
+- **Dokunulan dosyalar:** `RingGroupSignals.cs` ve `IRingGroupActivityView.cs` (yeni),
+  `EfRingGroupActivityView.cs` (yeni), `ConfigRenderer.cs`, `AmiEventMapper.cs`,
+  `TelephonyEventPipeline.cs`, `RingGroupEndpoints.cs`, `RingGroupActivityTests.cs` (yeni)
+- **Sonuç / doğrulama:** Api.Tests `Telephony|Provisioning` **1240/1240**, Architecture
+  615/615, entegrasyon 15/15, format temiz. **Mutasyon 4/4 kırmızı.**
+- **Commit:** `3876cc18` — kalan ekran işi `BR-FE-88` olarak açıldı.
+
+## Kararlar (yedinci tur)
+
+- **Üçüncü sayı çıkarma ile bulunmaz.** `geldi - cevaplandı` ≠ `taştı`: arayan çalarken
+  vazgeçerse çağrı ne cevaplanır ne taşar. Üçü de ayrı sayılır.
+- **Sessiz grup listeden düşmez.** Düşseydi "hiç çağrı almadı" ile "böyle bir grup yok"
+  aynı piksele düşerdi — kartın şikâyet ettiği körlüğün ta kendisi.
+- **Mimari kapısı bir kusur yakaladı ve muafiyet istenmedi.** `RawSqlAllowlistTests` ham
+  SQL'i reddetti (EF query filter atlanır, geriye tek savunma RLS kalır); sorgu LINQ'e
+  çevrildi. Kapının kendi tavsiyesi — *"aynı şey LINQ ile yazılabiliyor mu?"* — doğruydu.
+- **Bir mutasyon yeşil kalırsa önce mutasyonun hedefini sorgula.** M1 ilk turda yeşil
+  kaldı; sebep testin zayıflığı değil, mutasyonu **mapper'ı ölçmeyen** bir takıma
+  yöneltmemdi. Doğru takımla kırmızı yandı.
