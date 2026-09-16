@@ -234,6 +234,37 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Dokunulan dosyalar:** `deploy/test-kos.sh`, `yonetim/backlog.md`
 - **Commit:** `1794d06e`
 
+### 9. `BR-QA-78` — fikstür yardımcısı artık **yazdığını kalıcı yazıyor**
+
+- **Neden:** `TelephonyFixture.ScalarInTenantAsync` kendi transaction'ını açıp **commit
+  etmiyordu**. Salt okuma için zararsız; ama yardımcı **keyfi SQL** koşar ve onunla `DELETE`
+  yapan çağırılar vardı. Arıza sessiz **ve yanıltıcıdır**: sayım aynı transaction'da okunduğu
+  için `Assert.Equal(1, …)` **geçiyor**, bağlantı kapanınca silme geri alınıyor ve satır
+  **yerinde kalıyordu**.
+- **Önce ölçüldü (kartın şartı):** yeni `FixtureWriteVisibilityTests`, silmeyi **ayrı bir
+  bağlantıdan** sayıp **1 satır** gördü — kusur gerçek.
+- **Düzeltme:** yardımcı okuyucuyu kapatıp **commit ediyor**. *"Adı salt-okuma olduğunu
+  söylesin, yazan çağıranlar taşınsın"* alternatifi **reddedildi** ve sebebi yazıldı: **ad bir
+  kapı değildir**; bir sonraki çağırı yine keyfi SQL yazar ve aynı sessiz arızayı üretir.
+- **Kalıntı bırakan iki sınıf da kapandı:** `TelephonyEventPipelineTests` artık `call_events`
+  satırlarını da siliyor; `TrunkAdminPersistenceTests` kendi trunk host'larını siliyor
+  (fikstür trunk'ı listede **yok**).
+- **Kendi hatamı kendi kapım yakaladı:** `call_events` temizliğinin kimlik evrenini önce
+  `_cdrLinkedIds` üzerinden kurdum — vacuity kapısı **hiçbir satır görmeyince** evrenin yanlış
+  seçildiği anlaşıldı (o liste yalnız `cdr` bekleyen vakaların alt kümesi). Evren `NewCallId`
+  içinde **tek kapıda** toplandı. İkinci düzeltme: `visible > 0` iddiası üç vakayı haksız yere
+  kırmızı yaktı (tenant'ı çözülemeyen olay **bilerek** satır yazmaz) — iddia kaldırıldı,
+  gerekçesi yazıldı.
+- **Sonuç / doğrulama:** **mutasyon 3/3** — commit kaldırılınca yalnız yazma vakası kırmızı
+  (okuma kontrolü yeşil); `call_events` silmesi kaldırılınca **10/14**; trunk silmesi
+  kaldırılınca **6/6**. Tam Integration takımı: **1013/1015** (25 dk 25 sn).
+- **Kalan iki kırmızı bu işin dışında ve ikisi de karta bağlandı:** `FinalDeliveryReportTests`
+  → **BR-QA-67** (bayat kanonik şema; **baseline'da da kırmızı**, stash ile ölçüldü) ve tam
+  koşuda görülen `AuthLoginHttpTests` boş gövdesi → **yeni BR-QA-88**. İkincisi **atfedilmedi**:
+  filtreli koşu değişiklikle de değişiklik olmadan da yeşil verdi, tam koşu baseline'ı
+  alınmadı — yani "benim değil" demek için de ölçüm yok.
+- **Commit:** `30804d10`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -247,6 +278,8 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   kart bunu bilmiyordu; kalan bir kalem ise bugüne kadar hiç koşmamıştı.
 - **Kapıyı ölçülemeyeceği yere koymak, kapıyı kaldırmaktır.** `dotnet format` gate
   konteynerine taşınsaydı sonsuza kadar "ölçemedi" derdi.
+- **Bir "temizledim" iddiası, temizliğin dışından ölçülmeli.** Aynı transaction'dan
+  okunan sayım, kendi yazdığını görür ve hiçbir şey kanıtlamaz.
 - **Bir bekçinin mesajı, bekçinin yarısıdır.** Ne yapılacağını söylemeyen kırmızı,
   "geçsin diye" güncellenen bir listeye dönüşür.
 - **"Kuyruğa girdi" bir teslim kanıtı değildir.** Denetim iddiaları, incelemecinin
