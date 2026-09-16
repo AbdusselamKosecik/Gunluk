@@ -292,6 +292,41 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   Kaçış içeren yamalar artık heredoc yerine dosyaya yazılıp çalıştırılıyor.
 - **Commit:** `af8338ec`
 
+### 11. `BR-QA-65` — fikstür `job_runs` SELECT'ini artık **üretim gibi** veriyor
+
+- **Neden:** ikiz üretimden **KATIYDI**. Fikstür `REVOKE ALL ON pbxtr_sys.job_runs FROM
+  pbxtr_app` yapıp **SELECT'i de** alıyordu; üretimde ise `20260814141500_JobRunsHealthRead`
+  2026-08-14'ten beri `GRANT SELECT` veriyor ve `SystemHealthProbe` o tabloyu **bugün okuyor**.
+- **Belirti sessiz:** sağlık yoklaması okuyamadığı bölüme *"SORAMADIM"* der ve **gri** çizer —
+  kırmızı değil. Bu fikstürle yazılacak her sağlık ölçümü **vacuous** olurdu ve bunu hiçbir
+  kırmızı söylemezdi. Defterdeki ders (*test ikizi üretimden müsamahakâr*) burada **ters
+  yönde**; kökü aynı: ikiz gerçek yetkiyi taşımalı.
+- **Ne yapıldı:** `REVOKE` artık yalnız yazma yetkileri; `GRANT SELECT` açıkça yazıldı ve
+  gerekçesi fikstürün içine kondu.
+- **Vacuity kapısı kartın istediği biçimde:** yeni `JobRunsHealthReadGrantTests` **üretimin
+  kendi sorgusunu** (`SystemHealthProbe.JobSql` — metin **yeniden yazılmadı**) **üretimin
+  kendi rolüyle** (`pbxtr_app`) koşturuyor. İkinci vaka yazma yetkilerinin geri verilmediğini
+  **ve** SELECT'in gerçekten açık olduğunu ölçüyor — pozitif kontrol olmasaydı ilk iddia
+  *"hiçbir yetki yok"* hâlinde de yeşil kalırdı.
+- **Sonuç / doğrulama:** eski hâl geri konunca **2 kırmızı** (biri ham `42501 permission
+  denied`, öteki adıyla); aşırı düzeltme (`GRANT SELECT, INSERT`) konunca yine **2 kırmızı**.
+- **Yan bulgu (ölçüldü, mutasyonum yeşil kaldığı için araştırıldı):** yalnızca `REVOKE`
+  satırını silmek **hiçbir şeyi değiştirmiyor** — `pbxtr_app`'in zaten yazma yetkisi yok; o
+  satır bir **kemer-askıdır** (ileride biri `pbxtr_sys`'e default privilege tanımlarsa).
+  *"Mutasyon yeşilse fikstürü sorgula"* dersi yine işe yaradı: mutasyonu düzelttim, kapıyı değil.
+- **Tam Integration takımı: 1016/1017.**
+- **Commit:** `1c19c9dc`
+
+### 12. `BR-QA-88` — forgot-password boş gövdesi **tekrarlandı**, teşhis eklendi
+
+- İki **bağımsız** tam koşuda (25 dk) aynı vaka aynı yerde (~23. dakika) kırmızı yandı — yani
+  belirti **kalıcı** ve *"bir kez göründü"* itirazı kapandı.
+- `ComparableAsync` artık boş gövdede ham `JsonReaderException` yerine **durum kodunu adıyla**
+  basıyor: `429` (hız sınırı) / `5xx` / `204` ayrımı bir sonraki tam koşuda **çıktıdan**
+  okunacak.
+- **Kod değiştirilmedi** — sebep ölçülmeden değiştirmek bu kartın kendi yasağı. Kart
+  **Kısmen**.
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
