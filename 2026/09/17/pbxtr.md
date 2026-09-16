@@ -210,6 +210,30 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   **adıyla** teşhisli kırmızı. Architecture takımı **615/615** yeşil, `dotnet format` temiz.
 - **Commit:** `98d1b26c`
 
+### 8. `BR-QA-66` — kırmızının **sahibi** artık çıktıda okunuyor
+
+- **Neden:** paralel ajan turlarında *"takım yeşil"* bir **tarih iddiasıdır**. Ölçülmüş vaka
+  (2026-09-13): bir koşu `RedisLiveStateStore.cs(404,20): CS0103` ile kırmızı geldi; hata o
+  ajanın değişikliği **değildi** — dosya ölçümden **5 saniye önce** başka bir ajan tarafından
+  yazılıyordu. Çıktı sha ve kirlilik taşımadığı için kırmızının **sahibi okunamıyordu**.
+- **(b) İndi:** `deploy/test-kos.sh` artık her koşuda **ağaç kimliğini** basıyor ve **özete de
+  taşıyor**: `agac sha`, `kirli` (değişmiş dosya sayısı) ve **`son yazim`** — `src/` + `tests/`
+  altındaki **en yeni** kaynak yazımının kaç saniye öncesi olduğu. Üçüncüsü ölçülmüş vakanın
+  **tam imzasıdır**.
+- **Bunlar kapı değil KİMLİK:** kirli bir ağaçta ölçüm yapmak meşru bir iştir; satırlar koşuyu
+  kırmızı yapmaz, sonucu **okunabilir** kılar. **Pozitif kontrol:** bir kaynak dosyaya
+  dokunulunca satır `0 sn once` oldu.
+- **Kartın diğer yarısı zaten kapalıydı:** koşan test **sayısı** `--list-tests` beklenen vs
+  `Total:` karşılaştırmasıyla ölçülüyordu (`TOPLAM >= BEKLENEN`).
+- **(a) Worktree izolasyonu değerlendirildi — ve ölçümü çözmüyor:** `git worktree list` bu
+  kurulumda **zaten** bir ajan ağacı gösteriyor (`.claude/worktrees/agent-*`, ayrı dal, 11
+  kirli dosya) ama orada **`bin/` yok**: yani ajanlar düzenlemeyi izole ağaçta yapıp **ölçümü
+  ana ağaçta** koşmuş. Ayrıca izole ağaç **paylaşılan kaynakları ayırmaz** — Docker
+  PostgreSQL/Redis konteynerleri, `artifacts/` logları ve testhost belleği ortaktır.
+  **Karar:** zorunlu worktree ölçümü **önerilmiyor**; okunabilirlik (b) ile sağlanır.
+- **Dokunulan dosyalar:** `deploy/test-kos.sh`, `yonetim/backlog.md`
+- **Commit:** `1794d06e`
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
