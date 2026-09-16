@@ -50,3 +50,19 @@ kartına bağlanıyor. Branch: `feat/sentez-planing-ayrimi`. Kod değişikliği 
 - Docker API imajı henüz build edilmedi (yeni sürüm bat'ı yok). Deploy sonrası müşteri PO066'yı tekrar yüklemeli
   → 91760 kendiliğinden `2332/WNWHT`'e geçer. Acil ise canlıda web formundan modeli elle değiştirmek de yeter.
 - 91760'a bağlı QC raporlarında `sv_QaReport.StyleId` eski modelde kalmış olabilir (EnrichAuditCounts `??=`) — kontrol et.
+
+### 4. Docker sürümü 1.0.4.81 (sadece API)
+- **Neden:** 91760 model düzeltmesi (`529d8f2`) sadece API'de; web 1.0.4.80'de kalır.
+- **Ne yapıldı:** `BuildDocker_1.0.4.81.bat` (1.0.4.79 şablonundan). Build + push doğrudan docker ile.
+- **Komutlar:**
+  ```bash
+  docker build . --compress --no-cache -f Selvedge/src/Selvedge.Api/Dockerfile \
+    --tag tekbirsoft/selvedge-api:1.0.4.81-dev --tag tekbirsoft/selvedge-api:latest
+  docker push tekbirsoft/selvedge-api:1.0.4.81-dev && docker push tekbirsoft/selvedge-api:latest
+  ```
+- **Sonuç:** İki tag Docker Hub'da, digest `sha256:502e31f4…`. Sunucuya dokunulmadı.
+- **Commit:** `9982d4d` — chore(selvedge): surum 1.0.4.81
+
+## Açık kalanlar (son)
+- Sunucuda `docker compose pull && docker compose up -d`. Sonra müşteri PO066'yı tekrar yükler → 91760 `2332/WNWHT`.
+- 91760'a bağlı QC raporlarının StyleId'si kontrol edilmeli.
