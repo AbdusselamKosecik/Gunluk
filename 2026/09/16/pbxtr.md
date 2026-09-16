@@ -333,6 +333,36 @@ dönerdi (defterdeki *"yayın yolu kapıları bayatlar"* maddesi).
   çökme bu testten değil.
 - **Sonuç:** Integration `~Silence` **25/25**, format temiz. **Commit:** `564e531a`
 
+### 15. BR-BE-124 — teslim gözlemi deposu gerçek Redis'e karşı (`93e0af89`)
+
+- **Neden:** sınıfın tek bir gerçek-Redis testi yoktu. İkiz, bayatlık kuralını **aynı
+  sabitten** uyguluyor ama **üretim kodunu çağırmıyordu** — *"test ikizi üretimden
+  müsamahakâr"* ile *"hiç koşmamış bileşim ölçülmemiştir"* sınıflarının kesişimi.
+- **Üretim kayıt yolundan** (`AddPbxtrCache`), elle `new Redis…` yazılmadan. Saat
+  `AddPbxtrCache`'ten **önce** kaydedilir: üretim fabrikası
+  `GetService<TimeProvider>() ?? TimeProvider.System` der, yani sabit saat de üretimin
+  kendi yolundan okunur.
+- **(a) TTL** ham istemciyle ölçülür — ayrı ölçülmek zorundaydı: sınıf
+  `ITenantCache.SetAsync` yolundan **geçmez** (o imza TTL'i zorunlu kılar), ham
+  `HashSetAsync` kullanır ve **TTL'siz yazım derleme hatası vermez**. D-10 disiplini
+  burada tipten değil **yalnızca bu testten** gelir.
+- **(b) Bayatlık alan başına**, iki tenant aynı hash'te. Tek tenant'la ölçseydik anahtar
+  TTL'i ile alan damgası ayırt edilemezdi ve test **anahtar bazlı** bir uygulamadan da
+  geçerdi. **(c)** Bozuk JSON atlanır ama toplamı yalana çevirmez. **(d)** Boş depo
+  **boş liste** döner, `null` değil.
+- **Kartın şikâyet ettiği kusuru önce kendim yaptım — ve mutasyon yakaladı.** Testin ilk
+  hâli damgaları `Now - StaleAfter ± 1 dk` diye yazıyordu; eşiği 3650 güne çektiğimde
+  testin *"bayat"* damgası da onunla birlikte kaydı ve **mutasyon yeşil kaldı**. Bu,
+  kartın *"ikiz, bayatlık kuralını AYNI SABİTTEN uyguluyor"* teşhisinin **birebir
+  aynısıydı, bu kez testin kendisinde**. Damgalar **14 dk / 16 dk literaline** çevrildi
+  ve pencerenin hâlâ 15 dakika olduğu **ayrıca** iddia edildi — pencere değişirse test
+  sessizce uyum sağlamaz, yüksek sesle kırılır.
+- **Üçüncü mutasyon bu yüzden gerekliydi:** ikincinin kırmızısı o koruma satırından
+  gelebilirdi. `IsStale` her zaman `false` yapıldı (`StaleAfter`'a **dokunulmadan**) →
+  kırmızı; yani **süzmenin kendisi** ölçülüyor.
+- **Sonuç:** 4/4 yeşil (`Skipped: 0`), format temiz. Üç mutasyonun üçü de yakalandı.
+  **Commit:** `93e0af89`
+
 ## Kararlar (üçüncü tur)
 
 - Bir kuyruğa **kimlik** bırakılıyorsa, o kimliğin **hangi tabloya** ait olduğu da
