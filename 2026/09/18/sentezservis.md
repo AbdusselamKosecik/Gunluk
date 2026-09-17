@@ -91,6 +91,56 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
   Sır içermedikleri teyit edildi. Her biri TR/EN/AR üç dili birlikte taşıyor,
   firma rengi üst barda (`#17365D` ModaSima, `#2F4858` Modfex).
 
+### 5. Çoklu dil (TR/EN/AR) tasarımı — spec yazıldı, uygulanmadı
+
+- **Neden:** Talep dört alt sistemi kapsıyordu (arayüz, arka uç metinleri, mail,
+  rapor/PDF); tek turda yapılacak iş değil, önce parçalanması gerekiyordu.
+- **Ne yapıldı:** Ölçüm alındı ve kararlar konuşuldu. Ölçüm: `web/src` 95 dosya /
+  ~23.000 satır, 86 dosyada ~1.150 Türkçe metin, i18n kütüphanesi yok,
+  `index.html`'de `lang="en"` (yanlış). **Çoğullu/enterpolasyonlu Türkçe cümle: 0**
+  (iki ayrı desenle arandı) — bu, kütüphane kararını belirledi.
+- **Kararlar:** kütüphane yok, ~120 satırlık kendi `t()`'miz (TypeScript ile anahtarlar
+  tip güvenli olur, i18next'te bu yok); anahtarlar Türkçe slug; dil seçimi
+  `localStorage`'da; **mailler tek mesajda üç dili alt alta taşıyacak** (sunucu alıcının
+  dilini bilemez, bu karar o boşluğu kapatıyor); arka uç hataları `ApiError.kod`
+  üzerinden çevrilir — C# elden geçirilmesi gerekmiyor.
+- **İyi haber:** yön bağımlı CSS yalnızca 9 yer (`theme.css` 1.582 satır içinde),
+  inline'da 49 yer. RTL küçük ve mekanik iş. Gezinmenin 28 metni `Layout.tsx:23`
+  `MENU` sabitinde tek yerde.
+- **Dokunulan dosyalar:** `docs/superpowers/specs/2026-09-18-coklu-dil-design.md`
+- **Commit:** `cef7f35` — Coklu dil (TR/EN/AR) tasarim belgesi
+
+### 6. Karşıt kod eşleştirme (`UZM_ExternalXRef`) tasarımı
+
+- **Neden:** Gelen e-fatura XML'indeki ürün kodu `Erp_Inventory`/`Erp_Service`
+  kaydına bağlanmak zorunda. Sentez bunu `Meta_ExternalXRef`'ten çözüyor
+  (`TypeCode` 100/101, `ExtKeyValue4`=XML kodu, `KeyValue3`=cari, yoksa
+  `ExtKeyValue2` ile LIKE kalıbı). İstenen: **önce bizim tablomuza bakılsın**,
+  bulunamazsa Sentez'in mevcut mantığı uygulansın.
+- **Ne yapıldı:** Tasarım belgesi yazıldı. Şema `UZM_ExternalXRef`
+  (CompanyId, TypeCode, AccountCode, ExternalCode, ExternalName, TargetCode, InUse,
+  audit), iki indeks + kod tekilliği kısıtı. Örnek parametreli sorgular belgeye kondu.
+- **Önemli tespitler:**
+  - Bizim kod tabanında `Meta_ExternalXRef` **hiç geçmiyordu**; e-fatura aktarımını
+    biz yapmıyoruz, `192.168.1.4:3132/EFautra` adresindeki dış uygulamayı sadece
+    tetikliyoruz. Eklentiyi kullanıcı yazacak.
+  - `MigrasyonCalistirici` yalnızca bizim veritabanımıza bağlanıyor → ERP'deki tablo
+    göç sistemiyle kurulamaz; DDL elle uygulanacak bir betik olarak repoda duracak.
+    Servise canlı ERP'de DDL yetkisi vermek bir tablo için alınacak risk değil.
+  - **Şart B-10 çelişkisi:** ERP bağlantısı salt okunur, bugüne kadar iki yazma
+    istisnası var (raf adresi, `Meta_ForexRate`). Bu üçüncüsü olur ve kurul kararı
+    yazılmadan uygulanmayacak. Hafifletici: `UZM_ExternalXRef` ERP'de duran ama
+    tamamen bize ait **yeni** bir tablo; yanlış yazmada bozulacak ERP verisi yok.
+  - Muhafız testlerinin var olduğunu **kontrol ederek** doğruladım (önce yok sandım):
+    `EksiStokTestleri.cs:24`, `TcmbKurTestleri.cs:105`, `CariYaziciSinirTestleri`,
+    `SiparisDeposuSinirTestleri` — modül modül kaynak taraması. Yeni depo da
+    kendi sınır testini getirecek.
+  - Mevcut eklenti kodu SQL'i string birleştirmeyle kuruyor, tek koruması
+    `Replace("'", "-")`. XML dış veridir; belgede parametreli sorgu şart koşuldu.
+- **Dokunulan dosyalar:**
+  `docs/superpowers/specs/2026-09-18-karsit-kod-eslestirme-design.md`
+- **Commit:** `7687acb` — Karsit kod eslestirme (UZM_ExternalXRef) tasarim belgesi
+
 ## Kararlar
 
 - **465 kullanılır, 587 kullanılmaz.** Gerekçe sertifika; 587'nin sertifikası
@@ -107,7 +157,7 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
 
 ## Açık kalanlar / sonraki adım
 
-- **Çoklu dil (TR/EN/AR) — HENÜZ BAŞLANMADI.** Ölçüm yapıldı: `web/src` altında
+- **Çoklu dil — tasarım onaylandı, UYGULAMA PLANI YAZILMADI.** Ölçüm: `web/src` altında
   95 dosya / ~23.000 satır, **86 dosyada ~1.150 Türkçe metin**, i18n kütüphanesi yok,
   `index.html`'de `lang="en"` yazıyor (yanlış). Arapça için RTL gerekir. Ayrıca
   arka uçtan gelen metinler (iş adları, hata mesajları) ve mail şablonları da kapsam
@@ -121,3 +171,7 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
   oraya da yazılmadan canlıda mail çalışmaz.
 - 587'nin süresi geçmiş sertifikası Natro'ya bildirilebilir (bizim için acil değil,
   465 çalışıyor).
+- **Karşıt kod işi:** belgedeki üç açık soru cevaplanmalı (ad kalıbı birden fazla
+  satır tutarsa öncelik nasıl belirlenecek; `AccountCode` boş bırakılıp "cari fark
+  etmez" denebilmeli mi; eşleşmeyen XML kodları için kayıt/uyarı üretilsin mi).
+  Sonra Karar #07 yazılacak, sonra uygulama planı.
