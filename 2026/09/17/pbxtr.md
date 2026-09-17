@@ -755,6 +755,114 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Commit:** `c94c645d` (merge)
 - **ClickUp:** `BR-A3 → complete`, doğrulama `fark olan kart: 0, izde olmayan: 0`.
 
+### 25. Kurul Karar #67 - ikinci toplu oturum: koordinatorun DORT hatasi curutuldu
+
+- **Neden:** Karar #66'dan sonra ajan raporlarinda 12 soru daha birikti.
+- **Ne yapildi:** Gundem `kurul-gundem-2026-09-17-tur2.md` (N1-N12), 10 uye paralel oylandi,
+  Karar #67 yazildi.
+- **Sonuc:** SARTLI ONAY. Seytan **2 HAYIR** verdi ve **ikisinde de hakli cikti.**
+  **Asil cikti, gundemi yazan koordinatorun (benim) dort hatasinin curutulmesidir:**
+  1. **N2 - kapanmis bir karari geri aliyordum.** `BR-FE-66` Karar #36 (5) ile SARTLI ONAY
+     almis ve **dorduncu** secenege baglanmisti; gundemin sundugu iki secenek o oturumda
+     **son kullanicilar tarafindan adiyla reddedilmisti** (agent: "tire gorunce kimse
+     beklemiyor sanirim", supervizor: "yanlis sayi beni yanlis yone goturur"). Dort uye
+     (CTO, FE, cm-agent, Seytan) **bagimsiz olarak** yakaladi. Karar #36 aynen yururlukte.
+  2. **N4 - cevap zaten inmis.** (a) Karar #37'yi geri alir, (b) kullanicinin 2026-09-06
+     reddine carpar, (c)'nin regex ayagi A11'de reddedilmis ve `.pcap` icin imkansiz oldugu
+     olculmus. `BR-SEC-03`(a) **kapatildi**; kalan is tespit (`BR-QA-89`).
+  3. **N9 - karti yanlis aktariyordum.** `BR-BE-130` `trigger=null`'i "yalniz elle" diye
+     **tanimlamamis**; tersini yazmis (**baglama aninda** NULL reddedilir). Iki ayri yuzeyi
+     karistirdim. Yeniden cercevelendi: satirda NULL kalir (elle gonderim kipi korunur),
+     baglamada reddedilir, S52-3 metni duzeltilir.
+  4. **N1 yasak listesi - liste oldugu gibi gecseydi kapi ilk kosuda kirmizi dogardi.**
+     Taban uc kisi tarafindan ayri ayri olculdu (db-lider, backend-lider, ben):
+     `SECURITY DEFINER` **75**, `DROP FUNCTION` **102**, `DO` blogu **30**,
+     `DISABLE ROW LEVEL SECURITY` **0**, `GRANT ... TO PUBLIC` **1**. Naif `TO PUBLIC`
+     taramasi 53 satir esliyor, **52'si** `INSERT INTO public.` yanlis pozitifi.
+     Liste **bolundu**: 2 desen simdi DENIED, 3'u onay-gerektiren sinifa ve ancak bicim
+     indikten **sonra**.
+- **Uyelerin buldugu, gundemde olmayan uc gercek kusur:**
+  - **Supervizor:** mudahale `penalty: 0` ile ekliyor -> **`BR-BE-164`** (asagida olculdu).
+  - **Seytan I6:** `QueueMembershipSyncJob` mudahale uyesi icin **`QueueRemove` atmiyor** ->
+    uye santralde suresiz kaliyor, DB'de hic gorunmuyor -> **`BR-BE-165`**.
+  - **Frontend Uzmani:** **S47-4 yazilmis ama koda inmemis** - `LiveAlarmsScreen`
+    `ruleSource`'a hic bakmiyor, kural yalnizca *kazara* dogru -> **`BR-FE-89`**.
+- **Yan cikti - bayat belge satiri gereksiz bir indeks karari uretmek uzereydi.**
+  `IAuditLogQuery.cs` iki yerde "actor_user_id'de indeks YOKTUR" diyordu; migration
+  `20260816130000` o indeksi bir ay once yaratmis. N7 "38 ms yavas, dorduncu indeks
+  ekleyelim mi" diye oylaniyordu; db-lider olcumun **aktorsuz** alindigini ve KVKK
+  sorusunun daima aktorlu oldugunu gosterdi (aktor indeksinde 0,21-4,7 ms). Satir
+  duzeltildi (`042baa26`).
+- **Commit:** `c422ba89` (Karar #67 + 4 kart), `042baa26` (bayat satir)
+
+### 26. `penalty: 0` - oylama sirasinda bulunan, canlida dogrulanan kusur
+
+- **Neden:** Supervizor N8'i oylarken koda bakti ve `AgentInterventionService.cs:197`'de
+  mudahalenin `QueueAddAsync(..., penalty: 0, ...)` ile gittigini gordu.
+- **Ne yapildi / olcum:** Once yapi dogrulandi - diger **her** yol (uyelik senkronu, izin
+  isi, kuyruk yonetimi) uyenin **saklanan** `Penalty` degerini geciriyor; yalniz mudahale
+  sifir sabitliyor. Asterisk'te **dusuk penalty once cagrilir**. Sonra canli olcum:
+  `queue_members` 12 satir - **9 satir penalty 0, 3 satir penalty 1**.
+- **Sonuc:** Penalty fiilen kullaniliyor, yani mudahaleyle eklenen kisi o 3 uyenin
+  **onune geciyor**. Kusur gizli degil, bugun gorunur. Supervizorun tarif ettigi belirti:
+  SLA duzelir ama FCR/donusum duser ve bu ancak vardiya sonunda fark edilir.
+- **Kart:** `BR-BE-164` (P2), olcum kartin durum hucresinde yazili.
+- **Commit:** `83eeefb3`
+
+### 27. `main` benim yuzumden derlenmiyordu - ve bunu bir ajan buldu
+
+- **Neden:** DB ajani kendi isini kosarken `Pbxtr.Integration.Tests`'in **hic
+  derlenmedigini** bildirdi.
+- **Olcum:** Dogrulandi - `RegistrationAxisHttpTests.cs` `AriStasisApplicationProbe` ve
+  `AsteriskOptions` kullaniyor ama `using Pbxtr.Infrastructure.Telephony.Asterisk;` yok
+  -> **CS0246 x2**, projenin tamami kirmizi.
+- **Sebep bende:** O dosya `8a581a5d` (OPS merge) ile geldi. Merge'den sonra
+  `Architecture.Tests` ve filtreli `Api.Tests` kostum, yesil gordum, push ettim -
+  **`Integration.Tests`'i hic derlemedim.** Kirmizi saatlerce gorunmedi.
+- **Duzeltme:** Tek satir `using` (`d4b9e62e`). Bellege yazildi: *merge sonrasi her test
+  projesi en az DERLENMELI*; artik her merge'de ucu de derleniyor ve commit mesajina
+  hangi takimin kostugu yaziliyor.
+
+### 28. DB dali + Karar #68 (db-lider yazili onayi)
+
+- **Ne yapildi:** DB dali merge edildi: `kapi_07` onay satiri, `BR-DB-62` (tenants degismez
+  kolon tetikleyicisi + refresh migration), `BR-DB-65`, `BR-DB-50/46`.
+- **Onay satiri dogrulandi:** Yeni migration `Karar#62`'ye dayaniyor. Karar #62'nin
+  **secenek (c)**'si birebir "pbxtr_app icin yazilamaz kolonlara rol bazli BEFORE UPDATE
+  tetikleyicisi + 02-guards bekcisi" diyor ve Asterisk Uzmani'nin "id de tetikleyiciye
+  girsin" sarti da karsilaniyor. Onay satiri ham SQL'i geciren mekanizma oldugu icin bu
+  kontrol atlanamaz.
+- **Canli olcumler:** `BR-DB-50` DETACH kilidi - uzun transaction'da eszamanli INSERT
+  **7.020 ms** bekledi, kisa transaction kolunda **5,7 ms** (kontrol grubu farki gosterdi).
+  `BR-DB-52` retention kosusu atilir tenant'ta (demo verisine dokunulmadi, oncesi/sonrasi
+  sayimla dogrulandi): 343 ms, 20000/20000 + 60000/60000, partition'lar dustu.
+- **Karar #68 (kurul degil, db-lider):** `ci-check.sh:491-493` kapisinin **kendi gerekcesi**
+  db-lider yazili onayi + karar kaydi istiyor. db-lider SARTLI ONAY verdi ama gerekceyi
+  duzeltti: envanter "kismi olan her indeks" degil **"yuklemi garantinin parcasi olan
+  indeks"** listesidir. En kritik sart **S68-5**: kismi tekil indeks, yuklemsiz
+  `ON CONFLICT`'te **42P10** verir (S36-14'te PG16'da olculmus) ve taslakta yuklem yazili
+  degil. Karsi-kontrol: kartin "ikiye katlar" cumlesi **bugun turetimdir, gozlem degildir**
+  - iki eszamanli aktorle olculmeden `BR-DB-44` "Bitti" sayilmaz.
+- **Commit:** `d324c299` (merge), `62ddf08f` (Karar #68)
+
+### 29. BR-8 - ajan gorev metnimi duzeltti
+
+- **Ne yapildi:** Calisma saati disi otomatik mola merge edildi (`c3576e3e`).
+- **KAPSAM DUZELTMESI (ajan hakliydi):** Ben "vardiya planindan mola uretimi" yazmistim.
+  Kartta yazili olan bu degil: **WFM/vardiya plani Karar #29 ile ERTELENDI**; gercek kart
+  tek bir borc satiri (tenant parametresi + `working_hours` + `QueuePause` + DST testi).
+  Vardiya tablosu **yazilmadi** ve bu bilincli. Ayrica gorev metnimde bir uyariyi Karar #66'ya
+  atfetmistim; o uyari Karar #29'da - yanlis atif, ajan duzeltti.
+- **DST olcumu (asil kabul kriteri):** Europe/Berlin, kapanis penceresi yerel 02:00-03:00:
+  ileri alinan gunde kapali tick **0**, geri alinan gunde **8**, kontrol gununde **4**.
+  Bu uclu anti-vacuity kontroludur - gecisin gercekten olculdugunu gosterir. Ikinci gecisde
+  ikinci mola dogmamasinin sebebi bir DST ozel dali degil, istenen-durum karsilastirmasi.
+- **Tasarim notu:** `suppressed_by_leave` **yeniden kullanilmadi** - ikisi ayni anda dogru
+  olabilir ve tek kolon paylasilsaydi biri otekinin izini silerdi. Fail-safe: canli durum
+  okunamazsa **duraklatma yapilmaz** ("bilmiyorum" = "cagrida").
+- **Yeni kart:** `BR-FE-90` - sunucu hazir, #49'da anahtar yok (deponun baskin hata deseni).
+- **ClickUp:** 544 -> 545 kart, dogrulama "fark olan kart: 0".
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
