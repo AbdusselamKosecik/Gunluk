@@ -943,6 +943,105 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   acilmaz. Kod hazir, bayrak bugun yalnizca SQL ile acilabiliyor (ekran/uc yuzeyi
   yok - bilincli, ayri kart).
 
+### 32. BR-C2 webhook merge — kurul BENIM blob'uma onay VERMEDI, ve hakliydi
+
+- **Ne yapildi:** Webhook epic'i merge edildi (`dd6e7e58`). Merge catismasi advisory
+  kilit numarasindaydi: iki dal da **37**'yi almisti (BR-8 `OutsideHoursBreak`,
+  BR-C2 `WebhookDelivery`). Ikisinin de kendi yorumu *"ayni kilidi paylasan iki is
+  birbirini ACLIGA DUSURUR ve bu hicbir yerde hata uretmez"* diyordu — yani catisma
+  tam olarak **ikisinin de uyardigi sinifti**. Once merge edilen 37'de kaldi,
+  webhook 38 oldu; 1..38 arasi mukerrer olmadigi programla dogrulandi.
+- **KURUL 10/10 SARTLI VERDI VE ONAYI BUGUNKU BLOB'A VERMEDI (Karar #69).**
+  Uc uye **bagimsiz olarak** ayni kusuru buldu, ikisi olctu: migration'in `Down`
+  yolundaki `DELETE FROM tenant_license_features` **FORCE RLS altinda SESSIZCE 0
+  SATIR** siliyordu (`pbxtr_owner` NOBYPASSRLS, `app.cross_tenant` yazilmiyor) ve
+  hemen ardindaki daraltici CHECK `23514` ile `Down`'i yarida birakiyordu. Yani
+  yazarin *"tuzagi yakaladim"* dedigi sey **aynen duruyordu**.
+- **BENIM DORT ONCULUM CURUDU** ve dordu de gundeme "olculdu" diye benim elimle
+  yazilmisti:
+  1. *"Hicbir blok EF ile ifade edilemiyor"* → 7 satirin **3'u yanlis** (4 indeks
+     `CreateIndex(unique:, filter:)`, 3 COMMENT `CreateTable(comment:)`, CHECK
+     `Drop/AddCheckConstraint`). BR-AST-59 emsali geregi **ceviri sart, onay degil**.
+  2. S66-8/4'u **karar kaydinda hic olmayan** bir cumleyle alintiladim.
+  3. *"Kapi sinyali boguyor"* → kapi bulguyu **zaten** dosya+satir+sayi onekiyle
+     etiketliyor; bogulmuyor, **siralanmiyor**.
+  4. Defterde "6 onayli satir" yazdim, **11** vardi.
+- **Linux uzmani Ş69-10'u OLCTU:** onay satiri varken `01-rls-template.sql`'e
+  `DROP TABLE public.audit_log` eklenince kapi **rc=0** kaliyor. Yani onay `.cs`
+  blob'unu cipaliyor, o dosyanin **calistirdigi sablon icerigini cipalamiyor**.
+- **Frontend gercek bir hata buldu:** ADR/kod *"#34 Ayarlar"* diyor ama **#34 Kayit
+  Hedefleri**'dir (yetkisi `storage.read`), Ayarlar **#49**'dur (`bundle.integration`
+  yalniz owner'da). Cumleyi birebir uygulayan bir gelistirici dis veri akisi
+  yonetimini **yanlis yetki paketine** koyardi.
+- **Supervizor:** webhook'un **ekrani yok** — 8 uc yazilmis, `pendingDelivery`/teslim
+  gunlugu FE'de **0 eslesme**. Teslim arizasi musterinin telefonundan ogrenilir.
+- **Duzeltme sonrasi olcum:** kapi **rc=0** `ONAYLI (Karar#69)`, `OLCULEMEDI` yok;
+  Architecture **674/674** (webhook 7 bekci ekledi), `Modules.Integrations` **88/88**;
+  S69-12 mutasyonu (`CreatedAt = UtcNow`) **2/2 kirmizi**.
+- **Commit:** `dd6e7e58`
+
+### 33. AMI/ARI olay hatti merge — merge kirmizisi yakalandi, kurul bir komutu REDDETTI
+
+- **Ne yapildi:** BR-AST-45/50/70/73/82/84/88 + BR-BE-119 + D-11 merge edildi
+  (`654aa02a`).
+- **MERGE KIRMIZISI (hafizadaki dersin tekrari):** dal `ITelephonyProvider`'a
+  `GetEndpointDeliveryAsync` ekledi; daha once merge edilen BR-8'in test ikizi onu
+  bilmiyordu → **CS0535 ×2**. Iki dal **ayri ayri yesildi**, yalniz birlesimde
+  kirmizi. Ikizin kendi sozlesmesine uyularak `NotSupportedException` ile yazildi —
+  sessizce `Unmeasured` donmek, isin o yola girdigini **gizlerdi**.
+- **KURUL Q3-a'YI REDDETTI (Karar #70).** `module reload res_ari.so` kapali listeye
+  **eklenmedi**. Iki alan uzmani bagimsiz olarak ayni olcume vardi:
+  - `ari.conf` **IMAJ** sinifidir; `pbxtr-confd` ona **dokunmaz** → komutun
+    **SAHIBI YOK**. Sahibi olmayan bir ajana reload yetkisi vermek, kapali listeyi
+    **fayda karsiligi olmadan** genisletmektir.
+  - Yayin zaten `--force-recreate asterisk` kosuyor → ayar bir sonraki yayinda
+    **kendiliginden** geciyor: yeni komut yok, sudoers yok, yeni yetki yok.
+  - **Recreate teknik olarak USTUN:** `channelvars` yalniz reload'dan **sonra dogan**
+    kanallara uygulaniyor ve `AriChannelUsage` **tam-ya-hic** davraniyor → hot reload
+    sonrasi `ActiveCalls` santral dogal olarak bosalana kadar **`null`** kalir
+    (parklanmis cagri 1 saat). Recreate o pencereyi **sifirlar**.
+  - CTO'nun siniflandirmasi karara gecti: **kapali liste bir "zararsiz komutlar"
+    listesi degil, bir daemon'a verilen KALICI YETKI listesidir.**
+- **Turun asil bulgusu (res_ari kararindan bagimsiz):** CLAUDE.md §3.1 listesi ile
+  sarmalayici katalogu arasinda **koşan bir parite kapisi YOK**. Bugun `ast()`'e
+  yedinci satir eklemek **hicbir kirmizi uretmiyor**. AMI yetki kumesinde bu tam
+  olarak yasanmisti (`kapi_48` kuruldugu ilk kosuda belgenin koddan **genis** yetki
+  tarif ettigini yakalamisti).
+- **Karar #66 Ş66-13'un onculu YANLIS cikti** (linux-uzmani olctu): *"kapi_48
+  degisir"* — `kapi_48` AMI `write` kumesi + `CoreShowChannels` kapisidir, reload
+  listesiyle **ilgisi yoktur**. Dogru kapilar `kapi_38` ve `kapi_50`.
+- **Backend lideri turun en iyi olcumunu yapti:** kurulu DB'den **292 CHECK**, **85'i
+  EF modeli disinda** (`has-pending-model-changes` hicbirini gormez),
+  `EnumMirrorCheckConstraintTests` **27**'sini kapsiyor — ve **mutasyonla** o sinifta
+  **tek kapi** oldugunu kanitladi: `TenantStatuses.All`'a sahte deger eklenince test
+  1 kirmizi verdi, `has-pending-model-changes` **exit 0 yesil** kaldi. Kontrol grubu
+  (EF modeline bagli kisit) kirmizi verdi. Kapsanmayan: **4** dis ayna + **9** bagsiz
+  duz metin; en keskini `ck_dids_target_pairing` (kardesi bagli, kendisi degil).
+- **Linux uzmani sunucuda olctu:** 17.913 satir, DDL **25 ms**, ve `pg_locks` iki
+  okumayla gosterdi ki `NOT VALID` + ayri `VALIDATE` **kilit kazanci saglamiyor** —
+  EF tek transaction kullandigi icin `DROP CONSTRAINT`'in ACCESS EXCLUSIVE'i
+  `VALIDATE` taramasi boyunca tutuluyor. Bu, Karar #59'un `db-lider`'e devrettigi
+  sorunun cevabidir.
+- **Seytan gundemin iki tasiyici oncululunu curuttu.** Ikincisi bana ait:
+  *"`23514` transaction'i duserdi"* → **dusurmuyor**;
+  `PersistentTelephonyProvider.RecordAfterEffect` istisnayi **yutuyor**. Gercek
+  belirti *"etki olculur, defter satiri yazilamaz"*. Aciliyet gerekcem yanlisti.
+- **Saha ajani iki gercek kusur buldu:** (1) `pendingDeliveryMembers` FE'de **0
+  eslesme** — BR-AST-88'in fail-closed kapisi agent'a **sessiz**; (2) molada iken
+  uyelik yeniden kurulursa `paused` **tasinmiyor** → pbxtr "molada", kuyruk "musait"
+  saniyor ve **caldiriyor**.
+- **Supervizor:** `useRealtimeSilence` **yalniz wallboard'da** — koridordaki TV
+  kopmayi goruyor, mudahale ekrani gormuyor. Ve ilk 120 sn'de `longestWaitDisplaySec`
+  **bayat damgadan artiyor**: sayi donmuyor, **buyuyor**.
+- **Olcum:** kapi **rc=0** `ONAYLI (Karar#70)`, uc test projesi de derleniyor,
+  Architecture **674/674** cikis kodu 0. **OLCULMEDI:** Api.Tests Telephony tam
+  kosusu — uc paralel `dotnet test` testhost cokmesi riski uretiyordu, kendi kosumu
+  durdurdum.
+- **Kartlar:** Karar #69'dan **23 kart**, Karar #70'ten **22 sart**. Numaralar kart
+  yazilmadan **ONCE** olculdu (onek bazinda en buyuk taranarak), **0 mukerrer**.
+  ClickUp senkronu: 23 yeni kart acildi, **fark olan kart: 0, izde olmayan: 0**.
+- **Commit:** `654aa02a`
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
