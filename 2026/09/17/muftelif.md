@@ -16,13 +16,13 @@ Bugün brainstorming → onaylı tasarım → spec dosyası yapıldı; kod yok.
 - **Dokunulan dosyalar:** `SarfKullanim/docs/2026-09-17-sarf-kullanim-design.md`
 - **Komutlar:**
   ```bash
-  git switch -c feat/sarf-kullanim     # feat/sentez-planing-ayrimi HEAD'inden (main 106 commit geride)
+  git switch main && git pull --ff-only   # kullanici: ayri dal acma, main
   git add SarfKullanim/docs/2026-09-17-sarf-kullanim-design.md
   git commit -m "docs(sarf-kullanim): SarfKullanim web uygulamasi tasarim dokumani"
-  git push -u origin feat/sarf-kullanim
+  git push origin main
   ```
 - **Sonuç / doğrulama:** Spec GitLab'a push edildi; kullanıcı incelemesi bekleniyor.
-- **Commit:** `45d1af8` — docs(sarf-kullanim): SarfKullanim web uygulamasi tasarim dokumani
+- **Commit:** `9ea603d` (main) — docs(sarf-kullanim): SarfKullanim web uygulamasi tasarim dokumani
 
 ## Kararlar
 - Kullanıcılar `Meta_User`; yetki ayrımı yok (herkes her şeyi görür/kaydeder).
@@ -38,3 +38,17 @@ Bugün brainstorming → onaylı tasarım → spec dosyası yapıldı; kod yok.
 - Kullanıcı spec'i inceleyecek.
 - Sentez kolon adları (ReceiptType yeri, depo/masraf yeri kolonları, Resource/Employee → CostCenter bağı) SentezLive'a karşı doğrulanmalı — okuma bağlantı bilgisi gerekli.
 - Onay sonrası: uygulama planı (writing-plans) → implementasyon.
+
+### 2. Dal düzeni: main'de çalış + uzak/yerel eşitleme
+- **Neden:** Kullanıcı "mainde çalış, başka dal oluşturma" ve "dalları eşitle uzakla lokali" dedi.
+- **Ne yapıldı:** Spec commit'i `main`'e cherry-pick edildi (`9ea603d`) ve push edildi (yerel main'de push edilmemiş commit'ler de gitti). `feat/sarf-kullanim` yerelde ve uzakta silindi. Sadece yerelde olan `feature/birim-giris-cikis` ve `feature/fason-iscilik-history-workflow` uzağa push edildi (ikisi de main'e zaten dahil).
+- **Komutlar:**
+  ```bash
+  git switch main && git pull --ff-only && git cherry-pick 45d1af8 && git push origin main
+  git branch -D feat/sarf-kullanim && git push origin --delete feat/sarf-kullanim
+  git push -u origin feature/birim-giris-cikis feature/fason-iscilik-history-workflow
+  ```
+- **Sonuç:** Tüm yerel dallar upstream ile birebir (ahead/behind yok).
+
+## Açık kalan (dal)
+- `feat/sentez-planing-ayrimi` main'de olmayan 9 commit taşıyor — main'e birleştirilip birleştirilmeyeceği kullanıcıya soruldu.
