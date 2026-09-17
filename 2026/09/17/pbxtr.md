@@ -407,6 +407,46 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   `dotnet format --verify-no-changes` temiz.
 - **Commit:** `ee2db51a` — BR-QA-53 bitti: query filter artik GERCEK model uzerinde olculuyor
 
+### 16. `BR-QA-52` — `TenantLeakCoverageTests` **kuruldu**, ADR-012'nin R-1 riski kapandı
+
+- **Neden:** ADR-012 §G1 bu bekçiyi "KURAL, kurulacak" diye tanımlıyordu ve kendi R-1
+  riskinde şunu yazıyordu: *"Kurulum kartları açılmalı; açılmazsa bu belge projenin baskın
+  hata deseninin yeni bir örneği olur."* **Kart açılmadı ve öyle oldu** — kart
+  (`BR-QA-52`) ancak 2026-09-10'da, bir ADR taraması sırasında açıldı.
+- **Ne yapıldı:** `tests/Pbxtr.Architecture.Tests/TenantLeakCoverageTests.cs`.
+  `src/Pbxtr.Infrastructure/Modules/**/Ef*.cs` sayılır; her adaptör için ya bir sızıntı
+  testi bulunur, ya da borç listesinde kaydı olur. Dört vaka: (1) kapsam ya da borç,
+  (2) ölü/artık kapanmış kayıt yok, (3) **kilitli sayı** — borç yalnızca küçülür,
+  (4) vacuity + pozitif kontrol.
+- **Bekçi yasaklamaz, dondurur.** 66 adaptörün sızıntı testi bugün yok; bunları kırmızı
+  yakmak bekçiyi ilk günde silinecek bir engele çevirirdi. Kazanç: bundan sonra eklenen
+  her `Ef*.cs` ya sızıntı testiyle gelir, ya da bu dosyayı değiştirmek zorunda kalır ve
+  borcun büyümesi **review'da görünür**.
+- **66 ayrı gerekçe yazılmadı.** ADR "gerekçe + kart kimliği" istiyordu; hiçbiri
+  ölçülmemişken 66 ayrı cümle yazmak *gerekçe değil dolgu* üretirdi — ve bu deponun baskın
+  hata deseni tam olarak budur. Gerçek tek cümledir: bu 66 adaptörün tenant sızıntısı
+  bugüne kadar ölçülmedi. Ortak gerekçe ve tek kart kimliği `BR-QA-52`'dir.
+- **TANIM ÖLÇÜMLE DÜZELTİLDİ — turun asıl dersi.** İlk tanım yalnızca **dosya adına**
+  bakıyordu ve borç **83** çıktı. Sonra görüldü ki `BlacklistTenantLeakTests`,
+  `CampaignTenantLeakTests`, `CrmBridgeTenantLeakTests`, `IvrTenantLeakTests`,
+  `ReportTenantLeakTests` ve `SmsTemplateBindingTenantLeakTests` **gerçekten vardı** —
+  dosya adları adaptörün tam adını taşımıyordu (`Blacklist` ≠ `BlacklistDirectory`). Dar
+  tanım **16 kalemi yok yere borça yazıyordu** ve böyle bir liste, ilerlemeyi gizlediği
+  için kendi amacını bozardı. Tanıma "gövdede `Ef<Ad>` anma" dalı eklendi; borç **83 → 66**.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Architecture.Tests/TenantLeakCoverageTests.cs`
+  (yeni), `doc/mimari/ADR-012-tenant-izolasyonu-kanit-katmanlari.md`, `yonetim/backlog.md`
+- **Mutasyon (3 kırmızı):**
+  1. Borçta olmayan yeni bir `Ef*.cs` eklendi → `MutasyonDenemesi` ile kırmızı.
+  2. Borç listesine ölü kayıt (`EfOlmayanAdaptor`) → kırmızı.
+  3. Kapsam dedektörünün regex'i körleştirildi → vacuity vakası `kapali = 0` diyerek
+     kırmızı (pozitif kontrol çalışıyor).
+- **ADR güncellendi:** G1/G2/G3 üçü de artık **KURULDU**; §2 ve §5'in ilgili maddeleri
+  ÖNERİ değil **KURAL**. R-1 kapandı — ama *geç* kapandığı ve sebebi ADR'de kayıtlı
+  bırakıldı.
+- **Sonuç / doğrulama:** Mimari takım **624/624 yeşil**.
+  `dotnet format --verify-no-changes` temiz.
+- **Commit:** `0cae9596` — BR-QA-52 bitti: TenantLeakCoverageTests kuruldu (ADR-012 G1)
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
@@ -430,6 +470,14 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   okuyacağı yerden — tablodan — geri okunmalı.
 - **Paylaşılan bir önbellek, bekçilerin en sessiz düşmanıdır.** Hız kazancı alınır ama
   "üç ayrı soru" iddiası ölçülmezse kapılar tek kapıya çökebilir ve bunu kimse görmez.
+- **Bir kapsam ölçümünün ilk sayısı, tanımın ölçümüdür; kapsamın değil.** "83 modülün
+  sızıntı testi yok" cümlesi ölçüm gibi duruyordu; gerçekte altı test **vardı** ve tanım
+  onları göremiyordu. Borç listesi yayımlanmadan önce, listenin **kapalı** tarafı da ayrıca
+  doğrulanmalı.
+- **Bekçi borcu yasaklamaz, dondurur.** 66 kalemi kırmızı yakan bir kapı ilk gün silinir;
+  kilitli sayı ise borcu görünür kılar ve büyümesini review'a taşır.
+- **Bir ADR kendi uygulama kartını açamaz.** Kartı açılmayan "kurulacak" bekçi, ADR'nin
+  kendi uyardığı hata deseninin örneği olur — ADR-012 bunu yazmıştı ve öyle oldu.
 - **Boş bir aday kümesi, yeşil bir testin en sessiz hâlidir.** "0 TPH türevi" ölçüldüğünde
   seçenek ikidir: vakayı silmek ya da tetik olduğunu **yazmak** ve dedektörü ayrı bir
   pozitif kontrolle kanıtlamak. Yazılmayan üçüncü yol — sessizce yeşil bırakmak — bu
