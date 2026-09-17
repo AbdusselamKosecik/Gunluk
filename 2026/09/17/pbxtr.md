@@ -704,6 +704,57 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Commit:** `5d72444c` (merge), `8ea17dae` (backlog + iki kart + N12)
 - **ClickUp:** 2 yeni kart açıldı (539), doğrulama `fark olan kart: 0, izde olmayan: 0`.
 
+### 24. Epik BR-A3 — Scripter faz 2 (Bitti)
+
+- **Neden:** Kullanıcı kararı: büyük özellik epikleri "hepsi şimdi yapılsın".
+- **Ne yapıldı:** `worktree-agent-a820255300181aaaf` merge edildi. Kapsam backlog'da
+  yazılıydı ve **büyütülmedi**: `BR-A3 = BR-FE-16` (koşullu adım görünürlüğü) `+ BR-FE-17`
+  (adım başına katlanır bilgi notu — Karar #29 (11)'in "ayrı bilgi bankası modülü YOK"
+  karşılığı). Faz 1'in teslim ettiği her şey yerinde bırakıldı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Scripter/{ScriptRunnerRules,ScriptDefinition,ScriptDefinitionValidator,ScriptRules}.cs`,
+  `src/Pbxtr.Api/Modules/Scripter/ScriptDtos.cs`,
+  `src/Pbxtr.Web/src/app/screens/agent/{ScriptRunner.tsx,scriptApi.ts}`,
+  `src/Pbxtr.Web/src/app/screens/campaigns/{ScriptStepEditor,ScriptPreview,CampaignScriptScreen}.tsx`,
+  `tests/Pbxtr.Api.Tests/Modules/Scripter/ScriptConditionalStepTests.cs` (yeni, 31 test),
+  `deploy/nginx.conf`, `deploy/demo/nginx-demo-cloudflare.conf`, `deploy/nginx-dogrula.sh`,
+  `doc/prototip-urun-farklari.md`
+- **Tasarım kararı — görünürlük sunucuda:** `step.visibleWhen[]` agent DTO'suna **hiç
+  inmiyor**; koşulu tutmayan adım `ScriptRunnerRules.NextStepKey` içinde atlanıyor ve iki
+  çağıran (GET oturum + POST adım) **aynı metottan** geçiyor, yani kural tek yerde. Hamle
+  tavanı adım sayısı kadar — bozuk bir yayın masayı döngüye sokamaz.
+- **En kritik yeni kural `condition_field_unreachable`:** koşulun okuduğu cevap o adıma
+  gelmeden verilemiyorsa adım **hiçbir zaman** görünmez. Bu tamamen sessiz bir kayıp olurdu;
+  yayın kapısı artık reddediyor (`DirectedGraph.Reaches`).
+- **GÖVDE TAVANI DEĞİŞTİ ve elle doğrulama betikle değiştirildi.**
+  `ScriptRules.MaxDefinitionBytes` 8 → 9 MiB, nginx taslak yolu 9m → 10m (3 dosya). Sebep:
+  bilgi notu tanımın parçası; sayılmasaydı *"doğrulamayı geçen her script kaydedilebilir"*
+  şartı (BR-BE-65'in kendisi) sessizce yalan olurdu. Ajan aritmetiği **elle** doğrulamıştı
+  (`deploy/nginx-dogrula.sh` Windows'ta koşmuyor). Koordinatör betiği **ubuntu
+  konteynerinde** koşturdu ve betiğin kendisi doğruladı: *"script taslak tavanı kod ile
+  bağlı (uygulama 9 MiB, nginx 10m, 3 yer) TAMAM"*. Betiğin son adımı iç içe docker
+  olmadığı için **ölçülemedi** (rc=2) — o adım nginx'in kendi ayrıştırıcısını ister ve ilk
+  yayın koşusunda görülecek.
+  *Yol üstünde:* `docker run -w /repo` Git Bash'te `C:/Program Files/Git/repo`'ya çevrildi;
+  `MSYS_NO_PATHCONV=1` ile aşıldı (bellekteki "Git Bash yol çevrimi kapıyı öldürür" deseni).
+- **Sonuç / doğrulama:** Scripter **152/152** (yeni sınıf 31/31), Architecture **650/650**,
+  `tsc -b` rc=0, **vitest 217 dosya / 1959 test** (taban 1948 → +11), `dotnet format` temiz.
+  Mutasyon **7/7** kırmızı: görünürlük atlaması kaldırıldı (7 kırmızı), erişilebilirlik
+  kuralı kapatıldı, `visibleWhen` DTO'ya sızdırıldı, not tavanı düşürüldü, `useEffect`
+  bağımlılığı boşaltıldı, `/` kısayoluna `whileTyping` verildi, tel biçiminden alan düştü.
+- **Bilinçli borç A3-6 (fark belgesinde yazılı):** bir alanın anahtarı değişince **başka**
+  adımların o alana bakan koşulları editörde temizlenmiyor; sunucu
+  `condition_field_not_found` ile **reddediyor** ve engel ilgili adımın üstünde görünüyor —
+  yani sessiz kayıp yok. Adım **silmede** temizlik yapılıyor. Tam çözüm alan düzenlemesini
+  ekran seviyesine taşımayı gerektiriyor.
+- **Ajanın bildirdiği "ilgisiz kırmızı" zaten kapanmıştı:** dalının tabanında Ş46-9 bekçisi
+  kırmızıydı; o çarpışma bu turda main'de çözülmüştü (madde 22), yani dalı bayat tabandan
+  bakıyordu. Yeni bir kart gerekmedi.
+- **Fark belgesi:** Scripter satır 4 BORÇ → "VAR ve KAPANDI"; madde (11) bilgi bankası
+  **KAPANDI** (karşılık adım notu olarak teslim edildi, kayıt defterine yeni satır
+  eklenmedi); yeni tablo **A3-1..A3-6**.
+- **Commit:** `c94c645d` (merge)
+- **ClickUp:** `BR-A3 → complete`, doğrulama `fark olan kart: 0, izde olmayan: 0`.
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
