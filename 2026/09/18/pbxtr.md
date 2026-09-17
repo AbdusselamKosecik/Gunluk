@@ -210,6 +210,75 @@ karar kaydı yazılmamıştı.
   Doğrulama: **`fark olan kart: 0, izde olmayan: 0`**.
 - **Commit:** `dea1b5b0`, `8466ace4`, `341841d6`
 
+### 42. `BR-QA-91` — Ş69-10 deliği kapandı, onay satırı yazıldı
+
+- **Neden:** Karar #71 onay satırını vermemişti çünkü onay defteri `.cs` blob'unu çıpalıyor
+  ama o dosyanın **koşturduğu şablon içeriğini** çıpalamıyordu. Delik iddia değil, Karar
+  #69'da **ölçülmüştü**: onaylı satır varken `01-rls-template.sql`'e
+  `DROP TABLE public.audit_log` enjekte edilince kapı **rc=0** kalıyordu.
+- **Çözüm — şablon başına TEK satır:**
+
+  ```
+  Sablon deploy/db/01-rls-template.sql sha256:<64 hex> Karar#NN
+  ```
+
+  Migration onay satırlarının biçimi **hiç değişmedi**.
+- **Asıl tasarım kararı:** çıpanın değeri **dosyanın tamamı değil**, o dosyadaki **yıkıcı
+  ifadelerin** (`DROP`/`ALTER`/`RENAME`/`SET NOT NULL`) normalize metinlerinin sıralı
+  listesinin sha256'sı — ve **satır numarası çıpaya girmiyor**.
+  - Yorum/zararsız fonksiyon ekle, satırları kaydır → çıpa **değişmez**, kapı yeşil.
+  - Yeni bir `DROP` ekle, mevcut birinin hedefini değiştir, birini sil → **kırmızı**.
+
+  Gerekçe ölçülü: tam dosya sha'sı kullanılsaydı şablona **her dokunuşta 13 onay satırı
+  birden** kırmızıya düşerdi — yani kapı **HEP KIRMIZI** olur ve fiilen kaldırılmış
+  sayılırdı. **Operasyonel bedel:** yıkıcı küme meşru olarak değişince elle güncellenen
+  satır **şablon başına 1**; 13 migration satırına dokunulmaz.
+- **Ş69-10 mutasyonunu bağımsız tekrarladım:**
+
+  | Ölçüm | Önce | Şimdi |
+  |---|---|---|
+  | `01-rls-template.sql` + `DROP TABLE public.audit_log` | **rc=0** | **rc=1** |
+
+  Ve kapı artık enjekte edilen satırı **adıyla** basıyor:
+  `SABLON CIPASI TUTMADI … satir 3887: drop table public.audit_log`.
+- **Beş şart da kapandığı için onay satırı yazıldı:**
+
+  ```
+  48d8aa7d5c85ecc1bb8af8ffaece730014e4f318 …/20260917211340_VoicemailMessages.cs Karar#71
+  ```
+
+  **Son ölçüm:** kapı **rc=0** · `ONAYLI` **14** (13→14) · `OLCULEMEDI` **0** ·
+  `SABLON CIPASI TUTMADI` **0** · öz-test **rc=0** (14 yeni T-vakası + 4 T-mutasyonu) ·
+  mutasyon (onay satırını çıkar) **rc=1**, geri koy **rc=0**.
+- **CEO'nun Ş-71-CEO-2 şartı karşılandı:** *"BR-QA-91'in kabul ölçütü karşılanmadan defter
+  14. satırı alamaz."* 14. satır o ölçüm **yapıldıktan sonra** alındı. Şeytan'ın 2. itirazı
+  (*"kart açmak borcu kapatmıyor"*) bu turda **kart kapatılarak** karşılandı.
+- **Kapılar gerçek sarmalayıcıda da koştu:** `kapi_43` gövdesi `( set -e; … )` içinde
+  **rc=0**; iki yeni kontrolüm de yeşil satırını bastı (`backlog envanteri: dosya=626
+  mezar=3 ayrisan=623 ✓`, `mezar tasi isareti: 3 adet ✓`). Gövdeyi tek başına ölçmek
+  yetmiyordu — `kapi()` alt kabuğu `set -e` ile açıyor.
+- **Kart durumları gerçeğe çekildi:** 8 kart `Bitti`, **2 kart `Kısmen`** — `BR-DB-82`
+  (kalan iş `BR-AST-106`) ve `BR-SEC-23` (kalan iş `BR-SEC-24`). Pano eşlemesi ölçüldü:
+  ikisi `in progress`, yani **kısmi satırlar kapalı sayılmıyor**.
+- **ClickUp:** 8 kart güncellendi, doğrulama **`fark olan kart: 0, izde olmayan: 0`**.
+- **Commit:** `71562e67` (çıpa + onay satırı), `a161b336` (kart durumları)
+
+### 43. Aynı iki tuzağa üç kez düştüm — ikisi de hafızada yazılıydı
+
+- **`grep -c` sıfırda 1 döner.** Üç ayrı komutta `&&` zincirini kısa devre ettirdi:
+  1. kart betiği **hiç koşmadı** ama `node` ayrı satırda olduğu için çıktı "621 kart"
+     diyerek **başarılı göründü**;
+  2. şablon mutasyonu **hiç uygulanmadı** ama `echo rc=$?` yine bir sayı bastı.
+
+  İkisinde de belirti **sessizdi**: komut başarısız değil, **yarım** koştu. Yarım saat önce
+  aynı tuzağı `deploy/yerel-kapilar.sh`'ta `|| true` ile düzeltmiştim.
+- **`python -c "…"` içindeki backtick'leri bash yorumluyor.** Karar kaydına **bozuk metin**
+  yazıldı (`Read(RlsTemplate)` → boş, `pbxtr_apply_tenant_rls: command not found`).
+  `git checkout` ile geri alındı; betik `Write` ile `.py` dosyasına yazılıp tekrarlandı.
+- **Ders (kayda geçti):** çok adımlı bir ölçümde `&&` kullanma — her adımı **ayrı satıra**
+  yaz ve çıkış kodunu **kendi satırında** oku. `grep -c`/`grep -q` bir **koşuldur**, bir
+  sayaç değil.
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
