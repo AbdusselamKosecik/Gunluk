@@ -50,5 +50,17 @@ Bugün brainstorming → onaylı tasarım → spec dosyası yapıldı; kod yok.
   ```
 - **Sonuç:** Tüm yerel dallar upstream ile birebir (ahead/behind yok).
 
-## Açık kalan (dal)
-- `feat/sentez-planing-ayrimi` main'de olmayan 9 commit taşıyor — main'e birleştirilip birleştirilmeyeceği kullanıcıya soruldu.
+### 3. feat/sentez-planing-ayrimi → main birleştirme
+- **Neden:** Kullanıcı main'de çalışmak istiyor; güncel kod (SentezPlaning, OrderBarcode, PdfImport, apk/bat'lar, .gitignore — 441 dosya) sadece o daldaydı, `git switch main` bunları diskten kaldırmıştı.
+- **Ne oldu:** İlk `git merge` kullanıcı tarafından yarıda kesildi → çalışma klasöründe 42 yarım değişmiş dosya, sıfır baytla dolu ~340 yeni dosya (mtime 03:56) ve bayat `.git/index.lock` kaldı. Commit oluşmadı, veri kaybı yok (her şey dalda ve uzakta).
+- **Temizlik:** Değişen 42 dosyanın içeriği dal ile birebir aynı olduğu doğrulandı → `git restore`. Çakışan takip dışı dosyaların hepsinin 03:50 sonrası (birleştirme anında) oluştuğu doğrulandı → silindi. Çalışan git süreci olmadığı kontrol edilip `index.lock` silindi. Türkçe karakterli dosya adları için `-c core.quotepath=false` gerekti.
+- **Komutlar:**
+  ```bash
+  rm -f .git/index.lock
+  git restore -- <42 dosya>
+  git -c core.quotepath=false diff --name-only --diff-filter=A main feat/sentez-planing-ayrimi | while read f; do rm -f "$f"; done
+  git merge --no-edit feat/sentez-planing-ayrimi
+  git push origin main
+  ```
+- **Sonuç:** `782b13d` Merge branch 'feat/sentez-planing-ayrimi' → main push edildi. `git diff HEAD feat/sentez-planing-ayrimi` yalnızca SarfKullanim spec'i. Tüm yerel dallar upstream ile eşit.
+- **Ders:** Büyük (GB'lık apk) checkout/merge işlemleri kesilirse sıfır dolu dosya + index.lock bırakır; tekrar denemeden önce mtime ile kalıntı olduğunu doğrula.
