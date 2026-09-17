@@ -863,6 +863,86 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Yeni kart:** `BR-FE-90` - sunucu hazir, #49'da anahtar yok (deponun baskin hata deseni).
 - **ClickUp:** 544 -> 545 kart, dogrulama "fark olan kart: 0".
 
+### 30. SYS/confd dali - ajan talimatimdan bilincle sapti ve hakliydi
+
+- **Ne yapildi:** 12 commit merge edildi (`91611d48`). M26, M11, M25,
+  `BR-SYS-52-B`, `BR-AST-28` Bitti; M27, `BR-SYS-58/66` Kismen.
+- **M26 canli kanit:** `pbxtr-t0007-in` artik **tek dosyadan** geliyor
+  (`t0007-dialplan.conf`); elle yazilmis `8001` gitti ve urunun `_X.` deseni gelen
+  yolun tek sahibi. Sapma bekcisi S6 **SAPMA -> TAMAM**. Lab trafigi kesilmedi
+  (CDR 2351->2353, yeni satirlarin baglamlari `pbxtr-lab-*`). Bu, dialplan
+  ajaninin `BR-AST-58` (M16) isini acan on kosuldu.
+- **M11 canlida fiilen atesledi:** cok tenant'li dugumde tek-tenant araci
+  `ExecMainStatus=78` ile durdu ("bu dugum COK TENANT'LI (3 tenant)"). Sabit
+  `t0007` kalkti; elle onek bu kapiyi asmiyor.
+- **`BR-AST-28`:** CLAUDE.md §3.1'in laboratuvar olcumu **gercek santralde**
+  tekrarlandi - uretimde `pjsip reload` komutu HIC YOK; kontrol grubu
+  (`dialplan reload`) ayni turda yeni dosyayi ALDI.
+- **Kendi olcum araci sessizce gecersizmis (`BR-SYS-87`):** sahte `wget`
+  kurulmuyordu, ajan exit 69 veriyordu; yani arac bir sayi uretiyor ama hicbir
+  sey olcmuyordu (*arac yoklugu sifir gibi gorunur*). Duzeltilince oncul yeniden
+  dogrulandi: N=50 -> 2.270 cagri, T~301 s > `TimeoutStartSec` 240, yani
+  **38-tenant isletme kurali duruyor**.
+- **AJAN TALIMATIMI REDDETTI VE HAKLIYDI.** "Yeni kapin 61'den baslasin" demistim.
+  Ama `kapi_58`'i onceki turda **main almisti** (merge `1d1596cb`); 61'de birakmak
+  ayni kapiyi iki kez tanimlardi ve **merge'de biri sessizce kaybolurdu**. Ajan
+  58'i oldugu yerde birakip 62/63/64 kullandi. Merge'de catisma yine kapi
+  numarasindan cikti; dalin GUNCEL `kapi_58`'i (7 iddia etiketi) alindi, HEAD'in
+  59/60'i korundu, dalin 62/63/64'u eklendi ve **mukerrer tanim olmadigi
+  programla dogrulandi** (63 kapi, 0 mukerrer).
+- **Sapma bekcisinin kendi durustlugu:** selftest'i git'siz konteynerde kosturdum
+  -> "git YOK - bu YESIL DEGILDIR", exit 2. Sessiz yesil uretmiyor. git kurulunca
+  23/23 iddia gecti.
+- **Ajanin urun acigi iddiasini DARALTTIM.** "Asterisk yeniden baslarsa dinamik
+  kuyruk uyeligi TAMAMEN kaybolur ve hicbir kod geri itmez" dedi. Olctum:
+  `QueueMembershipSyncJob` **once `QueueStatus`, sonra yalniz eksik icin
+  `QueueAdd`** yapiyor - yani `queue_members`'ta kayitli uyelik geri itiliyor.
+  Bosluk dar ve zaten `BR-BE-165`'in konusu: **DB'de hic gorunmeyen** (mudahale)
+  uyelik. Mukerrer kart acilmadi, duzeltme mevcut karta yazildi (`41e6b2de`).
+
+### 31. BR-AST-59 devralma - queue_log gorusme suresini SIFIR yaziyor
+
+- **Ne yapildi:** M9 devralma mekanizmasi merge edildi (`b15a2229`); tenant
+  bazinda opt-in, **varsayilan KAPALI**, bayrak kapaliyken uretilen dialplan bayt
+  bayt ayni.
+- **ASIL OLCUM - bir sarti tercihten zorunluluga cevirdi:** devralmadan sonra
+  `queue_log` **`COMPLETEAGENT|0|0`** yaziyor, yani **gorusme suresi 0**. Ne
+  `TRANSFER` ne `COMPLETECALLER`. Sonuc: **AHT ve SLA `queue_log`'dan okunamaz.**
+  Karar #66 S66-8/7 "sureler `call_events`+`linkedid`'den hesaplanir" diyordu;
+  bu olcumden sonra o bir tercih degil, tek secenek.
+- **Dogrulanan diger sartlar:** `linkedid` KORUNUYOR (korelasyon bozulmuyor,
+  ikinci "cevaplandi" satiri yok); MixMonitor **kesilmiyor** (44 -> 165.484 bayt,
+  ~16 KB/sn); kontrol grubu - devralmadan ONCE ham ARI `hold` **409
+  NotUnderControl**, SONRA kabul ediliyor.
+- **Iki varsayim canlida curudu ve kod olculene gore duzeltildi:**
+  1. *"ARI'de `POST bridges/{id}` idempotenttir"* -> **degil**: ikinci bacak 409
+     alip dialplan'e dondu ve devralma yarim kaldi. Artik once varlik sorulur.
+  2. *"Dialplan'deki `Bridge(${PBXTR_CTL_PEER})` yarim kalmayi kurtarir"* ->
+     **kurtarmiyor**. Bu, Karar #66 S66-8/4'un metniyle celisiyor (asagida).
+- **KOORDINATOR DUZELTMESI - migration ham SQL ile yazilmisti.** Dal kolonu
+  `migrationBuilder.Sql("ALTER TABLE ...")` ile ekliyordu; bu,
+  migration-compatibility kapisini **RED** ediyordu ve bu migration icin bir kurul
+  onay satiri **yok**. Dogru cozum onay satiri yazmak **degildi** - kolon ekleme
+  EF API'siyle ifade edilebiliyor (emsal ayni gunun `OffHoursAutoBreak`'i). Ham
+  SQL kaldirildi: `AddColumn<bool>(..., comment:)` + `DropColumn`; yorum metni
+  kaybolmadi cunku Npgsql `comment:`i `COMMENT ON COLUMN`'a ceviriyor.
+  Kapi **RED -> OK**.
+- **Catisma:** iki dal da `tenant_settings`'e kolon ekledi
+  (`auto_break_outside_hours` / `ari_takeover_enabled`). Birlesim alindi ama
+  birlesim bir **fluent zinciri ortasindan boldu** (CS1002); zincir tamamlandi.
+- **Olcum:** uc test projesi de derleniyor, Architecture **667/667**, Api.Tests
+  Telephony **1278 gecti / 2 gorunur Skip** (ikisi de canli test, izin listesinde),
+  migration guard OK; ajanin mutasyonu 13/13 kirmizi.
+- **Kurula gidecek tek madde:** **S66-8/4'un metni olcumle celisiyor.** Sart
+  "biri duserse cagri dusmez, musteri bacagi kuyruga ya da onceki kopruye doner"
+  diyor; olcum, yalniz bir bacak tasindiginda cagrinin **tamamen dustugunu**
+  gosterdi. "Cagri dusmez" garantisi dialplan'den **gelmiyor**; bugun tek eylem
+  (`ExtraChannel`) + "Stasis uygulamasi kayitli mi" on kosulu ile saglaniyor.
+  Sart bu olcume gore yeniden mi yazilsin, yoksa ek kurtarma yolu mu isteniyor?
+- **Saha kapali kaliyor:** S66-8/1 sira sarti geregi `BR-AST-55` inmeden bayrak
+  acilmaz. Kod hazir, bayrak bugun yalnizca SQL ile acilabiliyor (ekran/uc yuzeyi
+  yok - bilincli, ayri kart).
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
