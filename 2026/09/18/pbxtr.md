@@ -1,0 +1,172 @@
+# pbxtr — 2026-09-18
+
+## Bağlam
+
+17'sinin gecesinden kesintisiz devam eden tur. Dünkü dosya: `2026/09/17/pbxtr.md`
+(bölüm 1–33). Hedef aynı: `yonetim/backlog.md`'deki tüm açıkları bitirmek.
+Bu dosya, gün sınırını geçtikten sonraki işi taşıyor.
+
+Güne başlanan durum: BR-9 (sesli mesaj) dalı **merge edilmiş ama commit edilmemiş**
+(33 dosya, çatışmalar çözülmüş), kurul tur 5'in 10 oyu + QA denetimi gelmiş ama
+karar kaydı yazılmamıştı.
+
+## Yapılanlar
+
+### 34. Kurul tur 5 → Karar #71: onay satırı BU TURDA YAZILMADI
+
+- **Neden:** Sesli mesaj migration'ı (`20260917211340_VoicemailMessages.cs`) contract
+  kapısında **rc=1** veriyordu ve geçmesi için onay defterine bir satır gerekiyordu.
+- **Ne yapıldı:** Kurul toplandı (tur 5, 4 soru), **10/10 ŞARTLI** çıktı — ama
+  **onay satırı yazılmadı** ve bugünkü blob `95d789bd…` **onaylanmamış** ilan edildi.
+- **Oyların gövdesi kaybolmuştu ve kurtarıldı:** context sıfırlanınca 11 oyun metni
+  bağlamdan düşmüştü. `tasks/*.output` dosyalarının **hepsi 0 bayt** çıktı (sonuçlar
+  yalnız bildirimle gelmiş, dosyaya yazılmamış). Oylar transkript JSONL'inden
+  `oy_cikar.py` ile çıkarıldı — 11/11 kurtarıldı, 6–19 KB arası.
+  **Ders:** ajan sonucu `.output` dosyasında olmayabilir; transkript tek kalıcı kopyadır.
+- **Üç bloke edici sebep:**
+  1. **Şeytan itiraz 1 (kabul):** Karar #70'in onayı açıkça *"bu dosya hiçbir SQL
+     şablonu okumuyor"* ölçümüne dayanıyordu. **Bu dosya ikisini de okuyor**
+     (`Read(RlsTemplate)` + `Read(Guards)`). Kapı çıktısında gözle görünür: 6 bulgunun
+     **3'ü şablon içeriğinden**. Onay satırı yazılsaydı Ş69-10 deliği (onay `.cs`
+     blob'unu çıpalar, o dosyanın **koşturduğu** şablonu çıpalamaz) bu dosya için
+     fiilen açılırdı.
+  2. **db-lider Ş71-1..Ş71-4** bloke edici.
+  3. **Blob zaten değişecek** → bugünküne onay vermek anlamsız.
+- **Sunucuda ölçülenler** (`176.88.41.220`, PG 16.14, `BEGIN…ROLLBACK`, geri alma
+  doğrulandı; sunucu saati `Thu Sep 17 22:07:14 UTC 2026`):
+  - **Q1-b çözüldü.** `IX_result_codes_tenant_id` **ölü değil** (`idx_scan = 431`,
+    `stats_reset` NULL yani sayaç hiç sıfırlanmamış). Ama aynı transaction içinde
+    plan A/B: `Index Scan using IX_result_codes_tenant_id` → **`Index Only Scan using
+    ak_result_codes_tenant_id`**, aynı `Index Cond`. Erişim yolu kaybolmuyor,
+    **yükseliyor**. Ve desen zaten üretimde: `queues.ak_queues_tenant_id`
+    `idx_scan = 2211`, `queues`/`extensions`'ta ayrı `IX_*_tenant_id` **yok**.
+  - **Kilit penceresi 579 ms / 34 ilişki** AccessExclusive — "16 ms" değil. O 16 ms
+    DDL'in *işidir*, kilidin *süresi* değildir (EF tek transaction, kilit COMMIT'e
+    kadar, arada 01/02 şablonunun 9366 satırı).
+  - `lock_timeout = 0` → migration çakışan bir kilide rastlarsa **sonsuza kadar
+    bekler** ve 34 tablo üzerinde pending AccessExclusive tuttuğu için arkasındaki
+    her okuyucu da kuyruğa girer. 579 ms bir kesinti **garantisi değil**.
+  - Kolon listeli `SET NULL` **canlı şemada fiilen kuruldu** (sürüm numarasına
+    bakmakla yetinilmedi); `pg_get_constraintdef` kolon listesini geri verdi.
+  - **Şeytan itiraz 3 GERİ ÇEKİLDİ** — kendi yazdığı şartla.
+- **P0 bulgu (Şeytan 5, kendim doğruladım):** CLAUDE.md §13/2 *"indirme hiçbir koşulda
+  yoktur"* **kodda ihlal ediliyor**. `EfRecordingAccess.FindByCallAsync` yalnız
+  `LinkedId == callId` bakıyor; tüm `src/` içinde `"vm-"` önekini **reddeden tek satır
+  yok** (tek isabet `VoicemailStoredName.KeyPrefix` sabiti); ve kodda atıf yapılan
+  **`VoicemailDownloadSurfaceTests` depoda hiç yok**. Yani `recording.download`
+  yetkisi olan biri `vm-<linkedid>` yazarak sesli mesajı indirir.
+- **Commit:** `740fb6c0` — kapı **bilerek kırmızı** bırakıldı ve sebebi commit
+  mesajına yazıldı.
+
+### 35. Q4'ün TAMAMI çürüdü — ve çürüten şey Şeytan'ın sorusuydu
+
+- **Neden:** Gündeme *"üç kart iki kez tanımlı, ClickUp senkronu sessizce birini
+  kazanan seçiyor"* diye yazmıştım. Şeytan 11. itirazında **ölçüm istedi**:
+  *"toplam `BR-*` satır sayısı ile ayrıştırılan satır sayısı eşit mi?"*
+- **Ölçüm (oylamadan sonra):**
+
+  ```bash
+  grep -c '^| BR-' yonetim/backlog.md          # 579
+  node yonetim/arac/clickup-cikar.js           # rows.json (576 kart), rc=0
+  ```
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | dosyadaki `\| BR-` satırı | **579** |
+  | ayrıştırılan | **576** |
+  | fark | **3** — üçü de mezar taşı |
+  | **gerçek mükerrer** | **0** |
+
+- **İki ayrı yerde yanılmışım, ikisini de ölçmemiştim:**
+  1. **Çıpam dardı.** `^\| (BR-[A-Z0-9-]+) \|` yazmıştım; bu çıpa küçük harf sonekli
+     **altı kartı** (`BR-00a`..`BR-00d`, `BR-AST-51a/51b`) hiç görmüyor. Aracın kendi
+     çıpası (`startsWith('| BR-')`) **doğru**. Yani araç benden genişti.
+  2. **"Sessizce kazanan seçiyor" tamamen yanlış.** `clickup-cikar.js` gerçek bir
+     mükerrerde `process.exit(1)` yapıyor ve mezar taşlarını (`Yerini satır N aldı`)
+     önce çıkarıyor. Üçü de mezar taşı: `BR-BE-47`→4569, `BR-BE-53`→4608,
+     `BR-SYS-45`→4527.
+- **Bedeli ölçüldü:** 10 üyelik kurul bu yanlış öncül üzerine oy verdi ve
+  **birleştirme** kararı çıkardı. Uygulansaydı *"Yerini satır N aldı"* izi **yok
+  edilecekti**. Yanlış sayım yalnız yanlış rapor değil, **zararlı bir karar** üretti.
+- **Karar:** Q4-a (birleştirme) **uygulanmayacak**; Q4-b (yeni kapı) **gereksiz** —
+  kapı zaten var ve doğru sebeple yeşil.
+
+### 36. Ş71-6 — var olan kapı gerçekten kapıya bağlandı (pozitif + 4 mutasyon)
+
+- **Neden:** `clickup-cikar.js` iki şeyi zaten ölçüyordu (çözülemeyen satır, mükerrer
+  kimlik) ve ikisinde de `exit 1` yapıyordu — ama **hiçbir kapı onu koşturmuyordu**
+  (63 kapı tarandı, 0 isabet). Yalnız koordinatör senkron koşturunca ateşleniyordu.
+  Koşmayan kapı insan hafızasıdır.
+- **Ne yapıldı:** `deploy/yerel-kapilar.sh` `kapi_43` gövdesine eklendi; ayrıca
+  Şeytan'ın istediği **vacuity kontrolü**: `ayrışan == dosya − mezar`.
+- **Ölçüm:**
+
+  | # | Mutasyon | Sonuç |
+  |---|---|---|
+  | 1 | (pozitif, bugünkü backlog) | **YEŞİL** `dosya=579 mezar=3 ayrışan=576` |
+  | 2 | gerçek mükerrer kimlik ekle | **KIRMIZI** — `HATA: mukerrer kart kimligi` |
+  | 3 | ayrıştırılamaz `\| BR-` satırı ekle | **KIRMIZI** — `1 adet satiri cozulemedi` |
+  | 4 | aracın mezar taşı kalıbını değiştir | **KIRMIZI** (mükerrer yoluyla) |
+  | 5 | araç bir satırı **sessizce düşürsün** | **KIRMIZI SAYIM** — `ayrışan=575 beklenen=576` |
+
+  5. mutasyon önemli: **eklediğim sayım kontrolünün kendi başına ateşlendiğini**
+  gösteren tek mutasyon o. 4'e kadar hep mükerrer kontrolü yakalıyordu, yani kontrolüm
+  ölü olabilirdi; var olduğu arıza sınıfını (gelecekte bir filtrenin satır yutması)
+  birebir taklit eden mutasyon yazılınca ateşlendi.
+- **İkinci düzeltme:** `grep -c` sıfır eşleşmede **1 döner** ve kapı `set -e` altında
+  koşuyor → mezar taşı kalmadığı gün kapı **yanlış sebeple** ölürdü. `|| true`
+  eklendi. (Aynı tuzak bu kapının üstünde `BR-QA-74` olarak zaten yazılıymış.)
+- **Dokunulan dosya:** `deploy/yerel-kapilar.sh`
+
+### 37. Karar #70'in 24 şartı HİÇ karta dönmemiş (ölçüldü)
+
+- **Neden:** Kart numarası tahsisi için önek bazında en büyükleri ölçerken, Karar
+  #70'in metninde **rezerve edilen** numaraların karta dönüp dönmediğini yokladım.
+- **Ölçüm:** `BR-QA-94`, `BR-BE-169`, `BR-BE-173`, `BR-DB-76`, `BR-DB-77`,
+  `BR-SYS-106`, `BR-AST-100`, `BR-SEC-22`, `BR-FE-94`, `BR-FE-96` → **hepsi 0 isabet**.
+- **Sonuç:** Karar #70'in 24 şartı bugün **görünmez borç**. `backlog.md`'ye kart olarak
+  yazılmayan iş ClickUp'ta hiç yoktur.
+- Kart yazımı ajana verildi; **numaralar önceden koordinatör tarafından blok hâlinde
+  tahsis edildi** (Karar #71 / Q3-a: ajan numara seçmez).
+
+## Kararlar
+
+- **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
+  contract onayı, Ş71-1..Ş71-5 kapandıktan sonra hesaplanacak **yeni** blob için ve
+  **ayrı bir kararla** verilir.
+- **Q2 — düzeltmenin yönü ters çevrildi.** Kayıt yolu ayrıştırıcısı GUID bekliyor, yol
+  parçası ise **tenant kodu**. Düzeltme **ayrıştırıcıda** yapılacak, üreticide değil:
+  dialplan GUID'i hiç bilmez; oraya GUID basmak kanalda **ikinci bir tenant kimliği**
+  yaratır.
+- **Q3-a — (c)+(b).** Ajanlar `BR-YENI-<slug>` yazar, numarayı **yalnız koordinatör**
+  verir. `backlog.md`'yi tarayıp "en büyük + 1" alma kuralı **kaldırıldı** — tarama,
+  paylaşılan durumdan numara türetmektir ve iki ajan aynı anda tararsa aynı sekiz
+  numarayı alır (bu turda oldu).
+- **BR-SYS-107'nin systemd-timer yolu REDDEDİLDİ** (linux-uzmanı, dördü ölçülü):
+  `pbxtr-confd` `ProtectSystem=strict` altında `/etc/systemd/system`'e **yazamaz**;
+  bundle **veri** taşır, **kod** değil (bir unit `ExecStart=` ile root olarak koşar);
+  `-mtime +7` **ikinci bir saklama süresi otoritesi** kurar (migration'ın kendi
+  `COMMENT`'i bunu yasaklıyor); ve `find -delete` teslim/ack'e bakmadığı için
+  **tek kopyayı sessizce** siler. Doğru ev: mevcut `MediaRetentionJob`.
+
+## Açık kalanlar / sonraki adım
+
+- **Ş71-1..Ş71-4** (migration), **Ş71-S1/S2/S4/S5/S7** (ürün) üç ajanda **uygulanıyor**.
+  Bitince blob yeniden hesaplanacak, sonra onay satırı ayrı kararla yazılacak.
+- **Ş71-S3 — KVKK:** `voicemail_messages` `purge_call_data()` allowlist'inde **yok** ve
+  `recording_retention_days = 0` olan tenant'ta satırlar **süresiz** kalıyor.
+- **Şeytan itiraz 9 — ÖLÇÜLMEDİ:** sonuç kodları `result_codes`'ta gerçekten siliniyor
+  mu, yoksa pasifleştiriliyor mu? Siliniyorsa `closed_result_code_id` dalı `SET NULL`
+  değil `RESTRICT` olmalı.
+- **Ş2-4 — ÖLÇÜLMEDİ, Ş2-1'in önkoşulu:** `MixMonitor` var olmayan ara dizini açar mı?
+  `Record()` için labda ölçüldü (D-14), `MixMonitor` için **ölçülmedi**. Açmıyorsa
+  tarih dizinine geçiş kaydı **tamamen susturur** — üstelik "düzelttik" etiketiyle.
+- **`__PBXTR_TENANT`'ın santraldeki gerçek değeri — ÖLÇÜLMEDİ** (Q2; iki uzman da
+  ölçmedi, bütçe Q1'e gitti).
+- **Ş71-7:** mezar taşı işaretlerindeki satır numaraları bayat (`4569`→4578,
+  `4608`→4617, `4527`→4536; üçü de 9 kaymış). Kart yazımı bitince düzeltilecek.
+- Merge bekleyen dallar: BR-7 (`worktree-agent-a7f867731097389e5`), SYS/confd
+  (`worktree-agent-a64865e7419068cf7`), BR-AST-59 (`worktree-agent-ad5f7ead59c16fb69`).
+- `dotnet test tests/Pbxtr.Api.Tests --filter "~Modules.Telephony"` tam koşusu hâlâ
+  **ÖLÇÜLMEDİ** (eşzamanlı ajan yükü altında testhost çökme riski).
+- BR-SEC-16 sır rotasyonu: ajanlar bitince.
