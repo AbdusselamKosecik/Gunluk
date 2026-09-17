@@ -129,6 +129,87 @@ karar kaydı yazılmamıştı.
 - Kart yazımı ajana verildi; **numaralar önceden koordinatör tarafından blok hâlinde
   tahsis edildi** (Karar #71 / Q3-a: ajan numara seçmez).
 
+### 38. Karar #71'in bloke edici şartları kapandı — P0 dâhil
+
+- **Neden:** Kurul onay satırını vermemişti; dört migration şartı + beş ürün şartı açıktı.
+  Dört ajana dosya sahipliği çakışmayacak şekilde dağıtıldı.
+- **P0 kapandı (Ş71-S1):** `recording.download` yetkisi olan biri `vm-<linkedid>` yazarak
+  sesli mesajı indirebiliyordu — CLAUDE.md §13/2'nin (**yazılı kullanıcı kararı**)
+  doğrudan ihlali. İki kapı kondu: grant (tazelik kapısından da önce) ve imzalı bilet
+  akış ucu. Yanıt **404**, ayrı bir kod değil — ayrı kod *"bu linkedid sesli mesaj
+  taşıyor mu"* **oracle**'ı olurdu.
+- **Ajan görevden bilerek saptı ve haklıydı:** reddi `IRecordingAccess`e koymadım dedi,
+  çünkü **meşru dinleme bileti aynı `FindByCallAsync("vm-…")` çağrısını kullanıyor** —
+  oraya koymak bekçiyi değil **özelliği** kapatırdı. Tuzağı sınıf dosyasına yazdı ki bir
+  sonraki okuyucu "asıl düzeltme burada olmalıydı" diye geri almasın.
+- **Ş71-4'te gündemde olmayan ikinci kusur:** aday sorgusundaki `NOT EXISTS` de yalnız
+  `(tenant_id, linked_id)` karşılaştırıyordu. Düzeltilmeseydi `ON CONFLICT` genişlemesi
+  **vacuous** kalacaktı: ikinci kutunun mesajı `INSERT`'e **hiç ulaşmadan** elenirdi.
+- **`Down` gerçek PostgreSQL'de koştu** (2 satır dolu tabloyla), `lock_timeout` **fiilen
+  ateşledi** (`55P03`) ve **yarım şema bırakmadı**; kontrol grubu: engelleyen transaction
+  düşürülünce **aynı komut** `Done` verdi.
+- **Ölçüm (birleşik HEAD — ajanların hiçbiri birleşimi koşmamıştı):**
+  `dotnet build` 0/0 · `Api.Tests` (Voicemail|Modules.Recordings|PermissionManifest)
+  **210/210** · `Architecture.Tests` **680/680** (674'ten, yeni bekçilerle).
+- **Commit:** `1035bdc1`
+
+### 39. EF modeli ile migration ayrışmıştı — sessiz bir gelecek regresyonu
+
+- **Neden:** Migration kısıtı üç kolona genişletti ama `VoicemailConfiguration.cs` ve
+  `PbxtrDbContextModelSnapshot.cs` **hâlâ iki kolon** diyordu. Bugün görünür bir kırmızı
+  yoktu (`database update` çalışıyor); risk **bir sonraki** `migrations add`'de: kısıtı
+  **sessizce geri daraltan** bir drift migration üretirdi.
+- **Ne yapıldı:** ikisi de düzeltildi.
+- **Ölçüm:** `has-pending-model-changes` **rc=0**. **Mutasyon:** `BoxRef`'i çıkar →
+  **rc=1** *"Changes have been made to the model… Add a new migration."* Geri al → rc=0.
+  Yani hem düzeltme yük taşıyor hem kontrol canlı.
+- **Geri almanın ikiliye işlediği ayrıca doğrulandı** (yeniden derle + tekrar ölç) —
+  `cp` ile geri alma MSBuild'i her zaman tetiklemez.
+
+### 40. Kurul VAR OLMAYAN bir seçeneği tercih etmişti (ölçüldü)
+
+- **Neden:** Karar #71, onay satırı yerine `Read(RlsTemplate)`/`Read(Guards)` çağrılarının
+  migration'dan **çıkarılmasını** tercih etmişti. Kurul bunu **ölçmeden** yaptı.
+- **Ölçüm:**
+
+  ```bash
+  grep -rl "Read(DeployDbScripts.RlsTemplate)" \
+    src/Pbxtr.Infrastructure/Persistence/Migrations/*.cs | wc -l
+  # -> 41
+  ```
+
+  **41 migration** aynı şeyi yapıyor, ve şablon okuması `pbxtr_apply_tenant_rls`'i
+  **tanımlayan** şey: dosya `:345-346`'da şablonları okuyor, `:351`'de o fonksiyonu
+  **çağırıyor**. Çıkarmak yeni tablonun RLS'ini kırar — yani (ii) şıkkı bir sadeleştirme
+  değil, **tenant izolasyonunu kaldırma** önerisiydi.
+- **Sonuç:** tek yol **şablon çıpası** = `BR-QA-91`. Onay satırı o kapanmadan **yazılamaz**;
+  bu artık bir tercih değil, ölçülmüş bir zorunluluk. Karar kaydına düzeltme olarak işlendi.
+- **Ders (üçüncü kez):** gündemin sunduğu *"iki seçenekten biri"* cümlesi de bir
+  **öncüldür**.
+- **Commit:** `89909d28`
+
+### 41. İki kapı, 47 kart, pano
+
+- **İki yeni kart (bu turun artıkları, ikisini de doğruladım):**
+  - **`BR-AST-106` — Ş71-4 YARIM KALDI.** DB'de artık iki satır var ama ses dosyası hâlâ
+    `vm-${CHANNEL(linkedid)}.wav`, yani **kutu ayrımı yok**: ikinci mesaj birincinin
+    dosyasının **üzerine yazar**. Sessiz kayıp DB'den **diske taşındı**, yok olmadı — ve
+    yeni belirti daha sinsi: kutuda **iki mesaj görünür, ikisi de aynı sesi çalar**.
+  - **`BR-SEC-24`** — `RecordingSelfEndpoints.cs:183` aynı kapının dışında (serbest
+    `callId`, `vm-` reddi yok). `Listen` kipinde olduğu için §13/2 ihlali değil, ama
+    §13/1'in tanımına aykırı. **ÖLÇÜLMEDİ.**
+- **Kendi komutumda `grep -c` tuzağına düştüm:** `grep -c` sıfır eşleşmede **1 döner**;
+  `&&` zinciri kısa devre yaptı ve kart betiği **hiç koşmadı** — ama `node` ayrı satırda
+  olduğu için çıktı "621 kart" diyerek **başarılı gibi** göründü. Aynı tuzağı yarım saat
+  önce kapıda `|| true` ile düzeltmiştim.
+- **Backtick tuzağı da tekrarladı:** `python -c "…"` içindeki backtick'leri bash yorumladı
+  ve karar kaydına **bozuk metin** yazıldı. `git checkout` ile geri alındı, betik dosyaya
+  yazılarak tekrarlandı. Kayıtlı ders: yamayı `Write` ile `.py` dosyasına yaz.
+- **ClickUp:** `izde olmayan: 55` çıktı — 47 yeni kart **artı** önceki turda BR-9 için
+  yeniden numaralanıp **panoda hiç açılmamış 8 kart**. Elli beşi açıldı.
+  Doğrulama: **`fark olan kart: 0, izde olmayan: 0`**.
+- **Commit:** `dea1b5b0`, `8466ace4`, `341841d6`
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
