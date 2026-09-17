@@ -581,6 +581,76 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Commit:** `26d828aa` (merge), `b149ffcc` (backlog)
 - **ClickUp:** 10 kart güncellendi, doğrulama `fark olan kart: 0, izde olmayan: 0`.
 
+### 21. BE ajan dalının birleştirilmesi — ve "ölçülmemiş öncül" üç kez çürüdü
+
+- **Neden:** Backend ajan turu bitti (5 commit).
+- **Ne yapıldı:** `worktree-agent-ac10edc113b2433b4` merge edildi (çakışma yok).
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/**` (monitor, audit, sms template),
+  `tests/Pbxtr.Api.Tests/**`, `tests/Pbxtr.Integration.Tests/**`, `yonetim/backlog.md`
+- **İnen iş:**
+  - **BR-BE-113 (Bitti):** monitor/sufle/araya girme kendini hedeflemeyi 403 + denetim
+    satırıyla reddediyor, sağlayıcıya hiç ulaşmıyor. Mutasyon: kapı kapalı → 3 kırmızı.
+  - **BR-BE-131 (Kısmen):** `/audit` çoklu `?action=`. **Ölçüm kararı değiştirdi:** tek
+    değer yolu bilerek `=` kaldı — canlı EXPLAIN'de `=` 0,35 ms (Index Cond), `ANY(3)`
+    38 ms (Filter, 50.825 satır elendi). Tek değeri de `Contains`'e çevirmek mevcut
+    aramayı ~100× yavaşlatırdı.
+  - **BR-BE-143 (Kısmen):** bilinmeyen SMS değişkeni 400, kullanımdaki şablonu
+    pasifleştirme 409, kampanya editörü için dar seçici. Seçicinin kümesini **bağlama
+    kapısının kendisi** üretiyor — yani seçici ile kayıt kapısı ayrışamaz.
+- **ÜÇ KARTTA KOD YAZILMADI, ÇÜNKÜ ÖNCÜL ÖLÇÜMDE ÇÜRÜDÜ** (asıl değer bu):
+  1. **BR-BE-142** kilit yenileme istiyordu. Ölçüm: 22 günlük `job_runs`'ta en uzun lider
+     tik 11,5 sn ve o da sabit bir timeout'tu, 09-13'te kayboldu; 09-14'ten beri ortalama
+     0,11–0,14 sn. 15 sn timeout'a çarpan tik **hiç yok**, 6 günde 0 idle-in-transaction
+     sonlandırması. Ölçülmüş bir arıza olmadan kilit yenileme yazılmadı.
+  2. **BR-BE-76** ETag istiyordu. Ölçüm: ETag o uçta **çalışamaz** — URL çağrı başına
+     değişiyor, 60 çağrı 60 ayrı URL, HTTP önbelleği hiç devreye girmiyor. Yarım çözüm
+     yazmak yerine kontrat kararı gündeme alındı.
+  3. **BR-BE-121** AMI-DB üyelik farkı varsayıyordu. Ölçüm: teslim edilen tenant'ta iki
+     taraf birebir aynı (6+3=9); 3 satırlık fark teslim edilmeyen ikinci tenant'tan.
+- **"Atlanan, geçmiş değildir":** ajan raporunda dört integration sınıfı **Skipped**
+  görünüyordu (Docker o an kapalıydı). Docker geri gelince koşuldu: **21/21, Skipped 0**,
+  gerçek PG'ye karşı. Bu olmadan BR-BE-113 "doğrulandı" denemezdi.
+- **Yol üstünde bir tuzak:** testleri yanlış projede (`Api.Tests`) filtreyle koştum;
+  `dotnet test` **"No test matches the given filter" deyip rc=0 döndü** — vacuous yeşil.
+  Sınıflar `Integration.Tests`'teydi. *Ders: filtreli koşuda "geçen test sayısı" da
+  okunmalı; rc=0 tek başına "koştu" demek değildir.*
+- **Commit:** `625d3850` (merge), `3a3febe3` (backlog)
+
+### 22. OPS/QA/AST dalı — ve main'in kırmızısı: iki dalın ANLAMSAL çarpışması
+
+- **Neden:** Takip turu (3 madde) bitti; ajan raporunda "main şu anda kırmızı" uyarısı vardı.
+- **Ne yapıldı:** Önce **merge etmeden main ölçüldü** (dürüst yön): `Architecture.Tests`
+  **648/650, 2 kırmızı**. Yani iddia doğrulandı — ama ajanın gördüğü 1 değil **2** taneydi.
+  Sonra dal merge edildi ve ikinci kırmızı da kapatıldı → **650/650, Skipped 0**.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Platform/Jobs/PlatformRollupJob.cs`,
+  `src/Pbxtr.Api/Platform/Health/SystemHealthProbe.cs`,
+  `tests/Pbxtr.Architecture.Tests/TenantLeakCoverageTests.cs`, `tests/**`
+- **Kırmızı #1 — bekçi ile yeni alan çarpıştı.** Ş-46-9 bekçisi (`ff95be52`) *"sistem özeti
+  yalnız SAYI taşır"* diyor; BR-AST-14 (`1c6b9dd1`) özete `bool? StasisApplicationRegistered`
+  ekledi. **İkisi de tek başına yeşildi; kırmızı yalnız merge'den sonra doğdu.** Çözüm:
+  izinli tür kümesine `bool` bilinçle eklendi — Ş-46-9'un çizdiği sınır *"sayı mı"* değil
+  **anahtar uzayı olan bir tür mü**; `bool?` üç değerlidir, içine nesne adı ya da tenant
+  kodu yazılamaz. Karşıt kontrol dosyada duruyor: `string` ve `string` anahtarlı sözlük
+  hâlâ reddedilir (mutasyonla doğrulandı).
+- **Kırmızı #2 — kendi mandalım beni yakaladı.** `TenantLeakCoverageTests` borç listesi
+  (bu sabah BR-QA-52'de kurulmuştu) `SmsTemplateAdministration`'ı borç sayıyordu; BE dalı
+  o adaptöre sızıntı testi eklemişti. Mandal kuralı gereği borçtan çıkarıldı ve
+  `BorcTavani` 66 → 65 indirildi. *Liste yalnızca küçülür — kapanan borcu listede
+  bırakmak sayıyı yalan yapar.*
+- **BR-QA-88 (Bitti) — "boş gövde" bulmacasının sebebi:** vacuity vakası paylaşılan fikstür
+  DB'sine `pbxtr_sys.mail_settings` yazıp **silmiyordu** → notifier operasyonel oldu → uç
+  503 JSON yerine 202 + boş gövde döndü. Temizlik artık **geri okunuyor** (0 değilse sınıf
+  kırmızı biter). Bu, bellekteki "tohum bırakan test başka sınıfı kırar" deseninin aynısı.
+- **BR-OPS-01 (Kısmen) — ölçüm bir vacuity buldu:** `t0007`'nin çalışma saati profili yok →
+  sessizlik metriği açık dakika saydığı için `null` kalıyor ve alarm **eşik ne olursa olsun
+  yanmıyor**; buna rağmen kapsam satırı o tenant'ı "kurulu" sayıyordu. #26'ya onuncu sayı
+  eklendi (açık kuralı olan ama aktif profili olmayan tenant), sağlık satırında üç cevap
+  (ölçülemedi / 0 / >0 → **sarı**), müdahale metni #07 takvim tanımlama.
+- **Commit:** `8a581a5d` (merge + main düzeltmesi), `61ffd417` (backlog + gündem tur2)
+- **ClickUp:** doğrulama `fark olan kart: 0, izde olmayan: 0`.
+- **Sonraki tur için gündem:** `yonetim/kurul-gundem-2026-09-17-tur2.md` (N1–N11) —
+  QA turundan 4, BE turundan 6 soru + BR-BE-142'nin kapsam sorusu.
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
