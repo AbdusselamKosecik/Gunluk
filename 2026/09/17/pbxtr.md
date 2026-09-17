@@ -651,6 +651,59 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Sonraki tur için gündem:** `yonetim/kurul-gundem-2026-09-17-tur2.md` (N1–N11) —
   QA turundan 4, BE turundan 6 soru + BR-BE-142'nin kapsam sorusu.
 
+### 23. Köprüleme dalı — "redirect 204 döndü ama hiçbir şey yapmadı"
+
+- **Neden:** BR-AST-60 (ARI köprüleme) turu bitti; kör aktarma, Ş43-3/14/15 ve geri-çağrı
+  tonu inmişti.
+- **Ne yapıldı:** `worktree-agent-ad5f7ead59c16fb69` merge edildi (12 dosyada çakışma),
+  iki yeni kusur kartı açıldı, BR-AST-59'un durumu düzeltildi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Telephony/Asterisk/{AriCallBridge,AriStasisApp,AriStasisDiagnostics,AsteriskAriProvider}.cs`,
+  `src/Pbxtr.Api/Platform/Health/SystemHealthProbe.cs`,
+  `src/Pbxtr.Domain/Platform/Observability/ISystemHealthProbe.cs`,
+  `src/Pbxtr.Web/src/app/screens/system/platformApi.ts`, 9 dilin i18n dosyası,
+  `yonetim/backlog.md`, `yonetim/kurul-gundem-2026-09-17-tur2.md`
+- **ASIL BULGU — sessiz başarı yalanı.** Kontrol grubu olarak ham ARI çağrıldı:
+  `POST channels/{cust}/redirect` → **HTTP 204** döndü ve köprü üyeleri **iki ölçümde
+  birebir aynı** kaldı. Yani aktarma hiç olmadı; panel "aktarıldı" derdi, müşteri agent'la
+  konuşmaya devam ederdi. Bu, bellekteki "belge santral değildir" ve "kod var, koşan yok"
+  desenlerinin üçüncü yüzü: **uç 2xx döndüğü hâlde hiçbir şey yapmıyor.** Kör aktarma bu
+  yüzden köprü üzerinden yeniden yazıldı ve ölçüldü: `Accepted=True`, 2 sn içinde köprü
+  `{X}-cust,{X}-xfer1`, aktaran agent kanalı yok; meşgul hedefte 3 sn içinde 0 kanal
+  (müşteri köprüde yalnız kalmıyor).
+- **Önceki turun kırmızısının sebebi:** canlı test `AriStasisApp`'i **uygulama adı vermeden**
+  kuruyordu; aktarma bacağı üretim `pbxtr` uygulamasına kaydolup testin soketine hiç
+  gelmiyordu. Dikiş: `application: App`.
+- **Çakışma — iki dal AYNI SORUYA iki sağlık satırı ekledi.** BR-AST-14
+  `asterisk-stasis-app` (kaynak: registration-sampler → Redis özeti) ve Ş43-14(i)
+  `asterisk-stasis-registration` (kaynak: süreç içi gözlem döngüsü) ikisi de *"Stasis
+  uygulaması kayıtlı mı"* diye soruyor, ikisi de aynı ARI ucundan. **Birleşim alındı** —
+  ikisi de ölçülmüş iş, kaynakları ayrışabilir (örnekleyici bayatlar; gözlem döngüsü soket
+  kapalıyken `Unmeasurable` döner) ve hiçbir sinyal atılmadı. Hangisinin kalacağı bir UI
+  kararı olduğu için kurul gündemine **N12** yazıldı. Birleşim doc yorumunu bozdu
+  (`/// <summary>` açıcısı kayboldu), derlemede yakalandı ve düzeltildi.
+- **Sonuç / doğrulama:** Architecture **650/650**, Api.Tests Telephony+Health **1296 geçti /
+  1 görünür Skip** (canlı ARI testi, izin listesinde), `tsc -b` temiz, **vitest 1948/1948**,
+  `dotnet format` temiz.
+- **İki gerçek kusur kart oldu** (numaralar önce ölçüldü: BR-AST max 92, BR-SYS max 103):
+  - **BR-AST-93 (P1):** köprülemede **aynı dosyaya iki `MixMonitor` yazıcısı**. Müşteri
+    bacağı da `-out` bağlamından geçiyor ve `PBXTR_REC` aynı `linkedid`. Agent kanalındaki
+    `b` seçeneği iki yönü de kaydediyor, yani ikinci yazıcı gereksiz. Düzeltme provizyon
+    çıktısını değiştirdiği için bilinçle kapsam dışı bırakıldı.
+  - **BR-SYS-104 (P2):** Ş43-14(iii) fd/`maxfiles` **üç yolun üçünden de** okunamıyor:
+    ARI'de uç yok, AMI `command` Karar #46 ile kilitli, host ajanı katalogunda
+    `core show settings`/`core show fd` yok.
+- **BR-AST-59 düzeltmesi:** ajan bunu "kurula soru" diye bıraktı, ama Karar #66 **M9**
+  seçeneği (2)'yi zaten seçmişti. Kart "kurul bekliyor"dan çıkarıldı; Ş66-8 şartlarıyla
+  uygulama bekliyor ve sıra şartı ajana yazıldı (**M10 `state_interface` önce** — yoksa
+  kuyruk, konuşan agent'a ikinci çağrı çaldırır).
+- **Temizlik dersi:** sunucuda adı **iki CR taşıyan** bir artık dosya kalmıştı
+  (`t9060-olcum60.conf\r\r`). `rm -f <temiz ad>` ve `stat` onu **bulmuyor**, `ls`
+  gösteriyordu; Asterisk `*.conf` glob'una uymadığı için hiç yüklenmemişti. `find -delete`
+  ile silindi. *CRLF'li betikten `docker cp`/`touch` yapılan dosya adları sessizce CR taşır
+  ve "sildim" iddiası doğrulanamaz.*
+- **Commit:** `5d72444c` (merge), `8ea17dae` (backlog + iki kart + N12)
+- **ClickUp:** 2 yeni kart açıldı (539), doğrulama `fark olan kart: 0, izde olmayan: 0`.
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
