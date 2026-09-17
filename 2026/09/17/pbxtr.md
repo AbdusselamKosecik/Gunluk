@@ -506,6 +506,81 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
 - **Parite bekçisinin yönü tutucudur.** Kaçan ölü satır riski alınır, yanlış alarm
   alınmaz — çünkü yanlış alarm veren bir kapı kaçınılmaz olarak silinir.
 
+### 19. Kurul Karar #66 — 27 açık sorunun toplu karara bağlanması
+
+- **Neden:** Gün boyu koşan paralel ajan turları (AMI, dialplan, SYS, DB, OPS) 27 açık
+  soru biriktirdi. Bunlar tek tek kullanıcıya sorulacak sorular değildi (bellek kuralı:
+  "kararı kullanıcıya değil kurula sor"); hepsi bir oturumda karara bağlandı.
+- **Ne yapıldı:** Gündem `yonetim/kurul-gundem-2026-09-17.md` yazıldı (M1–M27; her madde
+  seçenekler + koordinatör önerisi). 10 kurul üyesi ajanı **aynı mesajda paralel** koştu.
+  Oylar toplandı, eşik (7/10, ŞARTLI = EVET) hesaplandı, Şeytan'ın 12 itirazının her
+  birine yazılı cevap üretildi ve karar kaydı eklendi.
+- **Dokunulan dosyalar:** `yonetim/kurul-gundem-2026-09-17.md` (yeni),
+  `yonetim/kurul-kararlari.md` (Karar #66 eklendi)
+- **Sonuç / doğrulama:** **ŞARTLI ONAY**, 27 maddenin tamamı. Hiçbir maddede 4+ HAYIR yok
+  (en fazla 1 — Şeytan M1/M9/M18/M23). Veto şartları: CTO (M1, M15, M16, M21),
+  DB Lideri (M21), Asterisk Uzmanı (M9, M15, M18).
+
+  **Kurulun koordinatör önerisini DÜZELTTİĞİ dört madde** (asıl değer bunlarda):
+  1. **M12 — teslim kanıtı.** Öneri "ARI `GET /endpoints` listesinde görünmek" diyordu.
+     Asterisk Uzmanı çürüttü: BR-AST-87'de ölçüldü, o liste **silinmiş nesnelerin bayat
+     kopyalarını** da döndürüyor (509 hayalet kayıt). Kanıt nesne bazında
+     `GET /asterisk/config/dynamic/res_pjsip/endpoint/{ad}` 200 olmalı.
+  2. **M23 — owner yazma yüzeyi.** Öneri "definer fonksiyon kendini GUC işaretiyle
+     tanıtsın" diyordu. Şeytan (İ7), CTO ve DB Lideri aynı şeyi söyledi: **GUC bir kimlik
+     değildir** — `SET LOCAL` yapabilen her oturum kendini definer diye tanıtabilir. Karar
+     değişti: önce `pbxtr_owner`'ın `tenants` UPDATE yetkisi REVOKE edilir ve iki definer
+     fonksiyon `pbxtr_sys` sahipliğinde koşar; GUC yolu yalnız o ölçüm başarısızsa.
+  3. **M21 — RLS yüklemi.** Öneri "çapraz kip için ayrı policy" diyordu. DB Lideri ve CTO
+     aynı tuzağı gösterdi: **PostgreSQL aynı rol/komut için iki PERMISSIVE policy'yi OR
+     ile birleştirir** — plan yine satır başı Filter'a döner, 13 ms ölçümü üretimde
+     çıkmaz. Şart: ya ayrı DB rolü (`TO ...`) ya OR'suz tek ifade; EXPLAIN'de `Index Cond`
+     görülmeden `01-rls-template.sql`'e dokunulmaz.
+  4. **M14 — `ari.conf` `channelvars`.** Öneri kapalı reload listesini genişletmekti.
+     Asterisk Uzmanı üçüncü bir seçenek getirdi: `channelvars` tenant verisi değil,
+     santral geneli sabit ayar → imaj/host tabanına yazılır, liste hiç genişlemez.
+     Karar: (a) yalnız A/B ölçümü `module reload res_ari.so`'nun açık Stasis soketini ve
+     köprülü çağrıyı düşürmediğini gösterirse; düşürürse (c).
+
+  **Bağlayıcı uygulama sırası** (çoğu üyenin ayrı ayrı vardığı sonuç):
+  `M10 (state_interface) → M3 (resync) → M9 (devralma)` — sırası bozulursa kuyruk,
+  görüşmesi süren agent'a ikinci çağrı çaldırır ve resync bugünkü "0 müsait" yalanını
+  "9 müsait" yalanına çevirir. `M15 (edge) → M18 (dış üye) → M19`; edge kurulmadan dış
+  numara yolu fail-closed kapalı kalır (toll-fraud). `M20 (source) → M9 rapor kaynağı`.
+- **Commit:** `c45171fd` — Kurul Karar #66: toplu karar oturumu (M1-M27) — ŞARTLI ONAY
+
+### 20. QA/FE/SEC ajan dalının birleştirilmesi (10 kart Bitti)
+
+- **Neden:** Paralel ajan turlarından biri (QA + frontend + güvenlik) 11 commit'le bitti;
+  worktree dalı ana dala alınmalıydı.
+- **Ne yapıldı:** `worktree-agent-a4df1acfd61f0df68` merge edildi, üç çakışma çözüldü.
+- **Dokunulan dosyalar:** `deploy/yerel-kapilar.sh`,
+  `src/Pbxtr.Web/src/app/screens/system/auditView.ts`,
+  `src/Pbxtr.Web/src/app/screens/system/auditActionParity.test.ts`, `yonetim/backlog.md`
+- **Çakışmalar ve çözümleri:**
+  - **Kapı numarası çakışması.** Paralel ajanlar aynı numarayı aldı: bu dal `kapi_57` ve
+    `kapi_58` açmış, ama o numaraları başka dallar (BR-QA-81 linux-root, BR-SYS-91) çoktan
+    almıştı. Bu dalınkiler **59** ve **60** olarak yeniden numaralandı; `bash -n` temiz.
+    *Ders: paralel ajanlara kapı numarası dağıtılmalı, "en büyük + 1" kuralı paralelde
+    çalışmıyor.*
+  - **`auditActionParity.test.ts` — testin kendi bekçisi merge hatamı yakaladı.** Borç
+    listesi bir **manda**ldır (yalnız küçülür). Çakışmayı "iki tarafı da koru" diye
+    çözdüm; test kırmızı oldu: `privileged.stale.denied` bu dalda **etiketlenmişti**, yani
+    borç listesinden silinmeliydi. Elle "ikisini de koru" refleksi yanlıştı, mandal kuralı
+    doğruydu.
+- **Sonuç / doğrulama:** `tsc -b` temiz (rc=0), **vitest 1948/1948** (217 dosya).
+- **Devralınan kırmızı (bu dalın işi değil):** `kapi_07` HEAD'de kırmızı —
+  `20260916200000_CallDirectionUnmeasured.cs` ham SQL onay satırı eksik. `kapi_44` ise bu
+  dalda **düzeldi**: `bf645efb` (BR-FE-79) `delivery-manifest.json`'u değiştirmiş ama
+  `st44-role-matrix.json`'u yeniden üretmemişti — tam da BR-QA-58'in kurduğu dondurulmuş
+  artefakt defterinin var olma sebebi olan sınıf.
+- **Yeni bulgu (BR-QA-58):** yalnız dashboard-live değil **giriş ekran görüntüsü de
+  bayat**; ikisi de BR-QA-55 altında 2026-12-11'e kadar "bilinen bayat" işaretlendi.
+- **Kartlar:** BR-QA-60/45/59/58/35/39/47 + BR-SEC-13 **Bitti**; BR-QA-40 ve BR-FE-86
+  **Kısmen**; BR-SEC-14 ölçüldü (kapı zaten yerinde, kalan iş yok).
+- **Commit:** `26d828aa` (merge), `b149ffcc` (backlog)
+- **ClickUp:** 10 kart güncellendi, doğrulama `fark olan kart: 0, izde olmayan: 0`.
+
 ## Açık kalanlar / sonraki adım
 
 - Backlog'da kalan kartlara devam (`yonetim/backlog.md`); büyük kısmı canlı PBX/sunucu
