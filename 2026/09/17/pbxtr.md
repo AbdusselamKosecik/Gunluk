@@ -447,6 +447,23 @@ gün 09-17'ye `BR-FE-84` ile giriliyor.
   `dotnet format --verify-no-changes` temiz.
 - **Commit:** `0cae9596` — BR-QA-52 bitti: TenantLeakCoverageTests kuruldu (ADR-012 G1)
 
+### 17. `BR-QA-81` — güven dalı Linux root altında **gerçekten** koşuyor
+
+- **Neden:** üç test koşul sağlanmayınca `return;` ile sessizce yeşil dönüyordu; üretim güven dalı (uid 0 / 0600 / `O_NOFOLLOW`) hiçbir yerde ölçülmüyordu.
+- **Ne yapıldı:** `tests/Shared/` (iki test paketine `Compile Include` ile bağlı) `LinuxRootEnvironment` + `RequiresLinuxRootFact` / `RequiresSignedFixtureFact` / `RequiresLiveAriFact`, Integration'da `RequiresSeederTrustFact`. `deploy/yerel-kapilar.sh` **`kapi_57`**: `mcr.microsoft.com/dotnet/sdk:10.0` konteyneri `--user 0`, `--artifacts-path /kok` (ortak `BaseIntermediateOutputPath` MSB4006 verdi), iki proje / 3 test, ~35 sn; `Skipped: 0` şart.
+- **Kartın vacuity öngörüsü çürütüldü:** `st.Uid != 0` silindi, root hedefi yeşil kaldı — root iken her dosyanın sahibi zaten root. Yeni vaka `Root_olmayan_sahipli_dosya_ve_ust_dizin_REDDEDILIR` `chown nobody` yapar. Mutasyon 3 kırmızı (dosya uid, ata dizin uid, `IsLinuxRoot => false` → kapı "beklenen 2 geçen test YOK").
+- **Yayın kapıları:** `integration-trx-gate.py`, `api-test-shards.py`, `test-kos.sh` atlamayı yasaklıyordu (bu yüzden testler `return;`e itilmişti). Artık **sayılı**: `deploy/ci/skip_izinleri.py` kapalı liste, tavan 5; liste dışı atlama kırmızı. Kapı testleri: 13/13 ve 8/8.
+- **Komut:** `MSYS_NO_PATHCONV=1 docker run --rm --user 0 -v "$(cygpath -m "$PWD"):/repo" -v pbxtr-root-nuget:/nuget -v pbxtr-root-artifacts:/kok -w /repo -e NUGET_PACKAGES=/nuget mcr.microsoft.com/dotnet/sdk:10.0 dotnet test <proje> --filter ... --artifacts-path /kok`
+- **Sonuç:** Api.Tests filtreli 1366 geçti / 3 görünür atlandı. `deploy/ci/test-kos-yayin-test.py`'deki 1 hata önceden vardı (stash ile doğrulandı).
+- **Commit:** `ca0bf355`
+
+### 18. Paralel ajan turu + kullanıcı kararları
+
+- **Kullanıcı kararları (2026-09-17):** sunucu `176.88.41.220` **canlı değil, test/sunum ortamı** — originate/yazma/reload serbest (hafızaya yazıldı). BR-AST-60 için **köprüleme** (pbxtr ARI ile yönetir). BR-SYS-95: **24 ay kalır**. BR-SYS-34/44/90: **rapor postası şimdilik yok** → kapsam dışı. BR-SEC-16: sırlar ajanlar bitince döndürülecek. Büyük özellik epikleri (BR-7/8/9/A3/C2) **şimdi yapılacak**.
+- **Düzen:** sekiz ajan ayrı worktree'lerde (ARI köprüleme, dialplan üretimi, AMI olay hattı, DB, SYS/confd, BE, QA/FE/SEC, OPS/karışık). Ajanlar `backlog.md`'ye dokunmaz, commit eder ama push etmez; birleştirme, backlog, push, günlük ve ClickUp koordinatörde. Sunucuda yazma adımları `flock /tmp/pbxtr-agent.lock` içinde.
+- **Birleşenler:** `463b31d0` BR-BE-150 (taklit genişlik kuralı rol kapsamını da sayar; 4 mutasyon kırmızı; kalan: yayın + enforce kararı). `af1ba5d8` BR-AST-60 köprüleme (`AriCallBridge`; santralde gerçek C# kodu geçici `t9060` bağlamında 4 senaryo geçti; 10/10 mutasyon kırmızı; kalan: yayın, kör aktarma, çağrı sesi, kayıt).
+- **Kurula gidecek sorular (birikiyor):** BR-BE-81, 43-B, 119, 136, 159; BR-AST-59 gelen yönde bekletme yolu (Stasis'siz AMI Redirect mi, `AgentConnect` sonrası devralma mı); Ş43-13 (soket kapanışı köprülü çağrıyı düşürmüyor — boşaltma şartı değişsin mi).
+
 ## Kararlar
 
 - **Aynı reddi iki kez adlandırma.** Kod anahtarı ile kural adı aynı şeyi söylüyorsa
