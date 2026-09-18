@@ -1500,3 +1500,95 @@ Her kartın Durum hücresi yeniden ölçülerek güncellendi; önceki metinler
   düzenlemesi (`XML yorumunda '--'`) benim build'imi **MSB4025** ile öldürdü ve o arada
   koşan `dotnet test` **eski ikiliye** gidip "24 passed" dedi. Mutasyon ölçümü bu yüzden
   bir kez yanlış yeşil verdi. Ders: `PIPESTATUS[0]` + build rc'sini her ölçümden önce oku.
+
+---
+
+### BR-AST turu — 27 acik kartin olculmesi (backend-dev-2)
+
+- **Neden:** `yonetim/backlog.md`'de 27 acik `BR-AST-*` karti vardi ve cogunun Durum
+  hucresi "olculdu ama is kaldi" diyordu. Kartlarin **kendi teshisleri bayat olabilir**
+  (defter: *kart onculu olculmeden yazilmaz*), bu yuzden her kart once KODDA olculdu.
+
+- **Ne yapildi (kod):**
+  1. **BR-AST-102 kapandi.** Santral olcumu iki sey demisti: kayitsiz uygulama adiyla
+     cagrilan `Stasis()` kanali DUSURMUYOR (yani "sessiz dusme" yok), **ama**
+     `call_events`'e hicbir iz dusmuyordu. Panel kapaliyken cagri kontrolsuz devam
+     ediyor ve timeline'da hicbir sey bunu soylemiyordu. Kapatilan yari iz.
+     - Yeni kapali kume `ControlPlaneSignals.StasisUnavailable`. **`TakeoverSignals`'a
+       EKLENMEDI** — `TakeoverSignals.All` ile sayan yerler (`EfTakeoverOutcomeQuery`,
+       `EfAgentWorkspace`) sessizce baska bir seyi saymaya baslardi.
+     - `ConfigRenderer.AppendStasisUnavailableTrace` -> `[pbxtr-{t}-out]` ve
+       `[pbxtr-{t}-int]`'te devir denemesinden SONRA kosullu `UserEvent`.
+     - **Kosul iki ariza kipini de soruyor ve bu bir tercih degil:**
+       `STASISSTATUS=FAILED` = modul yuklu / uygulama bagli degil (pbxtr kapali, SIK hal);
+       `TRYSTATUS=NOAPP` = `res_stasis` hic yuklu degil (BR-AST-94 olcumu). Ikinci kipte
+       `STASISSTATUS` **hic yazilmaz**, birinci kipte `TRYSTATUS=SUCCESS` olur — tek
+       degiskene bakan kosul kiplerden birini **yapisal olarak** kacirirdi.
+     - **Anons BILEREK yazilmadi:** S70-12'nin anons yarisi GELEN cagri icin; giden yonde
+       cagri saglamdir, konusan cagriya anons calmak arizayi buyuturdu (CLAUDE.md §3.2).
+       Gelen yon bugun `Stasis()`'e hic girmiyor -> o yari BR-AST-58/61'e baglandi.
+  2. **BR-AST-109 (1) kapandi:** `res_parking` siniri `deploy/asterisk-conf-sinir.txt`'e
+     yazildi (provisioning park yeri yaratabiliyor ama kapali reload listesiyle geri
+     alamiyor; kontrol grubu ayni turda temizlenmisti -> `res_parking`e ozgu).
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/ControlPlaneSignals.cs` (yeni),
+  `src/Pbxtr.Domain/Modules/CallHistory/CallTimelineLabels.cs`,
+  `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/ConfigRendererTests.cs`,
+  `deploy/asterisk-conf-sinir.txt`, `yonetim/backlog.md`
+
+- **Komutlar / dogrulama:**
+  ```bash
+  dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~ConfigRenderer"
+  # 30/30 yesil; CallTimeline ile birlikte 42/42
+  # MUTASYON: TRYSTATUS -> TRYSTATUSX  => Failed 1 / Passed 29 (KIRMIZI), geri alindi
+  ```
+
+- **Olcumle CURUYEN iki kart teshisi (bu turun asil degeri):**
+  - **BR-AST-92:** Durum *"pbxtr-confd medya ajani bu depoda YOKTUR"* diyordu. **Yanlis.**
+    `deploy/pbxtr-confd-dugum.sh` tam bir medya teslim yolu tasiyor: `:888` manifest,
+    `:1305-1338` indirme + sha256 dogrulamasi, `:1394-1440` **tenant bagli** hedef yol
+    dogrulamasi (mutlak yol / `..` / GUID disi mediaId RED), `:1436` `/var/lib/asterisk`
+    altina yazim, indirilemezse tenant ATLANIR (fail-closed). Geriye kalan tek sey
+    9 dilin **ses kaynagi** — bir kod isi degil.
+  - **BR-AST-79:** kartin onerdigi *"#37'ye tenant bazli gorunur satir"* bicimi bugunku
+    sozlesmeye **aykiri**: `RegistrationSnapshot.cs:87-91` ozet icin kapali kisit yaziyor
+    (tenant kodu/kimligi/dahili numarasi YAZILMAZ, tenant kirilimi YOK) ve gerekcesi
+    guvenlik — aksi halde `bundle.system` capraz-tenant bir **is envanterine** donusur.
+    Bu yuzden bicim uydurulmadi; uyarinin yuzeyi (sistem sayisi mi, tenant kapsamli
+    ekran mi) mimari/kurul sorusu olarak yazildi.
+
+- **BR-AST-29 kapandi cunku kalan is KODDA ZATEN VARDI:** `QueueMemberPresenceResync.cs:13`
+  periyodik `QueueStatus` varlik mutabakati; kuyruk yok olunca hicbir sey yazilmaz,
+  kayitlar TTL ile duser ("olculemedi") ve eski deger tazelenmez. DI dikisi
+  `TelephonyServiceCollectionExtensions.cs:361`, cagrilma yeri `QueueMetricDeriver.cs:159`.
+
+- **Sonuc:** 2 kart KAPANDI, 8 kart "olculdu — is yok" diye kanitlandi, 15 kart BLOKE
+  (sebebi hucreye yazili), 2 kart teshisi curudu.
+
+- **Commit:** `27a900c8` (kod) — backlog guncellemesi es zamanli calisan baska bir ajanin
+  `3c540b15` commit'ine dahil oldu (ayni dosya, ayni an).
+
+## Kararlar (bu tur)
+
+- **Sira kilidi: ONCE BR-AST-108, SONRA BR-AST-17.** Hicbir yerde yazili degildi ve iki
+  kart birbirini goturuyordu: BR-AST-17'nin kabul kriteri *t0012 dugumde > 0*, BR-AST-108'in
+  olcum temizligi ise tam olarak t0012'yi dugumden DUSURMEK uzerine kuruluydu. t0012 yeniden
+  pinlenirse 108'in vacuity kapisi (dusurulen tenant'in dosyalari bir sonraki turda gitmeli)
+  **olculemez** hale gelir. Bu yuzden sunucudaki kayit bu turda DEGISTIRILMEDI.
+- **BR-AST-81 kabul kriteri bugunku kapali listeyle KARSILANAMAZ.** (b) sikki "durum yeniden
+  baslatma sonrasi AstDB'den geri geliyor mu" ve olcmek `core restart` ister — YASAK.
+  Kurula gitti: ya (b) kabul edilir ya kriter daraltilir.
+- **Anons != iz.** Bir arizanin "gorunur" olmasi, kullaniciya ses calmak demek degildir;
+  giden yonde dogru cevap **cizelgeye satir dusurmek**, arayani rahatsiz etmek degil.
+
+## Acik kalanlar / sonraki adim
+
+- Kurul gundemi (kartlara yazildi): A14 yas tavani (39/46), S42-8 inbound uretici (58),
+  S50-4 (b) olculemezligi (81), ADR-015 A1/A2/A3 (62/63/64), BR-AST-51a onceligi (A-1
+  sahada sifir masa telefonu olcmustu), 9 dilin ses kaynagi (92), BR-AST-79 uyari yuzeyi,
+  BR-AST-55 teslim sirasi kilidi (hint baglami -> StateInterface).
+- **Ortam engeli, kod engeli degil:** BR-AST-72 / 80 / 98(ses) kapanmasi icin test
+  sunucusunda **kayit olan bir WebRTC/SIP istemcisi** gerekiyor. Bugun `pjsip show contacts`
+  bos, 6 endpoint'in tamami ARI'de `offline`.
+- BR-AST-89: `pbxtr-app` restart isteyen tek ajanli bir bakim penceresi gerekiyor.
