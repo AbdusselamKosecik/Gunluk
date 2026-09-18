@@ -3780,3 +3780,102 @@ iş olanı yapmak, gerçekten bloke olanı **engeli adıyla** yazmak.
   `709368f0…` üretiyor = defterdeki Karar#73 sha'nın aynısı → kapı eskiden bu enjeksiyona
   **kördü**. Yalnız yorum satırı → **RC=0**. İkisi de geri alındı (`git diff` boş).
 - **Commit:** `e3005229` — BR-QA-111 / Karar #77 S77-7
+
+
+---
+
+## Tur: Kurul #77 — ve kurulu toplayanın kendi hatası (koordinatör)
+
+### Bağlam
+Kalan açık kartların yarısından fazlası kod işi değil, karar bekliyordu. 12 maddelik bir
+gündem (A–M) hazırlayıp PBXTR kurulunu topladım. Turun asıl çıktısı kararlar değil,
+**gündemin kendisindeki hata** oldu.
+
+### Yapılanlar
+
+### 1. Şeytan'ın I1 itirazı: gündemin 5 maddesi zaten karara bağlıymış
+- **Neden ölçüldü:** Şeytan *"metnin 12 maddesinden 5'i bu turda OYLANAMAZ"* dedi ve ayırt
+  edici soruyu sordu: *"Karar #66/#67'yi geçersiz kılan yeni ölçüm nedir, `dosya:satır` ile?"*
+- **Ne yapıldı:** `yonetim/kurul-kararlari.md` tarandı.
+  ```bash
+  grep -nE "^\| (M1[5-9]|M20|M2) (BR-|Ş)" yonetim/kurul-kararlari.md
+  grep -n "^| N8 " yonetim/kurul-kararlari.md
+  ```
+- **Sonuç:** itiraz **doğrulandı**. `BR-AST-61` (#66 M15, 10 oy), `BR-AST-58` (M16, 10),
+  `BR-AST-62` (M18, 9), `BR-AST-63` (M17, 10), `BR-AST-64` (M19, 10),
+  `BR-BE-43-B` (M2, 9), `BR-QA-51` (M20, 10), `queue_members` yazımı (#67 N8, 10).
+- **Kök sebep:** kartlar *uygulanmadığı* için backlog'da **açık** duruyordu; ben "açık =
+  kararsız" diye okudum. Doğru soru "hangi kol?" değil, **"kim uygulayacak, sırası ne?"**
+- **Zarar somut:** üyeler bu turda bazı maddelerde **farklı kol** seçti (A'da CTO ve
+  asterisk-uzmanı (b) dedi, #66 (a) demişti). Kaydetseydim Ş66-15/16/18/19 ve Ş67-8'in
+  onlarca şartı **sessizce düşecekti**. Şeytan sayıyı da verdi: #66'nın 27 maddesinin
+  **beşi bir günde eriyordu** (%18,5).
+- **Yeni kural (Ş77-0, Ş76-1'in kardeşi):** önceki kararın adı yazılmayan madde kurula
+  sunulamaz. Her madde ya *"Karar #NN Mxx — kol (a), NN oy"* taşır ya da *"karar defterinde
+  geçmiyor (arandı: `<kod>`)"*. Bir kararı değiştirmek serbest, ama onu **geçersiz kılan
+  yeni bir ölçüm** `dosya:satır` ile yazılmalı.
+
+### 2. Karar #77 yazıldı — beş madde geri çekildi, yedi madde ŞARTLI ONAY (10/10)
+- **Dosya:** `yonetim/kurul-kararlari.md` (+386 satır)
+- **Commit:** `2e9497cb`
+- Kurulun ölçümle ürettikleri:
+  - **linux-uzmanı:** `deploy/asterisk-lab/README.md` §D-08.1 — bozuk `t0008-context.conf`
+    yazıldığında `dialplan reload` sonrası tüm `pbxtr-t0007-*` bağlamları ayakta kaldı →
+    **dialplan izolasyonu dosya başınadır ve TUTAR**; §3.1'in kısmi rollback garantisi buna
+    yaslanıyor. Bu, Karar #66'nın (a) kolunu **teyit etti**.
+  - **linux-uzmanı (delik):** `yerel-kapilar.sh:2586` `Tum kapilar gecti (N)` basıyor ama
+    `kapi_65` host'a taşındığı için **o sayının içinde değil** — host adımı silinse
+    **hiçbir sayı değişmez**. "Koşmayan kapı bulgu değildir" sınıfının beşinci hâli.
+  - **linux-uzmanı (`BR-QA-86`/1):** kartın *"`Read` ile okunan dosyaya `ALTER` eklemek
+    kırmızı yakmıyor"* cümlesi **bugün yanlış** — `migration-compatibility-guard.py:24-29,55,99,492`
+    + `.blobs:80-81` + `DeployDbScripts.cs:23,25` (Read edilebilen dosya **tam 2**, ikisi çıpalı).
+  - **db-lider:** **Elasticsearch üründe YOK** (istemci + paket sıfır; CDR araması
+    `PostgresCdrSearch.cs`) → `BR-QA-51`'in ES ayağı bugün karara bağlanamaz.
+    `telephony_provider_effects` **`at` ile partition'lanamaz** (UNIQUE'te `at` yok; eklemek
+    tek tekillik korumasını düşürür). `BR-DB-16` onay satırı **verilemez** — onaylanacak
+    blob henüz yok, peşin onay defteri kauçuk mühre çevirir.
+  - **frontend-uzmanı:** `BR-FE-108`'in "9 dil i18n maliyeti" iddiası **çürütüldü** —
+    mola/sebep etiketleri sunucudan gelir, katalogdan değil.
+  - **CTO (veto):** düğüm kimliği serbest metin; B tenant'ı anahtarını A'nın düğüm adına
+    sabitleyebilir. `ux_api_keys_tenant_node` `(tenant_id, node)` → iki tenant aynı adı
+    paylaşabiliyor. Ayrı ölçüme bağlandı (`BR-SEC-30`, S1/S2/S3).
+
+### 3. Backlog'a karar ayağı
+- **Commit:** `e15f49fb`, `3c36c12e`
+- 7 karta **karar atfı** yazıldı ("hangi kol" sorusu düştü, kalan iş UYGULAMA).
+- 4 kart kapandı: `BR-BE-52` (Ş77-11 RED), `BR-BE-80` (Ş77-20 yazılı sapma),
+  `BR-FE-108` (Ş77-21), `BR-BE-120` (Ş77-11b).
+- 6 "karar bekleyen" kart karara bağlandı: `BR-DB-16/35/67/76`, `BR-AST-39/46`.
+- 9 yeni kart: `BR-QA-110/111/112`, `BR-DB-98`, `BR-BE-200/201`, `BR-AST-112/113`,
+  `BR-SEC-30`.
+- `BR-QA-06` **bölündü** (Ş77-22): Sprint-36'nın sayısal kapıları bugünkü ürün adlarına
+  eşlendi. Ölçüm: `queue_optin` 0 · `callback_requested` 0 · `callback_digit` 0 · `qexit` 0 ·
+  `callback_daily_cap` 0 · `callSource` **1 ve o bir yorum**; buna karşılık `CallbackEntry`
+  101 · `CallbackDispatcher` 84 · `ICallbackLedger` 75 · `sla_buckets` 101.
+  Eşlenemeyen tek küme **sprint kart numaraları** (`BR-FE-22/23` başka ve bitmiş işe
+  verilmiş) — numaralar yeniden kullanılmıyor.
+
+### 4. `BR-QA-109` kapandı
+`TenantLeakCoverageTests` 4/4 (önce 3/4). `EfAgentSkillProfile` sızıntı testiyle geldi;
+mutasyonda sorgu 3 tek başına yeşil kaldı ve sebebi **uydurulmadı, ölçüldü**: bileşik FK
+`(tenant_id, required_skill_id)` o dalı EF filtresi olmadan da tenant'a bağlıyor; 2+3
+birlikte KIRMIZI. Commit `c9646ce5`.
+
+### Kararlar
+- **Ş77-0:** önceki kararın adı yazılmayan madde kurula sunulamaz.
+- **Ş77-A2:** A maddesinde Karar #66'nın (a) kolu yürürlükte; bu turdaki (b) oyları karar
+  kaydına geçer ama kolu **değiştirmez** — yeni ölçüm sunmadılar.
+- **Ş77-1:** Kapı Evi Kuralı — varsayılan ev **kapı konteyneridir**; host'ta koşmak dört
+  şart ister (K-a araç bağı ölçülmüş · K-b özne platformdan bağımsız · K-c fail-closed,
+  atlama bayrağı yok · K-d vacuity).
+- **Ş77-17':** `BR-DB-16` onay satırı bugün yazılmaz; blob olmadan onay verilmez.
+
+### Açık kalanlar / sonraki adım
+- **Yayın koşulmadı** — 8 ajan paralel çalışıyor; testhost eşzamanlı yük altında çöküyor.
+  Yayın, ajanlar bitince koşacak ve `BR-DB-88/91`, `BR-BE-150/119`, `BR-AST-103`,
+  `BR-SEC-26/29` gibi ~10 kartı açacak.
+- `BR-SEC-30` (CTO vetosu) ölçümü sürüyor; S1/S2 "evet" çıkarsa **P0 tenant izolasyonu
+  sızıntısı**.
+- `BR-SEC-16` + `BR-SEC-28` sır rotasyonu, ajanlar bitince.
+- `BR-AST-112` (ölçek) ve `BR-AST-113` (rollback) test sunucusunda yapılacak; ikisi de
+  A'nın uygulamasının önkoşulu.
