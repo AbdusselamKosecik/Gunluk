@@ -5227,3 +5227,117 @@ iş kayıp değil, sadece commit mesajı onlarda.
   duruyor. Kart açılmalı.
 - `POST /telephony/screen-pop` hâlâ kodda yok (sözleşmede var) — bu alanın ikinci bir
   üreticisi olacaksa aynı `null` sözleşmesini taşımalı.
+
+---
+
+### Beş güvenlik/DB kartı: `BR-SEC-26` · `BR-SEC-21` · `BR-SEC-29` · `BR-DB-102` · `BR-DB-103` (db-dev)
+
+- **Neden:** Beşi de "karar yazılmış ama uygulanmamış" ya da "bekçisi yok" sınıfındaydı.
+  Kurul 2026-09-18'de kullanıcı tarafından dağıtıldığı için `BR-SEC-29` artık kurula
+  gitmiyor; ölçüp karar vermek bu tura düştü.
+- **Dosya çakışması (turu şekillendiren kısıt):** paralel bir `db-dev` ajanı
+  `deploy/db/00-01-02.sql` + `PbxtrDatabaseFixture` üzerinde çalışıyordu; o dosyalara
+  dokunulmadı. `BR-SEC-26`'nın (3)+(4) kalemleri ve `BR-SEC-29`'un tamamı bu yüzden
+  **inmedi** — erteleme değil, kilit.
+
+#### `BR-DB-102` — `callback_entries` RLS genişlemesinin mimari bekçisi (KAPANDI)
+- **Ne yapıldı:** `tests/Pbxtr.Architecture.Tests/CallbackEntriesWriteSurfaceTests.cs`.
+  **Önce mevcut veri ölçüldü** (kapı kurmadan önce): `src/` altında (migration'lar hariç)
+  `callback_entries`'e ham SQL ile **yazan 0**, **okuyan 2** (`CallbackRunJob.cs`,
+  `SlaAggregationJob.cs` — ikisi de çapraz kip açar), **EF ile dokunan 4** dosya ve
+  hiçbirinde `IgnoreQueryFilters` / `BeginCrossTenantScope` yok.
+- **Dört ayak:** (1) ham SQL yazma yok; (2) çapraz kip açan dosyalar yazmıyor (asıl soru);
+  (3) EF yolu kapsamı açmıyor; (4) tarayıcı öz-testi — 3 pozitif + 2 negatif desen
+  (`SELECT … FROM callback_entries` ve `callback_entries_archive` kelime sınırı),
+  dosya sayımı > 200, bilinen iki okuma yüzeyi görülüyor.
+- **Mutasyon:** `CallbackRunJob.cs`'ye `UPDATE public.callback_entries` metni enjekte
+  edildi → **2 test KIRMIZI** (tam da 1. ve 2. ayak); geri alındı → **4/4 yeşil**,
+  kalıntı 0 (`grep -c` = 0).
+
+#### `BR-SEC-26` — `public.*` `proacl` bekçisi ((1)+(2) indi, (3)+(4) açık)
+- **Ölçüm (kartın kendi ölçümü doğrulandı):** fonksiyon düzeyi `SET app.cross_tenant='on'`
+  taşıyan `public.*` fonksiyonlardan **doğrudan çağrılabilen tam olarak iki** tane var ve
+  ikisi de `PUBLIC EXECUTE` taşıyordu.
+- **(1)** `20260919010000_PublicCrossTenantFunctionAclRevoke` — iki fonksiyondan
+  `PUBLIC EXECUTE` kaldırıldı. **Şablona değil migration'a yazıldı** ve bu ölçülmüş bir
+  seçim: iki fonksiyon da `CREATE OR REPLACE` ile kurulur, PostgreSQL o yolda `proacl`'i
+  **korur** → REVOKE şablon tazelemesinden sağ çıkar. `Down()` birebir geri alır.
+- **(2)** `tests/Pbxtr.Integration.Tests/Tests/PublicCrossTenantFunctionAclGuardTests.cs` —
+  gerçek PostgreSQL + tam migration zinciri üzerinde `pg_proc`/`proacl` ölçer. Defter
+  (2 ad) + vacuity kontrol grubu (`pbxtr_index_guard()` taramaya **girmemeli**) + iki
+  mutasyon (elle `GRANT … TO PUBLIC`; sınıfa yeni doğrudan çağrılabilir fonksiyon).
+- **Ölçülen bağımlılık:** mutasyon-1 ancak (1) indikten **sonra** anlamlı —
+  `coalesce(proacl, acldefault(…))` yüzünden PUBLIC zaten varken `GRANT` hiçbir şeyi
+  değiştirmez. Yani REVOKE'suz bekçi **vacuous** olurdu.
+- **Açık, adıyla:** canlıda elle verilen bir `GRANT`'i bu test **görmez**; o hâl ancak
+  `02-guards.sql` + `MaintenanceRunner.GuardAsserts` ile kapanır (dosya kilidi).
+  `CLAUDE.md §4` istisna listesi (ajan CLAUDE.md'yi değiştiremez) ve
+  `01-rls-template.sql:177-180` cümlesi (dosya kilidi) yazılmadı.
+
+#### `BR-SEC-29` — `tenants_sys_update` daraltması (KARAR VERİLDİ, uygulama bloke)
+- **Ölçüm:** yazıcı sayısı **2** (`pbxtr_sys.move_tenants_to_dealer` `01:1425`,
+  `set_tenant_status` `01:1509`); `src/` ve `Migrations/` altında ham `UPDATE tenants`
+  **0 dosya**. Kapsanan satır: çapraz kipteki `pbxtr_owner` için **platform dışındaki her
+  tenant (N−1)**.
+- **Seçilen tasarım (A):** iki definer fonksiyona fonksiyon düzeyi
+  `SET "app.sys_write" = 'tenant_move' | 'tenant_status'`; policy o işareti şart koşar.
+  **Ölçülen daralma: iki fonksiyonun dışında owner'ın `tenants` UPDATE yüzeyi N−1 → 0.**
+  Mekanizma uydurma değil — `BR-SEC-26`'da bu turda ölçülen mekanizmanın ta kendisi.
+- **Reddedilen tasarım (B):** per-row `set_config('app.tenant_id', …, true)` ile çapraz
+  dalın tamamen kaldırılması. `set_config(…, true)` **işlem** ömürlüdür, fonksiyon ömürlü
+  değil → `set_tenant_status` döndüğünde çağıranın tenant bağlamı değişmiş olurdu.
+- **Dürüstçe yazılan kalıntı:** `app.sys_write` düz bir GUC'tur; owner elle de yazabilir.
+  A'nın kapattığı şey kötü niyetli owner değil, **kazara geniş owner yazımı**dır.
+- **Neden inmedi:** `01-rls-template.sql` (policy + iki gövde) **ve** `02-guards.sql`
+  (`SYS_UPDATE_WRONG_QUAL`/`WRONG_CHECK` birebir dizeleri, `sys-functions.expected`)
+  gerekiyor; ikisi de kilitliydi.
+
+#### `BR-DB-103` — `ix_provisioning_node_state_outcome` (Kapsam dışı, ölçülmüş)
+- **Tüketici sayısı SIFIR:** iki sorgu yeri var ve hiçbiri `outcome` predicate'i taşımaz —
+  `EfProvisioningNodeStateHealthReader.cs:87` (WHERE'siz tam tarama),
+  `EfProvisioningNodeStateStore.cs:82` (PK araması).
+- **Önek eklenmedi:** depo kuralının zorlayıcısı `pbxtr_index_guard()`
+  (`02-guards.sql:556`) yalnız **bileşik** indeksleri tarar (`ix.indnatts > 1`); ayrıca
+  `outcome` filtreleyen sorgu yokken `(tenant_id, outcome)` yazmak aynı kuralın ikinci
+  yarısının (*sorgu desenine bakmadan indeks ekleme*) ihlali olurdu. Tablo `tenant × pinli
+  düğüm` ile sınırlı. **Silinmedi de** (yıkıcı işlem + `kapi_07` onay satırı).
+- **Yeniden açacak tek şart yazıldı:** `outcome` üzerinde tenant-kapsamlı ilk predicate ile
+  birlikte indeks `(tenant_id, outcome)` ile **değiştirilir** (yanına eklenmez).
+
+#### `BR-SEC-21` — değişmedi, ölçüldü
+- (a) kapalı, (c) Ş76-10/3 sıra kilidiyle bilinçli kapalı. **(b) egress allowlist açık ve
+  `db-dev`'in alanı dışında:** nftables kuralı ancak sunucuda `nft -c -f` + kontrollü
+  yükleme ile doğrulanır. **Ağda ikinci kapı sorusunun cevabı: bugün SSRF'e karşı tek
+  savunma uygulama katmanıdır** (`OutboundHostGuard`). Sahip: `linux-uzmani`.
+
+- **Komutlar:**
+  ```bash
+  dotnet build pbxtr.sln                 # 7. denemede 0 hata (paralel ajanlar tekrar tekrar kırdı)
+  dotnet test tests/Pbxtr.Architecture.Tests --filter CallbackEntriesWriteSurfaceTests
+  python3 deploy/migration-compatibility-guard.py
+  git hash-object .../20260919010000_PublicCrossTenantFunctionAclRevoke.cs
+  ```
+- **Sonuç / doğrulama:** `CallbackEntriesWriteSurfaceTests` **4/4 geçti**; mutasyonla
+  **2 KIRMIZI**, geri alınınca yine **4/4**. `PublicCrossTenantFunctionAclGuardTests`
+  **derlendi ama yeşil koşusu alınamadı**: çalışma ağacında paralel ajanların yarım işi
+  (`PbxtrDbContextModelSnapshot` ↔ konfigürasyon uyumsuzluğu) EF'in
+  `PendingModelChangesWarning`'ini tetikliyor ve migration zinciri **hiç kurulmuyor**.
+  Bu benim değişikliğimden gelmiyor (migration model değiştirmiyor) ve **ölçülmemiş
+  sayılmalıdır**.
+- **Commit:** `724bb0db` — BR-DB-102 kapandi + BR-SEC-26 (1)+(2) indi
+
+#### Kararlar
+- Bekçi, şablona (`02-guards.sql`) değil test katmanına yazıldı; **kapsam farkı kartta
+  adıyla yazılı** (depo/zincir sapması yakalanır, canlıda elle GRANT yakalanmaz).
+- `kapi_07` onay defteri satırı **uydurulmadı**: defterin kendi kuralı *"Emsal bir BİÇİMİ
+  onaylar, bir İÇERİĞİ ASLA"*. Blob `6212b0500afdd58340c2866dceb14e4652c7d1d4`.
+
+#### Açık kalanlar / sonraki adım
+- `deploy/migration-contract-onay.blobs`'a tek satır (karar numarasıyla). **Kapı bu turda
+  zaten kırmızıydı:** `20260918234000` ve `20260918235500` de aynı satırı bekliyor.
+- `02-guards.sql`'e `pbxtr_public_function_acl_guard()` + `GuardAsserts` satırı (BR-SEC-26/2'nin
+  canlı ayağı), `CLAUDE.md §4` istisna sınıfı, `01:177-180` düzeltmesi.
+- `BR-SEC-29` tasarım A'nın inmesi + inmeden önce `03-smoke` owner `UPDATE tenants`
+  satırlarının hangi dala düştüğünün ölçülmesi ve `BR-DB-91`.
+- **Paralel ajan `backlog.md` değişikliklerimi kendi commit'ine süpürdü** (`da7faffc`) —
+  içerik korundu, commit mesajı yanlış sahibi gösteriyor. Defterdeki bilinen sınıf.
