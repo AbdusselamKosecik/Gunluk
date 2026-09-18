@@ -6168,3 +6168,104 @@ dotnet test tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj --no-bu
 - `BR-DB-88` ve `BR-DB-91` **yayın #18'in `MigrationRunner` aşamasını** bekliyor
   (`BR-DB-69`/`74`/`79`/`84` ile aynı pencere).
 - **Commit:** `d8cec0bf` — *BR-DB-99 Bitti: Faz2Database semayi migration zincirinden kurar (TEMPLATE); BR-DB-88/91 olculdu*
+
+---
+
+## BR-BE-206 / BR-BE-208 / BR-BE-209 — otomatik geri aramanın üç eksik kapısı (backend-dev-1)
+
+### Bağlam
+
+Kurul #78 üç kart açtı, üçü de `CallbackRunJob` etrafında. Önce bir **kayıt düzeltmesi**
+doğrulandı: *"hizalama tüm tenantlarda otomatik geri aramayı açıyor"* **yanlıştı** — keşif
+sorgusu `WHERE s.auto_callback_enabled` taşıyor ve kolonun varsayılanı `false`. Asıl risk
+oradan doğuyor: **düğmeyi aylar önce açmış ama iş hiç koşmamış** bir tenantta kayıtlar
+birikti; iş uyanınca `ORDER BY next_attempt_at` en eskisini önce arar ve sabah agent
+ekranlarına aylar önce arayıp vazgeçmiş insanlara giden aramalar düşer.
+
+### Yapılanlar
+
+#### 1. BR-BE-206 — bayatlık kapısı + ilk tur uyarısı
+
+- **Neden:** `EfCallbackLedger.cs` içinde `expire|stale|bayat|max_age` → **0 eşleşme**.
+- **Ne yapıldı:** `tenant_settings.auto_callback_max_age_hours` (**NOT NULL DEFAULT 24**,
+  CHECK 1–720). Varsayılanın **var olması** bilinçli ve `auto_callback_enabled` ile
+  **ters** yönde: orada açık bir varsayılan arama *başlatır*, burada varsayılanın yokluğu
+  kapıyı hiç kurmamak olurdu.
+  İki katman: toplu kapı `EfCallbackLedger.ExpireStaleAsync` (tur başına, tenant başına bir
+  `ExecuteUpdate`) + ikinci kapı `CallbackDispatcher` (iş dışından gelen çağrı da elensin).
+  Yeni kapalı-küme değerleri: `status='expired'` + `resolution='expired'`. `cancelled`
+  **bilerek** kullanılmadı (o bir *insan kararıdır*), `exhausted` de değil (orada *aradık*
+  denir; burada **hiç aranmadı**).
+  İlk tur uyarısı: `ICallbackFirstRunNotice` / `EfCallbackFirstRunNotice` → `WARN` + denetim
+  (`automation.callback.first_run`) + `callback.first_run` realtime olayı (**Supervisor**
+  odası = `live.queue.read`). Damga `auto_callback_first_run_at`, **koşullu UPDATE**.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Automation/*`,
+  `src/Pbxtr.Infrastructure/Modules/EfCallbackLedger.cs`, `.../EfCallbackFirstRunNotice.cs`,
+  `.../CallbackDispatcher.cs`, `src/Pbxtr.Api/Modules/Automation/MissedCallEndpoints.cs`
+- **Sonuç:** `CallbackDispatcherTests` 22/22, `CallbackFairnessAndStalenessJobTests` 3/3.
+- **Commit:** `f397380a`, düzeltme `c1687b44`
+
+#### 2. BR-BE-208 — `LIMIT 50` artık global değil
+
+- **Neden:** `:86` sıralama ve `:43` limit tenant'tan bağımsızdı; tek tenant diğerlerini
+  **süresiz** geciktirir ve **hiçbir hata üretmezdi**.
+- **Ne yapıldı:** keşif `CROSS JOIN LATERAL` ile tenant başına en fazla **10** satır okur;
+  dış sıralama **`d.sira`** (satırın kendi tenant'ındaki sıra numarası). Global `LIMIT 50`
+  aynen durur. LATERAL bilinçli: pencere fonksiyonu aynı sonucu üretirdi ama birikmiş
+  tenantın tüm satırlarını her tick taramak zorunda kalırdı.
+
+#### 3. BR-BE-209 — `callback_daily_cap`
+
+- **Neden:** `src/` altında **0 eşleşme**; sprint-36'da planlı, uygulanmamış.
+- **Ne yapıldı:** `tenant_settings.callback_daily_cap` (`int NULL`, CHECK 1–5000,
+  **DEFAULT YOK** — `daily_attempt_limit` ile aynı karar). Kapı originate'ten **hemen önce**;
+  gün sınırı **tenant saat diliminde** (yeni `TenantDayBoundary`, `DailyAttemptLimitLink`
+  ile tek kaynak). Red `CallOriginateBlocked` + `CALLBACK_DAILY_CAP`; **deneme sayılmaz**,
+  kayıt **ertelenir**.
+- **Yan bulgu:** dispatcher denemeyi `origin='dialer'` yazıyordu, oysa kendi kodunda
+  *"PROFİL YOKTUR VE UYDURULMAZ"* (#30/1) yazılıydı — #30 ekranı hiçbir profilin yapmadığı
+  aramaları sayıyordu. Yeni değer **`callback`** + `ix_call_attempts_tenant_origin_at`.
+
+#### 4. Entegrasyon testinin yakaladığı GERÇEK kusur
+
+İlk yazımda bakım adımı **keşiften sonra** koşuyordu. Test kırmızı verdi: bayat kayıtlar o
+turun `due` listesine zaten girmiş oluyordu; üretimde originate olmazdı ama o satırlar turun
+**tenant başına bütçesini** yer ve taze kayıtlar bir sonraki tick'e kalırdı — yani bayatlık
+kapısının kendisi `BR-BE-208`'in kapatmaya çalıştığı açlığı üretirdi. Bakım **keşiften
+önceye** alındı (üçüncü ham sorgu: açık defteri olan tenant kimlikleri, `EXISTS`).
+
+### Komutlar
+
+```bash
+dotnet build pbxtr.sln                      # Build succeeded
+dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~CallbackDispatcherTests"   # 22/22
+dotnet test tests/Pbxtr.Integration.Tests --filter "FullyQualifiedName~CallbackFairness"  # 3/3
+dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~Modules.Tenancy"           # 275/275
+```
+
+### Kararlar
+
+- **`expired` ayrı bir durumdur.** `cancelled` insan kararı, `exhausted` "aradık ulaşamadık";
+  ikisi de kimsenin yapmadığı bir şeyi birine atfederdi.
+- **`max_age_hours`'ın varsayılanı VAR, `daily_cap`'inki YOK.** İkisi zıt görünüyor ama aynı
+  soruya cevap: *hatanın maliyeti hangi yönde asimetrik?*
+- **Round-robin sıralaması ÖLÇÜLEMEDİ ve bu yazıldı** (aşağıda).
+
+### Açık kalanlar / sonraki adım
+
+- **`BR-BE-208` kapsam sınırı (dürüst kayıt):** test **tenant başına tavanı** ölçer,
+  **round-robin sıralamasını ölçmez.** Sıralamayı bozan mutasyon **yeşil kaldı** — fikstürde
+  2 tenant var, 2×10=20 satır global 50'nin altında; ayırt edici olması için **6+ tenant**
+  gerekir. Yakalananlar: tavan kaldırılınca 49 satır (kırmızı), tavan+sıralama birlikte
+  kaldırılınca büyük 50 / küçük **0** (kırmızı — fikstür kartın açlığını birebir üretiyor).
+- **`deploy/migration-contract-onay.blobs` defterine `Karar#78` satırı gerekiyor** —
+  `20260918235500_CallbackStalenessFairnessDailyCap` için; **bilerek yazılmadı** (kartın
+  sahibi değil).
+- **`BR-BE-206` şart (ii)** ve **`BR-BE-209` ilk 24 saat ölçümü** dağıtım zamanına aittir.
+- **#37 ekranının `expired` rozeti/filtresi** yazılmadı — FE kartı açılmalı.
+- **`PbxtrDbContextModelSnapshot.cs` elle yazılmıştı ve `PendingModelChangesWarning`
+  üretiyordu** (aynı gün `BR-DB-99` günlüğünde "başka ajanın commit etmediği snapshot" diye
+  geçen kırmızı buydu). `dotnet ef migrations add` ile yeniden üretilip geçici migration
+  silindi; `c1687b44` ile kapandı.
+- **Not:** `tests/Pbxtr.Architecture.Tests/RawSqlAllowlistTests.cs` düzeltmem (2→3) paralel
+  bir ajanın commit'ine (`cc4629dd`) süpürüldü — içerik depoda, mesajı başkasının.
