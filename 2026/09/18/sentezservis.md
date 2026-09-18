@@ -367,4 +367,104 @@ Bunlar kodla çözülemez; sunucudaki `appsettings.json` elle düzenlenmelidir:
 İkisi yazılıp servis yeniden başlatıldığında, açılış doğrulaması kalan eksikleri kendisi
 haber verecek.
 3. `SentezServis:Baglantilar:Pdks` — ZKBioTime (192.168.1.4/zkbiotime) için **ayrı kimlik**.
-   Bu olmadan PDKS raporu hiç çalışmaz ve sorgu hâlâ doğrulanmamış durumda.
+   Bu olmadan PDKS raporu hiç çalışmaz. (Bağlantı ve sorgu gün içinde canlıda
+   doğrulandı; eksik olan yalnızca sunucudaki ayar satırı.)
+
+---
+
+## Ek tur — PDKS raporu: hafta içi kararı, yeni sorgu, 08:30
+
+### 6. PDKS bağlantısı ve sorgu canlıda doğrulandı
+
+- **Neden:** Sorgu şemayı görmeden yazılmıştı; `clock_in`/`clock_out` kolon tipi bile
+  varsayımdı. Doğrulanmadan "bitti" demek, mahsupta 10 gün sessiz kalan hatanın aynısını
+  üretmek olurdu.
+- **Ne yapıldı:** Geçici bir konsol projesi (`scratchpad/spimza`) `SentezServis.Core`'a
+  referans verilerek gerçek kod yolundan koşturuldu: `appsettings.json` → `Ayarlar` →
+  `BaglantiFabrikasi` → `PdksDeposu` → `MailSablonu` → `EpostaGonderici`. Kuyruk atlandı.
+- **Ölçüm sonuçları:**
+  - `clock_in`/`clock_out` = `datetime2`, `att_date` = `date`. `CONVERT(..., 108)` tercihi
+    doğru çıktı.
+  - **Personelin çoğu cihazı kullanmıyor:** `att_payloadtimecard` her personel için her gün
+    satır açıyor, ama yalnızca ~5'i kayıt üretiyor (17.09: 12 satır / 5 giriş; 15.09: 17/5;
+    14.09: 15/1).
+  - **Hafta sonu hiç kayıt yok** (12–13.09: 15 satır, 0 giriş).
+- **Sonuç:** Kullanıcı "herkesi listele" dedi — rapor sayıyı sinyal değil envanter olarak
+  sunuyor. Hafta sonu için cron `1-5` yapıldı; bedeli kayda geçirildi: hafta sonu için
+  "mail gelmedi = iş çalışmadı" sinyali kaybediliyor, bilerek kabul edildi.
+
+### 7. `att_payloadtimecard.clock_in` gün içinde BOŞ — sorgu iki kaynaklı oldu
+
+- **Neden:** Doğrulama sırasında sunucu saati 08:31'di ve **bugünün 12 satırının 12'sinde de
+  `clock_in` boştu**; dünkü `clock_out` değerleri ise doluydu. Kullanıcı aynı anda yeni bir
+  sorgu gönderdi ve sebebi açıkladı: puantaj toplaması gün içinde koşmuyor, günün girişi ham
+  cihaz hareketlerinde (`iclock_transaction.punch_time`) duruyor.
+- **Bunun önemi:** Tek kaynaklı sorgu **her sabah "kimse gelmemiş" derdi** ve mail düzgün
+  göründüğü için bu fark edilmezdi. Sessiz yanlış rapor, hiç rapor gelmemesinden kötüdür.
+- **Ne yapıldı:** `PdksDeposu.GunlukAsync` bir CTE + `UNION ALL` ile yazıldı:
+  - 1. bacak — çıkış: `att_payloadtimecard.clock_out`, `att_date` bugün veya dün.
+  - 2. bacak — giriş: `iclock_transaction.punch_time > CONVERT(date, GETDATE())`.
+  - Dışta `MAX(Cikis)` / `MAX(Giris)` + `CONVERT(varchar(5), ..., 108)`.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Pdks/PdksDeposu.cs`,
+  `src/SentezServis.Core/Pdks/PdksRaporuJob.cs`,
+  `tests/SentezServis.Core.Tests/PdksSinirTestleri.cs`, `docs/pdks-raporu.md`
+- **Sonuç / doğrulama:** Canlıda **11 satır**; gerçek girişler geldi — HÜSEYİN YILMAZ 07:49,
+  YAĞMUR DEMİR 07:54, naciye akkaya 07:54, AYTEN ÇAKMAK 07:55, BUŞRA KÖMÜRCÜGİL 07:59,
+  HASAN EGE AYDIN 08:01, SİBEL TAŞDELEN 08:02. Örnek rapor bt@ adresine gönderildi
+  (69.773 karakter, TR/EN/AR).
+- **Commit:** `04e03fe` — PDKS raporu 08:30'da, gunun girisi ham hareketten
+
+### 8. Kullanıcının sorgusundaki iki bulgu
+
+Sorgu birebir uygulanmadan önce veriye bakıldı; iki şey çıktı:
+
+- **Filtre asimetrisi (DÜZELTİLDİ).** `p.status = 0` ve `p.emp_code <> '24'` filtreleri
+  kullanıcının sorgusunda **yalnızca puantaj bacağındaydı**; hareket bacağında yoktu.
+  18.09'da sızan kimse yoktu — ama sebebi filtre değil, o kişilerin o gün kayıt
+  üretmemesiydi. Yani hata **veri bağımlıydı**: rapor dışı tutulan personel bir gün
+  turnikeyi kullansa rapora geri girerdi. Filtreler iki bacağa da kondu ve
+  `Personel_filtreleri_UNIONun_IKI_bacaginda_da_vardir` testi her birinin **iki kez**
+  geçtiğini doğruluyor.
+- **`MAX` vs `MIN` (DEĞİŞTİRİLMEDİ).** Giriş kavramsal olarak **ilk** hareket (`MIN`);
+  sorguda `MAX` var. 18.09'da fark yoktu: hareket üreten 7 kişinin her birinde **tam bir**
+  hareket vardı (`MIN == MAX`). Fark ancak gün içinde ikinci kez geçen biri için doğar ve
+  rapor 08:30'da koştuğu için pencere çok dar. Değiştirmek bir karardır, kod düzeltmesi
+  değil — bu yüzden kullanıcının yazdığı gibi bırakıldı, gerekçesi belgeye yazıldı.
+  Gerekirse `MAX(Giris)` → `MIN(Giris)`, tek satır.
+
+### 9. Saat 10:00 → 08:30
+
+- **Neden:** Kullanıcı kararı. Ölçüm de destekliyor: girişler 07:49–08:02 arasında düşüyor,
+  yani 08:30'da günün girişleri tamamlanmış oluyor.
+- **Ne yapıldı:** `DefaultCron = "30 8 * * 1-5"`. Sınır testi
+  `Rapor_hafta_ici_her_sabah_8_30da_kosar` bunu kilitliyor.
+- **Dikkat:** Saat daha erkene çekilirse **işe geç kalmamış personel "girişi yok" görünür.**
+  Bu, cron'u değiştirecek kişinin bilmesi gereken tek şey.
+- **Canlı DB'ye etkisi yok:** `IsKayitDefteri` zamanlama satırı **varsa dokunmuyor**
+  (`IF NOT EXISTS`), yani yöneticinin arayüzden verdiği cron korunuyor. `pdks-raporu` hiç
+  yayına girmediği için canlıda satır yok; ilk açılışta 08:30 olarak açılacak.
+
+### 10. Gruplama ada göre — bilinçli, bedeli var
+
+Kullanıcının `GROUP BY dept_name, first_name, last_name` tercihi korundu. **Faydası:**
+canlıda aynı kişinin iki personel kaydı var (`emp_code` farklı) ve satırlar birleştiği için
+çıkışı ile girişi yan yana gelebiliyor. **Bedeli:** adı soyadı birebir aynı iki ayrı çalışan
+da birleşir ve satır sayısı sessizce eksilir. Bugünkü kadroda çakışma yok; kadro büyürse
+gruplamanın `emp_code`'a taşınması gerekir.
+
+## Kararlar (ek tur)
+
+- PDKS raporu **hafta içi 08:30**. Hafta sonu yok, bedeli kabul edildi.
+- Giriş **ham hareket tablosundan**, çıkış **puantaj tablosundan** okunur. Bu bir optimizasyon
+  değil zorunluluk; sebebi ölçülmüştür.
+- Kullanıcının sorgusunun filtre **değerleri** değiştirilmez; ama bir filtrenin eksik bacağa
+  taşınması düzeltmedir, karar değildir.
+- `MAX(Giris)` kullanıcının yazdığı gibi kaldı; `MIN` bir karar olarak açık bırakıldı.
+
+## Açık kalanlar (ek tur)
+
+- Canlı `appsettings.json`'a `SentezServis:Baglantilar:Pdks` yazılmadan PDKS raporu hiç
+  çalışmaz. Bağlantı ve sorgu doğrulandı; eksik olan yalnızca sunucudaki ayar satırı.
+- PDKS raporunun `alicilar` parametresi boş; boş kalırsa `Eposta:Alicilar` (şu an sadece
+  bt@) kullanılır. Kime gideceği karara bağlı.
+- `MIN(Giris)` sorusu açık.
