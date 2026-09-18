@@ -5846,3 +5846,94 @@ kolonu gereksiz değil **acilen gerekli** yapar.
   (`DialerCallDispatcher`), `pbxtr-edge`, `__PBXTR_PERM` için mimari bekçi.
 - `SlaAggregationJob.cs:322-323` yorumu ölçülmemiş bir santral iddiası taşıyor
   (*"Asterisk ikisini de `QueueCallerAbandon` olarak bildirir"*) — devredildi.
+
+---
+
+### Tur — BR-QA-108 · BR-FE-120 · BR-FE-111 (frontend-dev-1)
+
+#### Bağlam
+Üç P2 kart: enum ayna sınıf kapatıcısının kör noktası, karar taşıyan üç ekranın davranış
+testi, ve #12/#13 "Müsait ama çalmıyor" sebep rozeti.
+
+#### 1. BR-QA-108 — enum ayna sınıf kapatıcısı `character varying` kolonlarını hiç görmüyordu
+- **Neden:** `EnumMirrorCheckConstraintTests` evreni `definition.Contains("= ANY (ARRAY[")`
+  ile kuruyordu. PostgreSQL `text` kolonundaki `IN(...)`'i tam olarak böyle basar ama
+  `character varying` kolonundaki **aynı** kısıtı `= ANY ((ARRAY[…])::text[])` diye
+  **fazladan bir parantezle** basar. Kapı kendi evrenini daraltarak yeşil kalıyordu —
+  *"kapsıyor"* diyen bir bekçi, kapsamadığı bir kolon türü yüzünden sessizce eksikti.
+- **Ne yapıldı:** evren kalıbı `AnyArray` regex'ine çevrildi ve 34 kısıt **tek adımda**
+  kapatıldı (31 ayna + 3 gerekçeli muaf). `ProvisioningNodeOutcomes.All` eklendi,
+  `IsKnown` ondan türetildi.
+- **Kritik bulgu — kartın kendi önerisi de eksikti:** kapıya önce *"sayacın kendi filtresini
+  ölçmesi"* kapısı (VACUITY KAPISI 0) kondu — tanımı `ARRAY[` taşıyan **her** kısıt ham
+  sayılır ve kalıbın aldıklarıyla karşılaştırılır. Kapı **ilk koşusunda**
+  `ck_roles_custom_code_not_system`'i yakaladı: o kısıt `<> ALL (ARRAY[...])` biçimindedir
+  (**negatif** kapalı küme) ve kartın önerdiği `= ANY` genişlemesi onu **yine kaçıracaktı**.
+  Yani *"kapsanmayan 0"* ikinci kez yalan olurdu.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Tests/EnumMirrorCheckConstraintTests.cs`,
+  `src/Pbxtr.Domain/Modules/Telephony/ProvisioningNodeState.cs`
+- **Sonuç / doğrulama:** gerçek PostgreSQL 16'ya karşı **78 geçti / 0 kaldı / 0 atlandı**
+  (önceki 47). Kapsam: kurulu CHECK 102; ayna 76, muaf 11, kapsanmayan 0, kalıp dışı 0.
+  Üç mutasyon iki yön: küme değeri ekleme → tek kırmızı; aynadan satır silme → sınıf
+  kapatıcı kırmızı; kalıbı eski dar hâline çevirme → kapı 0 kırmızı ve **44 düşen kısıdı
+  adıyla yazdı**. Üçü de geri alınınca yeşil.
+- **Tuzak:** ölçüm **HEAD worktree'sinde** yapıldı — çalışma ağacında paralel ajanların EF
+  model değişiklikleri `PendingModelChangesWarning` üretiyor ve fikstür hiç migrate olmuyor.
+- **Commit:** `2a6d39a1`
+
+#### 2. BR-FE-120 — karar taşıyan üç ekranın davranış testi
+- **Neden:** `roleActiveScreenSmoke.test.tsx` bu ekranları gerçek `AppRoutes` ile çiziyor ama
+  `fetch`i **hiç çözülmeyen** bir söze bağlıyor — yani ekranlar bugüne kadar **sunucu
+  gövdesiyle hiç karşılaşmadı**. Boşluk primary action'ın ötesiydi.
+- **Ne yapıldı:** üç test dosyası (26 test). #26 IVR: taslak/yayın şeridinin **üç hâli**,
+  pasif "Test et"/"Yayınla" gerekçeleriyle, ağaç yapısının veriden çıkması, kopuk hedefin
+  susturulmaması, `ivr.write` yokken yazma yüzeyinin **hiç çizilmemesi**. #60/#58: `null`
+  (=ölçülemedi) ile `0` (=ölçüldü) ayrımı, toplamın satırlardan **türetilmemesi**, teslim
+  edilmeyen tenant'ta sayacın bastırılması, panellerin **bağımsız** düşmesi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/ivr/IvrFlowsScreen.test.tsx`,
+  `.../dashboards/SupervisorDashboardScreen.test.tsx`, `.../dashboards/AdminDashboardScreen.test.tsx`
+- **Sonuç / doğrulama:** 10 mutasyon iki yön — 10'u da kırmızı, 10'u da geri alınınca yeşil.
+  **Biri ilk turda yeşil kaldı ve bir fikstür kusuru ortaya çıkardı:** `—` yüklenirken de
+  çiziliyor (`!q` dalı), iddia veri gelmeden geçiyordu; iki dosyada da önce verinin geldiği
+  kanıtlanacak şekilde düzeltildi. Tam takım **2090 geçti / 1 kaldı** (kalan tek kırmızı
+  `auditActionParity.test.ts` ve bu turun işi değil), `tsc -b` çıkış 0.
+- **Commit:** `2a6d39a1`
+
+#### 3. BR-FE-111 — "Müsait ama çalmıyor" sebep rozeti: AÇILAMAZ, engel ölçüldü
+- **Neden:** kartın açık şartı *"sapma `doc/prototip-urun-farklari.md`'ye BİLİNÇLİ yazılır"*dı
+  ve o satır **yoktu** (CLAUDE.md §1: yazılı olmayan sapma unutulmuştur).
+- **Ölçüm:** `LiveAgentDto` (`LiveEndpoints.cs:1195`) **16 üye taşır ve hiçbiri sebep
+  değildir** — ne etkin penalty, ne gerekli yetenek, ne birincil kademe `timeout`unun kalan
+  süresi telde var. İstemcide türetme reddedildi: *"timeout dolmadı"* bir Asterisk **zaman
+  durumudur** ve hiçbir uç onu yayınlamaz; kuyruk üyelerinden penalty yorumlamak sunucunun
+  yönlendirme kararının **ikinci kopyasını** üretirdi.
+- **Kartın bir varsayımı ölçümle çürüdü:** `LiveAgentStatuses`
+  (`RedisLiveStateStore.cs:963-976`) kümesi `available · on_call · ringing · break · acw ·
+  offline`'dır — **wrapup ayrı bir DURUMDUR (`acw`), "müsait"in alt sebebi değildir**, yani
+  wrapup'taki agent ekranda zaten "Müsait" görünmez ve kartın senaryosuna hiç giremez. Üç
+  rozetten biri böylece düşüyor.
+- **Dokunulan dosyalar:** `doc/prototip-urun-farklari.md` (yeni bölüm), `yonetim/backlog.md`
+- **Commit:** `433b6de8` (aşağıdaki nota bakınız)
+
+#### Kararlar
+- Enum ayna evreni **negatif biçimi de kapsar**: yasak-liste (`NOT IN`) de bir kapalı kümedir
+  ve küme büyüyünce DB'deki yasak büyümez.
+- `ck_queues_callback_digit` aynaya **yazılmadı**, `Exempt`'e gerekçeyle girdi: `IvrDigits.All`
+  12 elemanlıdır, kolon bilerek 0–9'dur (`*` Asterisk desen dilinde özel, `#` girdi
+  sonlandırıcı) — aynaya yazılsaydı kapı her koşuda **yanlış** kırmızı yanardı.
+- BR-FE-111'de **penalty kolonu sınırı korundu** ve rozet uydurulmadı: ölçülmemiş bir rozet,
+  çözmeye çalıştığı *"panele güven"* sorununun daha kötü hâlidir.
+
+#### Açık kalanlar / sonraki adım
+- **BR-FE-111 engeli adıyla:** `LiveAgentDto`'ya sunucunun hesapladığı bir sebep alanı
+  (etkin penalty **hangi kuyruk için** olduğuyla, ya da doğrudan sebep kodu). Sunucu ayağı
+  için ayrı kart gerekiyor; `LiveEndpoints.cs`/`RedisLiveOperationsView.cs` bu turda başka
+  ajandaydı.
+- **BR-FE-120 ölçülemedi (aynen duruyor):** bu üç ekranın davranışlarının kaçının sunucuda
+  karşılığı olduğu.
+
+#### Tur notu — paralel ajan stage'i süpürdü
+`doc/prototip-urun-farklari.md` ve `yonetim/backlog.md` düzenlemelerim paralel bir ajan
+tarafından `433b6de8` ("BR-AST-58/61/115…") içine süpürüldü. **İçerik korundu**, kaybolan
+yalnızca commit mesajıdır — kayıtlı dersin ("ajan çalışırken `git add -A` yapma") canlı
+tekrarı. Kalan beş dosya `git commit --only` ile ayrı commit'lendi (`2a6d39a1`).
