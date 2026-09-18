@@ -358,3 +358,184 @@ dokunulmadı (üç ajan orada paralel çalışıyordu).
 - **Kalıcı boşluk:** `deploy/` altında `pbxtr-yedek` betiğini + drop-in'i
   **kuran** bir adım hâlâ yok; `kapi_84` sapmayı artık **görünür** kılıyor ama
   **gidermiyor**.
+
+---
+
+# pbxtr — 2026-09-19 (3. tur): `BR-BE-210` · `BR-BE-211` · `BR-FE-121`
+
+## Bağlam
+
+Üçü de `BR-FE-118`'in bölünmesinden doğdu. `BR-FE-118` ölçmüştü:
+`callback_requested_count` `sla_buckets`'a yazılıyor, `SlaWindowStore.cs:152` ile
+Redis anlık görüntüsüne giriyor ve **orada bitiyor** — `ILiveOperationsView.cs`'de
+`callback` → 0, `IAnalyticsQuery.cs` → 0, `EfAnalyticsQuery.cs` kolonu hiç
+seçmiyor, `MissedCallEndpoints.cs`'de `slaMinutes|dueAt|deadline|remaining` → 0.
+Yani bir dağıtım SLA formülünü `v1` → `v2` değiştiriyor, değişimi açıklayan sayaç
+üretiliyor ve süpervizör onu yalnızca `psql` ile görebiliyor. (`BR-FE-67`
+kusurunun — yazılmış ama hiçbir yerden çağrılmayan `AvgWaitOfQueue` — birebir
+tekrarı.)
+
+## Yapılanlar
+
+### 1. `BR-BE-210` — aynı sayı, iki okuyucu
+
+- **Neden:** sayı ÜRETİLİYORDU, taşınmıyordu. Kartın şartı "aynı sayı" olduğu
+  için ikinci bir sayım kuralı açılmaması esastı.
+- **Ne yapıldı:**
+  - `LiveQueueRow.CallbackRequested` (`int?`) + `LiveOperationsSnapshot.CallbackRequestedToday`.
+    Eşleme `RedisLiveOperationsView`'da; **tenant toplamı da AYNI `SlaWindowState`
+    sözlüğünden** toplanır (`SumCallbackRequested`) — kuyruk satırlarından ayrı bir
+    Redis okuması açılsaydı üst şerit ile satırlar bir gün ayrışırdı (aynı tuzak
+    `AgentsAvailable` yorumunda yazılı).
+  - `AnalyticsQueueSlaRow.CallbackRequested` + `AnalyticsQueueSlaTotals.CallbackRequested`;
+    `EfAnalyticsQuery.SelectSql` kolonu artık **seçiyor**; `TargetQueueRowDto`,
+    `TargetTotalsDto`, `LossQueueRowDto`, `LossTotalsDto` ve `AnalyticsExportCsv`
+    (`"Geri Arama Talebi"`, iki dosyada da).
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Live/{ILiveOperationsView,SlaCalculator}.cs`,
+  `src/Pbxtr.Domain/Modules/Analytics/IAnalyticsQuery.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/RedisLiveOperationsView.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfAnalyticsQuery.cs`,
+  `src/Pbxtr.Api/Modules/Analytics/{AnalyticsDtos,AnalyticsExportCsv}.cs`,
+  `src/Pbxtr.Api/Modules/Realtime/LiveEndpoints.cs`
+- **Sonuç / doğrulama:** `CallbackRequestedVisibilityTests` — 7 sürüm hâli +
+  toplam kuralı (pozitif kontrolüyle) + CSV boş hücre. `dotnet build pbxtr.sln`
+  0 error / 0 warning.
+
+### 2. `0` ↔ `null` ayrımı — kartın asıl riski
+
+- **Neden:** kolon `NOT NULL DEFAULT 0`. Migration öncesi kovalarda yazan `0`
+  *"ölçüldü, talep yok"* DEĞİL *"ölçülmedi"*dir (`BR-BE-205`) ve ayrım veriden
+  geri getirilemez. Tek taşıyıcı **tanım sürümüdür**.
+- **Ne yapıldı:** eşik **tek yerde** — `SlaDefinition.CarriesCallbackCounter`
+  (`v2`+, `v` + tamsayı ayrıştırır).
+- **Karar — SQL'e `>= 'v2'` YAZILMADI:** (a) metin karşılaştırması `v10 < v2`
+  derdi, (b) kural ikinci bir motorda tanımlanmış olurdu. Sorgu bunun yerine
+  `MIN(definition_version)` seçer ve kararı C# verir.
+- **Karar — `MIN`, `MAX` DEĞİL:** sürüm geçişine yayılan bir aralıkta (bir gün
+  `v1`, ertesi gün `v2`) `MAX` **eksik bir sayı** üretirdi; `MIN` ile satır
+  "ölçülmedi" der. Yön bilinçli: eksik bir sayı, gösterilmeyen bir sayıdan
+  pahalıdır. Aynı kural toplamda da geçerli — bir satır `null` ise toplam `null`.
+- **Tek istisna, `#11` kuyruk satırının kovası yokken:** satırda `null`
+  (`SlaPct` ile aynı hal) ama **tenant toplamında `0` katkı**. Ters kural
+  yazılsaydı sakin bir tenantta toplam her gün `—` çıkar ve alan kalıcı bir
+  tireye dönerdi — `BR-FE-67`'de kapatılan kusurun ta kendisi.
+
+### 3. `BR-BE-211` — `#37` söz / son tarih / SLA sınıfı
+
+- **Neden:** `tenant_settings.callback_sla_minutes` + `callback_sla_mode`
+  `BR-BE-199` ile eklenmişti ama **hiçbir okuma yüzeyi onları sormuyordu**.
+  *"30 dakikalık bir sözü, kalan dakikasını göremediğim bir tabloda tutamam."*
+- **Ne yapıldı:** `CallbackSlaPolicy.Project(...)` → `CallbackSlaProjection`
+  (`Minutes`, `DueAt`, `Class`, `RemainingSeconds`); tel sözleşmesi
+  `CallbackSlaClasses` — enum adı değil **kapalı dize kümesi**
+  (`within` · `pending` · `breached` · `excluded`). `CallbackRow`/`CallbackBoard`
+  ve `MissedCallEndpoints` DTO'ları genişletildi; tahta ayrıca **sunucunun anını**
+  (`at`) ve tenant sözünü (`slaMode`/`slaMinutes`) yayınlıyor.
+- **Kararlar:**
+  - **`excluded` `breached`'dan AYRI.** Kip a'da ölçülecek bir söz yoktur; ikisini
+    tek değere katlamak, kip a seçmiş bir tenantın **her satırını ihlal**
+    göstermek olurdu.
+  - **Kökeni `missed_call` olan satırda dördü de `null`:** müşteriye bir süre
+    SÖYLEMEDİK; uydurulmuş bir son tarih, verilmemiş bir sözü ölçmek olurdu.
+  - **"Kalan dakika" istemcide türetilmiyor** (CLAUDE.md §11,
+    `AmbientClockGuardTests`): `remainingSeconds` sunucudan gelir ve **negatif
+    olabilir** — gecikmenin miktarı da bir ölçümdür, işareti silmek "ne kadar
+    geciktı" sorusunu öldürürdü.
+  - **An bir kez okunur** (`_clock.GetUtcNow()`); satır başına okunsaydı sınır
+    üzerindeki iki kayıt aynı tabloda biri `pending` biri `breached` görünürdü.
+  - **Ayar satırı yoksa söz varsayılandır** (kip b / 30 dk). Kip a yazılsaydı
+    eksik yapılandırma bir **SLA muafiyetine** dönerdi.
+  - **Her kapanış bir cevap değildir:** `AnsweredAtOf` yalnızca `answered` ve
+    `customer_called_back` kapanışlarını cevap sayar; `manual`/`max_attempts`/
+    `expired` kapanışlarında müşteri geri ARANMAMIŞTIR.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Automation/{CallbackSlaPolicy,ICallbackLedger}.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfCallbackLedger.cs`,
+  `src/Pbxtr.Api/Modules/Automation/MissedCallEndpoints.cs`
+- **Sonuç / doğrulama:** `CallbackLedgerEndpointTests.BR211_*` — **dört sınıfın
+  dördü de uçtan**. Test ikizi (`FakeLedger.ToRow`) **gerçek `CallbackSlaPolicy`'yi
+  çağırır**, SLA alanlarını elle doldurmaz (kayıtlı ders: *test ikizi üretimden
+  müsamahakâr*). `21 passed` (dosya), sonra `27 passed` (yeni birim testleriyle).
+
+### 4. `BR-FE-121` — üç yüzeyin tüketicisi
+
+- **Ne yapıldı:**
+  - **`#11`:** kuyruk kartında "geri arama" rakamı (Terk'in **yanında**, içinde
+    erimeden) + üst şeritte tenant toplamı kartı.
+  - **`#23`/`#18`:** ayrı kolon + toplam kartı, ikisi de `countText` ile.
+  - **`#37`:** `SlaCell` — dört sınıf, **dört ayrı cümle** + son tarih yanında;
+    tahtada "Geri arama sözü" kartı.
+  - i18n **9 dilde 14 anahtar**; mükerrer kontrolü **ham metinde**
+    (`ham.count('"k"') == 0` → yaz → `== 1`), çünkü `json.loads` mükerrer
+    anahtarı sessizce kabul eder. Anahtarlar **kendi önek grubu içinde**
+    alfabetik yerine kondu; dosya baştan sona alfabetik değil ve
+    `sort_keys=True` ile yazmak binlerce satırlık sahte bir diff üretirdi.
+- **Kararlar:**
+  - **`—` çizilir, `0` yazılmaz:** hiçbir hücrede `?? 0` yok.
+  - **Kesişim uyarısı `#11`'e KOYULMADI.** Orada `abandoned` `sla_buckets`'tan
+    değil günlük `CallDisposition.Abandoned` sayımından gelir
+    (`RedisLiveOperationsView.cs:706,1306`) → kesişim iddiası o ekranda **yanlış**
+    olurdu. `BR-FE-119` ile aynı ölçüm; uyarı `#18`/`#23`'te durur.
+  - **Saat tablosunda kolon YOK** (ve CSV'de saat satırı boş hücre): bir saat
+    satırı farklı tanım sürümlerindeki kuyrukları toplar — "ölçüldü mü" sorusu
+    satır bazında cevaplanamaz. "Tanım Sürümü" kolonu da aynı sebeple orada yok.
+  - **Tenant kartının tonu NÖTR:** talep bir arıza değildir. `abandoned` gibi
+    kırmızı yazsaydı, özelliği **açan** tenantın panosu kendi başarısıyla
+    kırmızılaşırdı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/api/opsContracts.ts`,
+  `.../screens/live/LiveQueuesScreen.tsx`,
+  `.../screens/analytics/{targetsApi.ts,lossApi.ts,TargetsScreen.tsx,LossScreen.tsx}`,
+  `.../screens/automation/{missedCallsApi.ts,CallbackBoardPanel.tsx}`,
+  `.../i18n/messages/*.json` (9)
+
+### 5. Doğrulama koşusu
+
+- **Komutlar:**
+  ```bash
+  dotnet build pbxtr.sln                     # 0 Warning, 0 Error
+  dotnet test tests/Pbxtr.Architecture.Tests # 728 passed
+  dotnet test tests/Pbxtr.Api.Tests --filter "…Modules.Analytics|…Modules.Automation"  # 73 passed
+  dotnet test tests/Pbxtr.Api.Tests --filter "…CallbackRequestedVisibilityTests|…CallbackSlaPolicyTests"  # 27 passed
+  npx tsc -b                                 # temiz
+  npx vitest run src/app/screens/{live,analytics,automation} src/app/primaryUserActionHttp.test.tsx src/app/i18n
+  #   -> 24 dosya / 247 test yeşil
+  ```
+- **Mutasyon (vacuity kapısı):**
+  - `countText(row.callbackRequested)` → `String(… ?? 0)` ⇒ **2 kırmızı**
+    (`CallbackRequestedColumn.test.tsx`).
+  - `SlaCell`'de `excluded` dalı `breached` metnine çevrildi ⇒ **2 kırmızı**
+    (`CallbackBoardPanel.test.tsx`). İkisi de geri alındı ve dosyalar `cp` ile
+    doğrulandı.
+- **Commit:** `ed7dba7b` — BR-BE-210/211 + BR-FE-121 (33 dosya, +1726/−58).
+
+## Kararlar
+
+- **"Aynı sayı, iki okuyucu" bir veri kaynağı kararıdır, bir kopyalama değil.**
+  Tenant toplamı kuyruk satırlarıyla aynı sözlükten üretilir; ikinci bir okuma
+  açmak, iki yüzeyin bir gün ayrışması demektir.
+- **Sürüm eşiği SQL'e yazılmaz.** `MIN`/`MAX` seçimi bile bir yön kararıdır ve
+  yönü "eksik sayı yerine ölçülmedi" olarak sabitledik.
+- **`excluded` ≠ `breached`.** "Ölçmüyoruz" ile "ölçtük, tutturamadık" aynı
+  piksele düşerse ölçüm politikası bir arıza gibi görünür.
+- **Ekranda gösterilecek "an" sunucudan gelir.** Bu turda bir kez daha uygulandı:
+  `remainingSeconds` + tahtanın `at`'ı; istemci hiçbir süre hesaplamıyor.
+
+## Açık kalanlar / sonraki adım
+
+- **`dotnet format --verify-no-changes` depo genelinde KIRMIZI** (22.113 hata;
+  CHARSET/IMPORTS/WHITESPACE). Bu turda **ölçüldü, dokunulmadı**: hatalar bu
+  turun dokunmadığı satırlarda (ör. `RedisLiveOperationsView.cs:280/318/658`) ve
+  onlarca dosyada. Yayın betiği bu kapıyı koşuyor — ayrı bir kart gerekir.
+- **`LiveEndpoints.cs` değişikliğim paralel bir ajanın `78285240` commit'ine
+  süpürüldü** (kayıtlı ders: *paralel ajan stage'i süpürür*). İş kayıp değil,
+  **commit mesajı başka**; `git log --follow` ile aranırsa bu kartın adı o
+  commit'te geçmez.
+- **`Pbxtr.Api.Tests.Modules.Realtime` KIRMIZI ve bu turun değil:** 7
+  `AgentInterventionTests` + 1 `ScriptPublishedEventTests` + 1
+  `LiveAgentDndStoreTests` hatası, aynı anda çalışan bir ajanın yarım
+  `ITenantCache.TrySetIfNewerAsync` / `RedisLiveStateStore` işinden geliyor
+  (çalışma ağacında `M` olarak duruyor, testhost da çöktü). Bu turun kendi
+  namespace'leri (`Modules.Live` içindeki yeni test dâhil) yeşil.
+- **`#37`'de kalan süre CANLI SAYMIYOR:** ekran sunucunun verdiği sayıyı bir kez
+  çizer; sekme açık kalırsa değer tazelenene kadar donar. Tahtanın `at` alanı
+  bunu görünür kılar ama tazeleme bir sonraki karttır (istemcide sayaç
+  döndürmek, bu turda kapatılan türetme yasağını geri açardı).
