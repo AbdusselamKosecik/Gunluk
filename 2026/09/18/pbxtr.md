@@ -4702,3 +4702,86 @@ docker run --rm -v //x/GitHub/Pbxtr/pbxtr://repo -w //repo ubuntu:24.04 sh -c \
 
 - **Commit:** `8d828592` — kapi_74 + kapi_75: iki kapinin GERCEK AGACTAKI 6 bulgusu
   olculerek kapatildi
+
+---
+
+### Kurul #78 — Ş78-L1 / Ş78-L6 / Ş78-L7 uygulandı (linux-uzmani)
+
+**Bağlam:** Kurul #78'de linux-uzmani'nin kendi koyduğu üç şart. L1 yayın bloke edici.
+
+#### 1. Ş78-L1 — "Down NO-OP" iddiası ölçüldü ve yanlış çıktı
+- **Neden:** `deploy/lib/pbxtr-migrate-adimi.sh:114` ve `:201` yayın gecesi ekrana
+  *"`Down` NO-OP olduğu için geri dönüşün tek yolu dump restore'dur"* basıyordu.
+  Kodda koşacak bir `Down` duruyordu; operatörün önünde çelişen iki kaynak vardı.
+- **Ne yapıldı / ölçüm** (`src/Pbxtr.Infrastructure/Persistence/Migrations`, Designer+Snapshot hariç):
+
+  | | |
+  |---|---|
+  | migration dosyası | **211** |
+  | `Down()` gövdesinde ≥1 `migrationBuilder.` | **164** |
+  | `Down()` gövdesi gerçekten boş | **47** |
+
+  Kartta sayılan üç örnek doğrulandı: `20260918203500` → 5 çağrı,
+  `20260918233000` → 2 çağrı, `20260918230000` → üç fonksiyon gövdesini geri yazan tam `Down`.
+- **Gerekçe ölçüye uygun yeniden yazıldı, yerine yeni iddia KONULMADI:** `Down` **vardır**
+  ama **güvenilmezdir** — gerçek PostgreSQL'de `Up→Down→Up` zinciri **hiç koşulmadı**
+  (depoda o zinciri koşturan tek bir test/kapı/betik yok; tersine
+  `deploy/pbxtr-deploy-artifact-selftest.sh:292` yayın artefaktında `migrate down` /
+  `database update 0` bulunmasını **yasaklar**). Bu yüzden geri dönüş yolu dump restore.
+- **Dokunulan:** `deploy/lib/pbxtr-migrate-adimi.sh:113-115` (blok başı), `:138+` (yeni
+  "DOWN'A NEDEN GUVENILMEZ" bloğu), `:201` (operatöre basılan kırmızı metin).
+
+#### 2. Ş78-L6 — yedek yolunda sessizce yok sayılan `Environment=` satırı
+- **Neden:** systemd `Invalid environment assignment, ignoring: pbxtr-postgres` atıyordu.
+  Değişken unset kalıyor, betik kendini bare-metal kipte sanıyor, yedek yolu
+  **çalışmadığını söylemeden çalışmıyordu.** Tırnak kuralını yorumla *açıklamak* bunu
+  önlemedi — kural doğru yazılmıştı, satır yine yok sayıldı.
+- **Karar:** kural açıklanmadı, **ortadan kaldırıldı.** Drop-in artık **boşluksuz** değerler
+  verir; boşluk yoksa systemd'nin tırnak/kelime bölme kuralı hiç devreye girmez.
+  ```
+  Environment=PBXTR_YEDEK_PG_KONTEYNER=pbxtr-postgres
+  Environment=PBXTR_YEDEK_PG_KULLANICI=postgres
+  ```
+  `docker exec -i -u <kullanıcı> <konteyner>` argv'sini artık **betik** kurar.
+  Yan kazanç: ortam değişkeni artık keyfi argv enjekte edemez (eski biçimde edebiliyordu).
+- **Ölçüm — dört kip:** konteyner kipi ve eski `PBXTR_YEDEK_PG_ONEK` biçimi **birebir aynı
+  argv**'yi üretiyor; bare-metal değişmiyor; ikisi birden verilirse betik **fail-closed**
+  duruyor (`exit 1`). `bash -n` temiz.
+- **Dokunulan:** `deploy/pbxtr-yedek.sh:130-183` (ONEK bloğu + `pg_calistir`/`pg_calistir_yavas`),
+  `deploy/pbxtr-yedek.service.d/10-compose-yolu.conf`,
+  `deploy/pbxtr-yedek-tatbikat.service.d/10-compose-yolu.conf`.
+- **Sunucuya iniş:** sunucudaki dosyaya **elle dokunulmadı.** `deploy/README.md`'ye
+  adım **2b** (drop-in kurulumu + `daemon-reload`) ve adım **2c** eklendi — 2c drop-in'in
+  **gerçekten okunduğunu** doğrular (`systemctl show -p Environment` + journal'da
+  `Invalid environment assignment` taraması), çünkü bu arızanın tek belirtisi sessizlikti.
+
+#### 3. Ş78-L7 — kapı sonucu için makine tarafından aranabilir çıpa
+- **Neden:** PowerShell'de `$?` bir **boolean**'dır; çıkış kodu `$LASTEXITCODE`'dadır.
+  `cmd > log 2>&1; echo "cikis=$?"` bu yüzden *"6 kapı KALDI"* ile *"cikis=0"*ı aynı ekrana
+  bastı. Betik doğru söylüyordu, okuyan yanlış soruyordu — ve bunu zorlayan hiçbir şey yoktu.
+- **Ne yapıldı:** `deploy/yerel-kapilar.sh` kapanışı her iki dalda da renksiz tek satır basar:
+  `KAPI_SONUC=YESIL n=0` / `KAPI_SONUC=KIRMIZI n=<N>`; çıktının **son** satırıdır.
+  "Ölçemedi" (rc=3) da `KALAN`'a girdiği için çıpada temiz görünmez.
+  `AGENTS.md`'ye okuma kuralı eklendi (PowerShell `$LASTEXITCODE`, Bash `if cmd; then`).
+- **MUTASYON ÖLÇÜMÜ (iki yön), kasıtlı kırmızı üretilerek:**
+
+  | Durum | Sonuç |
+  |---|---|
+  | çıpa varken | `KAPI_SONUC=KIRMIZI n=3`, çıktının SON satırı, çıkış 1 |
+  | çıpa satırı silinince | aynı kırmızı koşum, `KAPI_SONUC satır sayısı: 0` → **CIPA YOK** |
+  | geri alındıktan sonra | çıpa yine basıldı; dosya bayt bayt eski hâli (CRLF korundu), `bash -n` temiz |
+
+  Mutasyon harness'i kapanış bloğunu **her koşumda dosyadan yeniden okur** — yani ölçülen
+  şey depodaki gerçek baytlardır, kopya değil.
+- **Dokunulan:** `deploy/yerel-kapilar.sh:2671-2700` (yorum + yeşil çıpa), `:2711` (kırmızı çıpa),
+  `AGENTS.md` (Ş77-5'ten önce yeni Ş78-L7 maddesi).
+
+**Yan bulgu (araç):** `python3 - <<'PY'` heredoc'u bir seviye ters bölü yiyor; `\\n` içeren
+bayt deseni sessizce eşleşmiyordu. Mutasyon `assert count==1` ile bunu **yakaladı**
+(uygulanmamış mutasyonu "uygulandı" sanmadık). Yama `.py` dosyasına `Write` ile yazıldı.
+
+**Commit:** `4342c035` — Kurul #78 / S78-L1+L6+L7. Push edildi (`main`).
+
+**Açık kalan:** üretim topolojisi kararı (Ş76-17) hâlâ açık — `User=root` + docker soketi
+üretime çıkmaz; host'a `postgresql-client-16` PGDG'den mi yoksa çevrimdışı `.deb` ile mi
+gelecek sorusu kurul gündeminde.
