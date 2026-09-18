@@ -425,6 +425,144 @@ içinde yeşildi**; kırmızı yalnız birleşimde doğdu. Kayıtlı ders
 
 **Commit:** `92cc65ea` (Karar #70 backend), `8bb6bd2c` (Asterisk merge)
 
+### 53. Turun en öğretici bulgusu: "ürün 500 veriyor" raporu yanlıştı, altındaki kayıp daha büyüktü
+
+QA ajanı kendi işinin dışında bir kırmızı gördü ve **kendi commit'ine almayıp bildirdi**:
+`IfMatchGateBranchTests`'in üç dalı kırmızı, `queue` ucu 404/409 yerine **500** dönüyor. Teşhis
+şuydu: *"olmayan bir kuyruğa `If-Match` ile PUT → istemci 'sunucu patladı' görür, 'böyle bir kaynak
+yok' görmez."*
+
+**Ölçtüm ve teşhis yanlış çıktı — ama altından daha kötü bir şey çıktı.** 500 handler gövdesine
+**girilmeden** oluşuyordu:
+
+- `PUT /queues/{id}` yetenek mutabakatı için `ITelephonyProvider` enjekte ediyor.
+- Üretim DI'ı onu `PersistentTelephonyProvider` ile sarıyor.
+- O kurucu `ApiKeySecurityOptions.Pepper`i **fail-closed** doğruluyor (`missing or low entropy`).
+- Bu test bileşiminde biber ayarlanmamıştı → kurucu patlıyor → ASP.NET 500.
+
+Yani **`If-Match` kapısının kuyruk dalı hiç koşmuyordu.** Test yeşil değildi, *"yanlış sebeple
+kırmızı"*ydı — ve asıl kayıp kapının kendisiydi, 500'ün değil. Üretimde aynı 500 **yok**: biber
+yapılandırmadan gelir ve eksikse uygulama fail-closed açılmaz, yani "açılmış ama 500 veren" hâl
+üretilemez.
+
+Biber emsalden (`UserAdminEndpointTests`) kondu, sebep koda yazıldı: **9/12 → 12/12, Skipped 0.**
+
+Bu `[[kart-onculu-olculmeden-yazilmaz]]`ın bugünkü **üçüncü** tekrarı. Desen artık şu kadar net:
+*teşhis ölçülmeden yazıldıysa çoğu kez yanlış çıkıyor, ama kazma yerini doğru gösteriyor.*
+
+### 54. Panelde hiç olmayan bir yönetim yüzeyi bulundu (BR-FE-53)
+
+Kart **`Bitti`** yazıyordu. Metninin **ikinci maddesi** ise açıktı: *"diğer ikisinin istemcisi de
+hiç yok."* 2026-09-06'da yalnızca birinci madde yapılmış, durum satırı bütünü kapalı göstermişti —
+`[[sayac-kismi-satiri-kapali-sayar]]`ın birebir tekrarı.
+
+Ölçüm: `inbound-format|inbound-screening` → `src/Pbxtr.Web/src` içinde **sıfır satır**. Sunucuda
+ise 1 GET + 2 PUT **aylardır** hazır (`TrunkAdminEndpoints.cs:181,208,212`). Yani gelen numara
+biçim profili ve **gelen kara liste kapısı panelden hiç yönetilemiyordu**.
+
+`TrunkInboundDialog` (496 satır), üç API ucu, 44 anahtar × 9 dil indi. Üç bilinçli sapma yazılı:
+
+1. Profil trunk formuna **gömülmedi** — `PUT /trunks/{id}` PUT semantiğindedir; alan eklenseydi
+   profili göndermeyen her trunk düzenlemesi profili **sessizce silerdi**.
+2. Yazma sonrası diyalog kapanmaz — iş iki adımlı (önce profil, sonra operatör onayı).
+3. Her başarılı yazmadan sonra kayıt yeniden okunur: üç uç **tek damgayı** paylaşıyor, aksi hâlde
+   ikinci adım 409 alırdı.
+
+### 55. Üç kart daha bayat çıktı, bir kart daha gerçek kusur verdi
+
+- `BR-FE-49/51/52` (kuyruk, IVR, çalışma saatleri `If-Match`) — **üçü de bitmiş.** Kod yazılmadı.
+- `BR-FE-22/23/59/60/63` — **beşi de bitmiş.** Zil/modal `AppShell.tsx:65`'te route ağacının
+  **dışında**; "zil YOK" teşhisi bayattı.
+- `BR-FE-42/43/44/45/46` — **beşi de bitmiş.**
+- **Ama `BR-FE-47`'de gerçek bir CLAUDE.md §5 ihlali çıktı:** sunucu `Simulated` alanını
+  gönderiyordu, istemci sözleşmesi onu **hiç taşımıyordu** ve #49 SMS sekmesi kapatılamaz
+  *"SİMÜLASYON — mesaj gerçekten gönderilmedi"* şeridini **çizmiyordu.** Somut bedel: mock ile
+  koşan kurulumda yönetici gönderen başlığını kaydeder, yeşil "Kaydedildi" görür ve sistemin SMS
+  gönderdiğini sanardı.
+- İkinci kusur (`BR-BE-191`, ben düzelttim): PUT yanıtı `Simulated`i **sabit `false`** kuruyordu,
+  GET dalı doğru okuyordu. Görünür arıza yoktu (istemci kaydettikten sonra GET'i yeniden okuyor)
+  ama alan **telde yalan** duruyordu ve yanıta bakan bir sonraki istemci şeridi sessizce
+  kaldırırdı.
+
+**Dersin özeti:** bu turda 14 kart ölçüldü, **11'i zaten bitmişti.** Bayat olan kod değil,
+**kartların kendisiydi.** Ajanlar önce ölçtüğü için boşuna iş üretilmedi — ve tam da o ölçüm
+sırasında üç gerçek kusur çıktı.
+
+### 56. Ölçüm
+
+- `dotnet build` 0 hata · `npx tsc -b --force` rc=0 · `IfMatchGateBranchTests` **12/12**
+- ClickUp: **`fark olan kart: 0, izde olmayan: 0`** (633 kart)
+- Kapalı: **432** (tur başında 428) · açık **201**
+- **Commit:** `8bb6bd2c` (Asterisk), QA + iki ekran dalı, `BR-BE-191`/`BR-QA-28` düzeltmesi,
+  trunk gelen-arama yüzeyi
+
+### 57. OPS/belge turu: bir kartın öncülü çürüdü, bir kartta yazmayan tuzak çıktı
+
+| Kart | Sonuç |
+|---|---|
+| `BR-OPS-15` | `deploy/santral-recreate-kapisi.sh` + `kapi_67`, 5 mutasyon kırmızı |
+| `BR-OPS-13` | Down'ın sildiği lisans satırları denetim günlüğüne + geri dönüş runbook'u |
+| `BR-OPS-14` | Kısmen — (a)(c) indi, (b) yayın anına bağlı |
+| `BR-OPS-09` | Kısmen — (1) indi |
+| `BR-DOC-17/18/19` | Bitti |
+
+**`BR-OPS-15`'in öncülü çürüdü.** Kart *"`staging-yayin.sh:587` her yayında koşuyor"* diyordu.
+**Koşmuyor:** satır `if [ -n "${PBXTR_SANTRAL_IMAJ:-}" ]` içinde ve dosyanın kendi yorumu
+*"VARSAYILAN: DOKUNMAZ … santral imajı ayda bir değişir"* diyor. Yani Karar #70 Q3-a'nın reddi
+sandığımızdan **zayıf**: `ari.conf` "bir sonraki yayında" değil, **bir sonraki santral imajı
+yayınında** geçiyor. Karar #70'e öncül düzeltmesi işlendi; kapı yine de kuruldu.
+
+**`BR-OPS-13`'te kartta yazmayan bir tuzak çıktı.** `audit_log` partition'lıdır.
+`pbxtr_create_partition` çağrısı olmadan Down `no partition of relation` ile **yarıda kalır** —
+yani **denetim eklemek migration'ı geri alınamaz yapardı.** Gerçek PG 16.15'te ölçüldü. Kartın
+istediği şey (izlenebilirlik) tam tersini üretecekti.
+
+**`BR-DOC-17`'de kart eksikti, asıl kusur başka yerdeydi.** Kart iki dosya sayıyordu, üçüncü yer
+`permissions.seed.json:681` idi. Ama asıl kusur not metniydi: `StorageScreen` dokuz dilde
+*"webhook aboneliği bu üründe YOKTUR"* diyordu ve bu cümle `BR-C2-2` teslim edilince **yanlış**
+oldu. Kullanıcıya **var olan** bir özelliğin yok olduğu söyleniyordu.
+
+**İki yan bulgu kart oldu:**
+- `BR-DB-86` — `BR-OPS-11` ile `BR-OPS-14` `lock_timeout` için farklı değeri "doğru" sayıyor
+  (2s vs 10s). Kurulan kapı değeri `00-roles.sql`'den **okuduğu** için çelişkiyi **görmüyor**.
+- `BR-SYS-110` — `pbxtr_role_settings_guard` **canlıya uygulanmamış**: canlıda
+  `statement_timeout=0`, bekçi 30s bekliyor. `[[kod-var-kosan-yok]]`ın birebir tekrarı.
+
+### 58. Onay defterinde çözülmemiş çatışma — ve onu yakalayan şey kapının kendisiydi
+
+Merge `backlog.md` çatışmasını bildirdi; **`migration-contract-onay.blobs` çatışmasını çıktının
+kuyruğunda kaçırdım.** Dosyada `<<<<<<<` işaretleri kaldı. Yakalayan: `kapi_07`.
+
+```
+deploy/migration-contract-onay.blobs:82: bicim bozuk … '<<<<<<< HEAD'
+deploy/migration-contract-onay.blobs:86: ayni yol iki kez onaylanamaz: …WebhookOutboxAndDelivery.cs
+```
+
+Kapı üç ayrı ağızdan bağırdı: biçim bozuk, aynı yol iki kez, ve blob eşleşmiyor. **Kapının
+kurulma sebebi tam olarak buydu** ve bu sefer beni yakaladı, kodu değil.
+
+Çözüm körü körüne değildi: `Webhook` satırı **daldan** (BR-OPS-13 `Down`'a denetim ekledi, gerçek
+blob `18d7c6e8`), `Telephony` satırı **HEAD'den** (Karar #70). Webhook blobunu onaylamadan önce
+`97549c51 → 18d7c6e8` diff'lendi: değişen satırlar **3** (using) ve **494-505**. `Up` **137-461**
+arasında ve **dokunulmamış** — yani kapının okuduğu sözleşme aynı, Karar #69 geçerli.
+
+### 59. Turun sayısal özeti — bayat olan kod değil, kartlardı
+
+Bugün **28 kart ölçüldü, 25'i zaten bitmişti.** İki ajan (10 + 4 kart) hiç kod yazmadı.
+
+Ama tam o ölçüm sırasında **dört gerçek kusur** çıktı:
+
+1. Trunk gelen-arama yönetimi **panelde hiç yoktu** — sunucuda 1 GET + 2 PUT aylardır hazır.
+2. #49 SMS sekmesinde zorunlu **simülasyon şeridi çizilmiyordu** (CLAUDE.md §5 ihlali).
+3. `Simulated` alanı PUT yanıtında **sabit `false`** idi.
+4. `If-Match` kapısının **kuyruk dalı hiç koşmuyordu.**
+
+Bu, "önce ölç" kuralının ne için var olduğunun en temiz kanıtı: **kartın teşhisi yanlıştı ama
+kazma yerini doğru gösterdi.**
+
+**Ölçüm:** `dotnet build` 0 hata · `tsc -b --force` rc=0 · `kapi_07` rc=0 / ONAYLI 15 ·
+ClickUp `fark olan kart: 0, izde olmayan: 0` (635 kart) · kapalı **432**, açık **203**
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
