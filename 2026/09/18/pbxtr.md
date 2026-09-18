@@ -2738,3 +2738,94 @@ python3 deploy/migration-compatibility-guard.py  # rc=0 (iki contract onayı Kar
 
 - **Commit:** `8fb533c9` — Karar #76 / Ş76-11: webhook_deliveries retention
   SİSTEM SABİTİ (30/30 gün). Push edildi.
+
+---
+
+## Karar #76 / Ş76-4 — sesli mesaj kutusu KİMLİKLE taşınır (BR-BE-182 + BR-BE-176 slug kolu)
+
+### Bağlam
+
+Kurul iki kartın çelişkisini kapattı: kutu ya slug'ı DB'ye materyalize ederek ya
+kimlikle taşınarak çözülecekti. **Kimlik seçildi.** Görev `backend-lider`'dan geldi,
+`backlog.md`'ye dokunulmadı.
+
+### 1. Kapatılan kusur (kararın "gizli bedel" dediği şey)
+
+- **Neden:** `ux_voicemail_messages_tenant_linked` = `(tenant_id, linked_id, box_ref)`
+  ve `box_ref` tenant önekli **santral nesne ADI**dır. Kuyruk yeniden adlandırılınca ad
+  değişiyor, aktarım işindeki `ON CONFLICT ... DO NOTHING` **artık çakışmıyor** ve
+  **aynı mesaj ikinci kez INSERT ediliyordu**. Belirti hata değil: kutuda iki aynı mesaj,
+  iki dinleme, iki SLA ateşlemesi.
+- Aynı ad üç yüzeyde daha anahtardı: `VoicemailStoredName.AssetKey`,
+  `recording_assets.linked_id = vm-<linkedid>-<box_ref>`, dialplan dosya adı ve
+  `voicemail_sla_daily` kırılımı (ad → kuyruk yeniden adlandırılınca **SLA serisi ikiye
+  bölünür**).
+
+### 2. Ne yapıldı
+
+- **Şema:** `voicemail_messages.box_id` (uuid NOT NULL, **FK DEĞİL**) +
+  `ck_voicemail_messages_box_id` (FK doluyken kimlikle eşit olmak zorunda);
+  `box_ref` kolonu **düştü**. `ux_...` ve `ix_..._box_status` kimliğe taşındı.
+  `voicemail_sla_daily` PK → `(tenant_id, day, box_kind, box_id)`.
+  *FK olmamasının sebebi:* tipli FK'lar kutu silinince `SET NULL` olur; kimlik de FK
+  olsaydı **idempotens anahtarı NULL'a düşer** (PG'de NULL'lar benzersiz indekste
+  birbirinden farklıdır) ve aynı mesaj yine ikinci kez yazılabilirdi.
+- **Üretici (BR-BE-176'nın daraltılmış kapsamı):**
+  `Gosub(pbxtr-{t}-vm,s,1(<ad>,<kind>,<id>))` (ARG2/ARG3), dosya adı
+  `vm-${CHANNEL(linkedid)}-${PBXTR_VM_ID}.wav`, `UserEvent(...,BoxKind:,BoxId:,...)`;
+  `AmiEventMapper` + `TelephonyEventPipeline` allowlist (`vmBoxKind`/`vmBoxId` — GUID
+  muafiyeti sayesinde numara bekçisine takılmaz).
+  **Eski revizyon tolere edilir:** kimlik boşsa ad tabanlı çözüm dalı (`lx` JOIN) koşar,
+  yoksa yayın penceresinde bırakılan her mesaj kaybolurdu.
+- **Aktarım:** aday SQL'i `WITH vm AS MATERIALIZED` + tür başına LEFT JOIN
+  (queue/did/extension) — kutu türü **üreticiden** gelir, addan tahmin edilmez.
+- **Okuma:** `GET /api/v1/voicemail` filtresi `boxId`; `boxRef` yanıtta **salt-okunur
+  türetim** (`EfVoicemailInbox.FillBoxRefsAsync`, tür başına tek `IN (...)`).
+  DID'de ad `label`dır — `e164` DEĞİL: `boxRef` maskesiz bir alan, oraya numara basmak
+  açık numarayı response'a taşırdı (CLAUDE.md §5).
+- **Migration:** `20260918190000_VoicemailBoxIdentity` (backfill `app.cross_tenant='on'`
+  ile — FORCE RLS altında owner UPDATE'i sessizce 0 satır eder), contract onayı
+  `Karar#76`, çapraz kip envanterine `0/2` olarak kaydedildi.
+
+### 3. Ölçüm
+
+```bash
+dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~Voicemail"   # 58/58 yeşil
+dotnet test tests/Pbxtr.Architecture.Tests --filter "~CrossTenantScopeGuardTests"  # 4/4
+npx tsc -b   # rc=0
+python deploy/migration-compatibility-guard.py  # OK
+```
+
+**Mutasyon (Ş76-4/3):** kimlik alanları `box_ref`'e geri çevrildi (writer `ON CONFLICT`,
+aday dedupe koşulu, EF model kolonu/indeksi, `AssetKey`, `Candidates`) → **9 test
+KIRMIZI**. Geri alındı, ikili yeniden derlendi (dosya damgası doğrulandı) → **58/58
+yeşil**. Ayrıca `voicemail_sla_daily` kırılımının ada döndürülmesi **derleme hatası**
+verdi (`VoicemailSlaDaily.BoxRef` artık yok) — kırmızı testten daha sert bir kapı.
+
+### Kararlar
+
+- `box_ref` **kolonu düşürüldü**, salt-okunur türetime çevrildi. Bedeli yazılı:
+  **silinmiş** bir kutunun adı artık üretilemez; satır `boxKind` + `boxId` ile görünür
+  ("silinmiş kutu"). Adı saklamak daha kötüydü — yeniden adlandırmada ad sessizce yetim
+  kalır ve ekran ile santral iki farklı ad söylerdi.
+- Backfill'de üç FK'si de NULL olan satıra `gen_random_uuid()` verilir: mesaj **listede
+  durur** (müşteri mesajı imha edilmez), tekilliği kendi başına sağlar.
+- `Down` simetriktir ama **tam değildir** (yazılı sapma): ad SQL'de üretilemez, kimliğin
+  metin hâli yazılır — sessiz bozulma yerine gürültülü yer tutucu.
+
+### Açık kalanlar / sonraki adım
+
+- **BR-BE-182'nin S-VM-5 ayağı YAPILMADI:** izne çıkan kullanıcının açık mesajlarının
+  havuza dönmesi. `VoicemailEndpoints` yalnız `assign` taşıyor; izin/çıkış akışından
+  tetiklenen bir iade yolu hâlâ yok. Kart bu ayakla açık kalmalı.
+- **BR-BE-176'nın kalan üretici işi:** IVR `voicemail` düğümü hedefi ve DID `voicemail`
+  kararı için **şema** (`ivr_nodes` / `dids` üzerinde `box_kind` + tipli kimlik).
+  Taşıma katmanı (Gosub/UserEvent/aktarım) artık üç türü de destekliyor; eksik olan
+  yalnızca hedefi **tanımlayacak** alanlar. Sözleşme `api-kontrat-v1.md` §7 + §7.1'e
+  yazıldı.
+- **Ölçülmedi:** migration kurulu bir PostgreSQL'de koşturulmadı; kuyruk yeniden
+  adlandırmasının uçtan uca davranışı (gerçek `INSERT`, ikinci satır oluşmaması)
+  entegrasyon turunun işi.
+
+- **Commit:** `66b52310` — Karar #76 / Ş76-4: sesli mesaj kutusu KİMLİKLE taşınır.
+  Push edildi.
