@@ -4881,11 +4881,18 @@ gelecek sorusu kurul gündeminde.
   bekçisidir.
 
 ## Açık kalanlar (BR-QA-114 turu)
-- **Tam `Pbxtr.Integration.Tests` koşusu bu turda ÖLÇÜLEMEDİ.** Çalışma ağacında **eşzamanlı
-  başka bir ajanın** işi vardı (`SlaAggregationJob.cs` +202 satır, izlenmeyen
-  `20260918234000_ReportRlsCrossTenantAlignment.cs` ve ~15 başka dosya). Tam koşu ~20 sınıfta
-  148 hata verdi ve ilk sebep `42883: function pbxtr_webhook_event_types() does not exist` —
-  **şema bootstrap'ı**, callback/SLA ile ilgisiz. Bu tura ait **değildir**, ama "yeşil" de
-  **denmedi**: ağaç durulunca tam koşu tekrarlanmalı.
+- **Tam `Pbxtr.Integration.Tests` koşusu BİTTİ ve KIRMIZI — ama bu tura ait değil.**
+  `Failed: 85, Passed: 1012, Skipped: 2, Total: 1099` (23 dk 58 sn). Kırılım ölçüldü:
+  **52 hata** `42883: function pbxtr_webhook_event_types() does not exist` (şema bootstrap'ı,
+  webhook işi), **3 hata** `42703: column "box_id" of relation …` (voicemail box kimliği).
+  Hiçbiri callback/SLA ile ilgili değil. **Bu turun üç sınıfı 85'in içinde YOK** (log'da sıfır
+  geçiş); ayrıca filtreli koşuda 7/7 yeşil ölçüldü. İki `Skipped` Docker atlaması **değil**,
+  Linux'a özgü iki test (`St44AcceptanceSeederTrustedFilesTests`, `FinalDeliveryReportTests`).
+  Sebep: çalışma ağacında **eşzamanlı başka ajanların** işi vardı (koşu başlarken
+  `SlaAggregationJob.cs` +202 satır, izlenmeyen `20260918234000_ReportRlsCrossTenantAlignment.cs`;
+  koşu biterken `src/` altında 30+ değişik dosya). Ağaç durulunca tam koşu tekrarlanmalı.
+- **Tuzak tekrar yakalandı:** arka plan sarmalayıcısı `[exited with code 0]` yazdı, oysa koşu
+  `Failed: 85` ile kırmızıydı — bileşiğin çıkış kodu son komutundur. Sayı okunmasaydı bu koşu
+  "yeşil" sanılacaktı.
 - `callback_sla_mode = 'excluded'` (kip a) dalı gerçek PG'ye karşı hâlâ **ölçülmedi**; bu turda
   yalnızca `deadline` kipi (pending + breached) ölçüldü.
