@@ -5587,3 +5587,88 @@ derleme kilit açılana kadar 40 denemeye kadar tekrarlandı.
   Defterdeki bilinen sınıf.
 
 **Commit:** `a259e0f1` — BR-AST-108 + BR-AST-55: dusen tenant artik dosya raporu + haksiz RNA ayri etiket
+
+---
+
+### Kimlik/yetki turu — BR-BE-150 · BR-SEC-08 · BR-SEC-20 (backend-dev-1)
+
+#### 1. BR-SEC-20 — karar verildi, kart kapandı (fail-closed kalıcı)
+- **Neden:** kart "KURULA" diyordu; kurul 2026-09-18'de kullanıcı tarafından dağıtıldı,
+  karar bu ajana kaldı. Soru: platform tenant'ında tanımlı özel rol, drill-in'de
+  (`X-Tenant-Id`) yetki vermeli mi? Bugünkü hâl: boş küme (fail-closed).
+- **Ne yapıldı:** ölçüldü, **dar olan** seçildi (bugünkü hâl korunur) ve gerekçe
+  `CustomRoleAwareExpander.cs`'te satır başına + test sınıfı notuna yazıldı.
+- **Ölçüm (kararı belirleyen iki bulgu):**
+  1. Özel rol `SessionScopeConsistency.WidestRoleScope` için **`Single`**'dır (katalogda yok)
+     ve `scope=single` jeton `TenantResolutionMiddleware.cs:201-210`'da ev tenant'ı dışına
+     **hiç çıkamaz** → kartın motive edici "dar destek rolü" senaryosu bu kapı gevşetilse de
+     **servis edilemez.**
+  2. Bu dala ulaşan her aktör kapsamını bir **katalog** rolünden alır (`admin`/`superadmin`
+     → Global, `dealer` → Dealer) ve o rolün kümesini katalog dalından zaten tam alır →
+     gevşetmenin tek etkisi geniş aktörü **daha da** genişletmek olurdu.
+  3. Ve açılsaydı **BR-SEC-08 daraltmasını delen** bir yüzey olurdu: platform yöneticisi
+     kendi tenant'ında özel rol yazıp matristen düşürülen tenant-işletme yetkilerini her
+     müşteri tenant'ına taşırdı. Meşru yol taklittir.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Platform/Authorization/CustomRoleAwareExpander.cs`
+  (yalnız yorum), `tests/Pbxtr.Api.Tests/Platform/Authorization/PlatformCustomRoleDrillInTests.cs`
+  (5 → 7 test).
+- **Mutasyon:** kapı kaldırıldı (`return custom;`), **yeniden derlendi** → 3 KIRMIZI / 6 geçti;
+  geri alındı + yeniden derlendi → 15/15 yeşil.
+
+#### 2. BR-SEC-08 — Ş51-1 önkoşulu indi, yüzey sayıldı; daraltma HÂLÂ açık
+- **Neden:** Karar #51 birebir *"Ş36-31 ÖLÇÜLMEDEN YETKİ KALDIRILMAZ"* diyor. Depoda taklit
+  **sonrası** bir tenant yazmasını ölçen test **yoktu**; en yakını taklit ucunun kendisini
+  ölçüyordu. Yani *"meşru yol var"* bir iddiaydı.
+- **Ne yapıldı:** `tests/Pbxtr.Integration.Tests/Tests/GlobalActorImpersonationTenantWriteHttpTests.cs`
+  — global `admin` müşteri tenant'ına drill-in → oradaki `owner` olarak taklit →
+  `PUT /ivr/flows/{id}` **200** + satır gerçekten değişir + **iki denetim satırı** DB'den geri
+  okunur (`user.impersonation.started` aktör=admin, `ivr.flow.updated` aktör=owner).
+  **Kontrol grubu:** aynı istek, tek fark admin'in kendi jetonu → **403**, ad değişmez.
+  Üçüncü test (Ş36-32): çapraz kipte **403 `CROSS_TENANT_WRITE_FORBIDDEN`**.
+- **Yüzey sayımı (kartın sayıları bayattı):** paketler çözülerek `superadmin=50, admin=48,
+  dealer=11, owner=83, supervisor=61, agent=13, wallboard=1`; `admin ∖ superadmin`=8,
+  `superadmin ∖ admin`=10. **Kartın "60 kalem" sayısı `owner ∖ global`dir (bugün 64) ve
+  daraltılacak yüzey o DEĞİL.** Daraltılacak aday küme `owner ∩ (admin ∪ superadmin)` =
+  **19 yetki / 83 uç** (`RequiresPermissionAttribute`, parantez-dengeli tarama: 360 kullanım,
+  115 ayrı yetki adı, 8'i elle çözüldü). `codec.write` admin'de var ama **0 uç** koruyor;
+  `ivr.read` hiçbir global rolde yok.
+- **Ölçüm tuzağı (kayda değer):** ilk sayım sabitleri **kısa adla global** haritaya koyuyordu;
+  `WritePermission` 24 dosyada tanımlı olduğu için hepsi son yazana çözülüyor ve
+  `workinghours.write` **88 uç** gibi saçma bir sayı veriyordu. Sabitler dosya-yerel çözülmeli.
+- **Koşulmadı:** Docker gerekiyor + ağaçta başka ajanların yarım işi vardı.
+
+#### 3. BR-BE-150 (P0) — blokaj sürüyor, ama **ölçüm tuzağı kapandı**
+- **Neden:** kartın kalan işi kod değil: (a) bir yayın döngüsü boyunca red sayacının 0 kalması,
+  (b) `enforce` geçiş kararı. Engel: sunucudaki imaj HEAD'in 292 commit gerisinde.
+- **Gerçek kusur:** `session-scope-consistency` sağlık satırı **kipi söylemiyordu**.
+  *"0 tutarsızlık"* metni, kapıyı hiç taşımayan bir ikilide de kapılı bir ikilide de
+  **birebir aynı** çıkıyordu — yani (a) ölçümü **kanıt olmayan bir satıra** dayanabilirdi.
+  (2026-09-14 kaydında operatörün okuduğu `session-scope-consistency ok` satırı tam olarak budur.)
+- **Ne yapıldı:** `SessionScopeConsistencyDiagnostics.Snapshot()` artık
+  `SessionScopeConsistencySnapshot(Mode, BySurface)` döner; kip **açılış doğrulamasında**
+  yazılır (`AuthOptions.EnsureConfiguredForProduction` → `RecordMode`, `Program.cs:483`,
+  her ortamda). Kapı singleton'ı **tembel** kurulur — ilk girişten önce gelen sağlık isteği
+  kipi okuyamazdı; bu yüzden kayıt açılış yolunda. Kip çözülmemişse satır **`Unmeasurable`**
+  ("ölçülemedi" ≠ "çalışmıyor") ve metin *"bu değer enforce geçiş kararı için KANIT DEĞİLDİR"*
+  der; çözülmüşse Ok/Down metnine `Kip: audit (… jeton ALIR)` / `Kip: enforce (… ALMAZ)` girer.
+- **`SystemHealthProbe.cs`'e DOKUNULMADI** (orada başka ajanın yarım işi vardı) — çağrı yeri
+  `Describe(Snapshot())` olduğu için imza değişimi orayı derlemeden geçirir.
+- **Mutasyon:** `Unknown` dalı devre dışı, **yeniden derlendi** →
+  `Kip_cozulmemisse_satir_olculemedi_der` KIRMIZI (1/6); geri alındı → 15/15 yeşil.
+
+- **Komutlar:**
+  ```bash
+  dotnet build src/Pbxtr.Api/Pbxtr.Api.csproj        # 0 Error(s)
+  dotnet build tests/Pbxtr.Integration.Tests/...     # 0 Error(s)
+  dotnet test tests/Pbxtr.Api.Tests --filter "...SessionScope...|...Impersonation...|...CustomRole..."
+  # 83/83 geçti (kimlik+yetki kümesi), 15/15 (iki yeni sınıf)
+  ```
+- **Ölçülemeyen:** `Pbxtr.Api.Tests` derlemesi tur boyunca **beş kez** başka ajanların yarım
+  işiyle kırmızıydı (ConfigRenderer, ProvisioningPullRateLimiter, LocalDialPlan,
+  OutsideHoursBreakJob); `dotnet test` için until-döngüsüyle beklendi.
+  Entegrasyon testi **koşulmadı** (Docker). `Pbxtr.Architecture.Tests` 709/718 — 6 ayrı sınıf
+  kırmızı (`SampleDataSeederInsertOnly`, `CrossTenantScopeGuard`, `TenantLeakCoverage`);
+  **hiçbiri bu turun dosyalarına ait değil**, `SessionScopeGateArchitectureTests` yeşil.
+
+**Commit:** `a417949` — BR-SEC-20 karar + BR-SEC-08 Ş51-1 önkoşul testi + BR-BE-150 sağlık satırı kipi
+**Commit:** `55db5ce2` — BR-BE-150: sağlık satırı kip testi (mutasyonla doğrulandı)
