@@ -738,3 +738,125 @@ ikisinin kart metnindeki teşhis **ölçünce eksik çıktı.** Paralel ajanlar 
   `AgentInterventionTests` ve `LiveAgentDndStoreTests` artık yeşil.
 - **`BR-BE-135` ve `BR-BE-171`(b) artık yazılabilir:** payda var, bağlanacak nokta
   (`deductedSec`) açık ve tek.
+
+
+---
+
+## Koordinator — yayin format kapisi ve dusme kanitinin korunmasi
+
+### 1. `BR-AST-119` — düşme kanıtının ikinci kopyası (süre kritikti)
+
+- **Neden:** Sunucudaki tek kanıt bir Redis anahtarıydı
+  (`pbxtr:sys:dropped:tenant-unresolved:2026-09-17` = `33224`) ve **TTL 10908 sn** kalmıştı
+  — yaklaşık 3 saat sonra (`~2026-09-19 01:49Z`) uçacaktı. İkinci bir kopyası **yoktu**.
+- **Ne yapıldı:** Kanıt karta yazıldı. Ardından aslında daha önemli olan ayrım ölçüldü:
+  *"18 Eylül için düşme anahtarı YOK"* bir **düzelme kanıtı değil**.
+- **Komut / ölçüm:** `call_events` gün bazında, `call_id ~ '^[0-9]+\.[0-9]+$'` (Asterisk
+  `uniqueid` biçimi) ayrı sayılarak:
+
+  | Gün | Olay | Asterisk biçimli |
+  |---|---|---|
+  | 13 Eyl | 295 | 4 |
+  | 14–16 Eyl | 291 | **0** |
+  | **17 Eyl** | 719 | **344** |
+  | 18 Eyl | 1960 | **10** |
+
+- **Sonuç:** `~291 olay + 0 Asterisk biçimli` tekrar eden **tohum** şeklidir. Gerçek trafiğin
+  aktığı **tek gün 17 Eylül** — ve düşmenin yaşandığı gün tam o gün.
+  Oran: **344 inen / 33.224 düşen = %98,97 düşürüldü.**
+  Bugünkü sessizlik *"düşme yok"* değil **"düşecek şey yok"**tur. Karta bir **ölçüm penceresi**
+  yazıldı: bir sonraki gerçek trafik gününde düşme sayacı ile inen Asterisk biçimli olay
+  sayısı **aynı gün** birlikte okunacak. Sebep hâlâ **TAHMİN** olarak işaretli.
+- **Commit:** `36607991`
+
+### 2. `BR-SYS-123` — yayın format kapısı: 22.113 hatanın 21.728'i borç DEĞİLDİ
+
+- **Neden:** Biten bir ajan, `dotnet format --verify-no-changes`'in depo genelinde
+  **22.113 hata** verdiğini raporladı. Kapı `deploy/yerel-yayin.sh:419`'da ve **host'ta**
+  koşuyor (konteynerde değil), yani yayını fiilen kesiyordu.
+- **Ne yapıldı (ve neden böyle):** Hatalar körü körüne düzeltilmedi. Önce **sınıfa ayrılıp
+  her sınıf git INDEX'ine karşı** ölçüldü — çünkü *"çalışma ağacında kırmızı"* ile
+  *"depoda borç"* ekranda aynı görünüyor:
+
+  | Sınıf | Hata | Dosya | Index'te | Anlamı |
+  |---|---|---|---|---|
+  | `ENDOFLINE` | 21.728 | 39 | CRLF **0/39** | **%100 platform artefaktı** |
+  | `CHARSET` | 51 | 51 | BOM **51/51** | **%100 gerçek borç** |
+  | `WHITESPACE`/`IMPORTS` | ~336 | 22 | — | gerçek borç |
+
+  `.gitattributes:31` **zaten** `*.cs text eol=lf` diyor ve index zaten LF; o 39 dosya
+  yalnızca **bayat çalışma kopyası**ydı (kural eklenmeden önce checkout edilmiş).
+  Onarımın commit üretmeyeceği bir iddia değil, **ölçüm**: 34 dosya LF'e yazıldı,
+  `git diff` **sıfır satır** döndü. BOM'lar silindi, girinti `--include` ile 5 dosyada
+  düzeltildi.
+- **Dokunulan dosyalar:** 51 dosyada BOM, 5 dosyada whitespace (`git commit --only`, yollar
+  açıkça sayıldı); `yonetim/backlog.md`
+- **Komutlar:**
+  ```bash
+  dotnet format pbxtr.sln --verify-no-changes --no-restore --verbosity diagnostic; echo "rc=$?"
+  grep -o "error [A-Z]*:" fmt.txt | sort | uniq -c
+  git show ":<yol>" | grep -c $'\r'      # index'te CRLF/BOM var mi
+  dotnet format pbxtr.sln --no-restore --include $(cat liste.txt | tr '\n' ' ')
+  ```
+- **Sonuç / doğrulama:** **22.113 → 4.833** (`rc=2`). Kalan hataların **tamamı** paralel bir
+  ajanın o an açık tuttuğu **5 dosyada** ve tamamı aynı `ENDOFLINE` artefaktı + 32
+  `WHITESPACE`. Kart bu yüzden **AÇIK** bırakıldı, *"Bitti"* yazılmadı.
+- **Commit:** `02e2db04` (56 dosya), kart `bee73415`
+
+### 3. Bu turda üç araç sessizce yanlış YEŞİL üretti
+
+1. **`dotnet format --include a;b;c`** hiçbir şey yapmaz ve **`rc=0`** döner. Ayraç
+   **boşluktur**. Tek kanıt `Formatted 0 of 2390 files.` satırı. 19 dosyayı düzelttiğimi
+   sanıp devam etmiştim.
+2. **`git status --porcelain` mtime'a takılır** ve içeriği aynı dosyayı DEĞİŞMİŞ gösterir.
+   *"İçerik değişti mi"* sorusunun cevabı **`git diff`**tir. İlk doğrulamam bu yüzden kendi
+   **doğru** iddiamı yanlış çıkardı.
+3. **Arka plan sarmalayıcısı `exit code 0` bildirdi**, gerçek çıkış kodu `rc=2` idi.
+   `rc=$?`'yi kendim basmasaydım kapıyı geçmiş sayacaktım.
+
+### 4. Kart yazımında tekrarlayan tuzak
+
+`BR-SYS-123` ilk yazımında ID'yi `` `BR-SYS-123` `` (ters tırnaklı) yazdım; komşu satırlar
+ID'yi **çıplak** yazıyor. Çıkarıcı satırı **hiç görmedi**: `rows.json` 743'te kaldı, sayacı
+87 dedi ve kart panoda da hiç olmayacaktı. Ters tırnaklar kaldırılınca **744 / 88**.
+
+
+### 5. `BR-SYS-123` KAPANDI — ve kalan 32 `WHITESPACE` de artefaktmış
+
+Paralel ajan bitince kalan 5 dosya onarıldı. **Kapı `rc=0`, 0 hata:** `22.113 → 4.833 → 0`.
+İki ek ölçüm:
+1. O 5 dosyanın onarımı da **sıfır diff** üretti — sınıf tesbiti doğruydu.
+2. Kalan **32 `WHITESPACE`** hatası da aynı CRLF türeviymiş: EOL onarıldıktan sonra
+   `dotnet format` **hiçbir dosyayı değiştirmedi** (`Formatted 0 of 2390`) ve kapı yine
+   yeşile döndü. *"336 girinti hatası var"* demek ölçmeden önce doğru görünüyordu ama
+   **yanlıştı**; gerçek borç yalnız **51 BOM + 5 dosyalık girinti** idi.
+
+### 6. Ana dalda ölçülmüş bir kırmızı — kart açılmadı, **sahibine** verildi
+
+`ScriptPublishedEventTests.Istemci_olay_listesi_sunucu_katalogunu_kapsar` kırmızı.
+Ölçtüm: sunucu kataloğunda **15** olay, istemcide **14**; eksik olan tam olarak
+**`callback.first_run`**. Üreticisi **VAR**
+(`EfCallbackFirstRunNotice.cs:130`), istemci listesi (`RealtimeProvider.tsx:42`)
+adı içermiyor — yani sunucu yayınlıyor, istemci **sessizce düşürüyor**.
+İstemcide `callback.first_run` geçen tek yer `auditView.ts` ve orası **denetim etiketi**,
+canlı tüketici değil.
+
+**Ayrı kart AÇILMADI:** iş `BR-BE-206`'nın alanında ve o kart şu an bir ajanda. Ölçüm
+ona iletildi; ben dosyalara dokunmadım — aynı dosyaya iki taraftan girmek, daha önce
+bir ajanın commit mesajını kaybettirmişti. Not düşüldü: **listeye adı eklemek testi
+yeşile çevirir ama tüketici yoksa kapı vacuous olur** ve "olay ulaşıyor" sanılır.
+
+## Kararlar
+
+- **`BR-SYS-123` KAPANDI** (aynı turda, ajan bitince). *"Benim değil"* demek kapıyı
+  yeşile çevirmiyordu; beklemek çevirdi.
+- **Düzeltme ile artefakt ayrı commit'lenmedi çünkü artefaktın commit'i YOK** — onarım diff
+  üretmiyor. Bu, kararın kendisinin kanıtı.
+
+## Açık kalanlar / sonraki adım
+
+- Yayın hattı 136/~150. kapıda durdu (bellek); **kendiliğinden yeniden başlatılmayacak.**
+  Dokuz kart ona bağlı (`BR-DB-91`, `BR-SYS-117` …).
+- `BR-SYS-123`'ün kalan 5 dosyası.
+- `BR-AST-119` için **bir sonraki gerçek trafik günü** ölçüm penceresi.
+- Açık kart: **88** (P0 2 · P1 43 · P2 34 · P3 9).
