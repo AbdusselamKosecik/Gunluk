@@ -4134,3 +4134,115 @@ kapanış kaydı.
   `Local/…` adresiyle karşılaştırıyor → süpervizör müdahalesinin mutabakatı **her zaman
   `not_applied`** okur. Bu turda DOKUNULMADI.
 - **Commit:** `2c13c24a` — push edildi.
+
+---
+
+## BR-DB-93 + BR-SYS-116 — purge/retention izin listesi ve runbook
+
+### Bağlam
+İki kart: (1) `purge_call_data()` izin listesinde `webhook_outbox`,
+`webhook_deliveries` ve `callback_entries` yok — çağrı verisi silinirken bu satırlar
+geride kalıyor; (2) purge/retention runbook'u hiç yok.
+
+### Yapılanlar
+
+#### 1. Mevcut veri ölçüldü — kartın bir öncülü çürüdü
+- **Neden:** "kart öncülü ölçülmeden yazılmaz" dersi.
+- **Ne ölçüldü:**
+  - İzin listesinin o anki hâli: `cdr`, `call_events` (partition dalı) +
+    `script_responses`, `survey_responses`, `voicemail_messages` (satır dalı).
+  - Üç gövdenin `md5(prosrc)` değeri kaynaktan yeniden üretildi ve dondurulmuş
+    envanterle **birebir tuttu** (`d758ce05…`, `a98191be…`, `72a9e917…`) — yani
+    `Down()`'a yazılan "önceki gövde" kopyaları tahmin değil, ölçüm.
+  - Sunucu (`176.88.41.220`, `pbxtr` DB): `callback_entries` = **0 satır**;
+    `webhook_outbox` / `webhook_deliveries` / `voicemail_messages` **tablo olarak
+    yok** (son migration `20260915122000`). Karşılaştırma: `cdr`=1318,
+    `call_events`=8196.
+- **ÇÜRÜYEN ÖNCÜL:** `webhook_deliveries` listeye **eklenmedi**. Aradan **Kurul Karar
+  #76 / Ş76-11** geçti ve o tabloyu **sistem sabiti** bir pencereye bağladı
+  (`pbxtr_sys.purge_webhook_deliveries`, `20260918170000`), tenant parametresine
+  bağlamayı **açıkça reddetti**. Ayrıca aylık RANGE partition'lı; satır dalı `ONLY`
+  taşımaz ve Karar #48/Ş48-2 kapısı onu zaten `wrong_object_type` ile reddeder.
+  Kartın *"ikisi de telefon numarası taşır"* gerekçesi `webhook_outbox` için de
+  yanlış: o tablonun gövdesinde numara **yoktur** (Karar #28, DB Lideri vetosu) —
+  gerekçe numara değil, **çağrı verisi** olması.
+
+#### 2. Tek migration — `20260918230000_CallDataRetentionWebhookOutboxCallback`
+- **Ne yapıldı:** `call_data_retention_plan()`, `purge_call_data()` ve
+  `call_data_retention_lag()` gövdeleri birlikte tazelendi; `c_row_tables`'a
+  `webhook_outbox` + `callback_entries`, anahtar kolon CASE'ine
+  `occurred_at` / `missed_at`.
+- **Kartta olmayan, bu turda ölçülen kusur:** `call_data_retention_lag()` **zaten
+  kördü** — Karar #71 `voicemail_messages`'ı **plana** ekledi, gecikme ölçümüne
+  **eklemedi**; üstelik o dal anahtar kolonu `y.started_at` olarak **sabit**
+  yazıyordu (tablo eklenseydi `undefined_column` ile patlardı).
+- **BLOKE EDİCİ ÖN KOŞUL (ilk kırmızı testle bulundu):** `callback_entries` RLS
+  policy'si **çapraz kipi hiç tanımıyordu** (`USING (tenant_id =
+  app_current_tenant())`, `app_is_cross_tenant()` dalı yok — elle yazılmış, şablondan
+  gelmiyor). Retention işi oturumunda **yalnızca** `app.cross_tenant` açar,
+  `app.tenant_id` **hiç yazmaz** (`CallDataRetentionJob.cs:211`) → `app_current_tenant()`
+  NULL → policy her satırda FALSE. `SECURITY DEFINER` bunu **kurtarmaz** (FORCE RLS
+  altında owner bypass değildir). Bu hizalama olmadan `callback_entries` retention'ı
+  **üründe sessizce vacuous** olurdu; testte çağıran = tenant olduğu için yeşil bile
+  görünürdü. `ALTER POLICY` ile şablona hizalandı, `Down()` eski metni birebir yazar.
+- **İndeksler:** `ix_webhook_outbox_tenant_occurred_at`,
+  `ix_callback_entries_tenant_missed_at` — ikisi de `tenant_id` ile başlıyor. Mevcut
+  indeksler deseni karşılamıyordu (`ix_webhook_outbox_pending_fanout` `created_at`
+  üzerinde ve `fanned_out_at IS NULL` ile **kısmi**; `ix_callback_entries_due`
+  `missed_at` taşımıyor).
+- **Silme anahtarı `ctid` değil:** satır dalı `ONLY` taşımaz ve bölümlü hedefi
+  `relkind`/`pg_inherits` kapısıyla **silmeden önce** reddeder; guard `ROW_COUNT`'tur
+  (`expected_rows` silmeden önce, `actual_rows` `GET DIAGNOSTICS` ile sonra).
+- **Dondurulmuş envanter:** `sys-functions.expected` + `02-guards.sql` seed md5'leri
+  + toplam md5 **aynı migration'da** tazelendi. Yöntem önce eski değerler üzerinde
+  doğrulandı (mevcut toplam `8dc49b1d…` yeniden hesaplandı ve tuttu); yeni toplam
+  `c732d80e…`.
+
+#### 3. Ölçüm ve mutasyon
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Integration.Tests --filter "FullyQualifiedName~CallDataRetention"
+  # 20/20 yesil (yeni CallDataRetentionWebhookCallbackTests dahil)
+  dotnet test tests/Pbxtr.Architecture.Tests   # 708/713
+  ```
+- **Mutasyon 1:** UP plan `c_row_tables`'tan `callback_entries` çıkarıldı **ve md5
+  envanteri de tazelendi** (aksi halde donmuş md5 bekçisi davranış iddiasından önce
+  patlıyordu) → **KIRMIZI**, tam da `callback_entries` plan iddiasında;
+  `webhook_outbox` iddiası yeşil kaldı. Mutasyon hedefli.
+- **Mutasyon 2:** `ALTER POLICY` hizalaması kaldırıldı → **KIRMIZI** (policy biçim
+  iddiası). İkisi de geri alındıktan sonra yeşile döndü, ikilide doğrulandı.
+- **Yan bulgu:** `md5(prosrc)`'nin çevrimdışı hesabı PostgreSQL'in ürettiği değerle
+  birebir aynı (mutant md5 `15d8a37b…` bekçi hata mesajında aynen çıktı) — bu yüzden
+  md5 tazelemek için DB'ye bağlanmak gerekmiyor; C# ham dize `"""` bloğu 12 boşluk
+  dedent + LF ile prosrc'e eşit.
+
+#### 4. `BR-SYS-116` — runbook
+- **Dosya:** `doc/isletim/purge-retention-runbook.md`
+- **Başlıklar:** işler tablosu / ne zaman koşar / **ne silmez** (`dealers` retention
+  politikası YOKTUR — CLAUDE.md §4; `webhook_deliveries` Karar #76) / ön koşullar
+  (yedek, süreler, gecikme, restatement tabanı, `lock_timeout`, `SET LOCAL`) / kuru
+  koşum / yıkıcı koşumu açma / sonrası doğrulama (defter, denetim günlüğü, `job_runs`,
+  gecikme) / **geri alma — `DETACH+DROP` geri alınamaz** / `ctid` neden değil / arıza
+  hâlleri / yasaklar.
+
+### Kararlar
+- `webhook_deliveries` **bilerek dışarıda**; yeniden açılması `db-lider` + kurul işi.
+- `callback_entries` policy'sinin şablona hizalanması bir **şema kararıdır** ve
+  `db-lider`'a raporlandı — ama alternatifi sessiz vacuity olduğu için bu turda yapıldı.
+- `call_data_retention_lag` da aynı migration'da düzeltildi: listelerin ayrışması
+  fonksiyonun **kendi yorumunun** yasakladığı şey.
+
+### Açık kalanlar / sonraki adım
+- **Migration contract kapısı** (`deploy/migration-compatibility-guard.py`) bu migration
+  için kurul onay satırı istiyor. Blob: `a7d4aa3e4f293fec99d166d05739c11f948fafff`.
+  **Bilerek yazılmadı** (Karar #48 — onay kurul işi). Not: aynı kapı
+  `20260918203500_CallbackRequestedSlaClass.cs` (başka ajan) için de kırmızı.
+- **Benim olmayan kırmızılar** (aynı anda çalışan ajanlar): `DeployPrivilegeTests`
+  (`deploy/ci/konteyner-ayricalik-kapisi*.py`), `CrossTenantScopeGuardTests` ×2 +
+  `TenantLeakCoverageTests` ×2 (`EfProvisioningNodeState`),
+  `WebhookAdministrationTenantLeakTests` ×3 (`Faz2Database.EnsureCreated`
+  `pbxtr_webhook_event_types()` fonksiyonunu yaratmıyor) — sonuncusu migration'ım
+  depodan çıkarılarak **aynen** doğrulandı, benim değil.
+- `bash deploy/yerel-yayin.sh --sadece-kapilar` **koşulmadı** (kapı betiklerini başka
+  ajanlar aynı anda düzenliyordu; koşsaydım kırmızının sahibi okunamazdı).
+- **Commit:** `85d4139b` — push edildi.
