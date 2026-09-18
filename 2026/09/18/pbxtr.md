@@ -4820,3 +4820,72 @@ gelecek sorusu kurul gündeminde.
 - **Commit:** `fdf95d27` — push edildi (`main`).
 - **Not (paralel ajan):** `yonetim/backlog.md` düzenlemem, eşzamanlı çalışan başka bir ajanın
   `1ec96333` commit'ine **süpürüldü**; içerik ana dalda, ama sahibi o commit görünüyor.
+
+### BR-QA-114 — SLA fikstürleri gerçek şemayla ayrıştı; iki gerçek-PG bekçisi eklendi
+- **Neden:** Kurul #78'de `BR-QA-114` "ölçülmedi" değil **"bilinen KIRMIZI"** olarak yeniden
+  sınıflandırıldı. `SlaAggregationJob.RecomputeSql` üç yeni şema nesnesi okuyor
+  (`public.callback_entries` `:340`, `public.tenant_settings` `:349`,
+  `sla_buckets.callback_requested_count` `:438/:503/:566`) ama SQL'i gerçek PostgreSQL'e karşı
+  koşan iki testin fikstüründe **üçü de yoktu.** Testler yeşil görünüyordu çünkü
+  `DockerEnvironment.IsAvailable` yoksa `InitializeAsync` erken dönüyor — yani **hiç
+  koşmuyorlardı.** `PBXTR_REQUIRE_DOCKER_TESTS=1` ile koşan ilk yayın `42P01`/`42703` verirdi.
+- **Ne yapıldı:**
+  1. İki fikstüre `callback_entries` + `tenant_settings` eklendi. **Yalnız SQL'in gerçekten
+     okuduğu kolonlar** (`tenant_id, call_id, origin, missed_at, resolved_at, resolution` /
+     `tenant_id, callback_sla_mode, callback_sla_minutes`); gerçek şemadan `dosya:satır` ile
+     doğrulandı (`20260824091455_CallbackLedger.cs:38-53`, `20260918203000:52`,
+     `20260918203500`). `sla_buckets` DDL'ine `callback_requested_count integer NOT NULL
+     DEFAULT 0`.
+  2. **Mutasyon 1 tablolar eklendikten sonra da YEŞİL kaldı** — fikstür ayrıştırmıyordu:
+     depoda `callback_entries`e satır yazıp `SlaAggregationJob`u koşan **hiçbir test yoktu**,
+     yani `callback_requested` dalı gerçek PG'ye karşı hiç veri görmemişti. Ayrıştıran test
+     yazıldı (üç giriş: sözü dolmamış talep / sözü aşılmış talep / defterde talebi olmasına
+     rağmen `AgentConnect`). Mutasyon tekrarlandı → **KIRMIZI.**
+  3. `callback_entries` çapraz kip RLS düzeltmesinin **davranışsal** bekçisi yoktu; tek iz bir
+     `pg_policies` **metin** kontrolüydü. Metin, policy'nin *yazıldığını* ölçer, *işe
+     yaradığını* ölçmez. Dört oturum biçimini fiilen okuyan yeni sınıf yazıldı.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Tests/SlaEventOrderingTests.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/SlaHoldTimePipelineTests.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/CallbackEntriesCrossTenantRlsTests.cs` (yeni).
+  **Migration dosyalarına ve `yonetim/` altına dokunulmadı** (blob sha'ları kurulda onaylı).
+- **Komutlar:**
+  ```bash
+  dotnet build pbxtr.sln -v q --nologo            # AYRI koşuldu: 0 Error, 0 Warning
+  PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test tests/Pbxtr.Integration.Tests \
+    --no-build --filter "…SlaEventOrdering|…SlaHoldTimePipeline|…CallbackEntriesCrossTenantRls|…CallDataRetentionWebhookCallback"
+  ```
+- **Sonuç / doğrulama:** `Failed: 0, Passed: 7, Skipped: 0, Total: 7`, çıkış kodu **0**.
+  Atlanmış test **yok** — bu kartın bütün meselesi buydu.
+  - **Mutasyon 1** (`RecomputeSql:391` `'callback_requested'` → `'abandoned'`): KIRMIZI —
+    `CallbackRequested 2 → 0`, `Abandoned 1 → 2`. Geri alındı, yeşil.
+    *(Aynı mutasyon ayrıştıran test eklenmeden önce YEŞİL kalmıştı; kayda geçti.)*
+  - **Mutasyon 2** (`20260918230000`'deki `ALTER POLICY` **kurulu veritabanında** `Down()`
+    metnine geri alındı; migration dosyasına dokunulmadı): biçim 1 KIRMIZI (`1 → 0`, satır 97);
+    biçim 1 kapatılıp tekrarlandı → biçim 2 de KIRMIZI (`1 → 0`, satır 102). Geri alındı, yeşil.
+- **Commit:** `ac5e91ce` — push edildi (`main`).
+
+## Kararlar (BR-QA-114 turu)
+- **Migration gövdesindeki gerekçe yanlış, bekçi doğru mekanizmaya kuruldu.**
+  `20260918230000` *"`app_current_tenant()` NULL'dir"* diyor; bu yalnızca **ham** oturum için
+  doğrudur. Ürünün gerçek arka plan biçiminde `TenantSessionWriter.cs:54` her transaction'da
+  `set_config('app.tenant_id', …, true)` **yazar** ve `LeaderElectedJobRunner.cs:133-138`
+  `SystemTenantId` boşsa fail-closed açılmaz — yani alanda `app_current_tenant()` NULL değil,
+  **sistem tenant'ıdır.** Bekçi **iki biçimi de ayrı ayrı** ölçer; yalnız biçim 1 ölçülseydi
+  gerekçe düzelirken bekçi yanlış biçime çapalanmış kalırdı.
+- **Fikstür, gerçek şemanın tamamını taşımaz ve taşımamalıdır.** `callback_entries` gerçekte 15
+  kolonludur; fikstüre SQL'in okuduğu 6 kolon girdi. Sözleşme o altı kolondur; fazlası,
+  değişmeyen bir şeyi kırılgan biçimde kopyalamak olurdu.
+- **`tenant_settings` LEFT JOIN'i sayı ile beklenir, varlıkla değil.** Test satırı
+  `callback_sla_minutes = 5` taşır; join çalışmasaydı ürün varsayılanı (30 dk) devreye girer,
+  ihlal `pending`e düşer ve `abandoned_count` 0 olurdu. Yani o sayı aynı zamanda join'in
+  bekçisidir.
+
+## Açık kalanlar (BR-QA-114 turu)
+- **Tam `Pbxtr.Integration.Tests` koşusu bu turda ÖLÇÜLEMEDİ.** Çalışma ağacında **eşzamanlı
+  başka bir ajanın** işi vardı (`SlaAggregationJob.cs` +202 satır, izlenmeyen
+  `20260918234000_ReportRlsCrossTenantAlignment.cs` ve ~15 başka dosya). Tam koşu ~20 sınıfta
+  148 hata verdi ve ilk sebep `42883: function pbxtr_webhook_event_types() does not exist` —
+  **şema bootstrap'ı**, callback/SLA ile ilgisiz. Bu tura ait **değildir**, ama "yeşil" de
+  **denmedi**: ağaç durulunca tam koşu tekrarlanmalı.
+- `callback_sla_mode = 'excluded'` (kip a) dalı gerçek PG'ye karşı hâlâ **ölçülmedi**; bu turda
+  yalnızca `deadline` kipi (pending + breached) ölçüldü.
