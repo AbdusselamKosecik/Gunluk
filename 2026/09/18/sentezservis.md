@@ -230,6 +230,24 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
 - **Sonuç / doğrulama:** 476/476 test geçti.
 - **Commit:** `80149a7`
 
+### 12. Rapor mailinden satış rakamları çıkarıldı
+
+- **Neden:** Kullanıcı örnek maili görünce "satış tutarlarını eklemene gerek yok, sadece
+  bulunmayan barkodları eklesen yeterli" dedi. Şablon `05-report.html`'den türetildiği için
+  **üç dilde de** sabit örnek satış KPI'ları duruyordu: "Toplam Sipariş 1.248",
+  "Toplam Tutar 4.860.300 ₺", "İade Oranı %2,1". Tabloyu değiştirmiştim ama KPI kutularını
+  görmemiştim.
+- **Ne yapıldı:** Üç kutu mahsup sayaçlarına çevrildi: **bulunan / düzelen / barkodsuz**.
+  (`{{duzelen}}`, çağrının hata vermediği sayı değil, yeniden taramada eksi bakiyesi
+  gerçekten kalmayan satır sayısıdır.) Ayrıca `{{ad_soyad}}` boş kalınca "Sayın ," gibi
+  kırık bir satır bırakıyordu; hitap üç dilde de sistem raporuna uygun bir cümleyle
+  değiştirildi. Dosya başındaki açıklama yorumu bu şablona uyarlandı.
+- **Not:** KPI kutuları tek `<td>` içinde iki `<div>` (üstte etiket, altta değer); `<td>`
+  aramak yetmiyor.
+- **Sonuç / doğrulama:** 476/476 test; örnek mail bt@'ye tekrar gönderildi, üç dilde de
+  tutar/para izi kalmadı.
+- **Commit:** `e4bfae2`
+
 ## Kararlar
 
 - **465 kullanılır, 587 kullanılmaz.** Gerekçe sertifika; 587'nin sertifikası
