@@ -3079,3 +3079,107 @@ Envanter yeniden donduruldu, mutasyonla doğrulandı (yeni çapraz-kip migration
   kindinde.
 - Kurula soru: reddedilen dışa aktarım (`>5.000 satır`) denetime yazılmalı mı?
   Bugün Contacts emsali alındı (yazmıyor).
+
+---
+
+## Tur: BR-BE kapanış turu (backend-dev-1, akşam)
+
+### Bağlam
+`yonetim/backlog.md`'de 31 açık `BR-BE` kartı vardı ve çoğunun ölçümü aynı gün
+yapılmıştı. Hedef yeni ölçüm değil **kapatmaktı**: her kart ya kapanış metnine ya
+yapılabilir işe ya da **adıyla yazılmış bir engele** düşmeliydi.
+
+### Yapılanlar
+
+#### 1. BR-BE-193 — `GET /api/v1/leaves` satır bakımından sınırsızdı (KOD İŞİ)
+- **Neden:** Ş76-13 dışa aktarıma 5.000 satır tavanı koymuştu; liste ucu sınırsız
+  kalınca aynı pencere, aynı yetki, aynı veri yalnızca `/export` soneki farkıyla
+  tavansız akıyordu — tavan anlamsızlaşıyordu. Ölçülmüş payda: çakışma tetikleyicisi
+  yüzünden `satır <= kullanıcı x 92`, 150 agent'lik tenantta **13.800** satır.
+- **Ne yapıldı:** liste ucuna `MaxListRows = MaxExportRows = 5.000` ve **red** kapısı
+  (400 + ProblemDetails, `meta.rule = list_too_large`). **Sayfalama bilerek
+  yazılmadı:** yanıtın tek tüketicisi `LeavesScreen` satırları kişiye göre gruplayıp
+  ısı haritası çiziyor; satır bazlı sayfalama eksik sayfadaki izni haritada "izinli
+  değil" gösterirdi — Ş76-13'ün yasakladığı sessiz kırpmanın ekran hâli.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/Leaves/LeaveEndpoints.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Leaves/LeaveEndpointTests.cs`
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj \
+    --filter "FullyQualifiedName~LeaveEndpointTests"
+  ```
+- **Sonuç / doğrulama:** **20 geçti / 0 kaldı** (önce 18). İki mutasyon ayrı ayrı
+  koşuldu, her biri TEK kırmızı verdi: `>` → `>=` (tam tavandaki istek reddedildi) ve
+  kapının etkisizleştirilmesi (5001 geçti). Vacuity yapısal olarak yok:
+  `ILeaveCalendar.ListAsync` imzasında limit parametresi bulunmaz.
+
+#### 2. BR-BE-169 — son dış ayna indi, ama altından daha büyük kusur çıktı
+- **Neden:** kart "kapsanmayan 4 dış ayna" diyordu; ölçümde gerçekten kalan **1**'di
+  (`ck_call_attempts_origin`). Kart ayrıca bir **çelişki** yazıyordu: kısıt kuruluysa
+  sınıf kapatıcı bugün kırmızı olmalıydı, oysa yeşil raporlanmıştı.
+- **Ne yapıldı:** `Mirrors` tablosuna `public.call_attempts.ck_call_attempts_origin`
+  satırı eklendi (C# kaynağı `CallAttemptOrigins.All`).
+- **Komutlar:**
+  ```bash
+  PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test \
+    tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj \
+    --filter "FullyQualifiedName~EnumMirrorCheckConstraintTests"
+  ```
+- **Sonuç / doğrulama:** **47 geçti / 0 kaldı / 0 atlandı** (önce 46). Mutasyon (C#
+  kümesine `mutasyon_degeri`) TEK kırmızı verdi ve kurulu tanımı bastı.
+- **ÇELİŞKİNİN SEBEBİ (kartın tahmininden başka):** sınıf kapatıcının evren filtresi
+  `definition.Contains("= ANY (ARRAY[")` ve bu kalıp **yalnızca `text` kolonlarını**
+  yakalıyor. PostgreSQL bir `character varying` kolonundaki aynı kısıtı
+  `= ANY ((ARRAY[…])::text[])` diye — **fazladan bir parantezle** — basıyor, kalıp
+  eşleşmiyor, kısıt evrene **hiç girmiyor**. Filtre geçici olarak `ARRAY[`'a
+  genişletilince ne aynada ne muafta olan **30** kısıt göründü
+  (`sms_messages` 5, `tickets` 3, `voicemail_messages` 3, `callback_entries` 3, …).
+- **Karar:** genişletme **bilerek geri alındı** — kapı 30 kalemle HEP KIRMIZI kalırdı
+  ve bu, onu susturmanın ilk adımı olurdu. Bulgu `BR-QA-108`'e yazıldı; testin
+  `<remarks>`'ındaki *"kapsanmayan 0"* iddiası da düzeltildi (dar evren içinde doğru,
+  gerçek şemanın tamamı için değil).
+
+#### 3. Kapanış metni yazılanlar (iş bitmişti, durum biçimi kapanış değildi)
+`BR-BE-135` (kapsam dışı — üründe occupancy metriği HİÇ YOK, düşülecek payda yok),
+`BR-BE-152` (bölündü — iş 6 karta devredilmiş), `BR-BE-170` (bölündü),
+`BR-BE-171` (bölündü), `BR-BE-175` (bölündü), `BR-BE-176` (kapsam dışı — Karar #76
+Ş76-4 ikilemi çözdü, taşıma `66b52310` ile indi), `BR-BE-184`.
+
+> **`BR-BE-184` dersi:** kart durumu zaten `**Bitti (...)` ile başlıyordu ama hücre
+> içinde geçen **"kismen-uygulanmis"** kelimesi `clickup-durum.js` kural 1'ini
+> tetikleyip **bitmiş işi `in progress`** gösteriyordu. Aynı sınıftan iki vaka daha
+> çıktı: `**Kapsam dışı** … taşıma bitti` → `in progress` (ortadaki "bitti"),
+> ve `Dikiş hazır` → `to do` (`Hazır` kalıbı). **Durum hücresinin gövdesindeki sıradan
+> kelimeler kartın panodaki durumunu değiştiriyor.**
+
+#### 4. Engeli adıyla yazılanlar (açık kalır)
+`BR-BE-53`/`59` (Netgsm hesabı AÇILMADI), `BR-BE-119`/`150` (yayın — sunucudaki imaj
+`demo-ea567d11` HEAD'in 292 commit gerisinde), `BR-BE-164`/`165` (Karar #67 Ş67-8'in
+açık bıraktığı A/B seçimi), `BR-BE-182` (S-VM-5 için iade TANIMI: hangi izin türü,
+geçmişe dönük, SLA sayacı, izin bitince geri atama), `BR-BE-183` (`pbxtr-qa` +
+`BR-SEC-23`), `BR-BE-185` (Docker'lı PostgreSQL ölçümü). Kalan 13 kart zaten
+"Bloke — <engel>" biçimindeydi ve dokunulmadı.
+
+#### 5. Açılan kartlar (devredilen iş görünür kalsın diye)
+`BR-BE-194` (agent doluluk/occupancy metriği — `BR-BE-135` + `BR-BE-171`(b) buraya
+devretti), `BR-BE-195` (monotonik `LiveAgentState.MeasuredAt`), `BR-BE-196`
+(`ivr_nodes`/`dids` üzerinde tipli kutu kimliği), `BR-FE-112` (#49 voicemail SLA
+alanı), `BR-FE-113` (`queueMemberDelivered` şeridi), `BR-QA-108` (enum ayna
+kapatıcısının `varchar` kör noktası).
+
+- **Commit:** `0b364722` — BR-BE kapanis turu: 9 kart kapandi, 1 gercek kod isi indi,
+  6 kart acildi
+
+### Kararlar
+- Liste ve dışa aktarım **tek tavan** paylaşır; ikinci bir sayı ikinci bir doğruluk
+  kaynağı olurdu.
+- `BR-QA-108`'de genişletme **tek adımda** yapılmalı: yarım genişletilmiş bir evren
+  kapıyı kalıcı kırmızı bırakır.
+
+### Açık kalanlar / sonraki adım
+- **Kart numarası önce ölçülmeli:** `BR-QA-107` eşzamanlı çalışan başka bir ajan
+  tarafından aynı turda kullanılmıştı; `clickup-cikar.js` mükerrer kimlikte durdu ve
+  kart `BR-QA-108`'e taşındı. Sayacın tek başına okunması yetmiyor.
+- `tests/Pbxtr.Api.Tests` tur sonunda **başka bir ajanın** in-flight dosyası yüzünden
+  derlenmiyordu (`AriDndDeviceStateAnnouncerTests.cs` → `AsteriskOptions.AmiPassword`
+  yok). Bu turun ölçümleri o dosya inmeden ÖNCE alındı.
