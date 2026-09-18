@@ -2004,3 +2004,206 @@ olcumle** cevaplandi, varsayimla degil.
 - **Sprint planina:** `BR-SEC-08` (Karar #51 alti sart; S51-1 olcumu ONCE).
 - **Baska ekipte:** `BR-AST-75`'in kalan kalemi (dolu `pjsip show registrations` bicimi)
   santralde TRUNK tanimlanana kadar olculemez.
+
+---
+
+# pbxtr — 2026-09-18 (SISTEM/YEDEK turu, linux-uzmani)
+
+## Baglam
+
+19 acik kart kapatilmak uzere verildi: SYS (49, 51, 60, 102, 107, 109, 111, 112, 113, 114)
+ve OPS (01, 02, 03, 04, 06, 09, 11, 14, 16). Yontem bagleyiciydi: **once kartin iddiasini
+koda/sunucuya karsi OLC, kartin kendi teshisi yanlis olabilir**; is varsa yap, yoksa
+"is yok"u kanitla.
+
+Uc kartta kartin teshisi dogru, **sebebi yanlis** cikti ve ucu de ancak SUNUCUDA
+kosturunca gorundu.
+
+## Yapilanlar
+
+### 1. BR-SYS-114 — zamanlanmis yedek: "kurulmamis" degil, **KOSAMAZ**
+
+- **Neden:** kart *"sunucuda zamanlanmis PostgreSQL yedegi YOK"* diyordu ve dogruydu:
+  `systemctl list-timers` yalniz confd/mail-onkosul/dpkg-db-backup, `crontab -l` bos,
+  `/var/backups/pbxtr` icinde 2 dosya (biri **27 gun** eski).
+- **Ne yapildi — once olcum:** depoda `deploy/pbxtr-yedek.{sh,service,timer}` ve
+  tatbikat birimi **ZATEN VARDI**. Yani (1) ve (2) yazilmisti. Sebep baskaydi:
+
+  ```
+  which pg_dump pg_restore        -> yok (host'ta yalniz /usr/bin/gpg)
+  systemctl is-active postgresql  -> inactive
+  id postgres                     -> no such user
+  docker ps                       -> pbxtr-postgres  postgres:16-alpine
+  ```
+
+  Birim `User=postgres` ile yazilmisti ve `pg_dumpall`i dogrudan cagiriyordu. **Kurulsa
+  da ilk satirda duserdi.** Yedek yolu bare-metal icin yazilmis, kurulum konteynerli.
+- **Cozum:** `pbxtr-yedek.sh`e **topoloji oneki** (`PBXTR_YEDEK_PG_ONEK`). Onek BOSSA
+  davranis birebir eski (bare-metal etkilenmez); konteynerli kurulumda drop-in
+  `docker exec -i -u postgres pbxtr-postgres` verir. `ionice/nice` onekli kipte
+  **bilerek uygulanmaz** (host'taki `docker exec` istemcisini nice'lamak konteynerdeki
+  postgres prosesini etkilemez; "dusuk oncelikli saniyorum" hali uretilmez).
+- **Reddedilen alternatifler (olculdu):** host'a `postgresql-client` kurmak
+  (`apt-cache policy` BOS doner — cevrimdisi kurulum), TCP (port yalniz tailscale
+  arayuzunde; yedek icin genisletmek yeni saldiri yuzeyi), konteyner ikililerini
+  kopyalamak (musl).
+
+#### 1a. TATBIKAT ILK KEZ KOSTURULDU — iki gercek kusur bulundu
+
+Ikisi de **kosmayan kapi kapi degildir** sinifindan:
+
+| Kusur | Belirti |
+|---|---|
+| RLS yuklemi `relkind='r'` sayiyordu | `policy=111, RLS'siz tablo=36` — 35'i **partition cocugu**, 1'i `__EFMigrationsHistory`. **Hicbir dogru pbxtr DB'sinde gecemezdi.** |
+| EXIT trap'i `local scratch` okuyordu | `set -u` altinda `scratch: unbound variable`; tatbikat **GECERKEN** unit `failed` gorunuyor ve her kosu bir **scratch DB sizdiriyordu** |
+
+Yuklem `02-guards.sql`in kanonik kumesine cekildi (`relkind IN ('r','p')`, partition
+cocugu haric, UNLOGGED haric). **Kontrol grubu:** canli DB'de ayni yuklemle 90 tablo
+var ve RLS'siz olan YALNIZ `__EFMigrationsHistory`. Yani sapma yedekte degil YUKLEMDEYDI.
+
+#### 1b. Yayin tazelik kapisi (kartin (3) maddesi)
+
+`yedek_tazelik_kapisi`, `deploy/lib/pbxtr-migrate-adimi.sh` icinde, cikis **73**,
+`migrate_adimi` (a4) — **DDL'den ONCE**.
+
+- Esik **KURULU unit'ten** okunur (`PBXTR_YEDEK_ARALIK_SAAT`), kapinin kopyasi yok.
+- Tolerans **2x**: bir kacirilan kosu durdurmaz, iki tanesi durdurur (1x olsaydi kapi
+  her gun yedek saatinin oncesinde kirmizi yanar ve ilk operator refleksi onu
+  KALDIRMAK olurdu).
+- **Kapi yayinin kendi `pre-<sha>.dump`ina BAKMAZ** — baksaydi kendi kendini gecirirdi.
+  Bunun icin ayri bir AYRISTIRICI testi yazildi.
+
+- **Dokunulan dosyalar:** `deploy/pbxtr-yedek.sh`,
+  `deploy/pbxtr-yedek{,-tatbikat}.service.d/10-compose-yolu.conf`,
+  `deploy/lib/pbxtr-migrate-adimi.sh`, `deploy/yayin-onkosul-selftest.sh`,
+  `deploy/staging-yayin-migrate-selftest.sh`,
+  `deploy/pbxtr-deploy-artifact-migrate-selftest.sh`, `deploy/yerel-kapilar.sh`
+- **Olcum:** `yayin-onkosul-selftest` **24/24** (bolum D: pozitif + 7 negatif + esik
+  KONTROL GRUBU + AYRISTIRICI + kartin vacuity olcutu *timer disabled -> KIRMIZI*),
+  `staging-yayin-migrate-selftest` **17/17**,
+  `pbxtr-deploy-artifact-migrate-selftest` **14/14**.
+- **Sunucu:** iki timer da `enabled`; yedek alindi (8,2 MB gpg + globals + dbsettings);
+  tatbikat **GECTI** (`policy=111, RLS'li tablo=89/89`); `backup-status.json`
+  `lastSuccessAt` + `lastVerifiedAt` dolu; kapi canlida `rc=0`.
+- **Commit:** `f8c229a0`
+
+> **Iki systemd tuzagi ayni kosuda olculdu:** (1) `Environment=` satirinda TIRNAKSIZ
+> bosluk yeni bir atama baslatir — degisken yalniz `docker` oldu ve hata **docker
+> CLI'sinden** geldi (`unknown flag: --globals-only`), yani belirti yanlis kapiyi
+> gosteriyordu; (2) `ProtectHome=yes` + `User=root` altinda gpg `/root/.gnupg`'yi
+> yaratamaz -> `GNUPGHOME` zorunlu.
+
+### 2. BR-SYS-113 — kart TEK bayat dosya adlandiriyordu, **IKI** vardi
+
+- **Olcum (09:51Z):**
+
+  ```
+  /root/pbxtr-build/deploy/db/00-roles.sql   17 Agu  443a1323c4bb65e0
+  /home/vuo/pbxtr-demo/db/00-roles.sql       12 Agu  545d641de3b72f49
+  depo HEAD                                          689708fa6650f303
+  ```
+
+- **Kartin gormedigi sey:** ikinci dosyanin AYRI bir tuketicisi var —
+  `rol_ayari_beklenen` (BR-OPS-14/c) beklenen `lock_timeout`u **TAM O DOSYADAN** okur.
+  Yani *"kapi kaynagi takip eder, belge ile kod ayrismaz"* iddiasi **bes haftalik** bir
+  dosyaya dayaniyordu. Iki surum de `10s` yazdigi icin aktif ihlal YOKTU — bosluk gizil.
+- **Ayrica:** compose dosyasinin kendi yorumu *"CI her push'ta iki dosyayi bayt bayt
+  karsilastirir"* diyor; **CI kaldirildi.** Depo ici eksen (`yerel-kapilar.sh:407`)
+  duruyor, DEPO<->SUNUCU ekseni **hic** olculmuyordu.
+- **Inen:** `deploy/db-roles-sunucu-sapma.sh` (0/1/2/**3=OLCULEMEDI**; sunucuya YAZMAZ,
+  dosya icerigi OKUNMAZ) + `deploy/db-roles-sunucu-sapma-selftest.sh` **6/6** (sahte
+  ssh; pozitif, iki ayri bayat dal, dosya yok, ssh dustu->3, **MUTASYON**) +
+  `kapi_75` (yalniz oz-test kosar — agsiz konteynerde hep-kirmizi kapi uretmemek icin).
+- **`deploy/README.md` §4.1'e yazilan:** (a) **hangi SURUM** kurali, (b) sapma olcumu
+  kurtarma adiminin ONUNE, (c) **KONTEYNERLI kurtarma yolu** — cunku olculdu ki yazili
+  runbook bu topolojide **kosulamazdi**: `systemctl stop pbxtr` hicbir sey yapmaz
+  (`pbxtr.service` kurulu degil) ve host'ta `psql`/`pg_restore` yok.
+- **Sunucu:** iki kopya da HEAD'den tazelendi; kapi canlida **1 -> 0**;
+  `rol_ayari_beklenen` taze dosyadan hala `10s` okuyor.
+- **Commit:** `65141562`
+
+### 3. BR-SYS-112 — `GuardAsserts` artik `pending == 0` acilisinda da kosuyor
+
+- **Kusur:** `MigrationStartupGate` bekleyen migration yokken KOSULSUZ erken donuyordu.
+  Bekci bataryasi yalnizca migration TASIYAN yayinlarda kosuyordu — oysa yakalamak icin
+  var oldugu sinif (elle DDL, yedekten donus, `deploy/db` scriptlerinin yeniden
+  uygulanmasi) tam da **bekleyen migration URETMEYEN** siniftir.
+- **Cozum:** yeni `MaintenanceRunner.RunGuardAssertsOnlyAsync` — **kilitsiz**,
+  salt-okunur, commit yerine **ROLLBACK** ("hicbir sey yazmadi" iddiasi niyet degil
+  islem siniriyla zorlanmis). Erken donusun kendi gerekcesi (bos migrate advisory lock
+  alir, cok-node'da acilislari serilestirir) **gevsetilmedi**.
+- **Baglanti OWNER'dir:** bazi bekci fonksiyonlari `pbxtr_app`'e BILEREK kapalidir
+  (02-guards REVOKE kontrolleri); uygulama roluyle cagrilsalardi kapi **42501** ile HER
+  acilista kirmizi yanardi — koruma degil, uretimi kilitleyen kapi.
+- **Kartin vacuity olcutu BIREBIR kosturuldu** (gercek `postgres:16`, Testcontainers):
+  (A) tam migre edilmis DB'de ayni cagri GECER — **ayristirici**;
+  (B) elle `DROP FUNCTION pbxtr_assert_role_settings_guard()` (bekleyen migration
+  URETMEZ) -> acilis DUSER ve mesaj fonksiyonu **adiyla** soyler.
+- **Kod mutasyonu:** bekci cagrisi kaldirildi, **ikili yeniden derlendi** -> yeni test
+  KIRMIZI, eski test YESIL kaldi (kontrol grubu); geri alindi, yeniden derlendi, 2/2.
+- **`DeployPrivilegeTests` kendi isini yapti:** BR-SYS-114'un drop-in'i
+  (`User=root` + `/run/docker.sock`) **ilk kosuda yakalandi** ve gerekceyle kayda
+  gecirildi. Bu bir ONAY degil KAYITTIR; uretim yolu **kurul gundemidir**.
+- **Olcum:** Architecture **694/694**, Integration `MigrationStartupGateTests` **2/2**.
+- **Commit:** `bc85fbae`
+
+### 4. BR-OPS-11 (5) — compose bagimliligi KONTROL GRUPLU olculdu
+
+`alpine:3.20` ile uc satirlik fikstur; hem yerelde (compose **v5.3.1**) hem
+**sunucunun kendisinde** (**v5.4.0**, surum farki caveat birakmamak icin tekrarlandi):
+
+| Hal | Sonuc |
+|---|---|
+| migrate cikis **75** | `service "migrate" didn't complete successfully: exit 75`, `up` rc=**1**, app HIC baslamadi (`APP-BASLADI` sayimi **0**) |
+| KONTROL: cikis **0** | app basladi (sayim **1**), rc=**0** |
+
+Yani BR-OPS-08'in korktugu *"kilidi alamayan migrate 0 donerse app yine kalkar"* yolu
+compose katmaninda da kapalidir — ama koruma **cikis kodunun dogru uretilmesine**
+baglidir; CLI 75'i 0'a cevirseydi compose onu gecirirdi (BR-OPS-08'in kok kusuru buydu).
+
+### 5. Olculdu — is yok / bloke (12 kart)
+
+- `BR-SYS-49` uc kodda **0 eslesme**, acilis kosulu dis olay.
+- `BR-SYS-107` `pbxtr-vm` koku konteynerde **hic yok**, buyume **0/gun** — aciliyet sifir.
+- `BR-SYS-109` zorlayici yari **kosturuldu**: `asterisk-kapali-liste-parite.sh --oz-test`
+  **7/7**, gercek kosu *PARITE TEMIZ*. Metin ayagi **kullanici onayinda** (CLAUDE.md'de
+  ilgili dizeler **0 eslesme**) — bir ajan talimati CLAUDE.md'yi degistirme yetkisi veremez.
+- `BR-OPS-01/02` canli sayim: `ring_groups` **0**, `dids` **0**, `queues` **3**.
+- `BR-OPS-04` `pbxtr_sys.mail_settings` **0 satir** (kullanici karari).
+- `BR-OPS-09` santralde `sounds/pbxtr/sys/` yok ve `pbxtr-decide` baglami
+  **hic yuklu degil** (`grep -rl` -> 0 dosya), yani (4) fiziksel olarak olculemez.
+- `BR-OPS-16` `tenant_settings` 5 satirin **0**'inda `auto_answer=true`.
+- Bloke: `BR-SYS-51` (tek sahiplik penceresi — bu turda pencere BR-SYS-114'e harcandi),
+  `BR-SYS-60` (santral uzerinde bilerek hatali revizyon yazimi ister),
+  `BR-SYS-102` (kurul gundemi), `BR-OPS-06` (`yazilim-mimari` tasarimi).
+
+## Kararlar
+
+- Konteynerli kurulumda yedek yolu `docker exec` uzerinden gider ve bu bir **yetki
+  genislemesidir**; kayda gecirildi, **uretim icin kurul gundemi**. Tercih edilen uretim
+  yolu: host'a `postgresql-client-16` kurup oneki BOS birakmak ve birimi
+  `User=postgres` ile dondurmak.
+- Yedek tazelik kapisi zamanlanmis yedegi olcer, **yayin dumpini degil**.
+- `00-roles.sql`in kurtarmada kosulan surumu **yayinlanan sha'nin agacindan** gelir.
+
+## Bu turda olculen tuzak — BACKLOG ES ZAMANLI EZILDI
+
+`yonetim/backlog.md`'ye yazilan 19 satirlik guncelleme, baska bir ajanin ayni dosyayi
+**tam dosya olarak** yeniden yazmasiyla **sessizce kayboldu**; `git diff` yalnizca o
+ajanin uc yeni kartini gosteriyordu. Belirti "degisiklik yok" degil, **"benim
+degisikligim hic olmamis gibi"**ydi.
+
+**Ders:** paylasilan bir markdown'a yazan ajan, yazdiktan **hemen sonra** commit
+etmelidir; arada olcum/dogrulama yapmak pencereyi acik birakir. Dogrulama yontemi de
+yaniltmisti: `clickup-cikar.js` ardisik kosularda **663 -> 666 -> 669** dedi ve bu
+benim ayristirma hatam gibi gorunuyordu; gercekte dosya altimda buyuyordu.
+
+## Acik kalanlar / sonraki adim
+
+- **Kurula:** yedek biriminin uretim topolojisi (docker.sock vs host pg-client);
+  `BR-SYS-102` (confd nginx kipi `curl`e gecsin mi + digest sabitleme).
+- **Kullaniciya:** `BR-SYS-109` metin ayagi (CLAUDE.md §3.1'e S70-23 + S70-24).
+- **Kalan olcum:** `BR-OPS-11` (1)(2)(4) yerel compose + yuk; `BR-OPS-14` (b) yayin ani;
+  `BR-SYS-111` vacuity (tarihsel 01 govdesiyle Docker'li A/B).
+- **Baska ekipte:** `BR-OPS-16` (backend-dev-2), `BR-OPS-06` (yazilim-mimari),
+  `BR-SYS-60` (santral yazimi), `BR-OPS-09` (2)(3) (asterisk-uzmani).
