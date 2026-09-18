@@ -2952,3 +2952,130 @@ docker exec pbxtr-postgres psql -U postgres -d pbxtr -Atc \
 
 `3c1ce1f4` — Karar #76 S76-13 + S76-16: izin aktariminda 5.000 satir tavani +
 AuditTargets.Leave. **Push edildi.**
+
+### 101. Kurul #76 — ve turun en pahalı hatası benimdi
+
+**Bağlam:** 8 ajanın kart kart ölçtüğü turdan sonra geriye 10 **karar** kaldı (araştırma
+değil, kol seçimi). Hepsini tek kurulda topladım. Sonuç: **10/10 ŞARTLI, 26 şart.**
+
+#### M6'yı yanlış gerekçeyle bloke etmeye çalıştım
+
+Kurula şu uyarıyla gittim:
+
+> *"`pbxtr_reassert_hardening()` içinde `pbxtr_apply_tenant_rls` çağrısı SIFIR → tazeleme
+> migration'ı 01'in policy metnini kurulu veritabanlarına hiç taşımaz."*
+
+db-lider ve Şeytan **bağımsız olarak** çürüttü. Uyarı, adını verdiğim **iki kartın ikisi için
+de geçersizdi (0/2)**:
+
+| Kart | Gerçek teslim yolu |
+|---|---|
+| `BR-DB-72` | Hedef policy'yi üreten `pbxtr_apply_tenant_rls` **değil**, `pbxtr_apply_tenant**s**_rls()` — bir harf farklı, ayrı fonksiyon. Reassert onu **koşulsuz** çağırıyor: `01-rls-template.sql:1053-1061` (üretim), `:3201` (`PERFORM`), `:3249-3257` (01'in kendi sonu), `20260918120000_RlsTemplateRefresh.cs:122` |
+| `BR-SEC-26` | 02'nin **tamamı** ayrı bir migration'la yeniden koşuyor: `20260918130000_GuardsTemplateRefresh.cs:123` |
+
+**Karar #75'te yazdığım kural "kendi ölçümünü unutma" idi. Bu sefer unutmadım —
+ölçüldüğünden GENİŞ uyguladım.** Jenerik şablon fonksiyonu için doğru olan bir olguyu, adı
+bir harf farklı olan `tenants`-özel fonksiyon için de doğru saydım.
+
+**Zararın yönü hatanın kendisinden kötüydü:** uyarı ayakta kalsaydı kurul, **var olan bir
+teslim yolunu yok sayarak** bir güvenlik daraltmasını *"nasılsa ulaşmaz"* diye **kabul edilmiş
+sapma** olarak kayda geçirecekti. Yani ölçüm hatası, bir güvenlik açığını belgeleyerek
+meşrulaştıracaktı.
+
+→ **Yeni kural Ş76-1:** ölçülmüş bir negatif sonuç aktarılırken **kapsamı da yazılır** —
+hangi fonksiyon/dosya/tablo için ölçüldü, hangisi için ölçülMEdi. **Ad benzerliği kapsam
+kanıtı değildir.** Kapsamı yazılmamış negatif sonuç kurula sunulamaz.
+Hafıza güncellendi: `kendi-negatif-sonucunu-unutma.md`.
+
+#### Hatanın yan ürünü bir P0 oldu
+
+Uyarı çürüyünce tersi doğru oldu: **01 tazelemesi `tenants` üzerinde 8 policy'yi DROP+CREATE
+ediyor** → ACCESS EXCLUSIVE. `POST /telephony/call-permission` zincirinin ilk adımı `tenants`
+üzerinde canlı EF okumasıdır ve uç **FAIL-CLOSED**'dır → o pencere boyunca **giden arama
+durur.** `20260918120000_RlsTemplateRefresh` **onaylı ama henüz yayınlanmadı.**
+→ `BR-DB-91` (P0), Karar #65 Ş65-3.5'in istediği ölçüm yapılmadan yayınlanamaz.
+
+#### Kurulun kart metinlerinde olmayan bulguları
+
+- **Asterisk uzmanı benim önerimi çürüttü:** brief'te "`module reload res_pjsip.so` bu işi
+  görür mü?" diye sormuştum — **hayır**, üç bağımsız sebeple. `Stasis:` device state
+  `res_stasis_device_state.so`'nun konteynerinde; reload **sahte YEŞİL** verir. Ve asıl
+  cevap zaten elimizdeydi, negatif yönde: `Stasis:` device state hiçbir yere kalıcı yazılmaz,
+  yani "restart sonrası kalıcı mı" **açık bir soru değil, bilinen bir hayır**.
+  **Kırmızı çizgi (Ş76-12a):** dialplan dalı yalnız `== BUSY` yazılır; `!= NOT_INUSE` gibi
+  negatif dal restart sonrası **düğümdeki her dahiliyi topluca DND'ye sokar.**
+- **İki yazılmamış teslim kilidi:** `BR-SYS-102` → `BR-AST-108` (ajan BusyBox `wget` ile 4xx
+  gövdesini okuyamıyor → 403/429 ayrımını yapamaz → kaldırma manifesti üretemez) ve
+  `BR-AST-87` → ARI envanter tabanlı **her** eşik (ARI bugün 509 endpoint listeliyor, ~500'ü
+  ölçüm kalıntısı → eşikler **çöp üstünde kalibre edilir**).
+- **`BR-AST-108` tertip işi değil:** düğümden düşürülen tenant'ın dialplan'i canlı kalıyor
+  (89 satır) — trunk'a erişen ücretlendirilebilir rota → **toll fraud ve faturalama sızıntısı.**
+- **Linux uzmanı M9'un ön koşulunu çürüttü:** `apt-cache policy postgresql-client-16` sunucuda
+  **boş**, host'ta **`postgres` kullanıcısı yok**. Kurul "kabul" deseydi kart kapanır, iş
+  sunucuda **hiç değişmezdi** — *"karar yazılmış ama uygulanmamış"*ın birebir kendisi.
+- **cm-agent:** BR-7 bugün indi ama **agent ayağı boştu**. *"Seviyem yanlış girilmişse ekranda
+  uyarı yok; zor çağrıları yemeye devam ediyorum, AHT'm şişiyor — kontrolümde olmayan bir şey
+  beni ölçüyor."* Brief'imin boşluğuydu → `BR-FE-110`.
+- **Şeytan `kapi_75`'in İKİ KEZ tanımlı olduğunu buldu** (`:2502` ↔ `:2516`) — iki ajan aynı
+  gün aynı numarayı almış. İkisi de koştuğu için **hiçbir kapı kırmızı yanmamıştı**; belirti
+  "kapı kırmızı" değil, **"kapı yanlış şeyi ölçüyor"** olacaktı. Aynı turda düzeltildi.
+- **Commit:** `87592acf` (karar), `eb1c055b` (kapı numarası)
+
+### 102. Karar #76 uygulandı — beş ajan, beş şart
+
+| Şart | Sonuç |
+|---|---|
+| **Ş76-8/9** — çapraz kip envanteri | `kapi_77` (`a09244ab`). **45 ↔ 85 çelişkisi çözüldü:** `45 ⊂ 61 ⊂ 85`. 85 = GUC'u yalnız *anan* dosya, 45 = P1'in tek-boşluklu varyantı, 61 = kanonik (30 koşan / 34 migration). **"7" ve "48" yeniden ÜRETİLEMEDİ** çünkü o sayımların **deseni yazılmamıştı** — deseni yazılmamış sayım ölçüm değildir. |
+| **Ş76-21** — agent yetenek görünürlüğü | `2d57f64d`. (b) yolu **ölçerek** elendi: `/users/{id}/skills` `user.read` ister ve `userId` rotadan gelir, `ITenantContext.UserId` ile karşılaştırılmaz → agent başkasının yetkinliğini okurdu. İzolasyon **tip düzeyinde**: `GetMineAsync()` `Guid` almaz. |
+| **Ş76-11** — webhook retention | `8fb533c9`. **Kurul şartı iddiayı düzeltti:** `ErrorText` uzak yanıt gövdesini **taşıyor** (`WebhookSender.cs:126-134`) — "içerik yok" yanlıştı; tavan 512 ve üç noktadan tek sabite bağlı. Karar değişmedi. İkinci şart (**"append-only varsa korunur"**) **boşta çıktı**: tetikleyici yok, `pbxtr_app`'in DELETE'i **var**. |
+| **Ş76-4** — sesli mesaj kutusu kimlikle | `66b52310`. `ux_..._tenant_linked` → `(tenant_id, linked_id, box_id)`. **`box_id` bilerek FK DEĞİL:** tipli FK'lar `SET NULL` olur, kimlik de FK olsaydı anahtar NULL'a düşerdi ve PG'de benzersiz indekste NULL'lar farklı sayıldığı için **aynı mesaj yine ikinci kez yazılırdı.** Mutasyon: 9 test kırmızı + SLA kırılımını ada döndürmek **derleme hatası**. |
+| **Ş76-13/16** — izin tavanı + `Leave` | `3c1ce1f4`. Tavan **5.000** (emsal 199/499 ucu iptal ederdi). Vacuity **yapısal olarak yok ve bu ölçüldü**: `ListAsync` imzasında limit parametresi bulunmuyor → dönen liste gerçek toplam. |
+
+### 103. Bugün üç kez aynı çarpışma: paralel ajanlar aynı dosyada
+
+1. AST ajanının 27 backlog satırı başkasının commit'ine girdi.
+2. DB ajanının `BR-DB-89` dosyaları başkasının commit'ine girdi.
+3. SYS ajanının 19 satırı **tam dosya yeniden yazımıyla sessizce silindi** (yeniden uyguladı).
+
+**Çözüm iki parçalı:** (a) `git commit --only -- <yollar>` tek adımda (`git add` + `commit`
+arasındaki pencere kapanır), (b) `backlog.md` tur boyunca ajanlara **kapatıldı**, satırları
+ben yazdım. Frontend ajanı üçüncü bir yol gösterdi: `git hash-object -w` +
+`git update-index --cacheinfo` ile HEAD üzerine **yalnız kendi eklemesini** uygulayıp staged
+blob'da başkasının satırının 0 olduğunu doğruladı.
+Hafıza: `paralel-ajan-stage-supurur.md`.
+
+### 104. İki ölçüm aracı yalan söyledi
+
+- **`grep -c $'\r'`** `deploy/yerel-kapilar.sh` için **0** dedi; dosyada 2542 CRLF vardı.
+  git-bash metin kipinde CR'yi kırpıyor. *"Araç yokluğu sıfır gibi görünür"*in kardeşi:
+  **araç, ölçemediği soruya da bir sayı basıyor.** Doğrulama python ile yapıldı.
+- **`pathlib.write_text`** Windows'ta `yerel-kapilar.sh`'a **2570 CR** ekledi. Depoda
+  `.gitattributes` düzeltirdi ama **yerel konteyner koşumu** `\r: command not found` ile
+  bozulurdu (ajan yakaladı, bayt düzeyinde LF'e çevirdi).
+
+### 105. `kapi_77` kurulduğu gün işe yaradı
+
+Yeniden dondurma sırasında kapı kırmızı yandı. Sebep bayat bir muafiyetti: uçuşta listesindeki
+yol `20260918**18**0000_VoicemailBoxIdentity.cs`, commit edilen dosya
+`20260918**19**0000_` (o damgayı webhook migration'ı almıştı). **Muafiyet yola göre eşleşiyor,
+dosya yeniden adlandırılınca muafiyet düşüyor ve kapı yanıyor** — istenen davranış tam bu.
+Envanter yeniden donduruldu, mutasyonla doğrulandı (yeni çapraz-kip migration → rc=1).
+
+## Kararlar
+- **Ş76-1:** negatif sonucun kapsamı da yazılır; ad benzerliği kapsam kanıtı değildir.
+- **Ş76-12a:** device state dialplan dalı yalnız `== BUSY`; negatif dal yasak.
+- **Ş76-13:** dışa aktarımda sessiz kırpma yasak — eksik satırlı bordro dosyası görünmeyen
+  izni "devamsızlık" yapar ve kesinti agent'ın maaşından çıkar.
+- **Ş76-22:** #12/#13'e penalty kolonu eklenmez; boş/sıfır gösteren kolon da çizilmez.
+
+## Açık kalanlar / sonraki adım
+- **`BR-DB-91` (P0):** `RlsTemplateRefresh` yayın öncesi `call-permission` RED ölçümü.
+  **Bu turun tek P0'ı ve yayının önünde duruyor.**
+- **Yayın hattı hâlâ koşturulmadı** (iki koşu bellek yetersizliğinden öldürüldü, talimat
+  "yalnız istenirse"). 8 kart bu yüzden bloke.
+- BR-SEC-16 + BR-SEC-28 sır rotasyonu: ajanlar bitti, sıra bende.
+- Yeni kart gerekiyor: IVR `voicemail` düğümü + DID kararı için `box_kind` + tipli kimlik
+  alanları `ivr_nodes`/`dids` üzerinde **hâlâ yok** → canlı veri bugün yalnız `extension`
+  kindinde.
+- Kurula soru: reddedilen dışa aktarım (`>5.000 satır`) denetime yazılmalı mı?
+  Bugün Contacts emsali alındı (yazmıyor).
