@@ -4896,3 +4896,143 @@ gelecek sorusu kurul gündeminde.
   "yeşil" sanılacaktı.
 - `callback_sla_mode = 'excluded'` (kip a) dalı gerçek PG'ye karşı hâlâ **ölçülmedi**; bu turda
   yalnızca `deadline` kipi (pending + breached) ölçüldü.
+
+---
+
+## Koordinatör turu — KURUL DAĞITILDI (2026-09-18, akşam)
+
+### Bağlam
+
+Tur, Kurul #78'i toplamakla başladı: üç migration'ın contract onayı (`kapi_07` yayını RED ile
+durduruyordu) + `callback_entries` RLS şablona hizalaması. 10/10 ŞARTLI oy çıktı ve karar yazıldı
+(`yonetim/kurul-kararlari.md` → Karar #78). **Ama o oylar 19 yeni kart doğurdu.**
+
+Kullanıcı turun ortasında, birebir:
+
+> *"bilader. kurulu dagit. kurulun salakliklari yuzunden proje bitmedi. bana sor nasil
+> yapilacagini ben soyleyelim."*
+
+ve hemen ardından:
+
+> *"kimseye birsey sormadan backlogdaki eritebilecegin tum maddeleri hemen erit bitir."*
+
+**Karar #78 kurulun SON kararıdır.** Bundan sonra `/kurul` çağrılmıyor; açık kararlar
+koordinatörde ve ajanlara **karar yetkisiyle** veriliyor.
+
+### Neden dağıtıldı (mekanizma, ölçülü)
+
+Kurul turları **gerçek** kusur buluyordu — Karar #78'in kendisi süpervizörün belirleyici
+bulgusunu (`pending → breached` geçişi zamanla olur, olayla değil) ve `ReportScheduleJob`'ın
+sessizce hiç koşmadığını ortaya çıkardı. Kusur ölçümde değil, **çıktının biçimindeydi**:
+her ölçüm bir **şarta**, her şart bir **karta** dönüşüyordu. Karar #78 tek başına 19 kart
+açtı. Yani süreç, açık kart sayısını düşürmek yerine **yükseltiyordu**.
+
+Hafızaya yazıldı: `karari-kullaniciya-degil-kurula-sor.md` **GEÇERSİZ** olarak işaretlendi
+(silinmedi), gerekçesiyle.
+
+### Yapılanlar
+
+#### 1. Karar #78 + contract defteri (`30953043`)
+Üç blob defterine yazıldı ve `migration-compatibility-guard.py` → **OK**. Blob 1 ayrıştırıldı:
+CTO şartıyla `SET LOCAL lock_timeout = '5s'` ve CHECK kısıtı `NOT VALID` eklendi, **sha değişti**
+(`f34b3bd4…` → `b458f219…`). Gerekçe: `tenant_settings` ürünün tek FAIL-CLOSED ucu olan
+`call-permission` zincirindedir ve `sla_buckets` bölümlüdür — `NOT VALID` olmadan doğrulama
+taraması `tenant_settings` ACCESS EXCLUSIVE kilitleri **tutulurken** koşardı.
+
+#### 2. 19 şart kartı yazıldı (`fae7abcb`, `b9785fca`)
+En kritik ikisi: **`BR-BE-204` (P0)** — geri arama SLA'sının yeniden hesap penceresi söz süresini
+kapsamıyor (aynı gün iki farklı SLA yüzdesi üretiyor, ve `callback_sla_minutes = 1440` olan
+tenantta **hiçbir geri arama asla ihlal sayılmıyor**); **`BR-BE-207`** — zamanlanmış raporlar ve
+teslim drenajı **sessizce hiç koşmuyor** (policy çapraz dal taşımıyor, `due` boş dönüyor, iş
+`return 0` ile BAŞARILI bitiyor, tek belirti `#18`'de donmuş `nextRunAt`).
+
+#### 3. `BR-SYS-121` — kapılar bu makinede hiç koşmuyordu (`1ec96333`)
+`deploy/` çalışma kopyası CRLF'ti; `yerel-kapilar.sh` `$'\r': command not found` ile açılmıyordu.
+Yeniden checkout edildi, `bash -n` temiz.
+
+**Kendi ölçüm hatam kayda geçti:** ilk sayımı `od -c | grep '\\r'` ile yaptım, **292 dosyanın
+291'ini** CR saydı ve **düzeltmeden önce de sonra da aynı 291**'i verdi — yani sayaç düzelmeyi
+göremezdi. Doğru ölçüm ham bayta bakar: `LC_ALL=C grep -qU $'\x0d'` → **3**, üçü de `.ps1` ve
+`.gitattributes` onları zaten CRLF istiyor. Hafıza: `sayac-degismiyorsa-sayac-bozuk.md`.
+
+#### 4. Ana dalda iki kırmızı kapatıldı
+- `05820a91` — `ProvisioningNodeDirectory` `TenantLeakCoverageTests` borç listesinden çıkarıldı;
+  sızıntı testi artık **var** (`ProvisioningMediaNodeScopeHttpTests.cs:64,136`).
+- `15164527` — `deploy/ci/konteyner-ayricalik-kapisi{,-selftest}.py` `DeployPrivilegeTests` onay
+  listesine eklendi. Ölçüldü: iki dosya da `setcap` **çağırmıyor**, **arıyor** (`:10,41` yorum,
+  `:149` öneri metni, selftest `:38` sahte Dockerfile fikstürü, `:99` vaka adı). Kardeşleri
+  `capture-topology-guard*` ile aynı sınıf.
+
+#### 5. Muhasebe — üç kart kapandı, bir kart açıldı (`e13c2e0d`)
+`BR-8` + `BR-AST-39` + `BR-AST-46` kapandı, `BR-AST-116` açıldı (`BR-8`'in **kartsız** üçüncü
+kalemi: `pbxtr-offhours` gerekçesinin gerçek santralde `queue_log` PAUSE satırında ölçülmesi).
+Kartsız iş `backlog.md`'de görünmez ve ClickUp'a hiç gitmez, yani `BR-8`'i kapatmak o kalemi
+**kalıcı olarak kaybederdi**.
+
+**İki sayaç tuzağı ölçüldü:**
+- `BR-8` hücresindeki **orta-metin `bitti`** kural 1'i tetikleyip BİTMİŞ kartı `in progress`
+  yazıyordu.
+- **`kalan iş \`BR-QA-112\`` yazımı kapanış kuralını tutturmuyordu**: kural `/kalan iş\s+BR-/`
+  arıyor, araya ters tırnak giriyordu. Yani **kapanış metnini biçimlendirmek kapanışı sessizce
+  iptal ediyordu.**
+
+#### 6. `BR-SYS-109` kapandı (`6559e639`)
+Engel *"kullanıcı onayı"* idi ve kalktı. Ayrıca metin **genişletmiyor, daraltıyor**: Karar #70'in
+hükmü yalnızca *genişletmeyi* onaya bağlar. `CLAUDE.md` §3.1'e (i) Ş70-23 kalıcı kırmızı çizgi
+(`http reload`, `module reload res_http_websocket.so`, `manager reload` — komut başına gerekçe
+tablosuyla) ve (ii) Ş70-24 beş maddelik kabul ölçütü yazıldı.
+
+**Yerleşim ölçüldü, tesadüf değil:** parite kapısının `awk`'i listeyi *"kapalı listeye"*
+çıpasından başlatıp ters-tırnak+nokta geçen ilk satırda bitiriyor; metin o satırdan **sonraya**
+kondu. Doğrulama: öz-test **7 geçti / 0 kaldı**, gerçek koşu *PARITE TEMIZ* ve sayım
+**değişmedi** (belge 6, katalog 5). Metin `manager reload` dizesini **taşıdığı hâlde** belge
+sayısının 6'da kalması, absorbe edilmediğinin doğrudan kanıtıdır.
+
+#### 7. Üç kurul sorusu koordinatör kararına bağlandı (`bdba3160`)
+- **`BR-OPS-01` → DAR YETKİ.** Agent'a `alarm.read` **verilmeyecek**, `bundle.live`
+  **genişletilmeyecek**; yerine `alarm.silence.read.self` (yalnız agent'ın üyesi olduğu kuyruklar).
+- **`BR-OPS-02` → kartın gösterdiği satır bağlayıcı kapı DEĞİL.** Asıl kapı `:333`
+  (`WHERE e.event_type = 'QueueCallerJoin'`); `:483` ikinci süzgeçtir ve tek başına kaldırılması
+  hiçbir şeyi değiştirmez. Mekanizma: `wait_sec`'in ilk iki kaynağı kuyruk içidir, yani ölü zil
+  grubunda yanan süre **yapısal olarak dışarıda** kalır ve **arızanın bedeli aynı kovanın BAŞARI
+  tarafına yazılır**.
+- **`BR-OPS-16` → BLOKE, "Kapsam dışı" değil.** `ConfigRenderer.cs` + `SlaAggregationJob.cs`
+  **tek ajanda** planlanacak; ayrı verilirse `AmiEventMapper` allowlist'i **kimsenin üretmediği
+  bir olayın izni** olurdu.
+
+### Sayım
+
+| An | Açık kart |
+|---|---:|
+| Tur başı (Karar #78 öncesi) | 112 |
+| Karar #78'in 19 şart kartından sonra | 124 |
+| Bu kayıt yazılırken | **117** |
+
+**Not:** ara ölçümde 157 gördüm ve o **yanlıştı** — ad-hoc bir Python sayacıyla ölçmüştüm ve
+`Kapandı` ile başlayan 24 kartı açık sayıyordu. Depodaki yetkili sayaç `yonetim/arac/kalan-isler.js`
+ve `clickup-durum.js` **zaten** o kelimeyi tanıyor. Ders: **depoda sayaç varken elle sayaç yazma.**
+
+### Kararlar
+
+- **Kurul dağıtıldı; Karar #78 sonuncusudur.** Açık kararlar koordinatörde ve ajanlara karar
+  yetkisiyle devredilebilir. Ölçüm ajanı çalıştırmak serbest, ama çıktısı **kod değişikliği**
+  olmalı, yeni bir şart listesi değil.
+- **Bir tur net eksi kapatmıyorsa tur yanlış kurulmuştur.**
+
+### Açık kalanlar / sonraki adım
+
+- 14 ajan koşuyor: `BR-BE-204/205`, `BR-BE-206/208/209`, `BR-BE-207`, `BR-DB-91/88/99`,
+  `BR-FE-118/119/112/113`, `BR-AST-58/59/61/115`, `BR-SEC-21/26/29` + `BR-DB-102/103`,
+  `BR-BE-150` + `BR-SEC-08/20`, `BR-DB-94/95/96/97`, `BR-QA-55/57/100`, ve iki "karar yetkili"
+  ajan (Asterisk kurul-blokelileri, sesli mesaj/ürün kurul-blokelileri).
+- **Ana dalda `Pbxtr.Integration.Tests` kırmızı:** `Failed: 85` — 52'si
+  `42883: function pbxtr_webhook_event_types() does not exist` (şema bootstrap'ı → `BR-DB-99`,
+  ajanda), 3'ü `42703: column "box_id"` (voicemail). Ağaç durulunca **tam koşu tekrarlanmalı**.
+- `BR-QA-113` yolundaki borç listesi düzeltmesi **doğrulama bekliyor** — ağaç o an başka ajanın
+  yarım işiyle derlenmiyordu (CS0535).
+- Yayın (`deploy/yerel-yayin.sh`) ajanlar bitince koşulacak; `BR-SYS-117` (kilit penceresi
+  `log_lock_waits=on`) ve Ş78-L1 **yayın öncesi** şartlardır.
+- `BR-SEC-16` + `BR-SEC-28` sır döndürme — kullanıcı: *"ajanlar bitince döndür"*. Henüz sıra
+  gelmedi.
+- ClickUp senkronu tur sonunda: `--kuru` → `clickup-olustur.js` → `clickup-senkron.js` → `--kuru`
+  ile doğrula. Şu an **11+ kart bayat** (Kurul #78 şart kartları hiç açılmamış).
