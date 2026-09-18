@@ -555,3 +555,92 @@ gruplamanın `emp_code`'a taşınması gerekir.
 - Yerel `appsettings.json`'daki CRS 04 kimliği canlıyla eşitlenecek mi?
 - Pakette `.pdb` dosyaları kalsın mı?
 - PTT barkod aralığının doğrusu ne? (başlangıç/bitiş ters)
+
+---
+
+## Ek tur — yönetici kendi arayüzünden kilitliymiş
+
+### 15. Belirti
+
+Kullanıcı `https://ms.uzmanadres.com/zamanlama` sayfasında dört şeyin **hiçbirinin
+olmadığını** bildirdi: bağlantı cümlesi girme, mail alıcılarını girme, saati değiştirme,
+manuel çalıştırma. Kullanıcı `yonetici` rolüyle giriş yapmış durumda.
+
+İlk varsayımım "paket kuruldu mu" idi ve **yanlıştı**: `GET /api/surum` canlının
+`04e03fe` / `2026-09-18 09:23` olduğunu, yani sabahki paketin kurulu olduğunu gösterdi.
+Varsayımla devam edilseydi tur boşa giderdi.
+
+### 16. Kök sebep — rol karşılaştırması tam eşitlikti
+
+- **Bulgu:** Sayfalar `rol === 'mudahaleEden'` diye **tam eşitlik** arıyordu. Roller
+  hiyerarşik: `izleyen` < `mudahaleEden` < `yonetici`. Sunucu bunu **doğru** uyguluyor —
+  `Modeller.cs:132`: `MudahaleEdebilir => RolAdi is Rol.MudahaleEden or Rol.Yonetici`.
+  Arayüz uygulamıyordu.
+- **Sonuç:** En yetkili rol en az yetkiyi görüyordu. Zamanlama sayfasında cron kutusu,
+  aç/kapat, "Şimdi çalıştır" ve "Parametreler"in **dördü birden** render edilmiyordu.
+  API istekleri kabul ederken düğme hiç çizilmiyordu — sessiz hata, hiçbir şey patlamıyor.
+- **Yayılım:** Aynı hata `IsListesiSayfasi`, `KaynaklarSayfasi` ve
+  `CalistirmaDetaySayfasi`'nda da vardı (durdur / tekrar dene dahil). Bazı sayfalar
+  doğru yapıyordu (`RafSayfasi`: `rol === 'mudahaleEden' || rol === 'yonetici'`,
+  `VarlikDetaySayfasi`: `rol !== 'izleyen'`) — yani kural sayfa başına elle yazıldığı için
+  bazı yerlerde tutmuş, bazılarında tutmamıştı.
+- **Düzeltme:** Kural tek yere alındı — `useAuth().mudahaleEdebilir`, sunucudakiyle
+  **birebir aynı ifade**. Beş sayfa buna bağlandı.
+- **Dokunulan dosyalar:** `web/src/context/AuthContext.tsx`,
+  `web/src/pages/{ZamanlamaSayfasi,IsListesiSayfasi,KaynaklarSayfasi,CalistirmaDetaySayfasi,RafSayfasi}.tsx`,
+  `web/tests/yetki.test.ts`, `web/tsconfig.node.json`
+- **Commit:** `83a5ec2`, `09e8945`
+
+### 17. Koruma testi ve iki kendi hatam
+
+`web/tests/yetki.test.ts` hiçbir kaynak dosyanın tam eşitlik aramadığını doğrular.
+
+İki hata yaptım, ikisi de kayda değer:
+
+1. **Testi `src` altına koydum.** `tsconfig.app.json` tüm `src`'i kapsar ve yalnızca
+   `vite/client` tiplerini tanır; `node:fs` kullanan test `npm run build`'i üç tip
+   hatasıyla kırdı. **Tip denetimi yakaladı** — testler geçerken derleme kırılıyordu, yani
+   "testler geçti" tek başına yeterli sinyal değil. Test `web/tests/` altına taşındı ve
+   node tiplerini `tsconfig.node.json`'dan alıyor.
+2. **Testin yakaladığını yanlış ölçtüm.** Hatayı geri koymak için kullandığım python tek
+   satırı şuydu:
+   ```python
+   io.open(p,'w',encoding='utf-8').write(io.open(p,encoding='utf-8').read().replace(...))
+   ```
+   Python **önce yazma tutamacını** değerlendirir ve dosyayı sıfırlar, sonra argümanı
+   değerlendirip **boş** dosyayı okur. Yani dosya silindi, test boş dosyaya bakıp geçti ve
+   ben "test yakalamıyor" sonucuna vardım. Bu yanlış sonuçla `import.meta.glob` sürümünü
+   "sessizce bozuk" diye suçladım — dayanaksızdı, testin içindeki gerekçe düzeltildi.
+   Doğrusu iki ayrı ifade:
+   ```python
+   s = io.open(p, encoding='utf-8').read()
+   s = s.replace(...)
+   io.open(p, 'w', encoding='utf-8').write(s)
+   ```
+   Düzeltilince test hatayı **dosya adıyla** bildirdi.
+
+- **Sonuç / doğrulama:** 51 web testi + 489 .NET testi geçti, `npm run build` temiz.
+
+### 18. Yeni paket
+
+`SentezServis-2026-09-18-1018.zip` (73,7 MB). Arayüz tarihi **2026-09-18 10:18**;
+kurulumdan sonra `GET /api/surum` bunu dönmeli.
+
+## Kararlar (yetki turu)
+
+- **Yetki kuralı arayüzde tek yerde durur** (`useAuth().mudahaleEdebilir`) ve sunucudaki
+  ifadenin aynısıdır. Sayfa başına elle yazılan rol karşılaştırması yasak; sınır testi
+  zorluyor.
+- **Koruma testi yazıldığında yakaladığı ölçülür.** Geçen ama yakalamayan test, hiç test
+  olmamasından kötüdür: güven verir.
+
+## Açık kalanlar (yetki turu)
+
+- **Paket canlıya kurulmadı.** Kurulmadan yönetici düğmeleri görmeye başlamaz.
+- **Bağlantı cümlesini arayüzden girme özelliği YOK** ve yazılmadı. Bu bir tasarım
+  kararıdır: bağlantı cümlesi `sa` parolası taşır; veritabanında saklanıp web arayüzünden
+  düzenlenebilir olması yeni bir saldırı yüzeyi açar ve `appsettings.json`'ın
+  `deploy/yayinla.ps1` ile korunan sır temizliğini devre dışı bırakır. Kullanıcıyla
+  konuşulacak.
+- Diğer üç istek (alıcılar, saat, manuel çalıştırma) zaten vardı; yalnızca rol hatası
+  yüzünden görünmüyordu.
