@@ -4246,3 +4246,99 @@ geride kalıyor; (2) purge/retention runbook'u hiç yok.
 - `bash deploy/yerel-yayin.sh --sadece-kapilar` **koşulmadı** (kapı betiklerini başka
   ajanlar aynı anda düzenliyordu; koşsaydım kırmızının sahibi okunamazdı).
 - **Commit:** `85d4139b` — push edildi.
+
+---
+
+## BR-B1 bölünmesi — kuyruktan tek tuşla geri arama talebi (`backend-lider`, 2026-09-18)
+
+### Bağlam
+`BR-B1` toplayıcısı üç karta bölünmüştü: `BR-DB-92` (kuyruk ayarı `callback_digit`),
+`BR-AST-111` (kuyruktan çıkış dialplan bağlamı + fail-back), `BR-BE-197` (`UserEvent`
+alım ucu, VETO şartı B-Ş3). Devralınan ölçüm: geri aramanın **ÇIKIŞ** yarısı ayakta,
+**TALEP ALMA** yarısı yok.
+
+### Yapılanlar
+
+### 1. Ölçüm bağımsız doğrulandı
+- **Neden:** kart metni "tekrar ölçmene gerek yok ama doğrularsan iyi olur" diyordu;
+  `callback` kelimesi C#'ta delege anlamında 397 dosyada geçtiği için düz grep yanıltıcı.
+- **Ne yapıldı:** `callback_digit` → 0 eşleşme, `qexit` → 0 eşleşme (`src/`+`deploy/`+`tests/`).
+  Ayırt edici adlar (`CallbackEntry`/`ICallbackLedger`/`CallbackPolicy`) `Modules/Automation`
+  altında bulundu — hepsi **dialer** geri araması.
+- **Sonuç:** devralınan ölçüm **doğru**.
+
+### 2. `BR-DB-92` — `queues.callback_digit`
+- **Neden:** arayanın talep bırakabileceği ayarın duracağı kolon yoktu; akış fiziksel
+  olarak imkânsızdı.
+- **Ne yapıldı:** nullable `text` + `ck_queues_callback_digit` (`'0'`…`'9'`).
+  `*`/`#` **dışarıda**: tuş üretilen `queues.conf`'ta `context=` ile bağlanır ve orada bir
+  **exten adı** olur; `*` desen karakteri, `#` girdi sonlandırıcısıdır. `IvrDigits` (12
+  elemanlı) bilerek kullanılmadı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Queues/Queue.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/QueueConfigurations.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918213000_QueueCallbackDigit.cs`,
+  `PbxtrDbContextModelSnapshot.cs`
+- **Sonuç:** gövde yalnız EF API'si (`AddColumn` + `AddCheckConstraint`) → **kapı_07 onay
+  satırı GEREKMEDİ** (kapı çıktısında dosya hiç geçmiyor).
+
+### 3. `BR-AST-111` — `[pbxtr-<t>-qexit-<kuyruk>]`
+- **Ne yapıldı:** `AsteriskObjectName.ForQueueExitContext` + `ConfigRenderer`'da iki üretim
+  noktası (`queues.conf` `context=` ve bağlamın kendisi). **Fail-back-to-queue:** numarasız
+  (gizli) arayan `GotoIf($["${CALLERID(num)}" = ""]?geri)` ile yakalanır ve `Queue()`'ya
+  **geri girer** — `Hangup()` değil.
+- **`ExecIf` DEĞİL `GotoIf`:** `ExecIf` ilk `:`'te bölünür, `UserEvent` argümanları `:` taşır
+  (BR-AST-68'de fiilen yaşanmış tuzak).
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/AsteriskObjectName.cs`,
+  `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`, `ProvisioningRevisionService.cs`
+
+### 4. `BR-BE-197` — `UserEvent(PbxtrQueueCallback)` alım yolu
+- **VETO B-Ş3:** yazım `call_events` ile **aynı transaction'da** (`PersistAsync` adım 5b,
+  `ISurveyAnswerIntake` emsali).
+- **Tenant gövdeden ALINMAZ:** kuyruk **KİMLİKLE** taşınır (`qcbQueueId`, Karar #76/Ş76-4
+  emsali — ad `Slugify` çıktısıdır, SQL'de geri çevrilemez). Çapraz kontrol **EF global
+  query filter**'ı ile; elle `WHERE tenant_id` yok.
+- **Basılan tuş ve arayan numarası payload'a GİRMEZ** (Karar #25/Ş8; numara `CallerE164`
+  ayrı alanında — payload'a konsa `FindPhoneLikeValue` olayı **tümden düşürürdü**).
+- **Dokunulan dosyalar:** `QueueCallbackSignal.cs`, `IQueueCallbackIntake.cs`,
+  `EfQueueCallbackIntake.cs`, `AmiEventMapper.cs`, `TelephonyEventPipeline.cs`,
+  `InfrastructureServiceCollectionExtensions.cs`
+
+### 5. Ölçüm ve mutasyonlar
+- Api.Tests `Modules.Telephony` **1315/1315**; Integration **6/6** (gerçek PostgreSQL+RLS);
+  Architecture `MigrationDiscoveryGuard` **3/3**. Tam çözüm derlemesi **0 hata**.
+- **5 mutasyon KIRMIZI:** fail-back→`Hangup` (1 test); tenant öneki düşürüldü (**7 test** —
+  `ConfigRenderGuard.AssertOutput` yakaladı, bekçi **gevşetilmedi**, Ş77-12);
+  `IgnoreQueryFilters` (**yalnız çapraz kipte** 1 — üretim kipi yeşil kaldı, yani çapraz kip
+  testi olmasa mutasyon görünmezdi); `[Migration]` niteliği kaldırıldı (2); CHECK gevşetildi (1).
+
+### Kararlar
+- **Çıkış anonsu (`periodic-announce`) YAZILMADI** — tenant'a özel anons bir **medya
+  kolonu** ister, o kolon `BR-DB-92`'nin kapsamında değil. Var olmayan dosyaya
+  `Playback`/`periodic-announce` yazmak **reddedildi**: `ConfigRenderer`'ın MOH bölümünde
+  ölçülmüş kusurun tekrarı olurdu (*"arayan sessizlik duyar, panelde iz kalmaz"*).
+- **Fail-back'te sıradaki yer KORUNMAZ** — `Queue()`'nun `position` argümanı var ama
+  arayanın çıkmadan önceki sırasını veren kanal değişkeni **doğrulanmadı**; uydurulmuş bir
+  değişken sessizce bozulurdu (*belge santral değildir*). İkisi de
+  `doc/prototip-urun-farklari.md`'ye BORÇ/BİLİNÇLİ yazıldı.
+
+### Ölçüm tuzakları (kayda değer)
+- **`[Migration]` niteliği unutuldu → migration EF tarafından HİÇ bulunmadı.** Derleme
+  yeşil, `Up` gövdesi doğru, **hiçbir şey olmuyordu**; belirti yalnızca çalışan bir testin
+  içinde `42703: column q.callback_digit does not exist` olarak çıktı.
+- **Kilitli `testhost` mutasyon ölçümünü iki kez yalanladı.** `MSB3026` ile DLL kopyalanamadı,
+  `--no-build` **eski ikiliyi** koştu ve mutasyon "yeşil" göründü. Artık her mutasyon
+  koşusunda `MSB3026|error CS` sayısı 0 mu diye bakıldı.
+- **`TenantLeakCoverageTests` kapanış tespiti ALT DİZE eşlemesidir.** Test dosyamın
+  **yorumunda** `EfCallbackLedger` adının geçmesi, `CallbackLedger` borç kalemini sessizce
+  *"kapandı"* gösterdi. Kalem gerçekte **açık** (portun `GetBoardAsync`/`CloseAsync` okuma
+  yüzeyleri ölçülmüyor); ad yorumdan çıkarıldı ve durum dosyaya yazıldı.
+
+### Açık kalanlar / sonraki adım
+- Çıkış anonsu + onay/hata anonsu için **kuyrukta medya kolonu** kartı açılmalı (kurul).
+- Stok ses adları (`auth-thankyou`, `vm-sorry`) **gerçek santralde doğrulanmadı** (§3.0).
+- **Benim olmayan kırmızılar:** `CrossTenantScopeGuardTests` ×3 + `TenantLeakCoverageTests`
+  (`EfProvisioningNodeState`, `20260918230000_CallDataRetentionWebhookOutboxCallback`),
+  `DeployPrivilegeTests` — hepsi aynı anda çalışan ajanların dosyaları.
+- Kapı_07 iki **başka ajan** migration'ı için kırmızı (`20260918203500`, `20260918230000`);
+  onay satırı **bilerek yazılmadı** (Karar #48).
+- **Commit:** `9c4aaf28` — push edildi.
