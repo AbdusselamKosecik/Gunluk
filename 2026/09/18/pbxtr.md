@@ -3879,3 +3879,80 @@ birlikte KIRMIZI. Commit `c9646ce5`.
 - `BR-SEC-16` + `BR-SEC-28` sır rotasyonu, ajanlar bitince.
 - `BR-AST-112` (ölçek) ve `BR-AST-113` (rollback) test sunucusunda yapılacak; ikisi de
   A'nın uygulamasının önkoşulu.
+
+---
+
+### BR-SEC-30 — Kurul #77 CTO vetosu ÖLÇÜLDÜ: sızıntı GERÇEKTİ, kapatıldı
+
+- **Neden:** CTO, tenant B'nin kendi API anahtarına tenant A'nın düğüm adını yazıp
+  `GET /provisioning/node-bundle` ile A'nın provisioning fragmanını çekebildiğini iddia
+  etti. backend-lider karşı ölçüm sundu ama **başka bir soruya cevap veriyordu**
+  ("Node null olabilir mi" ≠ "Node başkasının düğümü olabilir mi") — defterdeki
+  *"itirazı kategoriyle eleme"* tuzağı. Üç soru ayrı ayrı ölçüldü.
+
+- **S1 — ad sahipliği kontrolü var mı? → 0 (SIFIR) kontrol.**
+  `EfApiKeyAdministration.cs:105-108` yalnızca `NodeRequired` (boş olamaz) bakar.
+  Depoda düğüm kataloğu YOK: `provisioning_nodes` / `NodeCatalog` / `node_owner` için
+  `src tests deploy` altında **sıfır eşleşme**. `apikey.manage` ise `bundle.apikey`
+  üzerinden **owner (scope=single) ve dealer** rollerindedir ve `platformScopeOnly`
+  listesinde DEĞİLDİR (`permissions.seed.json`). Tek kapı `ProvisioningDelivery =
+  not_delivered` idi ve o yalnız susturulmuş tenant'ı tutuyordu.
+
+- **S2 — yabancı fragman fiilen dönüyor mu? → EVET.**
+  `ProvisioningNodeBundleEndpoints.cs:218` düğümü **anahtarın kendi pininden** alır;
+  `:328` `ListTenantsForNodeAsync(node)` ile üye kümesini çözer; o sorgu
+  `EfProvisioningNodeDirectory.cs:109-112` **`IgnoreQueryFilters()` + çapraz-tenant**
+  kipindedir. `:539` her üye için `BeginTenantScope(member.TenantId)` açıp fragmanı
+  üretir. **Çağıranın tenant'ı ile hiçbir yerde filtrelenmez.** Çok tenant'lı düğüm
+  (BR-AST-17) meşrudur; asıl kusur **kendi kendine atanmadır**.
+
+- **S3 — sunucuda bugün çoklu pin var mı? → HAYIR, ama sömürülebilir.**
+  `date -u` = 2026-09-18 14:03 UTC. `asterisk-01` → 6 anahtar, **1 tenant** (t0007),
+  1 aktif. Ancak `t9052` teslim niyeti `deliver`; owner'ı aynı ada pinlenebilirdi ve
+  teslim-niyeti kapısı onu **durdurmazdı**. Sır değeri hiçbir çıktıya yazılmadı.
+
+- **Ne yapıldı:** `ApiKeyEndpoints.CreateAsync` içine **YABANCI DÜĞÜM KAPISI**. Dolu bir
+  düğüme katılmayı yalnızca `scope=global` yapabilir (Karar #58'in teslim-niyeti
+  kapısıyla aynı desen). Keşif, **sızıntıyı besleyen aynı kaynaktan** yapılır
+  (`IProvisioningNodeDirectory`) — ikinci bir sorgu yazılsaydı iki kaynak zamanla
+  ayrışırdı. **Ayrı DI kapsamı zorunlu:** `/api/*` isteği `UnitOfWorkMiddleware`'in
+  transaction'ı içindedir, iç içe `BeginAsync` istisna atardı (`EfUnitOfWork.cs:33-37`)
+  ve kapı 403 yerine **500** üretirdi. Fail-closed: keşif okunamazsa istisna yutulmaz.
+  Denetim: `apikey.pin.blocked_by_foreign_node`, gövde yabancı tenant **kimliği taşımaz**
+  (yalnız sayı) — reddedilen aktör o satırı kendi denetim ekranında okur.
+
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/Security/ApiKeyEndpoints.cs`,
+  `src/Pbxtr.Api/Modules/Provisioning/ProvisioningEndpoints.cs`,
+  `src/Pbxtr.Domain/Platform/Audit/AuditActions.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/ApiKeyForeignNodePinTests.cs`
+
+- **Sonuç / doğrulama:** `ApiKeyForeignNodePinTests` — **1 passed, 0 skipped**.
+  Mutasyon (`if (false && foreignCount > 0)`, gerçek rebuild): **KIRMIZI**, ve kırmızının
+  gövdesi istismarın ta kendisiydi — `201 Created`, `"node":"ast-kurul77-a"`, tenant B.
+  Geri alındı → YEŞİL. Pozitif kontrol aynı metotta: boş düğüme pin **201**.
+
+- **Commit:** `0a382f1a` — Kurul #77 / CTO vetosu: tenant kendini YABANCI düğüme atayamaz
+
+## Kararlar (ek)
+
+- **`ProvisioningEndpoints.cs:933` yorumu yük taşıyordu ve YANLIŞTI.** *"Pin, bir
+  yöneticinin SUNUCUDA yazdığı kayıttır"* cümlesi hiç ölçülmemişti; owner için yanlıştı
+  ve node-bundle'ın çapraz-tenant genişlemesi **tam olarak bu cümleye yaslanıyordu**.
+  Cümleyi bugün doğru yapan şeyin bu kapı olduğu yoruma yazıldı.
+- **İki tenantlı negatif test TEK metottadır.** İki ayrı `[Fact]` yazıldığında sınıfın
+  `IAsyncLifetime`'ı kullanıcıyı/rolü her testte silip yeniden yaratıyor ve ikincisi yetki
+  önbelleği yüzünden `PERMISSION_DENIED` alıyordu (tek başına YEŞİL, sınıfça KIRMIZI —
+  defterdeki *"tohum bırakan test başka sınıfı kırar"* sınıfı).
+
+## Açık kalanlar (ek)
+
+- **Mevcut veri için geri dönük kapı YOK.** Kapı yalnızca YENİ pini durdurur; bugün aynı
+  ada pinli iki tenant olsaydı kapı onları ayırmazdı. Sunucuda bugün böyle bir satır yok
+  (S3), ama bir tarama/uyarı işi hâlâ borçtur.
+- **Düğüm adı hâlâ katalogsuz serbest metindir** (`ApiKey.cs:51`). Karar #36 Ş36-19
+  "düğüm kimliği tenant'ın yazdığı bir dize OLAMAZ" diyordu; bu kapı sömürüyü kesti ama
+  **şartı karşılamadı** — asıl çözüm düğüm kataloğu + FK'dir.
+- **İlgisiz KIRMIZI (benim değil, HEAD'de):** `ProvisioningRerenderJobDbTests` (2) ve
+  `ProvisioningTombstoneWriteDbTests` (1) → `42883: function pbxtr_webhook_event_types()
+  does not exist`. Kaynak commit'li migration `20260917184552_WebhookOutboxAndDelivery`;
+  defterdeki *"şablon gövdesi kurulu DB'ye ulaşmaz"* sınıfı.
