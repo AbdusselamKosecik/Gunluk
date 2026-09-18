@@ -5170,3 +5170,60 @@ iş kayıp değil, sadece commit mesajı onlarda.
   başkasının derleme hatası yüzünden koşturulamadı.
 - **Commit:** `9f537616` — BR-BE-204/205: SLA yeniden hesap penceresi soz suresini kapsar +
   tanim surumu v2
+
+### Kurul #78 / ŞART 4-5 — ekran-pop deneme sayacı uydurmayı bıraktı (backend-dev-2)
+- **Neden:** Kurul #78'de frontend-uzmanı + cm-agent bağımsız ölçtü ve **yayın bloke edici**
+  ("hata düzeltmesi, borç değil") sayıldı: `RedisLiveOperationsView.cs:828`
+  `Math.Max(1, contact.AttemptCount)` iki ayrı yalan üretiyordu.
+  1. **Uydurma:** hiç aranmamış caride `AttemptCount = 0`'dır, ekran "1. deneme" yazıyordu.
+     Depodaki `null = ÖLÇÜLEMEDİ` sözleşmesi tek bir satırda deliniyordu.
+  2. **Sayaç yöne/kökene bakmıyordu:** `Contact.AttemptCount`'u artıran **tek** yazıcı
+     `DialerCallDispatcher.cs:157`'dir, yani sayaç dialer serisidir. Geri arama çağrısında
+     modal "3. deneme" gösteriyor, agent "üçüncü kez arıyoruz" derken müşteri "ilk defa
+     arıyorsunuz" diyordu. Geri aramanın kendi sayacı `CallbackEntry.AttemptCount`'tur ve
+     `AgentEndpoints`'e hiç gitmiyor.
+- **Ne yapıldı (karar SUNUCUDA; istemcide `direction`/kuyruk adından türetme YASAK — kurul şartı):**
+  - `ActiveCallInfo.Attempt`/`MaxAttempts` → `int?`; `ActiveCallDto.Attempt` → `AttemptDto?`.
+  - `RedisLiveOperationsView.AttemptForCall` (yeni, `internal`): sayaç **yalnızca**
+    köken=`dialer` **ve** yön=giden **ve** `AttemptCount > 0` iken gider; aksi halde `null`
+    (köken **ölçülemediyse de** `null` — "ölçülemedi" ile "dialer" aynı piksele basamaz).
+  - `LiveCallState.Origin` (sona ek alan, varsayılan `null`): `Newchannel` payload'ındaki
+    `PBXTR_ORIGIN`. **Olmayan alan mevcut değeri silmez** (ikinci bacağın değişkensiz olayı
+    ilk bacakta ölçülmüş kökeni düşürmemeli).
+  - `DialerCallDispatcher` originate'e `PBXTR_ORIGIN=dialer` damgası vurur
+    (`CallbackDispatcher` ile aynı desen) — pozitif yol **gerçek** olsun diye; damga
+    olmasaydı rozet üretimde hiç çizilmez, yani düzeltme sayacı sessizce kaldırmış olurdu.
+  - İstemci: `ActiveCall.attempt: AgentTaskAttempt | null`, `CallContact.attemptN/attemptMax:
+    number | null`; `CallerFacts.tsx` hem rozet hem "Deneme: n/max" satırı koşullu,
+    `IncomingCallModal.tsx` kimlik satırı koşullu (satır tümden boşsa **sarmalayıcı da yok**).
+    `crmUrl`/`dueAt` kalıbının birebir taklidi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Live/ILiveOperationsView.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/RedisLiveOperationsView.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/RedisLiveStateStore.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Pipeline/TelephonyEventPipeline.cs`,
+  `src/Pbxtr.Infrastructure/Modules/DialerCallDispatcher.cs`,
+  `src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs`,
+  `src/Pbxtr.Web/src/app/api/opsContracts.ts`,
+  `src/Pbxtr.Web/src/app/screens/agent/{useCallSession.ts,CallerFacts.tsx,IncomingCallModal.tsx}`,
+  `tests/Pbxtr.Api.Tests/Modules/AgentDesk/{ActiveCallAttemptSourceTests.cs (yeni),AgentEndpointTests.cs}`,
+  `src/Pbxtr.Web/src/app/screens/agent/{CallerFacts,IncomingCallModal}.test.tsx`
+- **Sonuç / doğrulama:**
+  - `dotnet build pbxtr.sln` **0 hata** (paralel ajanların yarım işi geçtikten sonra alınan
+    temiz koşu); `Pbxtr.Api.Tests` AgentDesk ad alanı **258/258 geçti**.
+  - vitest: `CallerFacts.test.tsx` + `IncomingCallModal.test.tsx` **27/27 geçti** (7 + 20).
+  - **Mutasyon (dördü de tek başına doğru testi öldürdü):**
+    `Math.Max(1, …)` geri kondu → `Never_attempted_contact_never_reports_one` KIRMIZI;
+    köken kapısı silindi → `Callback_call_does_not_borrow_the_dialer_counter` +
+    `Unmeasured_origin_reports_no_attempt` KIRMIZI; `IncomingCallModal` guard'ı kaldırıldı →
+    "null iken çizilmez" KIRMIZI; pozitif yol `null`'landı → "doluysa yazılır" KIRMIZI;
+    `CallerFacts` guard'ı kaldırıldı → "null iken çizilmez" KIRMIZI.
+  - Migration YOK (Redis gövdesi sona ek alanla geriye uyumlu, eski gövde `null`'a düşer).
+- **Commit:** `fffd61bf` — Kurul #78 / SART 4-5: ekran-pop deneme sayaci uydurmayi birakti
+
+#### Kalan / sonraki adım (bu turda kapsam dışı bırakıldı)
+- `EfAgentWorkspace.cs:115` **aynı sınıf hatayı taşıyor**: `Math.Max(1, row.Task.Attempt)` —
+  görev listesi (`AgentTaskDto.Attempt`) için. Bu tur yalnızca aktif çağrı yüzeyini kapsadı;
+  görev satırında sayaç en azından görevin kendi serisidir, ama `0 → 1` yuvarlaması aynen
+  duruyor. Kart açılmalı.
+- `POST /telephony/screen-pop` hâlâ kodda yok (sözleşmede var) — bu alanın ikinci bir
+  üreticisi olacaksa aynı `null` sözleşmesini taşımalı.
