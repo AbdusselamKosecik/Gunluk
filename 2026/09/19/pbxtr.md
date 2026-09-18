@@ -860,3 +860,128 @@ yeşile çevirir ama tüketici yoksa kapı vacuous olur** ve "olay ulaşıyor" s
 - `BR-SYS-123`'ün kalan 5 dosyası.
 - `BR-AST-119` için **bir sonraki gerçek trafik günü** ölçüm penceresi.
 - Açık kart: **88** (P0 2 · P1 43 · P2 34 · P3 9).
+
+---
+
+# Ek tur — BR-AST-119 öncül ölçümü (backend-dev-2)
+
+## Bağlam
+
+`BR-AST-119` kartı 2026-09-17'de sunucuda ölçülmüş **33.224** düşen olaydan
+söz ediyordu ve teşhis olarak *"muhtemel öncül: `pbxtr-inbound` bağlamı hiç
+üretilmiyor (`BR-AST-58`/`BR-AST-61`)"* diyordu — kartın kendisi bunun
+**ölçülmemiş bir tahmin** olduğunu yazıyordu. Bu turun ilk işi o tahmini
+ölçmekti.
+
+## Yapılanlar
+
+### 1. Tahmin ölçüldü — ÜÇ bağımsız yoldan ÇÜRÜDÜ
+
+- **Neden:** kartın teşhis cümlesine güvenip kod yazmak, bu depoda defalarca
+  yanlış adrese gitti.
+- **Ne yapıldı / ölçüm:**
+  1. **Mekanizma yok.** `pbxtr:sys:dropped:tenant-unresolved:*` anahtarını yazan
+     tek uygulama `RedisPlatformCounters.NoteDroppedAsync`. Onu çağıran dört yer
+     var: `AmiTenantAdmission.cs:242/:358/:459` (üçü de **çelişki/karantina**) ve
+     `TelephonyEventPipeline.cs:158` (`TenantId == Guid.Empty`).
+     **Tenant'ı çözülemeyen dal sayaca hiç dokunmuyordu:**
+     `AmiTenantAdmission.AdmitAsync`, `evidence.Code is null` olduğunda yalnız
+     `LogWarning` yazıp `return []` yapıyor (HEAD `:130-145`). O gün koşan ikilide
+     de aynı: `git show ea567d11:src/.../AmiTenantAdmission.cs` → aynı blok.
+     AMI tüketicisi boş-tenant dalına **ulaşamaz** (`AmiAriEventConsumer.cs:456-480`
+     yalnız çözülmüş `tenantId` ile `IngestAsync` çağırır).
+     → `pbxtr-inbound` hiç üretilmese ve her olay çözülemese bile kova **0** okurdu.
+  2. **Damga ölü `Goto`'dan ÖNCE basılıyor.** Santraldeki üretilmiş dosya
+     `t0007-dialplan.conf:4` → `Set(__PBXTR_TENANT=t0007)`, ölü hedef `:6` →
+     `Goto(pbxtr-inbound,...)`. Bağlam yokluğu çağrıyı öldürür ama kanal
+     **zaten damgalıdır**.
+  3. **Düşme durdu, trafik durmadı.** TTL her artırımda 48 saate tazeleniyor
+     (`RedisPlatformCounters.cs:84`); üç bağımsız TTL okuması (18 Eyl 20:38Z /
+     22:47Z / 23:08Z) aynı sona çıkıyor: **son artırım 2026-09-17 ~01:48Z**.
+     Oysa `call_events`'e Asterisk biçimli olay o dakikadan sonra da indi
+     (17 Eyl 01:48/01:51/01:52/01:59/02:00/02:20/18:00/19:00; 18 Eyl 01:00/03:00).
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 'date -u'               # ILK KOMUT — yerel tarihe guvenme
+  docker exec pbxtr-redis redis-cli --scan --pattern "pbxtr:sys:dropped:*"
+  docker exec pbxtr-redis redis-cli GET  pbxtr:sys:dropped:tenant-unresolved:2026-09-17
+  docker exec pbxtr-redis redis-cli TTL  pbxtr:sys:dropped:tenant-unresolved:2026-09-17
+  # son artirim = (simdi + TTL) - 48s
+  docker exec pbxtr-postgres psql -U postgres -d pbxtr -f /tmp/q1.sql   # saatlik kirilim
+  ```
+  `psql -U pbxtr` **çalışmaz** (rol yok); kullanıcı `postgres`, veritabanı `pbxtr`.
+- **Sonuç:** tahmin reddedildi. Altından **daha kötü** bir kusur çıktı (↓).
+
+### 2. Gerçek kusur: sayacın ADI ile SAYDIĞI ŞEY farklıydı
+
+- **Neden:** 33.224 sayısı *"tenant çözülemedi"* değil **çelişki/karantina**
+  sınıfıydı; ters yönde, gerçekten çözülemeyen olaylar **hiçbir sayıda
+  görünmüyordu**. ST-31'in var olma sebebi olan sınıf, sayaç açısından KAPALIYDI.
+- **Ne yapıldı (dar karar, kurula sorulmadı):**
+  - `TelephonyEventDropReason { Unresolved, Conflict }` eklendi.
+  - `AdmitAsync` artık **eşlenen** (`IsMapped`) ama çözülemeyen çerçeveyi sayıyor.
+    `IsMapped` kapısı korundu: eşlenmeyen gürültü (`VarSet`) sayılsaydı kova çağrı
+    kaybını değil **AMI hacmini** ölçerdi — ve o sayı birinin *"olayların %99'u
+    düşüyor"* demesine yol açardı.
+  - **Toplam kova adı ve değeri DEĞİŞMEDİ** (dashboard aynı sayıyı okur);
+    kırılım `pbxtr:sys:dropped:reason:unresolved:<gün>` ve `...:conflict:<gün>`
+    anahtarlarına yanında yazılıyor. Gerekçe: operatörün elindeki tek araç
+    `--scan "pbxtr:sys:dropped:*"` idi.
+  - Arayüze yeni metot **varsayılan gövdeli (DIM)** eklendi → mevcut test ikizleri
+    değişmeden derlenir; kırılımı üretim uygulaması yazar.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Platform/Observability/TelephonyEventDropReason.cs`
+  (yeni), `.../IUnresolvedTenantEventCounter.cs`,
+  `src/Pbxtr.Infrastructure/Caching/RedisPlatformCounters.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Asterisk/AmiTenantAdmission.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Pipeline/TelephonyEventPipeline.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/TenantDropReasonTests.cs` (yeni).
+- **Doğrulama:** yeni takım 4/4; **mutasyon 3/3 yakalandı** (sayım satırı silinince,
+  `IsMapped` kapısı kalkınca, `Conflict`→`Unresolved` olunca ayrı ayrı KIRMIZI;
+  geri alındıktan sonra 4/4 yeşil). Komşu takımlar 36/36, `Pbxtr.Architecture.Tests`
+  728/728, `dotnet format --verify-no-changes` temiz.
+  `dotnet build Pbxtr.sln` **kırmızı** ama sebebi benim değil: başka bir ajanın
+  `testhost`'u `Pbxtr.Infrastructure.dll`'i kilitliyordu (MSB3027); projeler tek tek
+  derlendi.
+- **Commit:** `03009615`, `c998145e` — ikisi de push edildi.
+
+### 3. BR-AST-58 / BR-AST-61: "kod var, koşan yok"
+
+- **Ölçüm:** `ConfigRenderer.cs:2438/:2604/:2694` üç bağlamı da **üretiyor**, ama
+  santralde **hiçbiri yok**: `dialplan show pbxtr-t0007-inbound|-outbound|
+  -dialer-announce` → üçü de *There is no existence of … context*.
+  Sebep **teslim**: `/etc/asterisk/pbxtr.d/dialplan/t0007-dialplan.conf`
+  **2026-09-17 01:59** tarihli ve **eski nesil** (hâlâ `Goto(pbxtr-inbound,…)`).
+  Host'ta koşan `pbxtr-confd` **yok** — ne systemd birimi ne süreç; karşılığı
+  yalnız `/root/pbxtr-confd/` ve `/root/yeni/` altındaki betikler.
+- **Sonuç:** bu iki kartın kalan işi render değil **TESLİM** (`BR-SYS-100`).
+
+### 4. BR-AST-79 tazelendi
+
+`extensions` ⋈ `tenants` → t0007 = 6, t0012 = 3 (toplam **9**);
+`pjsip show endpoints` → **6** nesne, tamamı `t0007-wrtc-1042..1047`.
+Masa telefonu nesnesi ve `t0012` nesneleri yok. 2026-09-18 ölçümü **bayat değil**.
+
+## Kararlar
+
+- **Fallback yazılmadı, sayaç düzeltildi.** Kartın istediği (a) kalıcılık ve
+  (b) bildirim bacağı **açık bırakıldı**: ikisi de ayrı yüzey (tablo/denetim satırı,
+  e-posta bacağı) ister ve bu turda ölçülmedi. Sebep ayağı (c) kapandı.
+- **Toplam kova adı değiştirilmedi.** Ad yanıltıcı ama dashboard ve rollup işi onu
+  okuyor; yeniden adlandırma bir FE turu ister ve kırılım anahtarları aynı zararı
+  zaten kapatıyor.
+- **Backlog kolon hizası:** durum hücresine metin eklerken sondaki ` | ` ayıracı
+  **eklenmez** ve metin içinde **çıplak `|` bulunmaz** (`{unresolved|conflict}` bir
+  kolon kaydırdı). İlk denemede `BR-AST-58` panoda `complete` göründü — sebep metne
+  yazdığım *"Depo tarafı kapandı"* cümlesiydi (`/Kapandı/` → `complete`).
+  Kuru koşu bunu yakaladı; düzeltildikten sonra **fark 0**.
+
+## Açık kalanlar / sonraki adım
+
+- `BR-AST-119` (a) kalıcılık ve (b) bildirim bacağı **açık**.
+- **ÖLÇEMEDİM:** 33.224'ün hangi çelişki alt-dalından geldiği — `pbxtr-app`
+  konteyneri 2026-09-18 18:47Z'de yeniden yaratılmış, `docker logs` o andan
+  başlıyor, 17 Eylül'ün 4803/4805/4807 satırları **yok**. Bu *"yok"* değil
+  *"ölçemedim"*dir.
+- Düzeltme **sunucuda ölçülmedi** (yeni ikili teslim edilmedi); kırılım
+  anahtarlarının gerçekten yazıldığı ancak yayından sonra görülür.
+- `BR-AST-58`/`BR-AST-61` teslim bekliyor; `BR-AST-59` engeli değişmedi.
