@@ -828,3 +828,103 @@ Birleştirilmiş dosya `scratchpad/ayar/appsettings.json` içinde hazır; sunucu
   liste var; (b) e-arşiv belgelerinin `GetOutboxInvoiceList` yanıtında dönüp dönmediği
   bilinmiyor — ölçülmeden ekran yazılırsa "eşleşmedi" yanlış sonucu üretir. Kullanıcıdan
   örnek UUID + şirket + yaklaşık tarih istendi.
+
+---
+
+## Ek tur — belge kontrol ekranı (UUID → CRS + Sentez)
+
+### 31. Önce ölçüm: CRS e-arşiv döndürüyor mu?
+
+Ekranı yazmadan önce tek bir soru ölçüldü: mevcut `GetOutboxInvoiceList` **e-arşiv**
+belgelerini de döndürüyor mu, yoksa yalnızca e-fatura mı? Döndürmeseydi ekran her satıra
+"eşleşmedi" der ve kullanıcı buna güvenirdi.
+
+**Sonuç: dönüyor** (`senaryo='eArchive'`). 11–18.09 giden belgeler:
+
+| Şirket | Toplam | eArchive | eInvoice |
+| --- | --- | --- | --- |
+| 01 Modaşima | 23 | 14 | 9 |
+| 03 Viumod | 1.401 | 1.401 | 0 |
+| 04 Viuma | 11.347 | 11.347 | 0 |
+
+**Bu sayı tasarımı belirledi.** CRS sayfa tavanı `SayfaBoyutu × AzamiSayfa` = 200 × 100 =
+**20.000**. 04 numaralı şirket günde ~1.600 belge üretiyor; iki haftalık bir tarama tavanı
+aşar, liste kesilir ve ekran **var olan belgeye "yok" der**.
+
+Ayrıca: 04'ün CRS kimliği **yerelde bayattı** (`ViumaDigital` / `v1234567`) ve WhoAmI
+reddedildi. Canlıdaki doğrusuyla (`ViumaDigital_WebServis`) eşitlendi; ölçüm ondan sonra
+alındı. Daha önce işaret edilen bu fark, ölçüm yapılmasaydı "04 çalışmıyor" diye yanlış
+yorumlanacaktı.
+
+### 32. Tasarım — önce Sentez, sonra CRS
+
+CRS'te **UUID ile tek belge çeken operasyon yok** (bizde 3 operasyon kullanılıyor; serviste
+65 tane var ama dokümante edilmedi). Bu yüzden akış tersine çevrildi:
+
+1. UUID listesi **Sentez'e** sorulur — `Erp_Invoice.EInvoiceGuid IN (...)`, **şirket filtresi
+   olmadan** (UUID evrensel tekildir; belgenin şirketini burada öğreniyoruz).
+2. Bulunan her belge şirketini ve tarihini söyler → CRS'e **yalnızca o gün için** gidilir.
+   Böylece aralık her zaman bir gündür ve tavan sorunu doğmaz.
+3. Sentez'de bulunamayanlar için şirket/tarih bilinemez; ancak kullanıcı bir şirket + aralık
+   verirse CRS'te aranır.
+
+### 33. "Yok" ile "bakılmadı" ayrı durumlardır
+
+`BelgeDurumu.Aranamadi`, `HicbirindeYok`'tan ayrıdır. Tek duruma indirilseydi, şirketi
+bilinmediği için **hiç sorulmamış** bir belge kullanıcıya "CRS'te yok" diye görünürdü — bir
+kontrol ekranının verebileceği en kötü cevap: **yanlış ve emin**. Sınır testi ikisinin ayrı
+kaldığını doğruluyor.
+
+Diğer durumlar: `ikisindeDe`, `alanFarkli` (tutar/KDV/tarih), `yalnizCrs` (CRS'e gitmiş,
+ERP'ye düşmemiş — **aranması en önemli hâl**), `yalnizSentez`, `mukerrer`.
+
+### 34. Dokunulan dosyalar
+
+- `src/SentezServis.Core/Fatura/BelgeSorgulayici.cs` (yeni), `BelgeSorguModelleri.cs` (yeni)
+- `src/SentezServis.Host/Api/FaturaUclari.cs` — `POST /api/fatura/belge-sorgu` (**POST çünkü
+  liste URL'ye sığmaz; yine de salt okuma**), `GirisIster()`
+- `src/SentezServis.Host/Program.cs` — DI kaydı
+- `web/src/api/fatura.ts`, `web/src/pages/BelgeSorguSayfasi.tsx` (yeni),
+  `web/src/App.tsx`, `web/src/components/Layout.tsx` (menü: "Belge kontrol (UUID)")
+- `tests/SentezServis.Core.Tests/BelgeSorguTestleri.cs` (yeni, 7 test)
+
+### 35. Canlı doğrulama
+
+Motor, arayüz yazılmadan **önce** gerçek verilerle koşturuldu:
+
+```
+28951e33-…ffba  [ikisindeDe] 03  CRS MOD2026000125843 / Sentez 00317401  365,51
+3e9c3536-…7eda  [ikisindeDe] 01  CRS MOD2026000002272 / Sentez 00002276  499,90
+d3927b63-…5cfc  [ikisindeDe] 01  CRS MOD2026000002273 / Sentez 00002277  319,92
+00000000-…0001  [aranamadi]
+"MOD2026000002272"  -> gecersiz UUID olarak bildirildi
+```
+
+Not: **Sentez fiş no ile CRS fatura no farklıdır** (00002276 ↔ MOD2026000002272); ikisi ayrı
+numaralandırmadır, ekran ikisini de gösterir. KDV kuruş altı farkı (45,45 ↔ 45,44545)
+tolerans içinde kaldı ve "farklı" sayılmadı.
+
+- 504 .NET + 63 web testi geçti, `npm run build` temiz.
+- **Commit:** `ffe59a7`
+- **Paket:** `SentezServis-2026-09-18-1756.zip`, arayüz tarihi **2026-09-18 17:56**
+
+### 36. Yerel CRS 04 kimliği düzeltildi
+
+`src/SentezServis.Host/appsettings.json` (gitignored) içindeki `Crs.Sirketler[04]` canlıdaki
+doğru değerle eşitlendi. Öncesinde geliştirme makinesinde 04'ün tüm CRS çağrıları
+reddediliyordu.
+
+## Kararlar (belge kontrol turu)
+
+- **Ekran yazılmadan önce dış servisin gerçekten ne döndürdüğü ölçülür.** Bu turda ölçüm,
+  hem tasarımı (gün bazlı sorgu) hem de bir yapılandırma hatasını (04 kimliği) ortaya çıkardı.
+- **"Bakmadım" ayrı bir durumdur** ve kullanıcıya öyle söylenir.
+- Sorgu **otomatik koşmaz**; her koşu CRS'e SOAP çağrısı gönderir.
+
+## Açık kalanlar
+
+- Paket canlıya kurulmadı.
+- Mahsup bağlantısı hâlâ doğrulanmadı (bu gece 23:30 veya kuru çalıştırma).
+- `efatura-tetikle` 6 saatlik zaman aşımına takılıp duruyor — bakılmadı.
+- Sentez'de bulunamayan belgeler için yedek tarama aralığını kullanıcı veriyor; ileride
+  Sentez'deki komşu belgelerden tarih tahmini yapılabilir.
