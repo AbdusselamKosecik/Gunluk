@@ -2829,3 +2829,126 @@ verdi (`VoicemailSlaDaily.BoxRef` artık yok) — kırmızı testten daha sert b
 
 - **Commit:** `66b52310` — Karar #76 / Ş76-4: sesli mesaj kutusu KİMLİKLE taşınır.
   Push edildi.
+
+---
+
+## Karar #76 / Ş76-13 + Ş76-16 — izin dışa aktarımına tavan, denetime `Leave` hedefi
+
+### Bağlam
+
+Bugün yazılan `GET /api/v1/leaves/export` (`dd4b14c8`) kurulda iki eksikle geçti:
+satır tavanı yoktu ve denetim satırı `TargetType = User` + `targetId = null` yazıyordu.
+
+### 1. Ş76-13 — tavan = 5.000 satır, sessiz kırpma yasak
+
+- **Neden 5.000 ve neden emsal kopyalanmadı:** `CdrEndpoints` 199 (ham kanal satırı +
+  gruplama), `ContactEndpoints` 499 (düz satır). Süpervizör ölçümü bağlayıcı: 150
+  agent'lık tenant'ta çeyreklik bordro penceresi 600–900 satır, yazın iki katı — 199 ve
+  499 ucun **asıl kullanım amacını (bordro mutabakatı) iptal ederdi.**
+- **Ne yapıldı:** tavan aşılınca istek bütünüyle reddedilir (400 + `ProblemDetails`,
+  `meta.maxRows`, insan okur `detail`). Reddedilen istek denetime satır **yazmaz**
+  (Contacts emsali: dosya üretilmedi, indirme olmadı).
+- **Gerekçe kayıtta:** sessizce kırpılan dosya, görünmeyen izni "devamsızlık" yapar ve
+  kesinti agent'ın maaşından çıkar. Eksik dosya hatalı görünmez — tam sanılır.
+- **Vacuity tuzağı (`ContactEndpoints.cs:257`) burada YAPISAL olarak yok:**
+  `ILeaveCalendar.ListAsync` imzasında **limit parametresi bulunmaz** ve
+  `EfLeaveCalendar` `Take`/`Skip` çağırmaz → dönen liste filtreye uyan **gerçek
+  toplamdır**, `limit = tavan+1` probe'una ihtiyaç yoktur. Yine de iki fikstür ayrı
+  ölçülür: 5001 → 400, 5000 → 200 (5001 satırlık dosya).
+
+### 2. Ş76-16 — `AuditTargets.Leave` açıldı
+
+- `leave.created` / `leave.deleted` / `leave.exported` artık `Leave` hedefler.
+  `created`'ın `targetId`'si **izin kaydının id'si** oldu (önce izinli kullanıcının
+  id'siydi); `deleted`'inki zaten kayıt id'siydi → ikisi artık **aynı hedef uzayında**,
+  bir kaydın tarihçesi #38'de tek hedefte buluşuyor. `exported`'da `targetId = null`
+  (pencere hedefler, tek kayıt değil — `contact.exported` deseni).
+- Aktör **ve** iznin sahibi `before`/`after` yükünde: `ownerUserId`, `ownerName`,
+  `actorUserId`. Not metni **taşınmaz** (denetim yükü maskeleme yüzeyi değildir).
+- **Port değişti:** `ILeaveCalendar.RemoveAsync` artık `bool` değil **silinen satırı**
+  (`LeaveRow?`) döndürüyor. Gerekçe: kayıt fiziksel olarak siliniyor; sahibini silmeden
+  sonra okuyacak hiçbir yer yok — port döndürmezse "kimin izni silindi" sorusu kalıcı
+  olarak cevapsız kalırdı.
+- **Ters-yön boşluğu kapandı:** `auditTargetParity.test.ts` yalnız sabitin **varlığını**
+  ölçüyordu; **gerçek yazıcının** (ucun kendisi, HTTP üzerinden) bu türü **ürettiği**
+  iddiası eklendi.
+- **Geriye dönük doldurma yok (I15):** bugüne kadar `User` + `targetId: null` ile
+  yazılmış satırlar kalıcı olarak atıfsızdır; kod ve xmldoc bunu söylüyor.
+- İstemci: `TARGET_TYPES` + `aud.tLeave` **dokuz dilde** (ar, az, bg, de, en, fr, hy,
+  ka, tr). Tanınmayan tür ham kodla çizilir (mevcut `targetTypeLabel` fallback'i).
+
+### Dokunulan dosyalar
+
+`src/Pbxtr.Api/Modules/Leaves/LeaveEndpoints.cs`,
+`src/Pbxtr.Domain/Modules/Leaves/ILeaveCalendar.cs`,
+`src/Pbxtr.Domain/Platform/Audit/AuditActions.cs`,
+`src/Pbxtr.Infrastructure/Modules/EfLeaveCalendar.cs`,
+`tests/Pbxtr.Api.Tests/Modules/Leaves/LeaveEndpointTests.cs`,
+`src/Pbxtr.Web/src/app/screens/system/auditView.ts`, dokuz `i18n/messages/*.json`.
+
+### Ölçüm ve doğrulama
+
+Ana ağaçta **başka bir ajanın yarım Voicemail işi derlemeyi bloke ediyordu** (7→10
+`error CS`, hepsi Voicemail; o dosyalara dokunulmadı). Ölçüm bu yüzden **HEAD'den
+açılan izole bir `git worktree`'de** yapıldı; yalnızca benim 5 C# dosyam kopyalandı ve
+worktree'deki dosyanın çalışma ağacıyla **bayt bayt aynı** olduğu `diff` ile doğrulandı.
+
+```bash
+git worktree add --detach <scratch>/wt-leave HEAD    # ana ağaçtaki yarım iş dışarıda
+dotnet build Pbxtr.sln -v q --nologo                 # 0 error
+dotnet build tests/Pbxtr.Integration.Tests --no-incremental   # 0 error
+dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~Modules.Leaves"
+```
+
+| Koşu | Sonuç |
+|---|---|
+| `Pbxtr.sln` derleme (Integration/Architecture/SysAgent `--no-incremental` ayrıca) | 0 error |
+| `LeaveEndpointTests` | **18/18** (önceki 15 + 3 yeni), rc=0 |
+| `Architecture.Tests` | 694/694, rc=0 |
+| `Api.Tests ~Audit` | 246/246, rc=0 |
+| vitest `screens/system` + `screens/live` | 312/312 |
+| vitest `i18n` | 35/35 · parity 3/3 |
+
+**Mutasyon — üçü de KIRMIZI, geri alınınca 18/18 yeşil:**
+
+| # | Mutasyon | Sonuç |
+|---|---|---|
+| 1 | `created` `TargetType` → `AuditTargets.User` | `Gecerli_izin_kaydedilir_ve_denetime_yazilir` **KIRMIZI** (1 failed / 17 passed) |
+| 2 | tavan kontrolü devre dışı (`if (false && …)`) = sessiz kırpma | `Disa_aktarim_tavani_asilinca_istek_reddedilir` **KIRMIZI** (1/17) |
+| 3 | tavan sınırı `>` → `>=` | `Tam_tavandaki_disa_aktarim_gecer` **KIRMIZI** (1/17) |
+
+Parite bekçisi ayrıca ölçüldü: `TARGET_TYPES`'tan `Leave` satırı silinince 1 failed /
+2 passed, geri konunca 3/3.
+
+### 3. Liste ucunun sınırsızlığı — ÖLÇÜLDÜ, DÜZELTİLMEDİ (ayrı kart)
+
+Sunucuda (176.88.41.220, `date -u` = 2026-09-18 10:48 UTC) ölçüm:
+
+```bash
+docker exec pbxtr-postgres psql -U postgres -d pbxtr -Atc \
+  "select (select count(*) from public.tenants), (select count(*) from public.users),
+          (select count(*) from public.agent_leaves)"
+# 5|18|0
+```
+
+- **`agent_leaves` = 0 satır.** En büyük tenant ("Ertan Grup Çağrı Merkezi") 10
+  kullanıcı; 92 günde dönen satır sayısı bugün **0**. Yani sınırsızlık **veriden
+  görünmüyor** — bu bir "sorun yok" bulgusu değil, **ölçülemezlik** bulgusudur.
+- **Analitik tavan:** çakışma tetikleyicisi aynı kullanıcının izinlerinin kesişmesini
+  yasaklar → 92 günlük pencereye değen ayrık aralık sayısı kullanıcı başına en çok 92.
+  Yani `satır ≤ kullanıcı × 92`. 150 agent'lık tenantta **13.800** — dışa aktarım
+  tavanının (5.000) **iki katından fazla**. Gerçekçi hâl (kurulun süpervizör ölçümü)
+  600–900.
+- **Sayfalama kimi kırar (ölçüldü):** `ILeaveCalendar.ListAsync`'in **iki** çağırıcısı
+  var (`LeaveEndpoints.cs:112` liste, `:158` aktarım); istemci tarafında tek tüketici
+  `LeavesScreen.tsx` ve o ekran yanıtı **kişiye göre gruplayıp ısı haritası** çiziyor
+  (`groupByPerson`, `person.items.find(day ∈ [startsOn,endsOn])`). **Satır bazlı
+  sayfalama bu ekranı sessizce yanlış çizer:** eksik sayfadaki bir izin, haritada
+  "izinli değil" olarak görünür — yani Ş76-13'ün yasakladığı sessiz kırpmanın ekran
+  hâli. Sayfalama eklenecekse **kişi bazlı** olmalı ya da liste ucu da aktarım gibi
+  **tümüyle reddetmeli**.
+
+### Commit
+
+`3c1ce1f4` — Karar #76 S76-13 + S76-16: izin aktariminda 5.000 satir tavani +
+AuditTargets.Leave. **Push edildi.**
