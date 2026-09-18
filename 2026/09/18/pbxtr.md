@@ -3183,3 +3183,159 @@ kapatıcısının `varchar` kör noktası).
 - `tests/Pbxtr.Api.Tests` tur sonunda **başka bir ajanın** in-flight dosyası yüzünden
   derlenmiyordu (`AriDndDeviceStateAnnouncerTests.cs` → `AsteriskOptions.AmiPassword`
   yok). Bu turun ölçümleri o dosya inmeden ÖNCE alındı.
+
+---
+
+## db-lider turu — 17 açık BR-DB kartının kapatılması (2026-09-18/4)
+
+### Bağlam
+Karar #76 on maddeyi karara bağladı ve bunların çoğu BR-DB kartlarını bloke ediyordu.
+Bu turun hedefi: 17 açık BR-DB kartını (16, 35, 40, 44, 50, 52, 67, 69, 70, 72, 74,
+76, 79, 84, 88, 90, 91) üç halden birine oturtmak — kapanış metni, yapılan iş, ya da
+**adı konmuş** engel.
+
+### Yapılanlar
+
+#### 1. BR-DB-90 — M4'ün dördüncü kolu TESLİM EDİLDİ (tek gerçek kod işi)
+- **Neden:** Ş76-6 (Şeytan I6). Üç kol da `01-rls-template.sql` şablonuna bakıyordu;
+  oysa süper admin CDR araması milyonlarca satırda koşar ve **en büyük çapraz-kip
+  taraması şablonda değil `CdrSqlBuilder.cs:74`'tedir.** Bu kol policy metnine
+  dokunmaz → tazeleme migration'ı ve `tenants` üzerinde ACCESS EXCLUSIVE penceresi
+  istemez. Bedeli sıfır olan tek kol.
+- **Ne yapıldı:** `CdrSqlBuilder.ActiveTenant` operand sırası takas edildi:
+  `(c.tenant_id = app_current_tenant() OR app_is_cross_tenant())` →
+  `(app_is_cross_tenant() OR c.tenant_id = app_current_tenant())`. Ucuz kol
+  (`LANGUAGE sql`, satır içine alınır) solda; pahalı kol (`plpgsql` + regex biçim
+  kontrolü) sağda. Çapraz kipte OR kısa devre yapar ve pahalı kol satır başına **hiç**
+  değerlendirilmez.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Search/CdrSqlBuilder.cs`,
+  `src/Pbxtr.Infrastructure/Search/PostgresCdrSearch.cs`,
+  `tests/Pbxtr.Architecture.Tests/CdrSqlBuilderGuardTests.cs`,
+  `tests/Pbxtr.Architecture.Tests/RawSqlAllowlistTests.cs`,
+  `deploy/br-db-90-cdr-yuklem-olcumu.sql`,
+  `doc/analiz/br-db-90-cdr-yuklem-olcumu-2026-09-18.txt`
+- **Komutlar:**
+
+  ```bash
+  docker run -d --name br_db_90 -e POSTGRES_PASSWORD=x postgres:16
+  docker exec -i br_db_90 psql -U postgres -v ON_ERROR_STOP=1 -f - \
+    < deploy/br-db-90-cdr-yuklem-olcumu.sql > doc/analiz/br-db-90-cdr-yuklem-olcumu-2026-09-18.txt
+  dotnet build Pbxtr.sln
+  dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj --no-build
+  ```
+
+- **Sonuç / doğrulama:** PG 16.15, 1.000.000 satır, kontrol grubu aynı işi yapar
+  (aynı tablo, **aynı RLS policy metni**, aynı plan, `rows (gerçek)=1000000`; tek
+  değişken bu satır).
+  - cross=ON: `Seq Scan` 4.746 ms / `Buffers: shared hit=877 read=16656` →
+    `Seq Scan` 2.434 ms / `Buffers: shared hit=14765 read=2768` (**toplam blok aynı:
+    17.533**). Duvar saati medyanı 5.306 → 3.120 ms, **-%41**.
+  - cross=off (günlük kullanım, tenant daraltmalı, 50.000 satır): 232,4 → 230,4 ms;
+    plan, `Heap Blocks: exact=877`, `Buffers: shared hit=1126` **birebir aynı** →
+    gerileme YOK.
+  - Davranış özdeşliği (OLCUM-5): normal 50.000/50.000, çapraz 1.000.000/1.000.000,
+    **bozuk GUC 0/0**, GUC yok 0/0.
+  - **Mekanizma planda görünür:** `Filter` yüklemi **iki kez** taşır — biri policy,
+    biri uygulama. Policy kolu Ş76-5 (c) ile kilitli olduğu için ~%50 tavan beklenir;
+    ölçülen odur.
+  - Bekçi ikinci bir iddia taşır (**eski sıra sabit olarak yasak**); onsuz kapı
+    vacuous olurdu. Mutasyon: eski sıra geri yazıldı → 2/2 KIRMIZI, geri alındı →
+    2/2 YEŞİL. İkili doğrulandı (.dll içinde yeni dize 2, eski 0).
+- **Commit:** `23c69eed`
+
+#### 2. BR-DB-50 — Ş76-14'ün YAZILDIĞI ŞEKİL PostgreSQL'de MÜMKÜN DEĞİL (ölçüldü)
+- **Neden:** Ş76-14 *"`purge_ledger` partition başına satır yazar ve o satır çiftin
+  kendi transaction'ında commit edilir"* diyor. Bu cümlenin uygulanabilirliği hiç
+  ölçülmemişti.
+- **Ne yapıldı:** `deploy/br-db-50-parti-atomikligi-olcumu.sql` yazıldı ve koşuldu.
+- **Sonuç / doğrulama** (PG 16.15, ham çıktı
+  `doc/analiz/br-db-50-parti-atomikligi-olcumu-2026-09-18.txt`):
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | FUNCTION içinde `COMMIT` (bugünkü şekil) | `ERROR: invalid transaction termination` |
+  | PROCEDURE + **açık `BEGIN`** içinde `CALL` | **AYNI HATA** |
+  | kontrol grubu (`SET` vs `SET LOCAL`) | aynı hata → sebep GUC değil, transaction bloğu |
+  | otomatik commit kipi (açık `BEGIN` yok) | `CALL` + iç `COMMIT` **çalışır** |
+  | aynı kipte `SET LOCAL` | `WARNING: SET LOCAL can only be used in transaction blocks`, değer **uygulanmaz** |
+
+  Yani şartı gövde **içinde** karşılamanın tek yolu tenant GUC'unu `SET LOCAL` yerine
+  `SET` ile yazmaktır — **CLAUDE.md §5'in adıyla yasakladığı şey** (bağlam Npgsql
+  havuzunda bir sonraki isteğe sızar).
+- **Karar (db-lider):** döngü gövdeden **çağırana** taşınır. `CallDataRetentionJob`
+  her partition için ayrı transaction açar, `SET LOCAL` aynen yazılır, `DETACH`+`DROP`
+  çifti ve o partition'ın `purge_ledger` satırı aynı transaction'da commit edilir.
+  Ş76-14'ün değişmezi (**çift atomikliği**, ADR-006) aynen karşılanır; §5 korunur.
+- **Commit:** `dfa96955`
+
+#### 3. BR-DB-40 — KAPANDI: "Ölçüldü — kol (c), Karar #76 Ş76-5; kalan iş BR-DB-90"
+- Şeytan I4'ün şartı karşılandı: **"%5" iddiası artık `rows=` + plan adı + `Buffers:`
+  ile yazılı.** `doc/analiz/br-db-40-sql-govde-regexli-olcumu-2026-09-18.txt:219-243`
+  — iki hücre de `Seq Scan`, `rows (gerçek)=270000`, `Buffers: shared hit=3069`
+  **birebir aynı**; b1 `649,868 ms` → b6 `602,725 ms` = **-%7,3** (duvar saati -%5,1).
+- **Ş76-DB-3 serbestliği KULLANILMADI:** kazanç %15 eşiğinin altında (7,3 < 15) →
+  mikro-optimizasyon yapılmaz, şablona dokunulmadı.
+- Ş76-DB-2 **sayısal yeniden açma eşiği** karta yazıldı (tek tenant tablosunda RLS
+  yüklemi uygulanan plan adımında `rows (gerçek)` >= 5.000.000, ya da BR-DB-52 yıkıcı
+  koşusu 50 sn bütçenin %60'ını aşarsa → P1).
+
+#### 4. BR-DB-70 — BÖLÜNDÜ: `BR-DB-94` / `95` / `96` / `97` (Ş76-7, sıra bağlayıcı)
+- Kartın **kendi işi olan envanter** `kapi_77` ile kapıya bağlanmıştı (koşan kod
+  30/35, migration 34/60; `45 SUBSET 61 SUBSET 85`). Geriye kalan iş envanter değil
+  **daraltmadır** ve tek kartta durması Ş76-7'nin **risk sınıfı** ayrımını gizliyordu.
+- D1 silen → D2 yazan → D3 okuyan → D4 `CrossTenantReadAudit` + istek yolu.
+  Her dalgada **kapı önce, daraltma sonra**. Ş76-26 gereği dalgalar sonraki tur.
+- **Kart numarası önce ölçüldü:** ilk yazımda 92–95 alınacaktı; `92`/`93` aynı turda
+  **başka bir ajan** tarafından alınmıştı, betiğin mükerrer kontrolü durdurdu ve
+  numaralar 94–97'ye kaydırıldı.
+
+#### 5. Kalan 14 kart — engel ADIYLA yazıldı
+- **Yayın bağımlısı (69/74/79/84/88/91):** ölçüldü — canlıdaki son migration
+  `20260915122000_UserRoleScopeConsistency`, ondan sonra zincirde **21 migration**
+  bekliyor. Beklenen adım tek ve adı var: **yayın #18'in `MigrationRunner` aşaması**.
+  Her kart kendi migration'ının o kümedeki **sırasını** yazıyor (69→1, 74→9,
+  79→12/13/21, 84→15, 88→16, 91→14).
+- **Kurul bağımlısı (16/35/67/76):** ölçüldü — Karar #76'nın gündemi M1–M10'du ve bu
+  dört kart **hiçbirinde yoktu**; yani bekledikleri şey ek bir ölçüm değil, bir sonraki
+  kurul turu.
+- **72:** Ş76-2 gereği `BR-DB-91` + `BR-SEC-29`'a bağlı. "Tazeleme taşır mı" sorusu
+  **cevaplandı: TAŞIR**; yeni soru orada.
+- **52:** canlı yıkıcı koşu; iki ön koşulu da adıyla yazıldı (süre kaydı +
+  `budget-exceeded` tohumu + 1 saatlik kuru koşu kapısı).
+- **44/50:** onay verildi → `karar bekleyen` yerine **`to do`**. 44'e bu turda ölçülen
+  **beş dosyalık kapı zinciri** yazıldı (02-guards'taki **çift** literal liste +
+  dondurulmuş toplam md5 `8dc49b1d…` + iki `.expected` + 02 tazeleme şeridi +
+  contract onayı) — kartta yazılı değildi ve iş "iki tablo yaratmak" sanılıyordu.
+
+#### 6. Doğrulama ve pano
+- `node yonetim/arac/clickup-cikar.js` → rc=0 (696 kart).
+- `clickup-durum.js` ile 21 kartın eşlemesi **tek tek okundu**. `BR-DB-91` ilk yazımda
+  metindeki "**bitti**kten" kelimesi yüzünden `in progress` çıkıyordu → kelime
+  değiştirildi, `backlog` oldu. (Kural 1 çıplak alt dize arıyor.)
+- ClickUp: `clickup-olustur.js` 20 yeni kart, `clickup-senkron.js` 27 durum;
+  kuru doğrulama **`fark olan kart: 0, izde olmayan: 0`** (uzakta okunan görev 1513).
+- **Commit:** `dfa96955` (backlog + BR-DB-50 ölçümü), `8d667c63` (ClickUp izi)
+
+### Kararlar
+- **BR-DB-50'nin şekli:** `purge_call_data()` döngüsü gövdeden çağırana taşınır.
+  Gövde içinde `COMMIT` yolu CLAUDE.md §5 ile çelişmeden açılamaz (ölçüldü).
+- **BR-DB-40 kapanır, BR-DB-90 taşır:** M4'ün kaldıracı şablonda değil ham SQL'dedir.
+- **Mikro-optimizasyon eşiği bağlayıcıdır:** %15'in altındaki kazanç için şablona
+  dokunulmaz (Ş76-DB-3). 7,3 < 15 → yapılmadı.
+
+### Açık kalanlar / sonraki adım
+- **BR-DB-91 bu turun tek P0'ıdır ve yayının önünde durur.** Ölçüm yalnızca migrate
+  **koşarken** yapılabilir; geriye dönük veya yayın dışında üretilemez. Ölçüm planı
+  dört adım hâlinde karta yazıldı (taban RED sayacı → `pg_locks`/`pg_stat_activity`
+  örneklemesi → RED farkı + `DECISION_UNAVAILABLE` sayısı → Karar #65 Ş65-3.5 biçimi).
+- **BR-DB-44 yazılmadı ve sebebi ölçüldü:** 02-guards tazeleme şeridi **tek sıralı**
+  bir kaynaktır ve bu turda `20260918180000_GuardsTemplateRefreshWebhookRetention`
+  ile doluydu; aynı turda ikinci bir 02 tazelemesi `sablon-refresh.expected`'ın tek
+  satırlık 02 kaydında çakışır.
+- `Pbxtr.Architecture.Tests` tam koşusu **708 geçti / 1 kaldı**
+  (`TenantLeakCoverageTests`, `AgentSkillProfile`) — kırmızı **paralel bir ajanın**
+  uçuştaki işidir, bu turun kapsamında değil ve dosyaları commit'e alınmadı. Aynı
+  şekilde `Pbxtr.Infrastructure` tur ortasında başka bir ajanın in-flight dosyaları
+  (`AriStasisApp.cs`, `AriDndDeviceStateAnnouncer.cs`) yüzünden geçici olarak
+  derlenmedi; mutasyon ölçümü bu yüzden **kaynağı okuyan** bekçilerle `--no-build`
+  koşuldu.
