@@ -4459,3 +4459,100 @@ revizyon pbxtr'in urettigi en yuksek revizyondan farkli).
   (`42883: function pbxtr_webhook_event_types() does not exist`), contract kapısında
   `20260918203500` ve `20260918230000`.
 - **Commit:** `95bd29e0` — push edildi.
+
+
+---
+
+## Tur: Karar #77 uygulama dalgası — 8 paralel ajan (koordinatör)
+
+### Bağlam
+Karar #77 yazıldıktan sonra uygulanabilir şartları sekiz ajana paralel dağıttım. Turun
+çıktısı yalnız inen kod değil; ajanların **yolda buldukları** oldu.
+
+### Yapılanlar
+
+### 1. Kapanan kartlar (17)
+`BR-QA-109` · `BR-QA-110` · `BR-QA-111` · `BR-QA-06` · `BR-SEC-30` · `BR-FE-114` ·
+`BR-FE-115` · `BR-FE-116` · `BR-BE-201` · `BR-BE-164` · `BR-BE-165` · `BR-BE-121` ·
+`BR-BE-117` · `BR-BE-200` · `BR-DB-98` · `BR-DB-92` · `BR-BE-197` · `BR-DB-93` ·
+`BR-SYS-116` · `BR-BE-198`. Kısmen: `BR-AST-111`, `BR-BE-199`.
+
+### 2. CTO'nun vetosu DOĞRULANDI — gerçek P0 tenant sızıntısı (`0a382f1a`)
+- **S1 = EVET, sıfır kontrol:** `EfApiKeyAdministration.cs:105-108` yalnız "boş olamaz"
+  bakıyordu; ad **sahipliğini** doğrulayan hiçbir şey yoktu, düğüm kataloğu da yok.
+- **S2 = EVET:** `ProvisioningNodeBundleEndpoints.cs:218` düğümü anahtarın **kendi
+  pininden** alıyor → `EfProvisioningNodeDirectory.cs:109-112` `IgnoreQueryFilters()` +
+  çapraz-tenant kipinde o ada pinli **tüm** tenant'ların fragmanını üretiyor.
+  **Çağıranın tenant'ı hiçbir yerde filtre değildi.**
+- **S3 = HAYIR ama sömürülebilirdi** (`t9052` teslim niyeti `deliver`).
+- Düzeltme: yabancı düğüm kapısı; keşif **sızıntıyı besleyen aynı kaynaktan** yapıldı
+  (iki kaynak zamanla ayrışır ve kapı sessizce yanlış kümeyi ölçerdi). Ayrı DI kapsamı
+  **zorunluydu**: `/api/*` isteği `UnitOfWorkMiddleware`'in transaction'ı içinde, iç içe
+  `BeginAsync` istisna atar ve kapı 403 yerine **500** üretirdi.
+- **Kapı Ş36-19'u KARŞILAMADI** — düğüm adı hâlâ katalogsuz serbest metin. Borç
+  `BR-BE-43-B` ve `BR-SEC-31`'e geçti.
+
+### 3. Ajanların yolda bulduğu, kartlarda olmayan altı kusur
+1. **`callback_entries` RLS policy'si çapraz kipi hiç tanımıyordu** — elle yazılmış,
+   `app_is_cross_tenant()` dalı yok. Retention işi `app.tenant_id` yazmadığı için policy
+   **her satırda FALSE**; `SECURITY DEFINER` kurtarmaz. Retention **üründe sessizce
+   vacuous** olurdu, **test yeşil görünürdü** (testte çağıran = tenant).
+2. **`call_data_retention_lag()` zaten kördü** — Karar #71 voicemail'i plana ekleyip
+   gecikme ölçümüne eklememişti; fonksiyonun kendi yorumu tam bu riski yazıyordu.
+3. **`TenantLeakCoverageTests` kapanış tespiti ALT DİZE eşlemesi** — bir test dosyasının
+   **yorumunda** adaptör adının geçmesi borç kalemini "kapandı" gösteriyor. Aynı gün
+   **iki bağımsız ajan, iki farklı kalemde** aynı susturmayı kazara üretti → `BR-QA-113`.
+4. **`LiveEndpoints` `after["member"]`'a GUID yazıyor**, resolver `Local/…` ile
+   karşılaştırıyor → süpervizör müdahalesinin mutabakatı **her koşulda `not_applied`**
+   → `BR-BE-202`.
+5. **İki deploy betiği CRLF'ti ve kapı konteyneri onları HİÇ koşturamıyordu**
+   (`set: pipefail: invalid option name`, rc=2). `.gitattributes` `eol=lf` diyordu ve HEAD
+   blob'unda 0 CR vardı — `git diff` tertemizdi, bozuk olan çalışma kopyasıydı.
+6. **`BackgroundJobLocksTests` üç iş öncesinden beri sessizce kırmızıydı.**
+
+### 4. Ajanların kendi ölçümüyle düzelttiği iki iddia
+- **Damga tablosu (`BR-DB-98`):** benim tarif ettiğim "B'nin raporu A'nın satırını ezer"
+  senaryosu **koşturulamıyor** — `TenantStampInterceptor` çapraz kipte her yazmayı
+  reddediyor. `IgnoreQueryFilters` veri **bozmuyor**; düşen şey **ikinci savunma**. Ajan
+  testi buna göre kurdu ve önce abartılı yazdığı XML dokümanını geri aldı.
+- **`BR-BE-198` mutasyonu hayatta kaldı → fikstür kusuru:** uç testi bellek-içi ikizi
+  kullanıyordu, üretim defterindeki kapı kaldırılınca takım yeşil kalıyordu. Üretim
+  defterini **doğrudan** çağıran test eklendi.
+
+### 5. Kendi hatam (`BR-FE-116`)
+Yama betiğini mutasyondan sonra ikinci kez koşturdum; i18n anahtarları **dokuz dosyanın
+hepsinde mükerrer** oldu. Doğrulamam göremedi çünkü `json.loads` mükerrer anahtarı
+**sessizce kabul ediyor** — *"anahtar var mı"* sormuştum, *"kaç kez var"* değil.
+Geri alındı, doğrulama ham metinde sayıma çevrildi, dokuz dilde de **1**.
+
+### 6. Paralel ajan ortamının üç tuzağı (ölçüldü)
+- İki ajan **aynı migration zaman damgasını** aldı (`20260918200000`). Belirti "hata"
+  değil, **sessizce yanlış sıra**. Uyarıldı, `203000`'a taşındı.
+- `PbxtrDbContextModelSnapshot.cs`'i üç ajan birden yazdı; **son yazan kazanır** ve düşen
+  model değişikliği build'i kırmaz. Üçüne de commit öncesi grep doğrulaması şart koşuldu.
+- Bir ajan `git stash -u -- <kendi yolu>` denedi ve **başka bir ajanın stash'ini**
+  listeledi. Stash depo genelinde tek yığındır, yola göre izole değildir.
+
+### 7. Yayın öncesi sunucu sapmaları (176.88.41.220, test ortamı)
+İkisi de **elle düzenleme değil, sunucu geride** çıktı — git geçmişindeki sha ile birebir
+eşleşme ölçülerek doğrulandı, üzerine yazmadan önce:
+- `pbxtr-confd-dugum.sh`: sunucu `accfef54` = repo commit `b21cc3b1`; repo 58 satır ileride.
+  Kapının kendi `--tasi` yolu koşturuldu, timer durduruldu, ilk koşu **temiz**
+  (HTTP 200, sıfır yazım, sıfır reload), timer geri açıldı.
+- `docker-compose.yml`: sunucu `66c1243a6413` = repo commit `f082efec`. Yedeklendi
+  (`.onceki`), atomik taşındı (sahiplik/mod korunarak), `docker compose up -d app` ile
+  4 eksik `WebhookDeliveryRetention__*` anahtarı konteynere indi, `pbxtr-app` healthy.
+
+### Kararlar
+- Migration contract onay satırları **bilerek yazılmadı** (`BR-DB-100`): Karar #48 birebir
+  blob sha ister ve ajanlar çalışırken blob değişebilir; peşin onay defteri **kauçuk
+  mühre** çevirir.
+- `BR-DB-99`'un teşhisi düzeltildi ve **bağımsız ikinci kez doğrulandı**: sorun şablonda
+  değil **fikstürde** — `PbxtrDatabaseFixture` şablonlardan kuruyor, `Faz2Database`
+  `EnsureCreated` kullanıyor, **ikisi de EF migration'larını koşturmuyor**.
+
+### Açık kalanlar / sonraki adım
+- Kapı takımı koşuyor (80 konteyner + 6 host); bitince **yayın**.
+- `BR-QA-114`: `SlaAggregationJob` SQL'i gerçek PG'ye karşı ölçülmedi.
+- `BR-DB-100` kurula gidecek (iki blob + `callback_entries` RLS genişletmesi).
+- `BR-SEC-16` + `BR-SEC-28` sır rotasyonu.
