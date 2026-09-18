@@ -141,6 +141,95 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
   `docs/superpowers/specs/2026-09-18-karsit-kod-eslestirme-design.md`
 - **Commit:** `7687acb` — Karsit kod eslestirme (UZM_ExternalXRef) tasarim belgesi
 
+### 7. CANLI ARIZA bulundu: mahsup 10 gündür çalışmıyormuş
+
+- **Nasıl bulundu:** Kullanıcı "şu iki sorguyu her gece 23:30'da çalıştır" dedi. 1. sorgu
+  projede zaten uygulanmıştı (`EksiStokMahsupJob`). Doğrulamak için kendi defterimize
+  bakıldı: `mahsup_calistirmalari` tablosunda **sadece 2 tur** vardı, ikisi de 4 Eylül'de
+  "probe". Sonra `calistirmalar` sorgulandı: 08–17 Eylül arası **her gece** `basarisiz`,
+  mesaj hep aynı: `Mahsup veritabanı yapılandırılmamış (SentezServis:MahsupBaglantiCumlesi)`.
+- **Sebep:** Canlı sunucudaki `appsettings.json`'da `MahsupBaglantiCumlesi` **yok**. Paket
+  bu dosyayı taşımıyor, yükseltmede sunucudakine dokunmuyor → yeni ayar anahtarı
+  kendiliğinden gelmiyor.
+- **Neden 10 gün görünmedi:** İş başarısız olunca `BildirimServisi` mail atar; **e-posta
+  bugüne kadar kapalıydı** (madde 2). İki arıza üst üste binmiş.
+- **Kullanıcının yapması gereken (KOD ÇÖZEMEZ):** canlı `appsettings.json`'a
+  `MahsupBaglantiCumlesi` eklenmeli. Aynı dosyaya bugünkü `Eposta` bloğu da yazılmalı.
+
+### 8. İkinci, henüz patlamamış arıza: `@SpecialCodeStart`
+
+- **Ne:** `UZM_MahsubBarcode` **15.09.2026'da değiştirilmiş** (`sys.objects.modify_date`) ve
+  7. parametresi `@SpecialCodeStart nvarchar(max)` **varsayılansız**. Kod yalnızca 6
+  parametre geçiyordu → SQL Server çağrıyı reddeder.
+- **Niye fark edilmedi:** 4 Eylül'deki probe turu değişiklikten önceydi ve geçmişti. Yani
+  sadece bağlantı cümlesi eklenseydi, bu sefer her satır parametre hatası verecekti.
+  İkisi birlikte düzeltildi.
+- **Not:** `sys.parameters.has_default_value` T-SQL yordamlarında **her zaman 0** döner
+  (yalnızca CLR için anlamlı); varsayılan `OBJECT_DEFINITION` okunarak anlaşıldı.
+
+### 9. Mahsup: HR turu, 23:30, gece raporu maili
+
+- **Neden:** 2. sorgu HR stoklarını hedefliyordu (`LIKE 'HR%'`, `KonsinyeHR`); koddaki filtre
+  `NOT LIKE 'HR%'` olarak **sabitti**, yani ikinci sorgu desteklenmiyordu.
+- **Ne yapıldı:**
+  - `MahsupKapsami` enum'u (Normal → `Konsinye`, Hr → `KonsinyeHR`). Filtre ve yordam
+    parametresi buradan gelir. Filtre SQL'e gömülür ama **enum'dan türediği için** dışarıdan
+    veri içeremez; `LIKE` kalıbını parametreleştirmek sorgu planını bozardı.
+  - İş aynı gece iki kapsamı peş peşe koşar. **Tavan paylaşılır** — kapsam başına ayrı tavan,
+    "en fazla 1000" diyen yöneticiye sessizce 2000 fiş yazardı.
+  - Yeniden tarama **turun kendi kapsamıyla** yapılır; HR turundan sonra normal stokları
+    taramak düzelmemiş satırları düzelmiş gösterirdi.
+  - `mahsup_satirlari`'na `kapsam` kolonu (göç 016).
+  - Cron 00:00 → 23:30. **`IsKayitDefteri` mevcut zamanlama satırına dokunmuyor**, o yüzden
+    koddaki `DefaultCron` canlıyı değiştirmez; göç 016 satırı günceller ve **yalnızca eski
+    varsayılanı** (`0 0 * * *`) hedefler, yöneticinin seçtiğini ezmez.
+  - Gece raporu maili: kapsam kırılımı + **barkodsuz satırların tam listesi**. Boş gece de
+    gider — mailin gelmemesi "sorun yok" değil "iş hiç çalışmadı" demektir.
+- **Kullanıcının betiğine karşı korunan davranışlar** (betiği aynen koşmak önerildi, itiraz
+  edildi, kullanıcı vazgeçti): satır bazı transaction (yordam iki fiş üretiyor, içinde işlem
+  yönetimi yok → ikincisi patlarsa eksi bakiye **başka şirkette açılır**), yeniden tarama
+  (`@RC` daima 0 çünkü yordam hiç `RETURN` kullanmıyor → betiğin "Basarili: 312" çıktısı
+  stok hâlâ eksiyken de 312 yazar), barkodsuzların silinmemesi, barkodun `MIN + COUNT` ile
+  alınması.
+- **Sonuç / doğrulama:** 468/468 test; örnek rapor maili gerçek şablonla bt@'ye gönderildi
+  (42 KB, üç dil, yer tutucu kalmadı).
+- **Commit:** `1998cb0`
+
+### 10. Mail şablonu motoru
+
+- **Neden:** Rapor maili `docs/simple/05-report.html` şablonuyla istendi, ama şablonun tablosu
+  **sabit örnek satırlardı**; değişken uzunlukta liste basılamıyordu.
+- **Ne yapıldı:** Şablon `src/SentezServis.Core/Bildirim/Sablonlar/mahsup-raporu.html` olarak
+  servise taşındı (**gömülü kaynak**, çünkü paket `docs/`'u taşımaz; EXE yanındaki
+  `sablonlar/` klasörü öncelikli — `.frx` düzeninin aynısı). Tablo üç dilde de
+  `{{#satirlar}}…{{/satirlar}}` tekrar bloğuna çevrildi; kolonlar Şirket / Stok Kodu /
+  Varyant / Miktar.
+- **`MailSablonu`:** `{{alan}}` + tekrar bloğu; **üç dil tek HTML gövdesinde** birleşir —
+  üç `<!DOCTYPE>` uç uca eklemek geçersiz HTML olurdu, bunun yerine ilk belge kabuk alınır,
+  diğerlerinin `<body>` içerikleri `dir` taşıyan `<div>`'lere sarılarak eklenir (yoksa Arapça
+  RTL kaybolurdu), `<style>`'lar başlığa taşınır. Tanımsız yer tutucular boşaltılır, değerler
+  HTML'e kaçırılır.
+- **Commit:** `1998cb0`
+
+### 11. Bağlantı cümleleri rol bazlı + açılışta doğrulama
+
+- **Neden:** Kullanıcı "bağlantı cümlesini servis bazlı parametrik yap, boşsa app'den alsın"
+  dedi. İlk yarısı yapıldı, **ikinci yarısına itiraz edildi ve kullanıcı vazgeçti.**
+- **İtirazın özü:** Boş bir rolün ana bağlantıya düşmesi arızayı çözmüyor, **görünür arızayı
+  görünmez arızaya çeviriyordu**: mahsup ERP tablolarını kendi servis veritabanımızda arardı,
+  entegrasyon yanlış veritabanına yazardı, ERP okumaları **sessizce boş** dönerdi. Ayrım
+  ayrıca Şart B-10'un kanıtlanabilirliğini taşıyor.
+- **Ne yapıldı:** `SentezServis:Baglantilar` bölümü (Servis/Erp/Entegrasyon/Mahsup). Eski düz
+  anahtarlar **kaldırılmadı** — canlıdaki dosya onları kullanıyor; çözüm sırası önce yeni
+  bölüm, yoksa aynı rolün eski alanı. Roller birbirine düşmez.
+  `BaglantiFabrikasi.DogrulaAsync` açılışta **şemadan önce** her rolü dener (tanımlı mı +
+  gerçekten açılıyor mu), Event Log'a yazar ve maille bildirir (aynı sorun için 6 saatte bir).
+  Servisi durdurmaz.
+- **Dokunulan dosyalar:** `Ayarlar.cs`, `Data/BaglantiFabrikasi.cs`,
+  `Bildirim/BildirimServisi.cs`, `Host/Program.cs`, `docs/baglanti-cumleleri.md`, testler
+- **Sonuç / doğrulama:** 476/476 test geçti.
+- **Commit:** `80149a7`
+
 ## Kararlar
 
 - **465 kullanılır, 587 kullanılmaz.** Gerekçe sertifika; 587'nin sertifikası
@@ -175,3 +264,13 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
   satır tutarsa öncelik nasıl belirlenecek; `AccountCode` boş bırakılıp "cari fark
   etmez" denebilmeli mi; eşleşmeyen XML kodları için kayıt/uyarı üretilsin mi).
   Sonra Karar #07 yazılacak, sonra uygulama planı.
+
+## 18 Eylül sonu — CANLIDA YAPILMASI GEREKENLER
+
+Bunlar kodla çözülemez; sunucudaki `appsettings.json` elle düzenlenmelidir:
+
+1. `SentezServis:Eposta` bloğu (bugün yapılandırıldı ve doğrulandı, canlıda yok).
+2. `SentezServis:MahsupBaglantiCumlesi` (10 gündür eksik; mahsubun çalışmama sebebi).
+
+İkisi yazılıp servis yeniden başlatıldığında, açılış doğrulaması kalan eksikleri kendisi
+haber verecek.
