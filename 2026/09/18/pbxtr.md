@@ -5672,3 +5672,119 @@ derleme kilit açılana kadar 40 denemeye kadar tekrarlandı.
 
 **Commit:** `a417949` — BR-SEC-20 karar + BR-SEC-08 Ş51-1 önkoşul testi + BR-BE-150 sağlık satırı kipi
 **Commit:** `55db5ce2` — BR-BE-150: sağlık satırı kip testi (mutasyonla doğrulandı)
+
+---
+
+## BR-QA-51 + BR-BE-119 turu (backend-dev-2, entegrasyon/gerçek zaman)
+
+### Bağlam
+İki kart: ikisi de "ekran veri gösteriyor ama veri yok" sınıfında.
+- **BR-QA-51** — `call_events` canlı görünüyor ama satırların çoğu tohum; tohum ile gerçek
+  aynı tabloda ve **işaretsiz**. Karar #66 M20 / Ş66-19 ile kol seçilmişti (`source` kolonu,
+  varsayılansız); kalan iş **uygulamaydı**.
+- **BR-BE-119** — wallboard "Müsait agent" `0` yazıyor, oysa santralde 9 üye boşta. Kod
+  tarafı inmişti; kalan iş sunucuda **yayın sonrası doğrulamaydı**.
+
+### 1. BR-QA-51 — çağrı verisi ailesine kaynak kimliği
+
+- **Neden:** ayrım tesadüfi bir dize önekine (`call_id LIKE 'cdr-%'`) yaslanıyordu.
+  2026-09-10'da `max(at) = 2026-09-08` "canlıda çağrı akıyor" diye okundu; oysa o tarih
+  `seed-sample`'ın koştuğu tarihti.
+- **Ne yapıldı:**
+  - `CallDataSource` enum + `CallDataSourceValues` (DB metinleri `live` / `synthetic`).
+  - `source` kolonu: **varsayılansız NOT NULL + CHECK**, `cdr` **ve** `call_events` için.
+    Geri doldurma Ş66-19'un **kapalı** kimlik uzayı listesinden. `source` ile **başlayan
+    indeks yok**. Asterisk CDR DB'sine dokunulmadı.
+  - Yazan taraf: `ICallDataSourceStamp` **bileşim zamanında** seçilir (`Telephony:Provider`
+    switch'inin iki dalı). `CallDataSourceStampInterceptor` EF ile eklenen her satırı
+    damgalar; **açıkça verilmiş değer ezilmez** (tohum bileşimden bağımsız `synthetic`).
+    `Source` bilerek **nullable**: `Live = 0` olduğu için non-nullable alan "damgayı unutmak"
+    ile "gerçek demek"i ayırt edilemez yapardı.
+  - Okuyan taraf: **tek yüklem** `CallDataSourceQuery.RealOnly()`; İ9'un saydığı kümeye
+    uygulandı (5 rapor/analiz yolu + 2 canlı izleme yolu).
+  - `seed-sample`, **gerçek satırı olan tenant'a** çağrı geçmişi yazmayı reddeder (CRITICAL
+    log). Fırlatmaz: `migrate --with-sample` her yayında koşar, fırlatmak bir ölçüm
+    dürüstlüğü kuralını kesintiye çevirirdi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/CallDataSource.cs`,
+  `ICallDataSourceStamp.cs`, `CallEvent.cs`, `CallDetailRecord.cs`;
+  `src/Pbxtr.Infrastructure/Persistence/CallDataSourceQuery.cs`,
+  `CallDataSourceStampInterceptor.cs`,
+  `Migrations/20260919020000_CallDataSourceColumn.cs`,
+  `Configurations/CallHistoryConfigurations.cs`, `Seeding/SampleDataSet.cs`,
+  `Seeding/SampleDataSeeder.cs`; `Telephony/CallDataSourceStamp.cs`,
+  `Telephony/TelephonyServiceCollectionExtensions.cs`,
+  `Telephony/Pipeline/TelephonyEventPipeline.cs`, `Telephony/Live/RedisLiveOperationsView.cs`;
+  `Modules/EfAnalyticsQuery.cs`, `EfCallReportQuery.cs`, `EfAgentPerformance.cs`,
+  `EfUserOperationalSummary.cs`, `EfNetworkQualityQuery.cs`; `Search/CdrSchema.cs`;
+  `tests/Pbxtr.Architecture.Tests/CallDataSourceGuardTests.cs`.
+- **Doğrulama (gerçek PostgreSQL 16, bölümlü tablo, tek kullanımlık konteyner):**
+  ```bash
+  docker run -d --name pbxtr-mig-probe -e POSTGRES_PASSWORD=p -e POSTGRES_DB=probe postgres:16-alpine
+  # partition'lı cdr + call_events kuruldu, karışık satırlar yazıldı
+  cat mig_up.sql   | docker exec -i pbxtr-mig-probe psql -U postgres -d probe -v ON_ERROR_STOP=1
+  cat mig_down.sql | docker exec -i pbxtr-mig-probe psql -U postgres -d probe -v ON_ERROR_STOP=1
+  docker rm -f pbxtr-mig-probe
+  ```
+  Sonuç: geri doldurma doğru ayırdı (gerçek Asterisk `uniqueid` → `live`; `SIM/`, `cdr-*`,
+  `live-*`, `pbxtr-lab` → `synthetic`); NOT NULL + CHECK **partition'lara recurse etti**;
+  `column_default` **boş**; damgasız yazım **reddedildi**; üçüncü değer `'sample'`
+  **reddedildi**; `Down` kolonu düşürdü (Ş66-23).
+  Bekçi `CallDataSourceGuardTests` **7/7 yeşil**; bir `RealOnly()` silinince **kırmızı**,
+  geri konunca yeşil (mutasyon). Bekçi kurulurken **6 bayat muafiyet** de yakaladı.
+- **Commit:** `dcdcbf9e` (kod), `7d27e59e` (backlog).
+
+### 2. BR-QA-51'in öncülü aynı turda çöktü (kayda değer)
+Sunucuda (`date -u` = 2026-09-18 20:22 UTC, salt-okuma) ölçüldü: `call_events` **8196**
+(10 Eylül'de 7794), `cdr` **1318** (1090). Tohum-dışı olayların günlük dağılımı:
+`08-29` 15/1, `08-30` 345/14, **`09-13` 4/1**, **`09-17` 388/57**, **`09-18` 10/4**.
+Yani *"03 Eylül'den beri tek gerçek olay yok"* **bugün yanlış**. Kartın **teşhisi** ayakta
+(tohum ve gerçek aynı tabloda, işaretsiz); çöken şey **oranın sıfır olduğu iddiası** — ve bu,
+kolonu gereksiz değil **acilen gerekli** yapar.
+
+### 3. BR-BE-119 — yeniden tarihlendi, engel aynı
+- Santral yarısı: `queue show` → 6 + 3 üye, hepsi `Not in use`, hepsi
+  `Local/104x@pbxtr-t0007-local/n` (**`state_interface` cihaz kaynağı yok**); `pjsip show aors`
+  → 6 AOR.
+- Panel yarısı: Redis `*live:agent*` = **0 anahtar** (dbsize 26); `availableAgents: 0` ve blob
+  `skippedTenantsNoEvents` alanını **hiç taşımıyor** (eski kayıt tipi). İmaj
+  `tekbirsoft/pbxtr:demo-ea567d11bb2e` (commit `ea567d11`, 2026-09-15); konteyner bugün
+  18:47'de yeniden oluşturulmuş ama **etiket aynı** — *yeniden başlatma yayın değildir*.
+- **Yeni olgu:** aynı blob'da `registeredPhones` / `channelsInUse` / `callsInUse` **null**;
+  yani *"null = ölçülemedi"* sözleşmesi o imajda çalışıyor, tek `0` basan alan
+  `availableAgents`. Ve trafik **akarken bile** (`09-17`: 57 çağrı) `live:agent:*` = 0 →
+  *"trafik yok, o yüzden anahtar yok"* açıklaması **elendi**; bu `BR-BE-170` (b) kararının
+  canlıda doğrulanmasıdır.
+- **Yayın denenmedi ve sebebi yazılı:** aynı anda başka bir ajan test koşuyordu (testhost DLL
+  kilitleri ölçüldü) ve `Pbxtr.Api` paralel bir ajanın **CS0162** hatasıyla derlenmiyordu;
+  *"iki yayın koşusu üst üste binmez"*.
+
+## Kararlar
+- Kaynak damgası **olayın üzerinde bir alan değil, bir port**: üretici özelliğidir, olay
+  özelliği değil. Yeni bir simülasyon üreticisi alanı doldurmayı unutursa satır **gerçek**
+  diye yazılırdı.
+- `Source` **nullable**: `null` = "henüz damgalanmadı". `Live = 0` olduğu için non-nullable
+  alan, unutmayı gerçeklikten ayırt edemezdi.
+- Damga yoksa **`Live`** — dar ve yazılı: bu dal yalnızca hiç olay üreticisi kaydedilmemiş
+  bir test bileşiminde erişilebilir; orada satırı koyan şey gerçek çağrının yerine geçen bir
+  fikstürdür. Üretimde erişilemezliği bekçi ölçer.
+- `RealOnly()` **global query filter'a konmadı**: tenant filtresini `IgnoreQueryFilters()`
+  kaldırıyor; kaynak yüklemini oraya koymak, meşru sebeplerle tenant sınırını aşan her yolun
+  kaynak ayrımını da sessizce kaybetmesi demekti.
+- Silme güvenliği sorguları (`... kullanılmış mı`) ve retention işleri **asla** filtrelenmez;
+  ilki FK'si duran bir satırı görmezden gelip silmeyi patlatırdı, ikincisi tohumu hiç
+  temizlemezdi.
+
+## Açık kalanlar / sonraki adım
+- **BR-BE-119:** HEAD'den bir yayın. Beklenen: `availableAgents` → **`null`**,
+  `skippedTenantsNoEvents > 0`.
+- **BR-QA-51 kalanı:** ham SQL okuyan yollar bekçinin görüş alanı dışında
+  (`CallDataRetentionJob`, `PartitionMaintenanceJob`, `TenantCallDataRetention`,
+  `SlaAggregationJob`); `SilenceSamplerJob` sınıflandırılmadı; İ9'un "tohum işaretli tenant"
+  ayağı + `seed-sample` ortam kapısı/denetim satırı yazılmadı; tarih tazeleme yapılmadı;
+  `source` dışa aktarmaya konmadı.
+- **Kartlanmalı yan bulgu:** Redis'te `pbxtr:sys:dropped:tenant-unresolved:2026-09-17` =
+  **33224** — 17 Eylül'de 33 bin olay tenant'ı çözülemediği için düşürülmüş (CLAUDE.md §3.4).
+- **Ağaç kararsızlığı:** `SessionScopeConsistencyHealthLine.cs` CS0162 ile `Pbxtr.Api`'yi
+  kırıyor (başka ajanın uçuşta işi); `PendingModelChangesWarning` entegrasyon fikstürünü
+  düşürüyor ve çalışma ağacındaki snapshot farkı `callback_entries` / `'expired'` işine ait.
+  Entegrasyon ve Api testleri bu turda koşturulamadı.
