@@ -1412,3 +1412,91 @@ gerçekten yok. **Kaynak taramasıyla ayrıldı:**
   talimat "yalnız istenirse". 8 kart (BR-DB-69/74/79/84/88, BR-BE-150/119, BR-AST-103) o
   yüzden bloke.
 - BR-SEC-16 + BR-SEC-28 sır rotasyonu: ajanlar bitince, bende.
+
+---
+
+## Ek tur — backend-dev-1: 27 açık BE kartı (BR-BE-43-B … BR-BE-192)
+
+### Bağlam
+Koordinatör 27 açık BE kartını "oku → kodda ölç → iş varsa yap, yoksa yokluğunu kanıtla"
+yöntemiyle kapatmamı istedi. Kartın kendi teşhisi yanlış çıkarsa doğru bulgu yazılacaktı.
+
+### 1. BR-BE-192 — 23503 merkezî kapıda 409 (TEK GERÇEK KOD İŞİ)
+- **Neden:** FK ihlali (`23503`) hiçbir yerde eşlenmemişti; `PbxtrExceptionHandler.ResolveCode`
+  içinde `_ => InternalError` dalına düşüyordu. Kullanıcının gördüğü "bu kayıt kullanımda"
+  reddi, gerçek bir sunucu arızasından ayırt edilemeyen bir **500**'dü. `BR-DB-89`
+  (`SET NULL` → `RESTRICT`) bu hâliyle inseydi bu, normal kullanıcı akışı olacaktı.
+- **Ne yapıldı:**
+  - `PostgresErrors.IsForeignKeyViolation` (+ `ForeignKeyViolation = "23503"` sabiti).
+    Soru **Infrastructure'da** cevaplanır — ADR-001 §3.1 `Npgsql` tipinin `Pbxtr.Api`
+    içinde geçmesini yasaklar; sınıfın kendi özeti zaten bu amaç için yazılmış.
+  - `PbxtrExceptionHandler`: eşleme (`BadHttpRequestException`'dan SONRA, `_`'dan ÖNCE),
+    başlık, `meta.rule = "in_use"`, ve `LogWarning` + **yalnız `ConstraintName`**.
+  - **Bilinçli iki eksiklik yazıldı:** `meta.action` YOK (merkezî kapı hangi kaydın hangi
+    eylemle kurtarılacağını bilmez, uyduracağına susar); `LogError` YOK (her "kayıt
+    kullanımda" reddi 500 alarmına karışırdı). `Detail` PCI notu gereği hiçbir yere.
+  - Kartın (2) maddesi (arka plan savepoint/atla) **zaten vardı**: `ObjectRowRetentionJob.cs:270`.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Persistence/PostgresErrors.cs`,
+  `src/Pbxtr.Api/Platform/Errors/PbxtrExceptionHandler.cs`,
+  `tests/Pbxtr.Api.Tests/Platform/Errors/ExceptionHandlerTests.cs`
+- **Doğrulama:**
+  ```bash
+  dotnet build tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj   # rc=0
+  dotnet test  tests/Pbxtr.Api.Tests --filter ExceptionHandlerTests
+  ```
+  Yeşil: `Failed 0 / Passed 24`. **Mutasyon fiilen koşuldu:** dal `=> InternalError`
+  yapıldı → `Failed 4 / Passed 20`; geri alındı → `Failed 0 / Passed 24`. Her iki
+  ölçümden önce build rc=0 ile doğrulandı (bayat ikili tuzağı).
+- **Commit:** `adf1bc94` / `3c540b15`
+
+### 2. Kartların kendi teşhisi yanlış çıkan iki kalem
+- **BR-BE-169** — kart "kapsanmayan 4 dış ayna" diyordu; **üçü zaten kapsanmış:**
+  `ck_host_metrics_key` `EnumMirrorCheckConstraintTests.cs:176`'da aynada,
+  `ck_dial_numbers_owner_type` `:241`'de gerekçeli muaf (**yazılı borç**),
+  `ck_roles_custom_code_not_system` `SystemRoleScopeCatalogParityTests` ile katalogdan
+  türetiliyor (o dosyanın mutasyon planı madde 4 bu satırı kapsıyor). Gerçekte açık
+  olan **tek** kalem `ck_call_attempts_origin` (C# kaynağı `CallAttemptOrigins.All`).
+  **Ve orada bir çelişki var:** kısıt `origin IS NULL OR origin IN (4 değer)`; PostgreSQL
+  bunu `= ANY (ARRAY[...])` diye normalize eder ve sınıf kapatıcı tam bu ize bakar
+  (`:373`) → kısıt kurulu DB'de varsa kapatıcı **bugün kırmızı olmalıydı**, oysa yeşil
+  raporlanmıştı. Docker kapsam dışı olduğu için ayna satırı **bilerek yazılmadı**:
+  ölçmeden eklemek ya vacuous ya HEP KIRMIZI bir kapı bırakırdı.
+- **BR-BE-46-B** — kartın "48 satır" sayısı bayat. Ölçülen (`grep -cF`, `ConfigRenderer.cs`):
+  `${EXTEN}` **2**, `${DB(` **5**, herhangi `${` **81**. Yasağın lafzı yine her tenant'ın
+  dialplan'ini `withheld` yapardı; sonuç değişmedi, sayı düzeldi.
+
+### 3. Kalan 24 kart — hiçbiri backend tarafından tek taraflı açılamaz
+| Engel | Kartlar |
+|---|---|
+| Kurul / mimari kararı | BR-BE-52, 76, 80, 117, 120, 121, 152, 164, 165(1), 176, 182, 190 |
+| DB kolonu / migration onayı | BR-BE-43-B, 73, 159, 181 |
+| Öncül kart açık | BR-BE-51 (`BR-DB-44`), 135 (doluluk metriği yok), 190 (`BR-AST-107` P0) |
+| Frontend | BR-BE-171(a), 175 |
+| Docker'lı DB / santral ölçümü | BR-BE-169(d), 185, 121(2) |
+| `backend-dev-2` / eşzamanlılık ölçümü | BR-BE-170(c) |
+| Tanım işi (`yazilim-mimari` + `asterisk-uzmani`) | BR-BE-46-B |
+| `pbxtr-qa` negatif testi | BR-BE-183 |
+
+Her kartın Durum hücresi yeniden ölçülerek güncellendi; önceki metinler
+`Önceki kayıt:` altında **silinmeden** korundu. ŞART sütununa dokunulmadı.
+
+### Kararlar
+- **"Kartı kapat" ≠ "kartı Bitti yap."** 27 kartın 26'sının engeli kod değil; engeli
+  adıyla yazmak, sahte bir `Bitti`den daha kıymetli.
+- **Ölçülmemiş ayna satırı yazılmaz.** BR-BE-169'da tek satırlık iş vardı ama kapı
+  Docker'lı; koşulamayan bir kapı satırı eklemek defterdeki *"koşmayan kapı bulgu
+  değildir"* dersinin tekrarı olurdu.
+
+### Açık kalanlar / sonraki adım
+- **Kurul gündemi (üç madde):** (1) `BR-BE-176` ↔ `BR-BE-182` **aynı turda** karara
+  bağlanmalı — biri "slug'ı DB'ye materyalize et", diğeri "kutuyu kimlikle taşı" der ve
+  **doğrudan çelişirler**; (2) `BR-BE-164`/`BR-BE-165` müdahale üyeliğinin penalty'si
+  ve yaşam döngüsü (Karar #67 Ş67-8 seçmedi); (3) `BR-BE-152`'nin devrettiği RLS
+  `WITH CHECK` cross dalının kaldırılması.
+- **Docker'lı tek koşu üç kartı birden ilerletir:** `ck_call_attempts_origin` kurulu mu
+  (BR-BE-169) + `Down()` `NOTICE` gözlemi (BR-BE-185) + `queue show` ↔ `queue_members`
+  karşılaştırması (BR-BE-121).
+- **Tuzak kaydı:** çalışma ağacında paralel ajanlar var; bir ajanın yarım `.csproj`
+  düzenlemesi (`XML yorumunda '--'`) benim build'imi **MSB4025** ile öldürdü ve o arada
+  koşan `dotnet test` **eski ikiliye** gidip "24 passed" dedi. Mutasyon ölçümü bu yüzden
+  bir kez yanlış yeşil verdi. Ders: `PIPESTATUS[0]` + build rc'sini her ölçümden önce oku.
