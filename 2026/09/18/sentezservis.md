@@ -248,6 +248,80 @@ Ayrıca projeyi TR/EN/AR çoklu dile çevirme işi konuşuldu ama **başlanmadı
   tutar/para izi kalmadı.
 - **Commit:** `e4bfae2`
 
+### 13. Rapora barkodlu hata listesi — yanlış kümeyi hedeflemişim
+
+- **Nasıl anlaşıldı:** Kullanıcı "barkod numaralarını da eklersen güzel olur" dedi. Ama
+  barkodsuz satırların tanım gereği barkodu yok. Canlıya bakıldı:
+
+  | Şirket | Kapsam | Eksi satır | Barkodlu | Barkodsuz |
+  |---|---|---|---|---|
+  | 5 (03) | normal | 392 | 392 | **0** |
+  | 5 (03) | hr | 9 | 9 | **0** |
+  | 7 (04) | normal | 776 | 776 | **0** |
+  | 7 (04) | hr | 13 | 13 | **0** |
+
+  **Barkodsuz satır sıfır.** Yani hazırladığım liste her gece boş gidecekti.
+- **Doğru yorum:** Kullanıcının ilk cümlesi ("bulunmayan inventoryler … bunları bulamadım
+  bu şirkette diye") barkodu NULL olanları değil, **yordamın hedef şirkette bulamadığı**
+  ürünleri kastediyordu. Onların barkodu bilinir (yordama biz veriyoruz).
+- **Ne yapıldı:** Rapor iki tablo taşıyor:
+  - *Hatalılar*: Barkod | Stok Kodu | Şirket | Miktar | Hata — yordamın hata verdikleri
+    **ve** çağrı patlamadığı hâlde eksi bakiyesi devam edenler (sayaçta "başarılı" görünen
+    en sinsi durum).
+  - *Barkodsuzlar*: Stok Kodu | Varyant | Şirket | Miktar — barkod kolonu yok.
+  - Şablonda kolon 1 `class="hide-sm"` taşıyor (telefonda gizlenir); barkod ve hata sebebi
+    bilerek oraya konmadı.
+  - `MailSablonu` artık birden fazla adlandırılmış liste destekliyor.
+- **Ayrıca:** birikmiş 1.190 satır, `azami` varsayılanı 1.000'e takılacaktı → 5.000 yapıldı.
+- **Commit:** `b760b48` (öncesinde `e4bfae2`: şablondan satış KPI'ları çıkarıldı)
+
+### 14. Zamanlanmış turlar parametre taşımıyordu — genel boşluk kapatıldı
+
+- **Nasıl çıktı:** Kullanıcı "servislere alıcı parametresi ekleyelim" dedi. `zamanlamalar`
+  tablosunda **parametre kolonu yok** ve `ZamanlayiciServisi.TetikleAsync` turu
+  `new Dictionary<string, string?>()` ile başlatıyordu. Yani bir işe parametre eklemek
+  yalnızca **elle tetiklemede** işe yarıyordu; gece turu onu hiç görmüyordu.
+- **Ne yapıldı (göç 017):** `zamanlamalar.parametreler` (JSON, `ISJSON` kısıtlı). Zamanlayıcı
+  okuyup geçiriyor. Bozuk JSON'da varsayılanlara düşülür — bozuk bir alan yüzünden turu hiç
+  çalıştırmamak daha kötüdür. **Parametreler kayıt anında** `ParametreDogrulayici` ile
+  sınanır; aksi hâlde geçersiz bir değer her gece sessizce turu düşürür ve ancak ertesi
+  sabah görünürdü.
+- **Kazanım alıcılarla sınırlı değil:** artık her işin gece turu yöneticinin seçtiği
+  değerlerle koşabilir.
+
+### 15. İş bazlı mail alıcıları
+
+- **Ne yapıldı:** `JobParameter.Alicilar()` tek yerde tanımlandı — `Multiline` tipi zaten
+  *"noktalı virgülle ayrılmış alıcı listesi"* diye belgelenmişti. Boş bırakılması geçerlidir
+  ve `Eposta:Alicilar` anlamına gelir. Desen, yanlış yazılmış adresi **kaydetme anında**
+  yakalar.
+- **Neden ayar dosyası değil:** parametre bizim veritabanımızda durur. `appsettings.json`'a
+  yazılması gereken bir alan unutulduğunda modül sessizce ölü kalır — mahsup 10 gün böyle
+  kaldı (madde 7).
+- **Arayüz:** Zamanlama sayfasına "Parametreler" düğmesi + `ZamanlamaParametreModal`.
+  Manuel çalıştırma modalıyla aynı formu kullanır ama **"buradaki değerler her gece
+  kullanılır"** diye açıkça uyarır; ikisi karıştırılırsa yönetici tek seferlik sandığı bir
+  değeri kalıcı yapardı. "Varsayılanlara dön" düğmesi parametreleri temizler.
+- **Commit:** `60de775`, `c66da4a`
+
+### 16. PDKS (personel giriş/çıkış) raporu — KOD HAZIR, DOĞRULANMADI
+
+- **Ne yapıldı:** Yeni iş `pdks-raporu`, her sabah **10:00** (cron Europe/Istanbul'a göre
+  yorumlanıyor, `CronHesaplayici`). ZKBioTime veritabanından dünkü çıkış + bugünkü girişi
+  okuyup TR/EN/AR tek mailde raporluyor. Kullanıcının sorgusu birebir korundu; tek ekleme
+  `ORDER BY dept_name, first_name` (rapor okunacak şey).
+- **Yeni bağlantı rolü:** `Baglantilar:Pdks`. **Salt okunur** ve sınır testiyle korunuyor:
+  PDKS bizim sistemimiz değil, bir kayıt cihazının veritabanı; oraya yazmak cihazın verisini
+  bozar.
+- **Şema görülemediği için alınan karar:** saatler SQL tarafında
+  `CONVERT(varchar(5), …, 108)` ile metne çevriliyor. `clock_in`/`clock_out` kurulum başına
+  `time` veya `datetime` olabiliyor ve ikisi .NET'te farklı tiplere eşleniyor; bu çeviri
+  ikisinde de `HH:mm` veriyor.
+- **BLOKE:** `192.168.1.4`'e bağlanılamadı — `Login failed for user 'sa'`. O sunucu ayrı bir
+  kimlik istiyor. **Sorgu canlıda hiç koşturulmadı**; kullanıcı bağlantı bilgisini verince
+  doğrulanacak.
+- **Commit:** `60de775`
+
 ## Kararlar
 
 - **465 kullanılır, 587 kullanılmaz.** Gerekçe sertifika; 587'nin sertifikası
@@ -292,3 +366,5 @@ Bunlar kodla çözülemez; sunucudaki `appsettings.json` elle düzenlenmelidir:
 
 İkisi yazılıp servis yeniden başlatıldığında, açılış doğrulaması kalan eksikleri kendisi
 haber verecek.
+3. `SentezServis:Baglantilar:Pdks` — ZKBioTime (192.168.1.4/zkbiotime) için **ayrı kimlik**.
+   Bu olmadan PDKS raporu hiç çalışmaz ve sorgu hâlâ doğrulanmamış durumda.
