@@ -4785,3 +4785,38 @@ bayt deseni sessizce eşleşmiyordu. Mutasyon `assert count==1` ile bunu **yakal
 **Açık kalan:** üretim topolojisi kararı (Ş76-17) hâlâ açık — `User=root` + docker soketi
 üretime çıkmaz; host'a `postgresql-client-16` PGDG'den mi yoksa çevrimdışı `.deb` ile mi
 gelecek sorusu kurul gündeminde.
+
+### Kurul #78 / frontend-uzmani Ş1–Ş3 — çağrı kökeni: iki bekçi + ölçülmüş gerekçe
+- **Neden:** `CALL_SOURCE_KINDS` ↔ `CallEventPayload.Origins` "BİREBİR" iddiası yalnızca
+  **iki dosyanın yorumunda** yazıyordu; `tests/` altında `CALL_SOURCE_KINDS` geçen **0 dosya**
+  vardı, yani 4/4 eşleşme tesadüftü. Ayrıca `CallSourceVisibility.test.tsx` ve
+  `IncomingCallModal.test.tsx:239,265` sunucunun **hiç göndermediği** bir alanı fikstürle
+  besleyip yeşil kalıyordu (kayıtlı desen: *test ikizi üretimden müsamahakâr*).
+- **Ne yapıldı:**
+  1. `tests/Pbxtr.Architecture.Tests/CallSourceOriginParityTests.cs` — çift yönlü küme
+     paritesi + dokuz dilde `callSource.*` sözlük kapısı + vacuity kapısı
+     (emsal: `HealthComponentLabelPairingTests.cs`).
+  2. `src/Pbxtr.Web/src/app/screens/shared/callSourceServerField.test.ts` — MANDAL:
+     `ActiveCallDto`/`AgentStateDto`/`LiveAgentDto` `callSource` taşımadığı sürece YEŞİL,
+     taşıdığı gün KIRMIZI; kırıldığında yapılacaklar testin gövdesinde yazılı
+     (`BR-BE-198/199` kapanır). Emsal: `auditActionParity.test.ts` borç mandalı.
+     `vitest.config.ts` `server.fs.allow`a iki **dar** klasör izni eklendi — izinsiz bekçi
+     `Denied ID` ile dosya düzeyinde patlıyordu, yani hiç koşmayan bir kapı olurdu.
+  3. `callSourceAxis.ts:25-33` yanlış gerekçe ölçümle düzeltildi (silinmedi, üzerine yazıldı).
+- **Dokunulan dosyalar:** `tests/Pbxtr.Architecture.Tests/CallSourceOriginParityTests.cs`,
+  `src/Pbxtr.Web/src/app/screens/shared/callSourceServerField.test.ts`,
+  `src/Pbxtr.Web/src/app/screens/shared/callSourceAxis.ts`, `src/Pbxtr.Web/vitest.config.ts`,
+  `yonetim/backlog.md` (BR-QA-116 → Bitti).
+- **Sonuç / doğrulama:** dört mutasyonun **ikisi de iki yönlü**: sunucuya `voicemail` →
+  KIRMIZI / geri al → yeşil; istemciye `voicemail` → KIRMIZI / geri al → yeşil;
+  `ActiveCallDto`ya `CallSource` → KIRMIZI / geri al → yeşil; `LiveAgentDto` aynı.
+  `Pbxtr.Architecture.Tests` **712 geçti** (2 kırmızı bu tura ait değil: `DeployPrivilegeTests`
+  `setcap`, `TenantLeakCoverageTests` `ProvisioningNodeDirectory`), vitest **2046 geçti / 228
+  dosya**, `tsc -b` temiz.
+- **Ölçüm — Ş3:** `PBXTR_ORIGIN` yazan yalnız iki yer var, **ikisi de `callback`**
+  (`CallbackDispatcher.cs:219`, `ConfigRenderer.cs:2455`); `DialerCallDispatcher.cs:126-129`
+  sözlüğe yalnız `__PBXTR_DIALER_MODE` yazıyor → `dialer`/`agent`/`inbound` için **üretici YOK**
+  (borç `BR-BE-203`). Eski gerekçe, önlediğini iddia ettiği şeyi önlemiyordu.
+- **Commit:** `fdf95d27` — push edildi (`main`).
+- **Not (paralel ajan):** `yonetim/backlog.md` düzenlemem, eşzamanlı çalışan başka bir ajanın
+  `1ec96333` commit'ine **süpürüldü**; içerik ana dalda, ama sahibi o commit görünüyor.
