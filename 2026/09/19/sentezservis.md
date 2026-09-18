@@ -99,3 +99,93 @@ Kullanıcının verdiği 4 maddeden **yalnızca 1.'si yapıldı.** Kalanlar tasa
   hazır: `SendInvoice`, `ValidateInvoice`, `QueryOutboxInvoiceStatus`. **Dikkat:** bu ilk
   kez CRS'e YAZAN modül olacak; şimdiye kadar fatura modülü salt okunurdu ve bu bir kurul
   kararıdır — Karar yazılmadan uygulanmamalı.
+
+---
+
+## Ek tur — 2., 3. ve 4. maddeler
+
+### 7. Menü doğrulaması (1. madde)
+
+Kullanıcı "menüde bulamadım" dedi. Sebep: ekran 18.09 17:56 paketindeydi ve o paket
+kurulmamıştı. Kod ve paket içeriği doğrulandı — `Layout.tsx:37` menü satırı,
+`App.tsx:237` rota, ve `app.js` içinde hem `/belge-sorgu` hem "Belge kontrol" metni var.
+
+### 8. Dört pazaryeri işi tek servise indirildi (2. madde)
+
+- **İstek:** `pazaryeri-cari-aktar`, `pazaryeri-cari-uret`, `pazaryeri-siparis-hazirla`,
+  `pazaryeri-siparis-aktar` kaldırılsın, tek servis olsun, içi sonra yazılacak.
+- **Yapılmayan:** sınıfları silmek. `PazaryeriSiparisHazirlaJob.Hazirla` **12 testi olan
+  gerçek iş mantığı** taşıyor; cari üretim kuralları da öyle. Silmek "içi boş servis"
+  isteğinin gerektirdiğinden fazlasıydı.
+- **Yapılan:** Dört sınıftan `IJob` kaldırıldı → iş listesinde görünmüyorlar. Yerlerine
+  `PazaryeriAktarimJob` (`pazaryeri-aktarim`) geldi ve dördünü **sırayla** çağırıyor.
+- **Kararlar kayda geçti:**
+  - Sıra zorunlu: cari üretilmeden aktarılamaz, sipariş carisi yazılmadan aktarılamaz.
+  - Bir adım patlarsa sonrakiler koşmaz — yarım aktarım, hiç aktarım yapmamaktan kötüdür
+    (cari yazılıp siparişi yazılmayan müşteri ERP'de sahipsiz kalır).
+  - `MaxAttempts = 1`: iki adım yazıyor, tekrar mükerrer cari/sipariş üretir. Dört işin en
+    katı ayarı geçerli.
+  - Adımlar parametreyle kapatılabilir, sıraları değişmez.
+- **Göç GEREKMEDİ.** `IsKayitDefteri` açılışta tüm işleri `kayitli = 0` yapıp yalnızca kodda
+  var olanları 1'e çekiyor; eski kayıtlar ve çalıştırma geçmişi duruyor. Dördü de canlıda
+  **zamanlanmamıştı** (cron `NULL`), yani üretim etkilenmiyor.
+
+### 9. E-arşiv iskeletleri (4. madde)
+
+`earsiv-gonder` ve `earsiv-kontrol` eklendi. **Gövdeleri boş** ve bunu her turda **uyarı
+olarak** bildiriyorlar; zamanlanmıyorlar (`DefaultCron = null`).
+
+Boş bir işin sessizce "başarılı" görünmesi en tehlikeli hâlidir: kimse belgelerin
+gitmediğini fark etmez. Bu yüzden `JobSummary.Warnings` her çalıştırmada doluyor.
+
+**Sınır uyarısı kayda geçti:** `earsiv-gonder` yazıldığında bu modülün **CRS'e ilk yazma**
+işlemi olacak. Bugüne kadar fatura modülü salt okunurdu. Gönderilen e-arşiv geri alınamaz
+(iptali ayrı işlem: `CancelEArchiveInvoice`). Gövde yazılmadan önce kurul kararı ve
+idempotency anahtarı gerekir (Karar #03).
+
+### 10. Belge tipi kararı (3. madde) — ve iki dürüst sınır
+
+**Sorun:** Kullanıcı "siparişleri çekerken" kontrol istedi, ama sipariş modelinde
+**VKN/TCKN yok** (`SiparisModelleri.cs`: müşteri adı, il, ilçe var). VKN cari tarafında
+(`MusteriVknTckn`). Yani karar doğal olarak cari üretimi anında verilebilir.
+
+**Yapılan:** `CrsIstemcisi.EFaturaMukellefiMiAsync` (`IsEInvoiceUser`) +
+`BelgeTipiBelirleyici`.
+
+**Canlı doğrulama:** İlk denemem başarısızdı — VKN'leri ezberden yazmıştım ve hepsi `false`
+döndü. Gerçek veriden alınca doğrulandı:
+
+```
+[eInvoice] 9251182063 VIUMOD DİJİTAL ...  -> IsEInvoiceUser=True
+[eInvoice] 9250958912 VIUMA DİGİTAL ...   -> True
+[eArchive] 11111111111 AZRA KAYA          -> False
+```
+
+**Ders:** dış servisi sınarken girdiyi de gerçek veriden al; uydurma girdiyle alınan
+"çalışmıyor" sonucu yanlıştır.
+
+**Bulgu:** e-arşiv belgelerinin tamamı yer tutucu TCKN `11111111111` ile kesilmiş. Bu değer
+CRS'e hiç sorulmadan "bireysel" sayılıyor.
+
+**Açıkça yapılmayan iki şey:**
+
+1. **Mikro ihracat tahmin edilmiyor.** Kuralı tanımlanmadı **ve veri yok**: `CariUretici`
+   ülkeyi sabit `"Türkiye"` yazıyor, pazaryeri siparişinde ülke hiç taşınmıyor. Tahmin
+   edilseydi yurt içi satışlar ihracat sayılıp beyan hatası doğardı. Ülke açıkça
+   verilirse `MikroIhracat` döner; bugün bu yol hiç tetiklenmiyor.
+2. **Kararın nereye yazılacağı belirlenmedi.** Saklamak için cari veya sipariş tablosunda
+   kolon gerekir; şu an karar hesaplanıyor ama kalıcı değil.
+
+`Bilinmiyor`, `EArsiv`'den ayrı bir durumdur: CRS'e sorulamadığında "e-arşiv" demek tahmindir.
+Önbellek 12 saat — sonsuz saklamak, sonradan mükellef olan firmaya aylarca yanlış belge
+kestirir.
+
+- **Commit:** `f3db881` — 529 test geçiyor
+- **Paket:** `SentezServis-2026-09-19-0237.zip`, arayüz tarihi **2026-09-19 02:37**
+
+## Açık kalanlar (güncel)
+
+- **Mikro ihracat kuralı** ve ülke verisinin nereden geleceği.
+- **Belge tipi kararının nereye yazılacağı** (kolon gerekiyor).
+- `earsiv-gonder` gövdesi → önce kurul kararı (CRS'e ilk yazma).
+- Mahsup bağlantısı hâlâ doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
