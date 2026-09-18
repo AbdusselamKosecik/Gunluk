@@ -468,3 +468,90 @@ gruplamanın `emp_code`'a taşınması gerekir.
 - PDKS raporunun `alicilar` parametresi boş; boş kalırsa `Eposta:Alicilar` (şu an sadece
   bt@) kullanılır. Kime gideceği karara bağlı.
 - `MIN(Giris)` sorusu açık.
+
+---
+
+## Ek tur — paket ve canlı ayar dosyasının birleştirilmesi
+
+### 11. Yayım paketi üretildi
+
+- **Komut:** `deploy\yayinla.ps1`
+- **Çıktı:** `SentezServis-2026-09-18-0923.zip` (73,7 MB, depo kökü, `.gitignore` kapsamında).
+  18 dosya: tek dosya `SentezServis.exe` (201 MB, self-contained), `wwwroot\app.js` +
+  `app.css` (09:23), kurulum `.cmd`'leri, `kur.ps1`, `web.config`, `.pdb`'ler.
+- **Sonuç / doğrulama:** Betik `appsettings.json`'ı pakete almadı, **29 sır değerini**
+  boşaltıp `appsettings.ornek.json` bıraktı ve kaçan sır kalmadığını doğruladı. Zip ayrıca
+  elle de kontrol edildi: gerçek parola yok.
+- **Not:** Paket `.pdb` taşıyor (~450 KB). Hata ayıklamada satır numarası verdiği için
+  zararsız; bilinçli olup olmadığı kullanıcıya sorulacak.
+
+### 12. Canlı `appsettings.json` birleştirildi
+
+- **Neden:** Kullanıcı canlı sunucudaki dosyayı (pazaryeri sırları paketten dolayı boş) ve
+  ayrı bir listede gerçek anahtarları verdi; ikisinin birleştirilmesi istendi.
+- **Ne yapıldı:**
+  1. Her pazaryerinin **hangi alanı okuduğu koddan doğrulandı**
+     (`PazaryeriAyarlari.cs:255-390`), çünkü yanlış alana yazılan anahtar sessizce 401
+     üretir: Trendyol `ApiAnahtari`/`ApiGizli` = API Key/Secret; Hepsiburada
+     `SaticiKimligi` = Merchant ID + `Parola` (`Kullanici` **boş kalır**, Basic auth
+     kullanıcı adı olarak Merchant ID gider); Pazarama `ApiAnahtari`/`ApiGizli` = Client
+     ID/Secret; Boyner `ApiAnahtari` = kullanıcı adı, `ApiGizli` = parola; Shopify
+     `SaticiKimligi` = mağaza adı, `Jeton` = `shpat_` token.
+  2. Canlı dosya ile yereldeki doğrulanmış dosya **anahtar ve değer düzeyinde
+     karşılaştırıldı** (yorumlar ayıklanıp JSON olarak düzleştirilerek).
+  3. Son dosya yerel dosyadan üretildi (yorumlar ve Türkçe metinler bozulmasın diye),
+     üzerine sunucuya özel üç değer yazıldı.
+- **Karşılaştırmanın sonucu — boş sırların dışında SADECE 3 fark, üçünde de canlı doğru:**
+
+  | Alan | Yerel | Canlı (doğru) |
+  | --- | --- | --- |
+  | `Crs.Sirketler[04].KullaniciAdi` | `ViumaDigital` | `ViumaDigital_WebServis` |
+  | `Crs.Sirketler[04].Parola` | `v1234567` (yer tutucu) | gerçek parola |
+  | `Kasa.ServisHesabiDosyasi` | `D:\UzmanAdres\...` | `C:\Program Files\SentezServis\...` |
+  | `Toplayici.Spool.Klasor` | `D:\UzmanAdres\...\spool` | `C:\Program Files\...\spool` |
+
+  **Yereli temel alıp körlemesine üretmek CRS 04 kimliğini bozacaktı.** Bu yüzden
+  karşılaştırma yapılmadan dosya üretilmedi.
+- **Anahtarların kendisi:** kullanıcının verdiği 18 değer, yerelde **canlı doğrulanmış**
+  (03.09'da 10/10 hesapta `BaglantiDeneAsync` başarılı) değerlerle **birebir aynı** çıktı.
+  Yani listede sürpriz yok.
+- **Doğrulama:** Son dosya canlı dosyaya göre yalnızca **18 boş sır dolduruldu**; anahtar
+  farkı sıfır, başka hiçbir değer değişmedi. JSON geçerli, 14.681 bayt, UTF-8.
+- **Dosya deponun DIŞINDA** (`scratchpad\ayar\appsettings.json`) tutuldu; sırlar repoya
+  girmez.
+
+### 13. Üç bulgu
+
+- **04/Pazarama çift kayıt riski — CİDDİ.** `Etkin: true` ve anahtarları 03'ünkiyle
+  **birebir aynı** (aynı satıcı kimliği, aynı Client ID/Secret). 18.09 listesinde 04 için
+  Pazarama **hiç yok**. Bu hâliyle gece sipariş çekme işi aynı siparişleri iki kez çeker ve
+  aynı ticari belge iki firmaya düşer — geri alması zor bir muhasebe hatası. Dosyaya
+  uyarı notu kondu, `"Etkin": false` önerildi; **karar kullanıcıda.**
+  (02.09 tarihli hafıza notu "04/Pazarama bilerek kapalı" diyordu; ölçüm bunun artık
+  doğru olmadığını gösterdi, not düzeltildi.)
+- **Yerelde CRS 04 kimliği bayat** (`ViumaDigital` / `v1234567`). Canlıdaki doğru değerle
+  güncellenmesi öneriliyor; aksi hâlde geliştirme makinesinde 04'ün CRS çağrıları başarısız.
+- **Kullanıcının yapıştırdığı dosyada Türkçe karakterler bozuk** (`ModaÅŸima`, `â€”`):
+  UTF-8 metnin CP1252 olarak okunmuş hâli. Üretilen dosya temiz UTF-8; sunucuda düzenlenirken
+  **UTF-8 olarak kaydedilmesi** gerekiyor, yoksa arayüzde mağaza adları bozuk görünür.
+
+### 14. Pakete alınmayanlar (kasıtlı)
+
+- **N11:** entegrasyon iptal; 5 adet App Key/Secret çifti verildi ama sağlayıcı yazılmayacak.
+- **PTT Kargo:** pazaryeri sözleşmesine (sipariş/fiyat/stok) uymuyor, kendi katmanını
+  bekliyor. **Barkod aralığı TERS:** başlangıç `2791859800001` > bitiş `2791852299999`.
+  Bu hâliyle aralık boş kümedir; PTT katmanı yazıldığında ilk düzeltilecek şey bu. Ayrıca
+  üç şirket aynı PTT hesabını ve aynı aralığı paylaşıyor — çakışma riski.
+
+## Kararlar (paket turu)
+
+- Canlı ayar dosyası **karşılaştırma yapılmadan** üretilmez. Tek yönlü kopyalama, canlıda
+  doğru olan bir değeri (CRS 04) sessizce bozabiliyor.
+- Pazaryeri alan eşlemesi **koddan** doğrulanır, listedeki etiketten değil.
+
+## Açık kalanlar (paket turu)
+
+- **04/Pazarama açık mı kalacak?** Çift kayıt riski; kullanıcı kararı bekliyor.
+- Yerel `appsettings.json`'daki CRS 04 kimliği canlıyla eşitlenecek mi?
+- Pakette `.pdb` dosyaları kalsın mı?
+- PTT barkod aralığının doğrusu ne? (başlangıç/bitiş ters)
