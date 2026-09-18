@@ -708,3 +708,61 @@ Paketin içindeki `app.js` açılıp iki düzeltmenin de içeride olduğu doğru
 
 - Paket canlıya kurulmadı; 10:18 paketi de kurulmamıştı.
 - Bağlantı cümlesini arayüzden girme özelliği hâlâ yok (tasarım kararı bekliyor).
+
+---
+
+## Ek tur — her maile sabit kopya (CC)
+
+### 23. `Eposta:Kopya` ve `Eposta:Gizli`
+
+- **İstek:** Her maile CC olarak `bt@modasima.com.tr` eklensin.
+- **Neden ayar, neden kod değil:** Adres koda sabitlenseydi değiştiğinde yeni sürüm
+  derlemek gerekirdi. `SentezServis:Eposta:Kopya` (CC) ve `:Gizli` (BCC) eklendi; işin
+  kendi alıcı listesinden bağımsız, **her** giden maile uygulanır.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Ayarlar.cs`,
+  `src/SentezServis.Core/Bildirim/EpostaGonderici.cs`,
+  `tests/SentezServis.Core.Tests/EpostaAliciTestleri.cs`,
+  `src/SentezServis.Host/appsettings.json` (gitignored)
+- **Commit:** `9e2a6db`
+
+### 24. Üç kural, üçü de sessiz hatayı önlüyor
+
+1. **Tekilleştirme.** Aynı adres yalnızca tek listede yer alır; öncelik To > Cc > Bcc.
+   Canlıda `Alicilar` ve `Kopya` şu an **aynı adres** (`bt@`); tekilleştirme olmasaydı
+   bt@ her maili **iki kez** alırdı. Büyük/küçük harf ayrımı yapılmaz.
+2. **Alıcısız mesaj.** SMTP'de hatadır; gönderici artık denemeden önce durup uyarı
+   logluyor.
+3. **Tersi de kapsandı.** İşin alıcı listesi boşalmışsa mail en azından kopya adresine
+   düşer — sessizce kaybolmaz. Bu, mahsubun 10 gün sessiz kalmasıyla aynı sınıftan bir
+   arıza olurdu.
+
+### 25. Liste kurma işi gönderimden ayrıldı
+
+`EpostaGonderici.AliciListesi(hedef, kopya, gizli)` saf bir fonksiyon; SMTP'ye bağlanmadan
+sınanabiliyor. Gerekçe: bu kural bozulduğunda belirti "birileri mail alamıyor" veya "aynı
+mail iki kez geldi" olur ve gönderim başarılı göründüğü için **haftalarca fark edilmez**.
+8 test eklendi.
+
+- **Canlı doğrulama:** Farklı bir asıl alıcıya (`abdusselam.kosecik@gmail.com`) gerçek mail
+  gönderildi; `bt@modasima.com.tr` **Cc satırında** göründü. Asıl alıcı bt@ olduğunda ise
+  tekilleştirme devreye girip CC'ye eklemedi.
+- 497 .NET testi geçti.
+
+### 26. Paket
+
+`SentezServis-2026-09-18-1055.zip` (73,7 MB), arayüz tarihi **2026-09-18 10:55**.
+`appsettings.ornek.json` yeni `Kopya` anahtarını taşıyor ve içinde sır kalmadığı doğrulandı.
+
+## Kararlar (CC turu)
+
+- Mail adresleri **ayarda durur**, kodda değil.
+- Aynı adres birden fazla alıcı listesinde yer almaz.
+- CC görünürdür; gözetim adresinin görünmesi istenmezse `Gizli` (BCC) kullanılır. Şu an
+  bilinçli olarak CC seçildi (kullanıcı öyle istedi).
+
+## Açık kalanlar (CC turu)
+
+- Canlı `appsettings.json`'a `Kopya` satırı eklenmeli; birleştirilmiş dosya
+  (`scratchpad/ayar/appsettings.json`) yeni anahtarlarla tazelendi.
+- `bt@` hem `Alicilar` hem `Kopya` olduğu için şu an pratikte bir değişiklik yok; fark,
+  iş bazlı alıcı listesi girilen işlerde ortaya çıkacak (PDKS, mahsup).
