@@ -143,7 +143,38 @@ taban, sonra kapsam.
 - **Sonuç:** öz-test 11 → 12 durum, hepsi OK; gerçek koşum `SONUC: GECTI`.
 - **Commit:** `b4c0e520`
 
+### 8. gitleaks yanlış pozitifi — defterdeki `tokens.css` parmak izi
+
+- **Neden:** Defter güncellenince sır taraması kırmızı yandı:
+  `deploy/dondurulmus-artefaktlar.json:29`, kural `generic-api-key`, entropi
+  3.84. Yakalanan şey bir sır değil, **sha256 özeti**:
+  `"src/Pbxtr.Web/src/styles/tokens.css": "<64 hex>"`. Tetikleyen, anahtarın
+  adındaki "tokens" kelimesiyle değerin entropisinin birleşimi — aynı satırdaki
+  diğer kaynaklar aynı biçimde yazılı ve yakalanmadılar.
+- **Ne yapıldı:** `.gitleaksignore`'a **parmak izi** istisnası (commit+dosya+
+  kural+satır) eklendi. **Regex allowlist yazılmadı:** `.gitleaks.toml`'da
+  ölçülmüş olduğu gibi `regexes` sırrın kendisine uygulanır; çıplak 64-hex'e uyan
+  bir desen depo genelinde bütün 64-hex değerleri körleştirirdi. Satır da
+  silinmedi: `tokens.css` gündüz teması tabanının gerçek kaynağıdır.
+- **Doğrulama:** `gitleaks detect --source .` → 1750 commit, `no leaks found`, rc=0.
+- **Commit:** `490e8095`
+
 ---
+
+## Kapı koşusu — kapanış ölçümü
+
+`deploy/yerel-kapilar.sh` (ubuntu kapı konteyneri, docker soketiyle):
+
+| Kapı | Sonuç |
+|---|---|
+| `kapi_45` görsel sadakat taban manifestosu + öz-test | **geçti** |
+| `kapi_83` görsel sadakat PİKSEL (pinli Linux konteyneri) — YENİ | **geçti** |
+| dondurulmuş artefakt defteri (BR-QA-58) | **geçti** |
+| Sır taraması | **geçti** (yukarıdaki istisnadan sonra) |
+
+Kalan iki kırmızı **bu turun işi değil ve bu turdan ÖNCE de kırmızıydı**:
+`BR-AST-55` kartında durum metni ŞART sütununda, ve
+`yonetim/kurul-kararlari.md:13838`'de karışık yazılı bir kelime (Kiril `е`).
 
 ## Kararlar
 
