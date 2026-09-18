@@ -200,3 +200,161 @@ Kalan iki kırmızı **bu turun işi değil ve bu turdan ÖNCE de kırmızıydı
 - Ş10 gereği piksel kapısı **2026-12-11**'e kadar deneme süresinde: o tarihe
   kadar yapısal iddiaların yakalamadığı en az bir gerçek regresyon yakalamazsa
   kapı kaldırılacak. (Bu turda zaten bir ürün kusuru yakaladı — `BR-FE-122`.)
+
+---
+
+# pbxtr — 2026-09-19 (ikinci tur: linux-uzmani, beş kart)
+
+## Bağlam
+
+`BR-SYS-119`, `BR-SYS-120`, `BR-SYS-122`, `BR-AST-117`, `BR-AST-118`.
+Alan: `deploy/`, sunucu, `AGENTS.md` — `src/` altındaki C# dosyalarına
+dokunulmadı (üç ajan orada paralel çalışıyordu).
+
+**Turun tek cümlelik dersi:** beş kartın üçünde bulunan kusur aynı sınıftı —
+*"depoda" ≠ "kurulu" ≠ "devrede"*. Kartların hiçbiri bunu iddia etmiyordu;
+ölçüm söyledi.
+
+## Yapılanlar
+
+### 1. BR-SYS-119 — Ş78-L6 sunucuda kapandı, Ş78-L5 saatle açık bırakıldı
+
+- **Neden:** kart "kapı `is-enabled` soruyor, *hiç tetiklendi mi* sormuyor"
+  diyordu; ayrıca ikinci ayak (drop-in'de sessizce yok sayılan `Environment=`)
+  "depoda düzeltildi" kaydıyla duruyordu.
+- **İlk satır `date -u`** — ve tur burada döndü: **sunucu saati
+  `Fri 2026-09-18 21:57:40 UTC`**, yerel tarih ise 19 Eylül. İlk zamanlanmış
+  ateşleme `Sat 2026-09-19 02:30Z (+<=15dk randomize) = ~02:37Z`, yani ölçüm
+  anında **~4s39dk İLERİDE**. `LastTriggerUSec` hâlâ **BOŞ**.
+  Kartın kendi zamanlama şartı gereği koşul **bugün eklenemezdi**.
+- **Ş78-L6 ölçümü — düzeltme sunucuya HİÇ İNMEMİŞTİ:**
+
+  | | kurulu | depo |
+  |---|---|---|
+  | `/usr/local/sbin/pbxtr-yedek` | `2c8e1e9f` | `c6e6a7b4` |
+  | `...service.d/10-compose-yolu.conf` | `066e943e` | `6e6ceeda` |
+
+  `grep -c PBXTR_YEDEK_PG_KONTEYNER <kurulu betik>` = **0**.
+  Sebep yapısal: `deploy/` altında bu iki dosyayı **kuran hiçbir betik yok**;
+  kurulum bir runbook adımı, yani insan hafızası.
+- **Sapma aktif olarak tehlikeliydi:** yeni drop-in `PBXTR_YEDEK_PG_KONTEYNER`
+  verir, **eski betik yalnız `PBXTR_YEDEK_PG_ONEK` okur**. Yarı kurulumda betik
+  kendini bare-metal sanar, `pg_dumpall` host'ta olmadığı için düşerdi — ve
+  öğreneceğimiz an **gece 02:37'deki gözetimsiz koşu** olurdu.
+- **Ne yapıldı:** ikisi de kuruldu (**betik ÖNCE** — geriye uyumlu olduğu için
+  güvenli sıra), `daemon-reload`, geri-alma yedeği `/root/*.yedek-20260918`.
+- **Kabul ölçüldü:** `Environment`'ta `PBXTR_YEDEK_PG_KONTEYNER` **görünüyor**;
+  kurulu drop-in'den beri `Invalid environment assignment` **0**.
+- **pg yolu yedek durumuna DOKUNMADAN doğrulandı:**
+  `pg_dumpall --globals-only` = 1479 bayt, `pg_dump 16.14`.
+  **`backup-status.json` bilerek ELLENMEDİ** (274 bayt, mtime 09:45:21) — elle
+  bir koşu tazelik kapısını yeniden yeşile boyardı, yani **kartın şikâyet
+  ettiği şeyin ta kendisi**.
+- **Yapısal düzeltme:** `deploy/yedek-sunucu-sapma.sh` (yeni, `kapi_84`).
+  Üç iddia: (1) depo/sunucu sha, (2) drop-in adları systemd'nin **yüklediği**
+  unit'te mi + kurulu dosyadan **beri** `Invalid environment assignment` var mı,
+  (3) `LastTriggerUSec` boş **ve** timer 25 saatten uzundur etkinse **KIRMIZI**.
+- **"Yarın hatırla" bir kapı değildir** — kartın kapatmak istediği şeyin ta
+  kendisi. Bu yüzden koşul **tarihe değil timer'ın kendi beyanına** bağlandı
+  (`OnCalendar` + `RandomizedDelaySec` + `ActiveEnterTimestamp`):
+  **2026-09-19 10:42Z'de kendiliğinden sertleşir.**
+- **Dört mutasyonla doğrulandı** (hepsi kırmızı): drop-in'den `Environment=`
+  satırları silinir (vacuity), betik `KONTEYNER` okumayı bırakır, depo betiği
+  değişir (iddia 1), ateşleme penceresi 1 sn (iddia 3).
+- **Journal penceresi kurulu drop-in mtime'ı ile sınırlandı:** tüm journal'ı
+  saymak, 09:41:20'deki (artık geçersiz dosyaya ait) 5 satır yüzünden kapıyı
+  journal dönene kadar **kalıcı kırmızı** yapardı — *hep-kırmızı kapı, kapıyı
+  fiilen kaldırır*.
+- **Sonuç:** `BR-SYS-114` bugün **KAPANMIŞ SAYILMAZ**, sadece elle yamanmıştır.
+
+### 2. BR-SYS-120 — iki ayak da yerindeydi; ölçüldü, kör yazılmadı
+
+- Çıpa `deploy/yerel-kapilar.sh` kapanışında, **her iki dalda**, ANSI rengi
+  olmadan, son satırda; `rc=3` de `KALAN`'a giriyor.
+- **`AGENTS.md` maddesi zaten VARDI** (Ş78-L7, satır 600-616). Kart "yoksa yaz"
+  diyordu — **önce var mı diye ölçüldü**, mükerrer madde yazılmadı.
+
+### 3. BR-SYS-122 — envanter, sınıflandırma, kural
+
+- Sunucudan `--scan`: **22 pbxtr anahtarı**; `INFO keyspace` =
+  `db0:keys=23,expires=22`. **pbxtr'a ait TTL'siz anahtar SIFIR** (tek kalıcı
+  anahtar `key:__rand_int__`, bir `redis-benchmark` artığı).
+- Sınıflandırma: `counters` (TTL 694sn) ve `provisioning:delivery` (TTL 1730sn)
+  = **performans önbelleği, DOĞRU** (türetilmiş; TTL burada bir **koruma**).
+  `dropped:tenant-unresolved` / `payload-rejected` / `*:broken` (TTL 48s) =
+  **ARIZA KANITI, TEK KOPYA, YANLIŞ.**
+- **Sınıf ölçütü TTL uzunluğu değil:** *"bu anahtar silinirse olgu geri
+  getirilebilir mi?"*
+- **İkinci kopya arandı, YOK:** `docker logs pbxtr-app` içinde `unresolved`
+  geçişi **0**; konteyner günlüğü 358 satır / 59 KB, penceresi 17 Eylül'e
+  **ulaşmıyor**; log sürücüsü `json-file max-size=20m max-file=5`, yani
+  **boyut tabanlı, zaman garantisi yok**; DB'ye zaten yazılmıyor.
+  Yani `dropped:tenant-unresolved:2026-09-17` = **33224 düşmüş telefon olayının
+  TEK kaydı**, `2026-09-19 01:49Z`'de yok olacaktı.
+- **Kural:** `AGENTS.md` **16. bölüm** — *"Süreli anahtar, bir olayın TEK kaydı
+  olamaz"*, envanter tablosu + sınıf ölçütü + yapılacaklar.
+- Kalan iş (aynalama, `src/`) **backend-dev-2**'de. Redis kovası ve TTL'i
+  **kalkmaz** — istenen TTL uzatmak değil **ikinci kopya**.
+
+### 4. BR-AST-117 — durum doğrulandı + ÜÇÜNCÜ, kayda geçmemiş ayak
+
+- `ls /var/lib/asterisk/sounds/` = yalnız stok **`en`**;
+  `sounds/pbxtr/sys/` = **dizin YOK**. Yani `en` fallback'inin dosyası da yok:
+  **her dil** sessizliğe düşüyor (kart yalnız `tr` diyordu).
+- **YENİ (iv):** özelliğin dayandığı migration
+  `20260915124000_TenantAnnouncementLanguage` sunucuda **UYGULANMAMIŞ**
+  (`tenant_settings.announcement_language` kolonu **yok**), yani bugün tenant
+  bazlı dil **seçilemiyor bile**. Yine *kod var, koşan yok*.
+- `deploy/anons-dosyasi-kapisi.sh` **dürüst davrandı**: `rc=2 OLCULEMEDI`,
+  eksiği yeşile boyamadı ve gerekçesini yazdı.
+- (i) 9 dilin ses kaynağı **depo dışı ürün varlığıdır** (lisans/ürün kararı);
+  bir ajan üretemez. Sıra bağımlılığı: **(iv) önce**, çünkü anons kapısı (iv)
+  olmadan hiç ölçemiyor.
+
+### 5. BR-AST-118 — park bağlamı sorusu canlı A/B ile cevaplandı
+
+- **POZİTİF:** t0012 park dosyası geri konup `module reload res_parking.so`
+  (kapalı liste) koşulunca `parking show` = `Parking Lot: t0012-tut` **geri
+  geldi**, `dialplan show` = `700 Park()` + `751..759 ParkedCall()`.
+- **NEGATİF:** dosya silinip aynı reload koşulunca lot **gitti**, bağlam yine
+  `0 extensions (0 priorities)`.
+- **Kontrol grubu t0007 tur boyunca bozulmadı:** 2 park lotu, 10 ext / 19 pri.
+- **Sonuç:** kalıntı **boş bir bağlam ADIDIR** (0 extension); yönlendirilebilir
+  nesne olan **LOT gerçekten gidiyor**; ve kalıntı **yeniden oluşturmayı
+  BLOKLAMIYOR**.
+- **Doğru kabul ölçütü** *"dialplan show çıktısında tenant kodu hiç geçmemeli"*
+  **DEĞİLDİR** — öyle bir ölçüt kapalı listeyle **asla** sağlanamaz ve silmeyi
+  sonsuza kadar bloklardı. Doğrusu: (a) `parking show` lot yok,
+  (b) `dialplan show <ctx>` = `0 extensions`, (c) pjsip/queue/moh tenant kodlu
+  satır yok, (d) diskte `t<kod>-*.conf` yok.
+- **Yolda GERÇEK BİR HATA bulundu ve düzeltildi:** `pbxtr-confd-dugum.sh` 5.5
+  bölümü operatöre *"4) doğrula: dialplan show ile tenant satırı 0 olmalı"*
+  diyordu. Doğru temizlikten sonra o grep **1 satır** döndürüyor, yani talimatı
+  izleyen operatör/ajan temizliği **başarısız sanıp** yasak komutlara
+  (`module unload` / `core restart`) yönelirdi.
+
+## Kararlar
+
+- **Zamanlama şartı "hatırlanacak" bir şey olarak bırakılmaz.** Koşul tarihe
+  değil, ölçülebilir bir sistem beyanına bağlanır ve kendiliğinden sertleşir.
+- **Elle başlatılan bir yedek, zamanlanmış yedeğin kanıtı değildir** — tersine,
+  onu ölçen kapıyı körleştirir. Bu yüzden doğrulama `backup-status.json`'a
+  dokunmayan bir yoldan yapıldı.
+- **Kalıntının muaf tutulması bir "görmezden gelme" değil, A/B ile ölçülmüş bir
+  SINIFLANDIRMADIR** — nesnenin yönlendirme kabiliyeti olmadığı gösterildi.
+- **Silme hâlâ açılmadı.** Blokeyi kaldıran ölçüm, kartın diğer üç ayağının
+  (eşik/onay, vacuity kapısı, geri alma) yerine geçmez.
+
+## Açık kalanlar / sonraki adım
+
+- **`BR-SYS-119` / `BR-SYS-114`:** 02:37Z ateşlemesinden sonra
+  `sh deploy/yedek-sunucu-sapma.sh` koşulur. (3) TAMAM derse `BR-SYS-114`
+  gerçekten kapanır; demezse kart P1 olarak açılır. Geri-alma yedekleri
+  `/root/*.yedek-20260918` **o ana kadar durur**.
+- **`BR-SYS-122`:** arıza kanıtı sayaçların TTL'siz aynalanması — `backend-dev-2`.
+- **`BR-AST-117`:** (iv) migration sunucuya uygulanmalı; (i) 9 dilin ses kaynağı
+  bir ürün/lisans kararıdır.
+- **`BR-AST-118`:** eşik/onay politikası, vacuity kapısı, geri alma yolu.
+- **Kalıcı boşluk:** `deploy/` altında `pbxtr-yedek` betiğini + drop-in'i
+  **kuran** bir adım hâlâ yok; `kapi_84` sapmayı artık **görünür** kılıyor ama
+  **gidermiyor**.
