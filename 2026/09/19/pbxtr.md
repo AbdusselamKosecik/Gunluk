@@ -1170,3 +1170,208 @@ sh   deploy/yedek-sunucu-sapma.sh              # BAGIMSIZ dogrulama (kapi_84)
   mutasyonla kırmızı, `sh -n deploy/yerel-kapilar.sh` OK, kapı sayacı 84.
 
 **Commit:** `89eb4e1c` — BR-SEC-21(b) KAPANDI + BR-SYS-124 acildi
+
+---
+
+## Tur — `BR-QA-114` kapandı + `BR-BE-206` şart (iv) hedefine ulaşmıyordu (backend-dev-1)
+
+### Bağlam
+
+Elimde beş P1 kart vardı (`BR-BE-206/208/209`, `BR-QA-114`, `BR-FE-117`). Turda
+kapatılabilecek olan `BR-QA-114`'tü: diğer dördünün açık ayakları **dağıtım sonrası
+canlı ölçüme** bağlı (kart metinleri bunu adıyla yazıyor). Tur ortasında koordinatör
+ana dalda ölçülmüş bir kırmızı devretti ve o da `BR-BE-206` alanındaydı.
+
+### 1. `BR-QA-114` — aynı kural iki yerde yazılıydı, SQL ikizi hiç koşmamıştı
+
+- **Neden:** `callback_requested` SLA sınıfı iki kez ifade edilmiş: saf C#
+  (`CallbackSlaPolicy.Classify`) ve `SlaAggregationJob` içindeki `RecomputeSql`.
+  `BR-BE-199` turunda C# tarafı 52/52 yeşildi, SQL tarafı **okunarak** doğrulanmıştı
+  (ortamda PostgreSQL konteyneri yoktu). Defterdeki *"test ikizi üretimden
+  müsamahakâr"* sınıfının önceden adı konmuş hâli: iki ifade ayrı ayrı yeşilken bile
+  ayrışabilir ve ayrıştığında belirti sessizdir — SLA sayısı yanlış çıkar, kimse patlamaz.
+
+- **Ne yapıldı — ORAKEL, kopya değil.** Yeni bekçi
+  `tests/Pbxtr.Integration.Tests/Tests/CallbackSlaSqlParityTests.cs`. Beklenen sayılar
+  **elle yazılmadı**: `CallbackSlaPolicy.Classify` *çağrılarak* üretiliyor ve
+  `SlaAggregationJob.RecomputeAsync`'in gerçek PostgreSQL 16'da `sla_buckets`'a yazdığı
+  sayaçlarla karşılaştırılıyor. Elle yazsaydım test *bugünkü SQL'in* kopyası olur ve iki
+  ifadenin **ayrışmasını** değil kendi kopyasından sapmasını ölçerdi.
+
+- **Tasarımın can alıcı noktası — HER VAKA İKİ ANDA ÖLÇÜLÜR.** Kova sayaçlarında
+  `pending` ile `excluded` **aynı izi** bırakır (ikisi de paydaya girmez). Ayrımı
+  yalnızca ZAMAN görünür kılar: son tarihten sonra `pending` → `breached`'a döner,
+  `excluded` yerinde kalır. Tek anda ölçseydim kip a ile "süresi dolmamış talep" aynı
+  yeşili üretirdi.
+
+- **Çeviri sözleşmesi tek yerde ve üretimle birebir.** C# imzası `answeredAt` ister,
+  SQL `resolution` + `resolved_at` çiftini okur. Çeviri üretimde
+  `EfCallbackLedger.AnsweredAtOf`'tadır ve testte birebir tekrarlandı — aksi hâlde test
+  üretimin sormadığı bir soruyu ölçerdi. Aynı şekilde ayar satırı olmayan tenant için
+  varsayılan (`deadline`/30) iki tarafta da aynı (`ReadSettingsAsync`'in `row is null`
+  dalı ↔ `COALESCE(ts.callback_sla_mode,'deadline')`).
+
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Tests/CallbackSlaSqlParityTests.cs` (yeni).
+
+- **Komutlar:**
+  ```bash
+  dotnet build tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj -v q --nologo
+  PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj \
+    --no-build --filter "FullyQualifiedName~CallbackSlaSqlParityTests"
+  ```
+
+- **Sonuç:** 13 vaka + 3 fact = **16 test, 16/16**. Kartın dört riskinin dördü de
+  ölçüldü: (a) `Pending ≠ Breached`, (b) kip a paydadan düşer ama `callback_requested_count`
+  yine 1 (giriş kaybolmuyor), (c) `AgentConnect` müstesnası — bu kural C# politikasında
+  **yoktur** ve bilinçlidir, o yüzden ayrı testte sayılarla yazıldı ve ayrım karta kondu,
+  (d) `queue_optin` lateral join'i tenant sınırında sızmıyor (aynı `call_id`, iki tenant).
+
+- **YEDİ MUTASYON, İKİ YÖN; yedisi de kırmızı, geri alınınca yeşil:**
+
+  | # | Mutasyon | Kırmızı olan |
+  |---|---|---|
+  | M1 | SQL sınırı `<=` → `<` | yalnız `b/sinir-uzerinde` |
+  | M2 | SQL `ELSE 'pending'` → `'breached'` | 6 vaka |
+  | M3 | SQL `'excluded'` → `'breached'` | yalnız iki kip a vakası |
+  | M4 | lateral join'den `cb0.tenant_id = r.tenant_id` silindi | sızıntı testi |
+  | M5 | `AgentConnect` müstesnası silindi | AgentConnect testi |
+  | **M6** | **C# tarafı** `answered <= deadline` → `<` | yine yalnız `b/sinir-uzerinde` |
+  | M7 | vaka defterinden kip a çıkarıldı | **vacuity kapısı** |
+
+  M6 önemli: orakelin **canlı** olduğunun, SQL'in kopyası olmadığının kanıtı.
+
+- **TUZAK (kayda geçsin):** mutasyonları `git checkout -- <dosya>` ile geri alan bir
+  sürücü betiği yazdım; o dosyada **commit edilmemiş kendi düzenlemem** vardı ve
+  checkout onları da sildi. Mutasyon sürücüsü yalnızca **temiz** dosyalarda güvenlidir;
+  düzenlenmiş dosyada mutasyon ters yamayla geri alınmalıdır.
+
+- **İKİNCİ TUZAK:** ilk mutasyon koşusunda `dotnet build` **1 hata** verdi (DLL bir
+  önceki testhost tarafından kilitliydi) ama boru hattı yine de teste geçti ve test
+  **mutasyonsuz ikiliyi** ölçüp "16/16 geçti" dedi. Sürücüye `grep "0 Error(s)"` kapısı
+  kondu: derleme doğrulanmadan ölçüm yapılmıyor. (Defter: *test koşarken build sessizce
+  atlanır*.)
+
+### 2. `BR-BE-206` şart (iv) — uyarı yayınlanıyordu, kimse dinlemiyordu
+
+- **Neden:** koordinatör ana dalda ölçülmüş bir kırmızı devretti
+  (`ScriptPublishedEventTests.Istemci_olay_listesi_sunucu_katalogunu_kapsar`): sunucu
+  kataloğunda 15 olay, istemcide 14; eksik olan `callback.first_run`. Üreticisi var
+  (`EfCallbackFirstRunNotice.cs:130`), tüketicisi yok — `RealtimeProvider` bilmediği
+  adı taşıyan çerçeveyi **sessizce düşürüyordu**. Yani `BR-BE-206`'nın dört ayağından
+  (iv) koda inmişti ama **hedefine hiç ulaşmamıştı**.
+
+- **İKİNCİ VE DAHA SİNSİ KUSUR (ölçüm).** Kapının kendi ayrıştırıcısı
+  `'(?<name>[a-z][a-z0-9.]*)'` idi ve `callback.first_run` **alt çizgi** taşıyor.
+  Python ile ölçtüm:
+  ```
+  "'callback.first_run',"            -> []        (hiç eşleşmiyor)
+  "'webhook.subscription.suspended'," -> ['webhook.subscription.suspended']
+  ```
+  Yani adı listeye eklesem bile kapı *"eksik"* demeye devam ederdi ve ekleyen kişi
+  listeye bakıp *"ama ekledim"* derdi. Klasik *envanter sayacı kendi filtresini ölçmez*.
+  Alfabe `[a-z0-9._]`'ye genişletildi **ve bir vacuity kapısı eklendi**: kapı artık
+  *"ad eşleşiyor mu"* değil **"AYRIŞTIRICI bu adı GÖREBİLİYOR MU"** diye soruyor —
+  yarın `_` dışında bir karakter taşıyan bir ad eklenirse aynı satır yine kırmızı olur.
+
+- **Adı listeye eklemek TEK BAŞINA YAPILMADI.** O hâl kapıyı vacuous bırakırdı
+  (*"olay ulaşıyor"* sanılırdı). Gerçek bir tüketici bağlandı: `CallbackBoardPanel`
+  → `useRealtimeReload(['callback.first_run'], reload, 0)`.
+  **Gerekçe ölçülü:** olayın yayınlandığı tick'te işin kendisi `callback_entries`
+  satırlarının `status` / `attempt_count` / `next_attempt_at` alanlarını **toplu hâlde**
+  değiştirir; açık duran #37 defteri tam o anda **bayatlar**.
+  `0 ms` birleştirme: olay tenant başına ömür boyu bir kez yayınlanır
+  (`tenant_settings.auto_callback_first_run_at`), sel üretmez.
+
+- **BELGE DÜZELTMESİ (silinmedi).** `IRealtimePublisher`'daki
+  *"olay bir tazeleme tetikleyicisi değil, bir duyurudur; **hiçbir ekran onsuz
+  bayatlamaz**"* cümlesinin ikinci yarısı **yanlıştı**. Cümle durduğu sürece tüketici
+  yokluğu bir *eksik* değil bir *tasarım* gibi okunuyordu — ve gerçekten öyle oldu.
+
+- **`REALTIME_EVENT_GATES` satırı da yazıldı** (tsc bunu zorladı, ben unutmadım —
+  tip `Record<RealtimeEventType, …>` tam kapsama istiyor):
+  `'callback.first_run': { anyOf: ['live.queue.read'], subjectSelf: false }`.
+  Boş bırakılsaydı `deadRealtimeEvents` olayı hiç alamayacak bir agent'ta #37'yi
+  *"canlı"* sayardı.
+
+- **Dokunulan dosyalar:**
+  `src/Pbxtr.Domain/Modules/Realtime/IRealtimePublisher.cs`,
+  `src/Pbxtr.Web/src/app/realtime/RealtimeProvider.tsx`,
+  `src/Pbxtr.Web/src/app/screens/automation/CallbackBoardPanel.tsx`,
+  `src/Pbxtr.Web/src/app/screens/automation/CallbackBoardPanel.test.tsx`,
+  `tests/Pbxtr.Api.Tests/Modules/Realtime/ScriptPublishedEventTests.cs`
+
+- **ÜÇ MUTASYON, üçü de kırmızı:**
+  1. bekçi alfabesi eski dar hâline çevrildi → *"BEKCININ ALFABESI DAR … callback.first_run"*
+  2. ad istemci listesinden silindi → *"Istemcide olmayan sunucu olaylari: callback.first_run"*
+  3. panelin `useRealtimeReload` çağrısı kaldırıldı → yeni vitest kırmızı
+
+- **YAN BULGU — bekçi benim kendi mock'umu yakaladı.** `src/test/viMockTargets.test.ts`
+  yeni `vi.mock('../../realtime')` ezmemde **iki** kusur gördü: (a) ölü `StaleDataBadge`
+  ezmesi (panel o adı ithal etmiyor), (b) `useRealtimeReload` sarmalayıcım 2/3 parametre
+  alıyordu ve `coalesceMs`'i **sessizce düşürüyordu**. İkisi de düzeltildi. Bu kapı
+  çalışıyor ve iyi çalışıyor.
+
+### Komutlar (doğrulama)
+
+```bash
+dotnet build pbxtr.sln -v q --nologo                     # 0 Error
+dotnet format pbxtr.sln --verify-no-changes --include <5 dosya, ayrac BOSLUK>
+dotnet test tests/Pbxtr.Api.Tests/... --filter "FullyQualifiedName~Pbxtr.Api.Tests.Modules.Realtime"
+PBXTR_REQUIRE_DOCKER_TESTS=1 dotnet test tests/Pbxtr.Integration.Tests/... \
+  --filter "…CallbackSlaSqlParityTests|…SlaDeadlineRestatementTests|…CallbackFairnessAndStalenessJobTests"
+cd src/Pbxtr.Web && npx tsc -b && npx vitest run
+```
+
+### Sonuç / doğrulama
+
+| Ölçüm | Sonuç |
+|---|---|
+| `CallbackSlaSqlParityTests` (gerçek PG 16) | **16 / 16** |
+| callback + SLA entegrasyon kümesi | **22 / 22** |
+| `Pbxtr.Api.Tests.Modules.Realtime` | **132 / 132** |
+| frontend takımı (`vitest run`) | **2103 / 2103**, 234 dosya |
+| `tsc -b` | temiz |
+| `dotnet build pbxtr.sln` | 0 Warning, 0 Error |
+| `dotnet format --verify-no-changes` | rc=0 |
+
+**Commit:** `225da1bf` — BR-QA-114 kapandi + BR-BE-206: ilk tur olayinin istemcide
+tuketicisi yoktu. ClickUp senkronu koşuldu: `BR-QA-114 → complete`,
+`BR-BE-206 → in progress`, doğrulama `fark olan kart: 0, izde olmayan: 0`.
+
+### Kararlar
+
+- **Bir kuralın iki ifadesi varsa, bekçi ORAKEL olmalıdır.** Beklenen değerleri elle
+  yazan bir "parite" testi paritenin değil, kendi kopyasının bekçisidir. Kanıtı M6:
+  C# tarafını mutasyonlamak testi kırmızı yaptı — kopya olsaydı yeşil kalırdı.
+- **Gözlemlenemeyen bir ayrım, İKİNCİ BİR GÖZLEM ANIYLA gözlemlenebilir hâle gelir.**
+  `pending` ile `excluded` kova sayaçlarında aynıdır; ayıran şey zamanın geçmesidir.
+- **Bir bekçinin ilk çıktısı hem kodu hem KENDİNİ ölçer.** Alfabesi dar bir kapı,
+  düzeltilmiş kodu bile "eksik" gösterir; kapı kurarken *"benim evrenim neyi hiç
+  göremez"* sorusu ayrı bir ayak olmalıdır (bu tura vacuity kapısı olarak indi).
+- **Olay adını istemci listesine eklemek "tüketici" değildir.** Kapıyı yeşile çevirir
+  ve "olay ulaşıyor" yanılsaması üretir. Ya gerçek bir tüketici bağlanır ya olay
+  kaldırılır.
+- **Mutasyon sürücüsü `git checkout` ile geri alma yapmaz** (düzenlenmiş dosyada
+  kendi işini siler) **ve derlemeyi doğrulamadan ölçmez** (kilitli DLL "0 Errors"
+  yalanı üretiyor).
+
+### Açık kalanlar / sonraki adım
+
+- `BR-BE-206` şart **(ii)** hâlâ açık: hizalamadan önce canlıda ölçülecek üçlü
+  (kaç tenant'ta düğme açık, kaç `pending AND next_attempt_at <= now()` satır, en
+  eskisi kaç günlük) **dağıtım öncesine aittir ve bu turda da ölçülmedi.**
+- `BR-BE-209` açık ayağı (ilk 24 saat: originate sayısı, `CallOriginateBlocked` red
+  sayısı, kanal eşzamanlılığı) + `call_attempts` sayım sorgusunun canlı PG'de
+  doğrulanması — **dağıtım sonrası**, bu turda ölçülemez.
+- `BR-BE-208` kalan ayağı: round-robin **sıralamasının** 6+ tenantlı bir fikstürle
+  ölçülmesi (bugünkü `TelephonyFixture` iki tenant seeder; 2×10=20 satır global
+  `LIMIT 50`'nin altında kaldığı için sıralama mutasyonu **yeşil kalıyor**).
+- `BR-FE-117` (modal kampanya sayacını gösteriyor) **bu turda ele alınmadı**:
+  doğru düzeltme, geri arama kökenli çağrıyı ayırt edebilmeyi gerektiriyor ve o alan
+  (`callSource`) `BR-BE-203`'te hâlâ **sunucuda yok** (`CallSource` deseni `src/**/*.cs`
+  altında sıfır eşleşme). Kartın "kısa vadeli" önerisi (sayacı gizle) bile ayırt edici
+  bir alan ister; alansız yapılacak her gizleme kampanya çağrılarında da sayacı
+  kaldırırdı ve kartın kendi vacuity şartına takılırdı.
+- Gerçek santralde `queue_optin` çıkışının hangi AMI olayını ürettiği (Abandon mı
+  Leave mi) hâlâ ölçülmedi (`BR-AST-116` sınıfı). Parite testinin sınıflandırması
+  o olaydan **bağımsızdır**; değişen yalnızca `wait_source`'tur.
