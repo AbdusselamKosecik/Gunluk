@@ -5117,3 +5117,56 @@ iş kayıp değil, sadece commit mesajı onlarda.
 - i18n: 8 anahtar × 9 dil. Doğrulama `json.loads` + `in` **değil**, ham metinde
   `ham.count('"'+k+'"') == 1`.
 - ClickUp: `--kuru` → `fark olan kart: 0, izde olmayan: 0`.
+
+---
+
+### BR-BE-204 (P0, yayın bloke edici) + BR-BE-205 — SLA yeniden hesap penceresi ve tanım sürümü
+
+- **Neden:** `pending → breached` geçişi **zamanla** olur, olayla değil — ve üründe zamanla
+  tetiklenen bir yeniden hesap yoktu. Tick penceresi `[açık kova −900 sn, +900 sn)`, gece
+  mutabakatı yalnız dünün tamamı ve günde bir kez. 09:05'te bırakılan bir talep 09:30'da
+  söz kırıldığında hiçbir pencerede değildi → aynı gün 17:00'de %92, ertesi sabah %86.
+  `callback_sla_minutes = 1440` olan tenantta gece mutabakatı 00:0x'te koştuğu için
+  **hiçbir geri arama asla ihlal sayılmıyordu** (kip b sessizce kip a'ya dönüyordu).
+- **Ne yapıldı — çözüm (a) seçildi:** `DeadlineRestatementSql` + `RestateExpiredDeadlinesAsync`.
+  Toplayıcı her tick'te, tick penceresinin **dışında** kalan ama artık başka bir sonuç
+  verecek kovaları hedefli yeniden hesaplar.
+  - **Adaylık zamandan değil VERİDEN okunur** (`NeedsNightlyRestatementAsync` ile aynı desen):
+    `sla_buckets.computed_at` iki ana karşı kıyaslanır — (1) son tarih
+    (`missed_at + callback_sla_minutes`), (2) `callback_entries.updated_at`.
+  - **Ölçüt `resolved_at` DEĞİL `updated_at`** — bu ayrım ölçülerek bulundu: `resolved_at`
+    **iş zamanıdır** (cevabın gerçekten olduğu an) ve geçmişe dönük yazılır, yani kova ondan
+    sonra hesaplanmış olur ve satır hiç aday olmaz. `updated_at` "kova hesaplandıktan sonra
+    yeni bilgi geldi mi" sorusunu cevaplar. `resolved_at IS NOT NULL` şartı gerekli: aksi
+    halde her arama denemesi `updated_at`'i tazeler ve kova boş yere yeniden hesaplanırdı.
+  - Kova **talebin değil kuyruğa girişin** zamanından türediği için `call_events`/
+    `QueueCallerJoin` üzerinden hizalanır; `missed_at` ile hizalamak yanlış kovayı hedeflerdi.
+  - Ufuk 2 gün (= şema üst sınırı 1440 dk'nın 2 katı; 1 gün son tarih + 1 gün kesinti
+    toparlanma payı), kırpma 200 kova/koşu + WARNING.
+  - **(b) neden seçilmedi:** `callback_sla_minutes` üst sınırını garantili pencereye (~15 dk)
+    bağlardı; 1440'a kadar serbest bırakılmış gerçek bir ürün parametresini
+    (CLAUDE.md §13/3 — söz süresi tenant parametresi) zamanlayıcı ritmine feda ederdi.
+- **BR-BE-205:** `SlaDefinition.Version` `v1` → **`v2`**. Eski satırlar `v1` kalır — ayrım
+  budur. Sürüm zaten DTO'ya çıkıyordu (`TargetQueueRowDto`, `AnalyticsLossQueueRowDto`, CSV,
+  `SlaWindowState`) ve #18/#19'da çiziliyor; `v1` sabitleri yalnızca eski satırı temsil eden
+  fikstür/DEFAULT olarak kaldı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Live/SlaCalculator.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Sla/SlaAggregationJob.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/SlaWindowStore.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/SlaDeadlineRestatementTests.cs` (yeni),
+  `yonetim/backlog.md`
+- **Sonuç / doğrulama:**
+  - `SlaDeadlineRestatementTests` **4/4 geçti**; SLA süiti (Deadline + HoldTime + EventOrdering)
+    **9/9 geçti**.
+  - **Mutasyon:** son tarih dalı `AND FALSE` → kabul testi KIRMIZI (diğer 3 yeşil);
+    `updated_at` → `resolved_at` → geç-cevap testi KIRMIZI. İkisi de tek başına **doğru**
+    testi öldürdü.
+  - **Migration YOK** → `deploy/migration-contract-onay.blobs` defterine satır gerekmiyor.
+- **Test EDİLEMEYEN:** `dotnet build pbxtr.sln` tam çözüm yeşili alınamadı — paralel ajanlar
+  `ConfigRenderer.cs`, `OutsideHoursBreakJob.cs`, `SampleDataSeeder.cs`, `Api.Tests` fake'leri
+  üzerinde yarım işle çalışıyordu (CS0246/CS0102/CS0535 dalgaları, hiçbiri benim dosyamda
+  değil). Benim ölçümüm proje bazında: `Pbxtr.Infrastructure` 0 hata,
+  `Pbxtr.Integration.Tests` 0 hata. `Pbxtr.Architecture.Tests` ve `Pbxtr.Api.Tests`
+  başkasının derleme hatası yüzünden koşturulamadı.
+- **Commit:** `9f537616` — BR-BE-204/205: SLA yeniden hesap penceresi soz suresini kapsar +
+  tanim surumu v2
