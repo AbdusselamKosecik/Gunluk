@@ -2207,3 +2207,154 @@ benim ayristirma hatam gibi gorunuyordu; gercekte dosya altimda buyuyordu.
   `BR-SYS-111` vacuity (tarihsel 01 govdesiyle Docker'li A/B).
 - **Baska ekipte:** `BR-OPS-16` (backend-dev-2), `BR-OPS-06` (yazilim-mimari),
   `BR-SYS-60` (santral yazimi), `BR-OPS-09` (2)(3) (asterisk-uzmani).
+
+---
+
+## QA kart kapatma turu (pbxtr-qa, akşam) — 16 kart
+
+Bağlam: `yonetim/backlog.md`'de açık duran 16 QA/FE/DOC kartı kapatma turu.
+Yöntem bağlayıcıydı: önce Durum hücresini oku, sonra iddiayı **kodda ölç**; iş varsa yap,
+yoksa "ölçüldü — iş yok" diye **kanıtla**. Kartın kendi teşhisinin yanlış olabileceği
+varsayıldı ve iki kartta gerçekten yanlış çıktı.
+
+### Q1. BR-QA-98 — şablon çıpası artık `DROP FUNCTION/POLICY/TRIGGER` görüyor
+
+- **Neden:** `DROP FUNCTION|POLICY|TRIGGER|ROUTINE|VIEW|SCHEMA` hiçbir kapının desen
+  kümesinde yoktu. Somut delik: `02-guards.sql`'e eklenen bir `DROP FUNCTION ...` satırı,
+  onaylı bir tazeleme migration'ıyla kurulu üretim veritabanına taşınıyor, kapı bulgu
+  üretmiyor ve çıpa sha'sı değişmiyordu. Bir RLS policy fonksiyonunu düşüren satır tenant
+  izolasyonunu doğrudan ilgilendirir.
+- **Ne yapıldı:** Şeytan'ın önerdiği **geniş** hal ölçüldü ve **uygulanmadı** (148+ yeni
+  bulgu → onaysız onlarca migration RED → toplu onay → defterin kauçuk mühre dönmesi).
+  Kartın **dar seçeneği** uygulandı: genişletme yalnız **şablon çıpasında**
+  (`TEMPLATE_ONLY_DENIED` / `ANCHOR_DENIED`); kapının `DENIED` kümesi değişmedi, migration
+  tarafı hiç etkilenmedi.
+- **Dokunulan dosyalar:** `deploy/migration-compatibility-guard.py`,
+  `deploy/migration-compatibility-guard-selftest.py`, `deploy/migration-contract-onay.blobs`
+- **Sonuç / doğrulama:** çıpaya giren ifade 01'de 8 → 35, 02'de 2 → 18. Ham grep (67/74)
+  ile fark **yorumdur** ve bağımsız doğrulandı (27 ve 16). Gerçek depoda mutasyon: 01'e
+  `DROP FUNCTION pbxtr_apply_tenant_rls(text);` → kapı rc=1, geri alındı → rc=0. Öz-test:
+  T10a/T10b/T10c/T10d + `T-M5` mutasyonu; rc=0.
+- **Commit:** `e979c579`
+
+### Q2. BR-QA-99 — RLS yüklemi ayna bekçisi (`kapi_74`)
+
+- **Neden:** aynı yüklem üç ayrı yerde, üç ayrı yoldan yazılıydı; biri değişip diğeri
+  kalırsa ürün **iki sıraya birden** sahip olur ve hiçbir kapı bunu söylemezdi.
+- **Ne yapıldı:** tek doğruluk kaynağı **şablondur**; bekçi diğerlerini ondan **türetir**
+  (ikinci bir elle yazılmış beklenti tutulmaz — tutulsaydı bekçi kendi kopyasını ölçerdi).
+  Kapsanan: şablon üretici, **şablonun kendi açıklaması** (öz-test sırasında bulundu:
+  `01-rls-template.sql:205-206` yüklemi yorum olarak da yazıyor ve ilk mutasyon çıpam ona
+  çarpmıştı), `CdrSqlBuilder.cs:74`, `02-guards.sql:1651` donmuş dize,
+  `03-smoke-tenant-isolation.sql:1124-1130` **ikinci** `CREATE POLICY` üreticisi ve beş
+  bayatlayacak yorum yüzeyi.
+- **Kategoriyle eleme yapılmadı:** `EfResourceVersionGate.cs:233,237` **ölçerek** elendi —
+  yüklemi `AND tenant_id = app_current_tenant()`, `OR app_is_cross_tenant()` yok.
+- **Dokunulan dosyalar:** `deploy/ci/rls-predicate-mirror-guard.py`,
+  `deploy/ci/rls-predicate-mirror-guard-selftest.py`, `deploy/yerel-kapilar.sh`
+- **Sonuç / doğrulama:** 10 mutasyonun 10'u da kırmızı + 1 pozitif + 1 negatif kontrol.
+- **Commit:** `fd74e677`
+- **Kalan:** kurulu DB'deki üretilmiş policy metni için birebir bekçi (01/02'yi değiştirir
+  → Ş73-L2 eşli tazeleme migration'ı + kurul kararı). Karta yazıldı.
+
+### Q3. BR-QA-101 — worktree'den koşan kapılar artık sessiz sahte kırmızı vermiyor
+
+- **Neden:** worktree'de `.git` bir dosyadır ve içeriği Windows mutlak yoludur; 7 kapı
+  ölçmeden kırmızı yanıyor, okuyan "yayın bloke" sanıyordu (bugün birebir bu olmuş).
+- **Ne yapıldı:** seçenek (a) — kapılar aynen koşar, ama çıktı **başında** yedi kapı adıyla
+  sayılır ve kırmızı özetinden **sonra** hatırlatma basılır.
+- **Sonuç / doğrulama:** pozitif (`.git` dosya → banner), negatif (`.git` dizin → çıktı yok),
+  gerçek ana checkout → çıktı yok; `bash -n` temiz.
+- **Commit:** `1cdde27a`
+
+### Q4. BR-FE-109 — geçici arızada oturum artık düşmüyor (P1)
+
+- **Neden:** açılış `catch`'i çıplaktı (`clearTokens(); setStatus('anonymous')`) ve hata
+  **sınıfına hiç bakmıyordu**. `/me` `tenants` tablosunu okur → bakım penceresinde sayfayı
+  açan ya da F5 yapan herkes yenileme jetonunu kaybediyor, ekranda "bakım" değil **giriş
+  formu** görüyordu. En ağır hal wallboard: TV'nin başında parola yazacak kimse yok.
+- **Ne yapıldı:** (1) `isSessionLossError` — 4xx jetonu siler, 5xx/ağ/timeout/bilinmeyen
+  jetonu **korur** ve yeni `unavailable` hali çizilir; (2) `client.ts` istek zaman aşımı
+  10 sn (blob indirmesi 300 sn ile muaf, `AbortSignal.any` kullanılmadı).
+- **Kartta olmayan, bu turda ölçülen İKİNCİ delik:** `refreshSession`'ın kendisi de ağ
+  hatası dışındaki her şeyde jetonu siliyordu; `/auth/refresh` 503 dönünce aynı hasar orada
+  da üretiliyordu. 5xx artık yukarı fırlatılıyor.
+- **Karttan bilinçli sapma:** "tek atış" yerine **5+15+45 sn sınırlı merdiven** (sonra
+  durur, polling değil). Gerekçe kodda: 5 sn'de tek atış, kartın kendi 40 sn'lik pencere
+  senaryosunu kapsamıyordu.
+- **Sonuç / doğrulama:** 6 test; mutasyon A (koşulsuz oturum kaybı) 4 kırmızı, mutasyon B
+  (hiçbir hata oturum kaybı değil) 1 kırmızı. **B ilk yazımda yeşil kaldı** — negatif vaka
+  401'i `/auth/refresh`'e verdiği için sınıfı ayıran satır hiç koşmuyordu (fikstür kusuru);
+  vaka `/me` 403'e taşındı. vitest 222 dosya / 1991 test yeşil, `tsc -b` rc=0, 9 dil.
+- **Commit:** `101e9a73`
+
+### Q5. BR-DOC-22 — var olmayan AstDB fallback'i artık koruma sayılmıyor (`kapi_75`)
+
+- **Neden:** CLAUDE.md §3.2 bu cümleyi bir **koruma** sayıyordu ve uygulama 11 dosyada olay
+  günlüğüne onu var sayan satır yazıyordu; operatör arıza anında "çağrı korundu" diye
+  okuyordu. Düşülecek yer yoktu.
+- **Ölçüm:** `ConfigRenderer.cs`'de `CURL(` = 0 (akış `Stasis`), `Set(DB(` = 0,
+  `database put`/`DBPut`/`pbxtr/snapshot` = 0 dosya; **ek olarak** `pbxtr-edge`in depoda
+  kaynak dosyası yok ve `doc/mimari/asterisk-dialplan-sablonu.md:267` fallback bloğunu
+  yazıyor ama **o belge üretici değil** (kayıtlı ders: belge santral değildir).
+- **Ne yapıldı:** üç belgede mezar taşı; iki operatör günlük satırı düzeltildi; AstDB anan
+  dokuz canlı kaynağa ölçülmüş başlık (iki uygulanmış migration muaf — donmuş tarih, blob
+  çıpalı); `kapi_75` + öz-test.
+- **Vacuity dersi:** M1/M2/M3 ilk yazımda **sessizce geçti** — kapı ±12 satırlık pencereye
+  bakıyordu ve cümleyi mezar taşının yanına koşulsuz geri yazmak yetiyordu, yani korumaya
+  çalıştığı **tam senaryoyu** kaçırıyordu. Kural aynı satıra daraltıldı.
+- **Commit:** `3e26bcc0`. Karar (fallback yazılsın mı) kurul gündemine gitti.
+
+### Q6. Ölçümle kapanan üç kart — ikisinde kartın kendi teşhisi yanlış çıktı
+
+- **BR-QA-40:** kalan madde *"kurulu DB'de `lock_timeout` ölçülmüyor"* diyordu. Atılır bir
+  `postgres:16-alpine` üzerine 00/01/02 kuruldu ve `pg_proc.proconfig` okundu: **dördü de**
+  `lock_timeout=2s` taşıyor. Bekçiler `02-guards.sql:2118/2623/5251`'de duruyor; canlı
+  mutasyon (`RESET lock_timeout`) `pbxtr_assert_sys_function_guard()`'ı **ERROR** yaptı; tam
+  göçlü şemada `db-kapilari-docker.sh` üçünü de "temiz" dedi (rc=0). İddia çürüdü.
+- **BR-QA-90:** *"tek aktörle ölçülemez"* denen yapısal öncül **iki eşzamanlı oturumla
+  ölçüldü ve doğrulandı**: lider kilidi tutuyor → ikinci düğüm alamıyor → lider
+  idle-in-transaction ile düşürülüyor → kilit serbest → ikinci düğüm **alıyor**. İlk fikstür
+  yanlıştı (psql `-c` ile verilen `BEGIN` bloğu kapanıyordu, oturum hiç idle kalmıyordu);
+  mutasyon yeşil çıkınca önce fikstür sorgulandı. `JobLeaderLock.cs:76` gerçekten
+  `pg_try_advisory_xact_lock` kullanıyor, yani ölçüm birebir bu koda uygulanır.
+- **BR-QA-89:** ölçüm zaten inmişti; kartın son işi yapıldı — inmemiş üç şart kart olarak
+  açıldı (`BR-QA-102/103/104`), numaralar önce ölçüldü.
+
+### Q7. Kurul gündemine taşınanlar (tek taraflı kapatılamaz)
+
+`yonetim/kurul-gundem-2026-09-18-qa-kapatma.md`: BR-DOC-22/3 (fallback yazılsın mı —
+`call-permission` için **asla**), BR-QA-86 (Karar #48 defter biçimi), BR-QA-100 (vitest
+kapısının evi), BR-FE-108 (dinleme için ayrı meşgul kipi mi), BR-QA-51 (kaynak ayrımı +
+`seed-sample` politikası), BR-QA-06 (sprint-36 sayı kapılarının bugünkü adlarla yeniden
+yazılması — `queue_optin` / `callback_requested_count` depoda **0 isabet**).
+
+### Q8. Kısmi kalanlar ve sebepleri
+
+- **BR-QA-95:** kabul ölçütü *"tam takımda ardışık N koşu"*; makinede başka ajanlar aktifti
+  (25 değişmiş/izlenmeyen dosya, yeni bir migration dahil) ve testhost eşzamanlı yükte
+  çöküyor — böyle bir koşumun ne kırmızısı ne yeşili bu kartın kanıtı olurdu.
+- **BR-QA-55 / BR-QA-57:** Karar #44 (B) ayrı digest-pinli **Linux** Playwright imajı ister.
+  Windows'ta taban üretmek kurulun **reddettiği** (A) seçeneğidir; sahte/boş taban
+  üretilmedi, hiçbir bekçi gevşetilmedi.
+
+## Kararlar
+
+- Geniş desen kümesi yerine **dar seçenek**: çıpa genişler, kapının `DENIED` kümesi
+  genişlemez — yoksa onay defteri kauçuk mühre döner (ölçülmüş: 148+ bulgu).
+- Bekçiler **kaynaktan türetir**, ikinci bir beklenti kopyası tutmaz.
+- Belge/günlük yalanları **silinmez**, üzeri çizilir ve ölçülmüş hal yazılır; geri
+  yazılmasını bir kapı engeller.
+
+## Açık kalanlar / sonraki adım
+
+- Kurul gündemindeki 6 madde.
+- BR-QA-90'ın uygulama yarısı (iki düğümlü bileşim, mükerrer yan etki ölçümü).
+- BR-QA-95 için takım sakinken ardışık N koşu.
+- BR-QA-55/57 için Linux Playwright imajı (Karar #44'ün 14 şartı).
+
+### Not — eşzamanlı ajan çarpışması
+
+Bu turda açılan `BR-QA-102/103/104` kart satırları, aynı checkout'ta çalışan başka bir
+ajanın backlog commit'ine (`6f3d9d39`) dahil oldu. Kayıp yok ama sahiplik commit mesajından
+okunamıyor; `git add -A` yasağının neden global kural olduğunun bir örneği daha.
