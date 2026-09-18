@@ -3956,3 +3956,87 @@ birlikte KIRMIZI. Commit `c9646ce5`.
   `ProvisioningTombstoneWriteDbTests` (1) → `42883: function pbxtr_webhook_event_types()
   does not exist`. Kaynak commit'li migration `20260917184552_WebhookOutboxAndDelivery`;
   defterdeki *"şablon gövdesi kurulu DB'ye ulaşmaz"* sınıfı.
+
+---
+
+## `BR-FE-114` — `callSource` (çağrı kökeni) rozeti (frontend-dev-1)
+
+- **Neden:** Agent, gelen çağrının normal bir kuyruk çağrısı mı yoksa çağıranın daha önce
+  bıraktığı **geri arama talebinin dönüşü** mü olduğunu ekrandan anlayamıyordu. Açılış
+  cümlesi yanlış kuruluyor (*"buyurun"* yerine *"talebiniz üzerine arıyorum"*) ve müşteri
+  kendini baştan anlatmak zorunda kalıyordu. Ölçüm bağımsız doğrulandı: `callSource` depoda
+  **tek eşleşme ve o da bir YORUM** (`CallEventPayload.cs:123`).
+- **Ne yapıldı:** Tek sözlük + tek bileşen; dört yüzeyde tüketildi.
+  - `screens/shared/callSourceAxis.ts` — kapalı küme sunucunun `CallEventPayload.Origins`
+    kümesiyle **birebir** (`callback`/`dialer`/`agent`/`inbound`), ton/metin/"neden" eşlemesi,
+    `callSourceKindOf` + `hasCallSourceAxis`.
+  - `screens/shared/CallSourceBadge.tsx` (+ `.module.css`) — **rozet yalnızca sunucu alanı
+    geldiğinde** çizilir; alan yok ya da kapalı küme dışı ise DOM'a **hiçbir şey** yazılmaz
+    ("ölçülemedi" işareti bile). Büyük/küçük harf toleransı yok.
+  - Yüzeyler: `agent/IncomingCallModal.tsx` (kabul etmeden **önce** — kökenin tek değerli anı),
+    `agent/CallTab.tsx` başlığı, `live/LiveAgentsScreen.tsx` (#13), `live/LiveQueuesScreen.tsx`
+    (#12), `automation/MissedCallsScreen.tsx` (#31, **koşullu kolon** — boş başlık yazılmaz).
+  - Sözleşme: `api/opsContracts.ts` → `ActiveCall.callSource?`, `LiveAgent.callSource?`;
+    `automation/missedCallsApi.ts` → `MissedCallRow.callSource?`; `agent/useCallSession.ts`
+    projeksiyonu alanı **yalnızca sunucu gönderdiyse** taşır.
+  - 9 dilde 9 anahtar (`callSource.*`).
+- **Karar:** `DndBadge`'den ayrılan tek nokta — burada **dört değerin dördü de** çizilir.
+  `inbound` sessiz bırakılsaydı "rozet yok" iki ayrı şeyi birden söylerdi ("normal kuyruk
+  çağrısı" ve "sunucu bu alanı göndermiyor") ve kartın yasakladığı tahmini istemci yerine
+  **kullanıcıya** yaptırırdı.
+- **Tuzak (ölçüldü):** `callSource.inbound` ilk hâlinde "Gelen çağrı" yazıyordu ve
+  `incoming.title` ile **birebir çakışıyordu** — negatif testler yanlış kırmızı verdi.
+  `Kuyruk çağrısı`ya çevrildi; iki ayrı olguya aynı cümleyi yazmak zaten başlığı bir ölçüm
+  sanmaya davet ederdi.
+- **Kalan (bilinçli):** rozet **bugün hiçbir ekranda çizilmiyor** — sunucu alanı yok.
+  Sunucu ayağı `BR-BE-198` / `BR-BE-199`. Kod yolu fikstürle bugünden ölçülüyor.
+- **Testler:** `shared/CallSourceBadge.test.tsx` (13), `shared/callSourceDictionary.test.ts` (7),
+  `live/CallSourceVisibility.test.tsx` (6), `automation/MissedCallsScreen.test.tsx` (+4),
+  `agent/IncomingCallModal.test.tsx` (+3).
+
+## `BR-FE-115` — #49 "çalışma saati dışı otomatik mola" anahtarı (frontend-dev-1)
+
+- **Neden / ölçüm:** Kart *"#49 ekranında anahtar YOK"* diyordu. **Teşhis cümlesi bayattı:**
+  anahtar `SettingsScreen.tsx:1209-1270`'te **vardı** (BR-FE-90, commit `401b8151`). Gerçekten
+  eksik olan şey kartın **kendi vacuity şartıydı**: *"vitest anahtarın ayarı okuduğunu ve
+  kaydettiğini ölçsün"* — böyle bir test **yoktu**, yani anahtarın çalıştığı hiçbir yerde
+  kanıtlı değildi ve bir sonraki dokunuş onu sessizce kırabilirdi.
+- **Ne yapıldı:** `SettingsScreen.test.tsx`'e 7 test (`#49 · çalışma saati dışı otomatik mola`):
+  sunucudan okuma (açık **ve** kapalı), açma/kapatmanın gövdeye girmesi, **dokunulmayan alanın
+  gövdeye girmemesi** ("alan yok = DOKUNMA"), yetki kilidi, açık hâlin sonucunun ekranda yazması.
+- **Karar:** Yetkisiz alan **gizlenmez, kilitli çizilir** — ekranın diğer on alanı da
+  `editable.*` + `salt okunur` desenini kullanıyor ve değeri tamamen gizlemek yetkisiz
+  kullanıcıyı *"böyle bir ayar yok"* sanmaya iterdi. Kapı her hâlde sunucudadır
+  (`TenantSettingsChangePolicy`).
+- **Tuzak (ölçüldü):** `input.checked = x` + elle `change` React onay kutusunda **çalışmıyor**;
+  React `click`i dinler ve jsdom elle atanan değeri bir kez daha ters çevirir. Testler
+  `input.click()` kullanıyor ve öncesinde/sonrasında `checked`i doğruluyor.
+
+### Mutasyon doğrulaması (boz → KIRMIZI, düzelt → YEŞİL)
+
+| Mutasyon | Sonuç |
+|---|---|
+| Rozet: alan yokken `?? 'inbound'` varsayılanı | **8 test KIRMIZI** |
+| `callSourceKindOf`: kapalı küme kontrolü kaldırıldı | **8 test KIRMIZI** |
+| #31 köken kolonu koşulsuz çizildi | **2 test KIRMIZI** |
+| `autoBreakInput` daima alanı gönderdi | **7 test KIRMIZI** |
+| #49 kutusu sunucu değerini okumadı (`autoBreak: false`) | **5 test KIRMIZI** |
+
+### Doğrulama
+
+```bash
+cd src/Pbxtr.Web && npx tsc -b --force   # 0 hata
+npx vitest run                            # 2037/2038
+```
+
+`tsc --noEmit` **kullanılmadı** (defter dersi: yayın kapısı değil).
+
+- **İlgisiz KIRMIZI (benim değil, HEAD'de):** `system/auditActionParity.test.ts` →
+  `apikey.pin.blocked_by_foreign_node` ve `live.agent.intervention_membership_expired`
+  sunucuda tanımlı (commit `0a382f1a`) ama #38 istemcisinde etiketsiz. `auditView.ts`
+  `ACTION_VIEW`/`ACTION_GROUPS` + 9 dilde `aud.a.*` ister; sahibi o commit'in ajanı.
+
+- **Sapma kaydı:** `doc/prototip-urun-farklari.md` — yeni bölüm *"Çağrı kökeni rozeti
+  (#09 · #12 · #13 · #31) — prototipte YOK, üründe VAR ama bugün İNERT"* (BİLİNÇLİ + BORÇ);
+  `#49/13` satırı **BORÇ → KAPANDI**.
+- **Commit:** `ff377820` — BR-FE-114 + BR-FE-115 (27 dosya, push edildi)
