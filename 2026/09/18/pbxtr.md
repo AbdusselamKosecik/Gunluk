@@ -1845,3 +1845,162 @@ contract onay satiri ise `e979c579` ("BR-QA-98: sablon cipasi...") icinde durdu.
 kaynaktir. Is kaybolmadi ama **commit mesaji kayboldu** — degisikligin gerekcesi artik
 yalniz kod yorumlarinda ve bu gunlukte. Guvenli bicim `git add` + `git commit` yerine
 tek adimda `git commit --only -- <yollar>` (index'e hic dokunmaz).
+
+---
+
+# pbxtr — 2026-09-18 (BR-SEC turu, backend-lider)
+
+## Baglam
+
+`yonetim/backlog.md` icindeki ACIK BR-SEC kartlarindan 11'i (03, 05, 08, 09, 15, 17, 19,
+20, 21, 25, 26) kart kart olculdu. 16 ve 28 KAPSAM DISI birakildi (sir rotasyonu,
+kullaniciya ait). Yontem bagleyiciydi: once durum hucresi okunur, sonra kartin iddiasi
+KODDA olculur; kart kendi teshisinde yanilmissa dogru bulgu yazilir.
+
+## Yapilanlar
+
+### 1. BR-SEC-03 / BR-SEC-09 — son blokaj kapandi, fikstur bir ayristiriciya baglandi
+
+- **Neden:** iki kart da ayni uc devir kartina bagliydi (`BR-FE-78` S37-6,
+  `BR-BE-131` S37-16, `BR-AST-75` S37-17 fikstur ayagi) ve kendi metinlerinde
+  *"bu uc madde kapanmadan genel kapanis VERILEMEZ"* diyorlardi. Olculdu: ilk ikisi
+  **Bitti**; ucuncusunun fikstur dizini (`tests/fixtures/asterisk-cli/`) 11 dosyayla
+  ACILMIS ama **hicbir test onu okumuyordu** — yani fikstur bir kapi degil, bir dosya
+  yiginiydi.
+- **Ne yapildi:** gercek santral ciktisi (`queue-show.txt`, uretim santrali, Asterisk
+  22.10.1) urunun ayristiricisina baglandi. Ayristirici `AsteriskQueueBlock.Extract`;
+  AST-06 (`queue show <kuyruk>`) tenant izolasyonunu **tamamen** ona borclu, cunku
+  tasima katmani komutu **parametresiz** kosar ve santral daima TUM tenantlarin
+  kuyruklarini dondurur.
+- **Olculen guvenlik ozelligi:** gercek cikti **cok tenantlidir** — ayni dokumde onek
+  tasimayan `lab-satis` ve iki `t0007-*` kuyrugu var; blok kesimi kacarsa ekrana baska
+  tenant'in dahilileri (`Local/1045@pbxtr-t0007-local`) duser.
+- **Elle yazilmis eski fiksturun kacirdigi uc bicim farki:** uye satiri `Local/...@...`
+  (`PJSIP/...` degil), satirlarda **ANSI kacis dizileri** (9 satir), `Members:`
+  basliginin sonunda bosluk. Defterdeki *"belge santral degildir"* dersinin somut hali.
+- **Dokunulan dosyalar:**
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/AsteriskQueueBlockRealFixtureTests.cs` (yeni),
+  `tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj`
+- **Mutasyon (iki yonlu):** `AsteriskQueueBlock.cs` blok-sonu kirilmasi
+  (`!char.IsWhiteSpace(line[0])` -> `false &&`) devre disi -> yeniden derlendi ->
+  `Gercek_ciktida_ilk_blok_kendinden_sonrakileri_yutmaz` **KIRMIZI**; geri alindi,
+  `git diff` bos, **15/15** yesil.
+- **Vacuity testin icinde:** `Fikstur_gercekten_cok_tenantli_bir_dokumdur` once HAM
+  ciktinin yabanci kuyruk + yabanci dahili + ANSI tasidigini dogrular.
+
+### 2. BR-SEC-20 — kurul sorusu duruyor, bugunku cevap KILITLENDI
+
+- **Neden:** kart *"platformda tanimli ozel rol drill-in'de yetki vermeli mi"* diye
+  soruyor ve cevabi kurula birakiyor. Ama bugunku cevap **olculmemisti**: davranis
+  `CustomRoleAwareExpander.ExpandCore`'un tek satirindan
+  (`_customRoles.TenantOf(roleCode) == tenantId ? custom : fromCatalog`) doguyordu ve
+  **hicbir test onu tutmuyordu** (`DealerPermissionBoundaryTests` ozel rol dizinini BOS
+  kuruyor, yani o dali hic kosmuyor).
+- **Risk:** *"ozel rol acilmiyor"* diye gelen bir hata raporuna cevaben o satir
+  gevsetilseydi, kumeyi **GENISLETEN** degisiklik kurul hic toplanmadan **sessizce**
+  inerdi.
+- **Ne yapildi:** bes testle bugunku fail-closed hal kilitlendi — kontrol grubu (rol
+  KENDI tenant'inda calisir), drill-in bos kume, capraz-tenant daraltmasi asirisinda da
+  bos kume, sahibi cozulemeyen rol reddedilir, **sistem rolu etkilenmez** (`admin`
+  drill-in'de yetkisini kaybetmez).
+- **Dokunulan dosya:**
+  `tests/Pbxtr.Api.Tests/Platform/Authorization/PlatformCustomRoleDrillInTests.cs`
+- **Mutasyon:** kapi kaldirildi (`return custom`), yeniden derlendi -> **3 KIRMIZI /
+  2 gecti**; gecen ikisi kontrol grubu + sistem rolu, yani mutasyon dogru yeri vurdu.
+
+### 3. BR-SEC-15 — kart (C)'ye dondu; KODDAKI yanlis cumle olcumle degistirildi
+
+- **Neden:** onceki turun olcumu RTCP CNAME'in **rastgele UUID** oldugunu gostermisti,
+  ama `IPacketCapture.cs`'teki `RtcpSnapLength` aciklamasi hala *"CNAME bir dahili numara
+  tasiyabilir"* diyordu. Kartin kendi cumlesi *"ayni soru alti ay sonra yeniden
+  sorulacak"* idi — ve sorulmasini saglayacak sey tam olarak o yorumdu.
+- **Ne yapildi:** snaplen (104) **degistirilmedi**; yorum silinmedi, olcumle
+  degistirildi (Asterisk 22.10.1, `res_rtp_asterisk.so`: `ast_uuid_generate_str`in tek
+  cagri yeri SSRC uretiminin hemen ardinda, uzunluk `0x25` = `AST_UUID_STR_LEN`; modulde
+  `cname`, `%s@`, `@%s` dizeleri yok).
+- **Dokunulan dosya:** `src/Pbxtr.Domain/Platform/Diagnostics/IPacketCapture.cs`
+
+### 4. BR-SEC-05 — kurula sorulan kisit ZATEN YAZILI
+
+- Olculdu: `ck_users_global_platform` CHECK (`scope <> 'global' OR home_tenant_id =
+  platform`) `20260915122000_UserRoleScopeConsistency.cs:159-165`'te ve canlida
+  (`BR-DB-66`, 2026-09-15).
+- Kartin kisiti **ertelettiren** iki gerekcesi de dustu: (1) `St44AcceptanceSeeder.cs:88-89`
+  artik global kapsamli hesabi PLATFORM tenant'ina aciyor; (2) *"`users.scope` CHECK'i
+  gercek saldiri yolunu gormez"* teshisi dogruydu ve **ayri** kapatilmis —
+  `users_role_scope_consistency` / `user_roles_role_scope_consistency` tetikleyicileri
+  rol katalogundan turetilen kapsami `users.scope` ile karsilastiriyor.
+- **Sonuc:** kod isi YOK. SART sutunundaki *"backend-lider incelemesi"* bu kayittir.
+
+### 5. Devredilenler ve acik kalanlar
+
+- **BR-SEC-17 kapandi** kartin kendi kuraliyla (*olculdu, acik degil*): `T` bayragi
+  uretimden dusurulmus (`grep -ro ',tT' src/Pbxtr.Infrastructure` = **0**),
+  `DialTransferFlagGuardTests` 1/1. Canli lab olcumu **yapilmadi** ve yapilmis gibi
+  yazilmadi — kapanis, olculecek dalin **kaldirilmis** olmasina dayaniyor.
+- **BR-SEC-19 devredildi** -> `BR-DB-70` (sahibi `db-lider`, 2026-09-18'de bloklu
+  degil). Ayni isi iki kartta acik tutmak panoda iki kez sayar.
+- **BR-SEC-25 devredildi** -> `BR-SEC-26`; dort kalan kalemi birebir tasiyor.
+- **BR-SEC-08 sprint isi:** Karar #51 SARTLI ONAY. S51-1 onkosulu **olculmemis** —
+  taklit SONRASI tenant yazmasi (`PUT /ivr/flows/*` 200 + denetim satiri) testi yok; en
+  yakini (`CrossTenantWriteGateHttpTests.Taklit_ucu_capraz_basligiyla_calisir`) yalnizca
+  taklit UCUNU olcuyor. Karar #51 *"S51-1 olculmeden yetki kaldirilmaz"* dedigi icin
+  matris daraltmasi baslayamaz.
+- **BR-SEC-21 (c) — SIRA TERS CIKTI:** `webhook_deliveries`'ten satir/partition silen
+  **hicbir** is yok (`WebhookDeliveryJob.cs:236` yalniz INSERT; emsaller baglanmamis:
+  `ReportDeliveryRetentionJob`, `TenantDocumentRetentionJob`, `ObjectRowRetentionJob`).
+  Bu haliyle #37'ye BOYUT esigi eklemek **HEP KIRMIZI** bir saglik satiri uretir —
+  operatorun yapabilecegi hicbir sey olmadigi icin kapiyi fiilen kaldirir. Once
+  retention (kurul karari: saklama suresi tenant parametresi mi), sonra esik.
+- **BR-SEC-26 kurula:** is `deploy/db/02-guards.sql` **sablon govdesine** dokunuyor
+  (migration'a yazilan `REVOKE` sablonca geri alinir — `01:2959-2963`), sablon degisince
+  `kapi_71` K6 kirmizi olur ve tazeleme migration'i + onay defteri satiri gerekir.
+  Sablona dokunacak diger kartlarla **tek turda** gitmeli.
+
+## Komutlar
+
+```bash
+ART=<scratchpad>/art1
+dotnet build tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj --artifacts-path "$ART" -v q
+dotnet test  tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj --artifacts-path "$ART" --no-build \
+  --filter "FullyQualifiedName~AsteriskQueueBlock|FullyQualifiedName~PlatformCustomRoleDrillIn|FullyQualifiedName~DialTransferFlagGuard"
+python3 deploy/ci/test-inventory-contract-test.py && python3 deploy/ci/source-test-floor-test.py
+node yonetim/arac/clickup-durum.test.js && node yonetim/arac/kart-atif-dogrula.js && node yonetim/arac/homoglif-tara.js
+node yonetim/arac/clickup-senkron.js --kuru && node yonetim/arac/clickup-senkron.js
+```
+
+## Sonuc / dogrulama
+
+- build **0 Error / 0 Warning**; ilgili filtreler **15/15**, `Skipped 0`.
+- `test-inventory-contract`, `source-test-floor`, `clickup-durum.test`,
+  `kart-atif-dogrula`, `homoglif-tara` -> hepsi **RC=0**.
+- kapi_41 mantigi yerel olarak kosuldu: **666 kart taranmis, 0 bozuk** (SART sutunu
+  temiz). `BR-SEC-03`'un durum hucresindeki **boru karakterleri** egik cizgiye cevrildi —
+  o satir sutun kaymasi uretiyordu.
+- ClickUp: **10 kart yazildi**, dogrulama kosusu `fark olan kart: 0, izde olmayan: 0`.
+- **Commit:** `ab3036eb` — BR-SEC 11 kart; `55679f8d` — sha damgasi.
+
+## Bu turda olculen tuzak — FIKSTUR YOLU, MUTASYON OLCUMUNU YANILTTI
+
+Yeni test once fiksturu **depo kokunu yukari arayarak** (`pbxtr.sln`) buluyordu. Baska
+bir ajanin `testhost`'u `bin/`i kilitledigi icin derleme ayri bir artifacts agacina
+alindi; o agac depo **disinda** oldugu icin kok bulunamadi ve **dort test birden SAHTE
+KIRMIZI** yandi. Ilk mutasyon okumasi "4 kirmizi" dedi — mutasyonun degil yolun
+sonucuydu.
+
+**Ders:** ayri bir artifacts yolu, depo-koku arayan her testi sessizce kirmizilastirir
+(`RegistrationSingleSourceTests` ile ayni sinif). Fikstur artik **csproj'dan cikti
+dizinine baglaniyor**, kaynak tek kopya kaliyor. Ayrica: ayni kosuda kirmizi gorunen iki
+`Capture` testi (`Rtcp_sablonu_santralin_rtp_araligina_bakar`,
+`Sweep_service_is_registered_as_hosted_service`) **HEAD'de de** (degisiklik geri alinip
+yeniden derlenerek) kirmizi olculdu — yani "benim kirmizim mi" sorusu **ayri bir
+olcumle** cevaplandi, varsayimla degil.
+
+## Acik kalanlar / sonraki adim (SEC turu)
+
+- **Kurula:** `BR-SEC-20` (platform ozel rolu drill-in'de yetki versin mi),
+  `BR-SEC-21`(c) (webhook teslim kaydi retention politikasi),
+  `BR-SEC-26` (02 sablonuna `REVOKE` + `proacl` bekcisi, tazeleme migration'i ile).
+- **Sprint planina:** `BR-SEC-08` (Karar #51 alti sart; S51-1 olcumu ONCE).
+- **Baska ekipte:** `BR-AST-75`'in kalan kalemi (dolu `pjsip show registrations` bicimi)
+  santralde TRUNK tanimlanana kadar olculemez.
