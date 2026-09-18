@@ -5036,3 +5036,84 @@ ve `clickup-durum.js` **zaten** o kelimeyi tanıyor. Ders: **depoda sayaç varke
   gelmedi.
 - ClickUp senkronu tur sonunda: `--kuru` → `clickup-olustur.js` → `clickup-senkron.js` → `--kuru`
   ile doğrula. Şu an **11+ kart bayat** (Kurul #78 şart kartları hiç açılmamış).
+
+---
+
+## Ek — `frontend-dev-1` turu: BR-FE-112 / 113 / 118 / 119
+
+Commit: `690754fe` (21 dosya, +796/−5). `opsContracts.ts` ve `yonetim/backlog.md`
+değişikliklerim **paralel bir ajanın commit'ine süpürüldü** (`fffd61bf` / `da7faffc`) —
+iş kayıp değil, sadece commit mesajı onlarda.
+
+### BR-FE-112 — `#49 Ayarlar`da `voicemailSlaMinutes`
+
+- **Neden:** backend zinciri bitmişti (`GET/PUT /tenant/settings`, `TenantLimitsDto` min/max,
+  400 doğrulaması, ayrı denetim satırı) ama ekranda alan **çizilmiyordu** → parametre fiilen
+  sabitti.
+- **Ne yapıldı:** `TenantLimits`e `minVoicemailSlaMinutes`/`max…`; `TenantSettings`,
+  `TenantSettingsEditable.voicemailSla`, `TenantSettingsInput`, `voicemailSlaInput()`,
+  `sameSettings`. Ekranda **ayrı panel**, alarm eşiklerinin altında.
+- **Karar:** alan **saklama süresi paneline KONMADI** — `BR-BE-183` çiti kartın açık şartı; yan
+  yana iki "gün/dakika" kutusu "SLA'yı uzatırsam kayıt da uzar mı" sorusunu üretirdi.
+- **Karar:** yetki kapısı `editable.voicemailSla`; ekran `editable.maskLevel`e **yaslanmadı**
+  (bugün aynı yetkiden geliyor, ama sunucu kapıyı daraltırsa test kırmızı olmalı).
+- **Karar:** duvar saati sapması **ekranda** yazılı (`data-note="voicemail-sla-wall-clock"`,
+  `BR-BE-167`ye işaret eder) — yazılı olmayan sapma unutulmuştur.
+- **Dosyalar:** `app/api/opsContracts.ts`, `screens/settings/settingsApi.ts`,
+  `screens/settings/SettingsScreen.tsx`, i18n ×9.
+- **Sonuç:** 7 yeni test; `SettingsScreen.test.tsx` 52 test yeşil.
+
+### BR-FE-113 — `queueMemberDelivered` şeridi (#12/#13)
+
+- **Neden:** sunucu alanı gönderiyordu, istemcide **0 eşleşme**; agent "Müsait"e basıyor,
+  çağrı gelmiyor, sebebi hiçbir yerde yazmıyordu.
+- **Ne yapıldı:** `AgentStateResponse`a üç değerli alan; masa `=== false` ile açık karşılaştırma.
+  `false` → şerit + "Müsait" **çizilmez**. `null`/eksik → şerit **hiç çizilmez**.
+- **Karar:** üçüncü değer için "farklı renk" değil **hiç çizmeme** seçildi; kaynağı olmayan
+  kutu çizilmez (`extensionDelivery` `unknown` dalıyla aynı desen) ve bu, kartın şartını en sert
+  biçimde karşılar.
+- **Karar:** iki eksen aynı anda `false` ise **iki şerit** çizilir ama düğmenin yerinde **tek**
+  cümle durur — iki satır birden "ekran bozuk" diye okunurdu.
+- **Karar:** "ne zamandan beri" **yazılmadı**; sunucu bu eksende damga göndermiyor ve istemcide
+  süre hesaplamak CLAUDE.md §11 ihlalidir.
+- **Dosyalar:** `app/api/opsContracts.ts`, `screens/agent/AgentDeskScreen.tsx`,
+  `api/provisioningContract.test.ts` (`TRISTATE_FIELDS`), `AgentDeskProvisioning.test.tsx`.
+
+### BR-FE-119 — terk ↔ geri arama kesişimi
+
+- **Ne yapıldı:** `#18 Kayıp` ve `#23 Hedef` kural şeritlerine ortak uyarı satırı
+  (`loss.ruleCallbackOverlap`) + bekçi `CallbackOverlapNote.test.tsx`.
+- **Ölçüm kararı — `#11` SEÇİLMEDİ:** oradaki `abandonedToday` `sla_buckets`'tan **değil**
+  günlük `CallDisposition.Abandoned` sayımından gelir (`RedisLiveOperationsView.cs:706,1306`);
+  kesişimi oraya yazmak **yanlış bir iddia** olurdu. #18/#23 ise `sla_buckets.abandoned_count`
+  okur (`EfAnalyticsQuery.cs:310,352`) ve `Giriş` ile `Terk`i **yan yana** çizer.
+- **Bekçi:** hiçbir ekranın SLA sınıf kolonlarını topladığını metin taramasıyla ölçer (bugün
+  0 ihlal), mutasyon metinleriyle vacuity kapısı var.
+
+### BR-FE-118 — **bölündü**, FE'de kod yazılmadı
+
+Üç yüzeyin de **sunucu ayağı yok** (ölçüldü):
+
+| Yüzey | Ölçüm |
+|---|---|
+| (i) `#11` kuyruk satırı | `ILiveOperationsView.cs` `callback` → **0**; `RedisLiveOperationsView.cs`te tek isabet `:867` ve o bir **yorum**. Sayı Redis'te var: `SlaWindowState.CallbackRequested` (`SlaWindowStore.cs:152`) — eşleme yok. |
+| (ii) `#23`/`#18` + CSV | `IAnalyticsQuery.cs` → **0**; `EfAnalyticsQuery.cs` `callback_requested_count` → **0**; `AnalyticsExportCsv.cs` → **0**. |
+| (iii) `#37` kalan süre | `MissedCallEndpoints.cs`te `slaMinutes/dueAt/deadline/remaining/promise/serverNow/asOf` → **0**. `tenant_settings.callback_sla_minutes` var ama tahtaya projelenmiyor. |
+
+`src/Pbxtr.Api` genelinde `CallbackRequested|callback_requested` → **0**.
+
+- **Karar:** "kalan dakika" **istemcide türetilmedi** — iki damga arasındaki fark tarayıcının
+  saat kaymasını ölçüme yazardı (CLAUDE.md §11, `AmbientClockGuardTests`).
+- **Yeni kartlar:** `BR-BE-210` (i+ii — aynı sayı, iki okuyucu), `BR-BE-211` (iii — söz/son
+  tarih/SLA sınıfı), `BR-FE-121` (FE tüketicisi, BLOKE).
+
+### Doğrulama
+
+- `tsc -b --noEmit` **rc=0**, `tsc -p tsconfig.visual-tests.json` **rc=0**
+  (`--noEmit` tek başına yayın kapısı değildir — ikisi de koşuldu).
+- Tam web takımı: **2064 geçti**, 1 kırmızı ve **o benim değil**:
+  `auditActionParity.test.ts` → `automation.callback.first_run`; paralel bir ajan
+  `AuditActions.cs`e eylemi ekledi, `#38` etiketini henüz eklemedi.
+- i18n: 8 anahtar × 9 dil. Doğrulama `json.loads` + `in` **değil**, ham metinde
+  `ham.count('"'+k+'"') == 1`.
+- ClickUp: `--kuru` → `fark olan kart: 0, izde olmayan: 0`.
