@@ -5341,3 +5341,92 @@ iş kayıp değil, sadece commit mesajı onlarda.
   satırlarının hangi dala düştüğünün ölçülmesi ve `BR-DB-91`.
 - **Paralel ajan `backlog.md` değişikliklerimi kendi commit'ine süpürdü** (`da7faffc`) —
   içerik korundu, commit mesajı yanlış sahibi gösteriyor. Defterdeki bilinen sınıf.
+
+---
+
+### db-dev — Ş76-7 dört dalga: çapraz kipin tenant başına daraltılması (`BR-DB-94..97`)
+
+#### Bağlam
+`BR-DB-70` dört karta bölünmüştü; sıra bağlayıcı (D1 silen → D2 yazan → D3 okuyan →
+D4 denetim/istek yolu) ve her dalgada **kapı önce, daraltma sonra**.
+
+#### 1. Kapı kuruldu (`kapi_82`) — D1 ile birlikte
+- **Neden:** `kapi_77` "çapraz kip kaç yerde açılıyor" der. Daraltma için gereken soru
+  başkadır: **"açılan kapsamın İÇİNDE ne oluyor"**. Keşif için açıp işi tekil tenant
+  kapsamında yapan bir iş envanterde görünür ama risk taşımaz.
+- **Ne yapıldı:** `deploy/ci/capraz-kip-yazma-daraltma-kapisi.py` + öz-test (10 vaka).
+  İki ayak: (A) dondurulmuş fark — bütün evren; (B) MUTLAK kural — dalganın dosya
+  kümesinde çapraz aralık içinde **yazma olamaz** ve aralık **kapatılmak zorundadır**.
+- **Sonuç:** ilk koşuda D1'de iki ihlal yakaladı.
+
+#### 2. D1 — silen işler (`BR-DB-94`, `5d332d81`)
+- **Ölçüm ÖNCE:** 16 dosya / 16 ham aralık; 6 KAPATILMAMIŞ, 6'sında yazma.
+- **İhlal:** `CallDataRetentionJob` ve `WebhookDeliveryRetentionJob` N tenant'ın denetim
+  satırını çapraz kipte yazıyordu. Çapraz kipte RLS yazmayı **reddetmez** ve arka plan
+  işleri uygulama savunmasının dışındadır → `row.TenantId` yanlış olsa satır başka
+  tenant'ın günlüğüne sessizce düşerdi, `audit_log` append-only olduğu için geri alınamaz.
+- **Daraltma:** emsal `InterventionMembershipExpiryJob` — satır kendi tenant'ı altında
+  (`set_config('app.tenant_id', …, true)`), `finally`de bağlam geri verilir.
+- **Ölçüm SONRA:** 14/14. `kapi_77`: 33/38 → 31/36.
+
+#### 3. D2 — yazan/push eden işler (`BR-DB-95`, `3065b181`)
+- **Dalga önce KAPIYI düzeltti** (iki körlük): (i) sekiz iş `Open/CloseCrossTenantSql`
+  sabiti kullanmıyor, SQL'i satır içi yazıyor — kapı o sekizini **hiç görmüyordu**;
+  (ii) yazma tespiti sabitin ilk kelimesine bakıyordu, `IysSyncJob.ProjectSql`
+  `WITH projected AS (UPDATE …)` ile başladığı için "yazma=yok" sayılıyordu — oysa
+  çapraz kipte **iki tabloya** birden yazıyordu.
+- Düzeltilmiş kapıyla ÖNCE: 26/27, **12 KAPATILMAMIŞ**.
+- Daraltılanlar: `IysSyncJob`, `OutsideHoursBreakJob` (tenant'sız `UPDATE queue_members`
+  keşif + tenant başına yazmaya bölündü; ayrıca `ApplyTenantAsync` **lider bağlantısının**
+  GUC'unu da daraltır — `BeginTenantScope` DI/EF tarafını kapsıyordu, `SetFlagSql`/
+  `AuditSql` ise `execution.CreateCommand` ile lider bağlantısında koşuyordu),
+  `QueueMembershipSyncJob`, `DialerRunJob`, `CampaignSmsRunJob`.
+- SONRA: 24/25, 8 KAPATILMAMIŞ.
+
+#### 4. D3 — okuyan/toplayan (`BR-DB-96`, `50e11c64`)
+- Kartın şart koştuğu **P3 (`.BeginCrossTenantScope`) yolu ölçüldü** ve kapıya sokuldu.
+  Sınır kalkmadı, daraldı: aralık artık kapsayan bloğun sonuna kadar (girintiyle).
+  P3'te `kapali` hep true ve bu **dil garantisidir** (`using` → `finally`).
+- Daraltılanlar: `SilenceSamplerJob`, `TrunkHealthSnapshotJob`, `PlatformRollupJob`,
+  `AriDndDeviceStateAnnouncer`.
+- **DARALTILAMAZ (ölçüldü):** `EfDealerAdministration` (71/150). `dealers` global tablodur;
+  yazmayı açan tek policy `<tablo>_dealer_cross` ve yüklemi **`WITH CHECK
+  (app_is_cross_tenant())`**. Daraltılırsa yazma **42501 ile reddedilir** — "daha güvenli"
+  değil, fiilen çalışmayan olur. Ş76-DB-14 veto sınırı ihlal edilmedi: çapraz dal
+  genişletilmedi, `BYPASSRLS` önerilmedi.
+
+#### 5. D4 — denetim + istek yolu (`BR-DB-97`, `ec2e04ca`)
+- **`CrossTenantReadAudit` DARALTILAMAZ** ve çıktı kartın öngördüğü ikinci sonuçtur.
+  Dört ölçüm: (a) satır zaten tenant doğrudur — `tenantId` **çağıranın** bağlam tenant'ı,
+  hedef değil; (b) hedef başına bölmek "bir kapsam açılışı = bir satır" anlamını yok eder;
+  (c) çağıranın açık transaction'ından çıkarılamaz (fail-loud); (d) kapsamdan önceye
+  alınamaz — bazı çağıranlarda `app.tenant_id` boş olabilir, RLS fail-closed olur ve
+  **kanıt satırı yazılamaz**.
+- **Kapının üçüncü ve en ciddi körlüğü burada bulundu:** kapı "kapanış" derken yalnız
+  `'off'` sabitini arıyordu, **önceki değere geri döndürme** yazımını kapanış saymıyordu.
+  Depodaki **en iyi** örnek (`EfUserAdministration`, iç içe kapsamı hesaba katan tek
+  çağıran) "KAPATILMAMIŞ" işaretleniyor ve aralık dosya sonuna kadar sürdüğü için aynı
+  dosyadaki ilgisiz `SaveChangesAsync`/`ExecuteSqlRaw` da "çapraz kipte yazma"
+  görünüyordu. Düzeltildi; **iddia da daraltıldı**: kapı "kapsam kapandı" demez,
+  "kapanış YAZIMI var" der.
+- `CustomRoleRowSource` daraltıldı.
+
+#### Komutlar
+```bash
+python3 deploy/ci/capraz-kip-yazma-daraltma-kapisi-selftest.py   # 10 vaka, rc=0
+python3 deploy/ci/capraz-kip-yazma-daraltma-kapisi.py            # 29 dosya / 34 aralık
+python3 deploy/ci/capraz-kip-envanteri-kapisi.py                 # 31 / 36
+```
+
+#### Kararlar
+- Kapı üç kez **kendi körlüğünü** buldu ve her defasında düzeltildi. Kartın kendi dersi
+  ("deseni yazılmamış sayım ölçüm değildir") kapının kendisinde üç kez tekrarladı.
+- Daraltılamayan iki kalem **sebebiyle** kapatıldı, "yapılmadı" diye bırakılmadı.
+- Migration'lar Ş76-9 gereği daraltmanın **dışında**; gövde değiştirilmedi.
+
+#### Açık kalanlar / sonraki adım
+- `CallbackRunJob.cs:87` ve `LeaveEnforcementJob.cs:365` **bu turda daraltılmadı** —
+  ikisi de başka ajanın açık işinde. İkincisi `AuditLogWriter` + üç yazan SQL taşır ve
+  **D2'nin kalan tek gerçek ihlalidir**. Envanter JSON'unda `_devredilen` altında yazılı.
+- `SlaAggregationJob` ölçüldü (zaten dar) ama uçuşta olduğu için mutlak kümeye alınmadı.
+- Gerçek PG ile davranış ölçümü yapılmadı (kurulu şema yok): "yok" değil, **"ölçülmedi"**.
