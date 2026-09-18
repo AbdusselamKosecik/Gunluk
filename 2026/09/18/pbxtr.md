@@ -2358,3 +2358,114 @@ yazılması — `queue_optin` / `callback_requested_count` depoda **0 isabet**).
 Bu turda açılan `BR-QA-102/103/104` kart satırları, aynı checkout'ta çalışan başka bir
 ajanın backlog commit'ine (`6f3d9d39`) dahil oldu. Kayıp yok ama sahiplik commit mesajından
 okunamıyor; `git add -A` yasağının neden global kural olduğunun bir örneği daha.
+
+---
+
+## Ek tur — Kurul Karar #76 Ş76-8 + Ş76-9: çapraz kip envanteri kapıya bağlandı
+
+### Bağlam
+
+`app.cross_tenant='on'` açan kullanımların sayısı **aynı gün dört kez** değişti:
+kart **7**, bir ajan **45** (21 migration + 24 koşan kod), backend-lider **48**
+(22 + 26), `BR-SEC-19` kaydı **85 kaynak dosya**. Dördü de "ölçtüm" diyordu.
+Şeytan (I7) bunu "45 bir sınıf değil, bir regex çıktısı" diye yakaladı; kurul
+envanterin elle tutulmasını yasakladı.
+
+### 1. 45 ↔ 85 mutabakatı (Ş76-8'in açık şartı)
+
+- **Neden:** iki sayı uzlaşmadan `Ş76-7` daraltma dalgası planlanamaz —
+  "kaç tane kaldı" sorusunun cevabı yok.
+- **Ne yapıldı:** üç aday desen `src/**/*.cs` üzerinde ayrı ayrı koşturuldu ve
+  küme ilişkisi fiilen doğrulandı: **45 ⊂ 61 ⊂ 85**.
+
+  | Sayı | Desen | Ne |
+  |---|---|---|
+  | 85 | `grep -rl "app.cross_tenant" --include=*.cs src/` | GUC'u yalnızca **anan** her dosya (yorum, `'off'`, `current_setting`) → **üst sınır** |
+  | 45 | `grep -rl "cross_tenant', 'on'" --include=*.cs src/` | `set_config` yazımının **tek-boşluklu** varyantı → **alt sınır** |
+  | 61 | kanonik açıcı sayımı | 29 koşan kod + 32 migration dosyası |
+
+  **45'in kaçırdığı 16 dosya, kalem kalem:**
+  - **4 dosya** `BeginCrossTenantScope` ile açar, ham `set_config` desenine **hiç eşleşmez**:
+    `EfDealerAdministration`, `EfPlatformTicketDesk`, `EfProvisioningNodeDirectory`,
+    `EfTenantAdminQuery`
+  - **11 migration** fonksiyon gövdesinde `SET app.cross_tenant = 'on'` taşır
+    (`TicketRetention`, `CallDataRetention*` ailesi, `SmsSysFunctions`,
+    `VoicemailRetentionAllowlist` …)
+  - **1 dosya** boşluksuz yazım: `set_config('app.cross_tenant','on'` →
+    `St44AcceptanceSeeder.cs:48,98`
+
+  **7 ve 48 yeniden ÜRETİLEMEDİ** — kart metni ve ajan çıktısı deseni yazmamıştı.
+  Deseni yazılmamış bir sayım ölçüm değildir; kapı bu yüzden deseni **koda gömer**.
+
+- **İki uç ayrı yazıldı (şartın kendisi):**
+  - **Neyi tarıyorum (evren):** `src/**/*.cs`, `bin/`+`obj/` hariç. `tests/` dışarıda
+    (test kodu daraltma yüzeyi değil; dahil edilse sayı 230 dosyaya çıkar ve ölçümden
+    kopar). `deploy/db/01-rls-template.sql` + `02-guards.sql` dışarıda (orada
+    `app.cross_tenant` bir **policy yüklemi**, kipi **açan** bir çağrı değil).
+  - **Neyi çağırıcı sayıyorum (açıcı):** yorum olmayan satırda P1 `set_config(...,'on'`,
+    P2 `SET [LOCAL] app.cross_tenant='on'`, P3 `.BeginCrossTenantScope(`.
+    `'off'`, önceki değere **geri döndüren** yazım ve `current_setting` okuması
+    açıcı **değildir**.
+
+### 2. Kapı (Ş76-8) + migration dondurma (Ş76-9)
+
+- **Neden:** elle envanter geçersiz; ayrıca daraltma bittiği gün yüzey **yeni bir
+  migration ile sessizce geri açılabilirdi**.
+- **Ne yapıldı:** `kapi_77` eklendi. Numara alınırken önce
+  `grep -o "^kapi_[0-9]*()" | sort | uniq -d` **boş** ölçüldü (Ş76-24; bugün
+  `kapi_75` iki kez tanımlıydı, `eb1c055b` ile düzeltilmişti) → en büyük 76, yeni 77.
+- **Dokunulan dosyalar:** `deploy/yerel-kapilar.sh`,
+  `deploy/ci/capraz-kip-envanteri-kapisi.py`,
+  `deploy/ci/capraz-kip-envanteri-kapisi-selftest.py`,
+  `deploy/ci/capraz-kip-envanteri.json`
+- **Dondurulan taban (HEAD `87592acf`):** koşan kod **29 dosya / 34 kullanım**,
+  migration **32 dosya / 57 kullanım**; 32 migration **ad ad** allowlist'te.
+
+### 3. Taban çalışma ağacına karşı ALINMADI
+
+- **Neden:** dondurma sırasında çalışma ağacındaki anma sayısı **aynı oturumda
+  85 → 87** değişti (paralel ajanlar dosya ekliyordu). Çalışma ağacına karşı alınan
+  bir taban dakikalar içinde yeniden üretilemez hale gelir — yani kapının
+  engellemeye çalıştığı şeyi (üretilemeyen sayı) kapının **içine** koyardı.
+- **Ne yapıldı:** taban `git archive HEAD` ile temiz bir ağaçtan alındı.
+  Dondurma anında commit edilmemiş **3 dosya** (`WebhookDeliveryRetentionJob.cs`,
+  `20260918170000_WebhookDeliveryRetention.cs`, `20260918180000_VoicemailBoxIdentity.cs`)
+  ayrı bir `ucusta` listesine kondu: onlar için ne varlık ne yokluk kırmızı yanar.
+  Gerekçe: kapı kurulduğu gün **başkasının yarım işi** yüzünden kırmızı yansaydı
+  hemen devre dışı bırakılırdı (defter: *hep-kırmızı kapı = fiilen kaldırılmış kapı*).
+  Mekanizmanın **dışı da** ölçülüyor — listede olmayan yeni migration yine kırmızı
+  (öz-test M8a/M8b). Sahibi commit edince yolu listeden çıkarıp `--dondur` koşar.
+
+### 4. Vacuity (Ş76-25) — üçü de fiilen koşturuldu
+
+- **Öz-test 15 vaka, `rc=0`:** pozitif 2 + negatif 2 + desen varyantı 4 + uçuşta 2 +
+  vacuity 2 + fail-closed 1 + masum-dosya 1 + gerçek ağaç 1.
+- **Gerçek ağaç mutasyonları (geri alındı):**
+  - yeni koşan açıcı eklendi → `rc=1` (`Ş76-8 IHLALI`)
+  - yeni migration eklendi → `rc=1` (`Ş76-9 IHLALI` + ad bazlı ihlal)
+  - mevcut açıcı `'on'` → `'off'` yapıldı → `rc=1` (`KULLANIM KALDIRILMIS`)
+  - temiz ağaç → `rc=0`
+- **Mutasyon yeşil çıkan bir vaka vardı ve fikstür değil DESEN suçluydu:**
+  `M5-V4` (C# kaçışlı tırnak, `SET \"app.cross_tenant\"='on'`) ilk yazımda
+  **sessizce geçti**. Desen `\?['"]` ile düzeltildi. Gerçek ağaçta bugün o yazım
+  yok — yani düzeltme **önleyici**, ve bunu yalnızca fikstür gösterdi.
+
+### 5. Yol boyu yakalanan iki tuzak (defterden)
+
+- **Heredoc bir seviye ters bölü yiyor:** `"\n"` yazımı dosyaya çıplak satır sonu
+  olarak düştü ve `SyntaxError` verdi; `chr(92)` ile üretildi.
+- **`pathlib.write_text` Windows'ta CRLF yazıyor:** `deploy/yerel-kapilar.sh`
+  yamalanırken **2570 CR** eklendi — `.gitattributes` `deploy/** text eol=lf` dediği
+  için repoda düzelirdi ama **yerel konteyner koşumu** bozulurdu (`\r: command not
+  found`). Dört dosya commit'ten önce baytla LF'e çevrildi; `git diff` 28 satır
+  ekleme olarak sadeleşti.
+
+- **Commit:** `a09244ab` — Karar #76 / S76-8 + S76-9: çapraz kip envanteri artık
+  kapıyla sayılıyor (kapi_77). Push edildi.
+
+### Açık kalanlar
+
+- `ucusta` listesindeki 3 dosya sahipleri tarafından commit edilince listeden
+  çıkarılıp `--dondur` koşulmalı; aksi halde o üç dosya kalıcı olarak ölçüm dışıdır.
+- Ş76-7 daraltma dalgası artık güvenilir bir tabana sahip: D1–D4 risk sınıfları
+  bu 61 açıcı üzerinden bölünebilir.
