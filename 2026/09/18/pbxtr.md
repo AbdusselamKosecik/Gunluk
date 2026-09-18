@@ -3647,3 +3647,112 @@ uygulanmamış → ölçülecek ACCESS EXCLUSIVE edinimi yok), `BR-SEC-26`/`BR-S
   başka bir ajanın `git add`'i index'e girdiği için `deploy/ci/depo-koku-arayan-*`,
   `deploy/ci/konteyner-ayricalik-*` ve bir `.test.ts` dosyası bu commit'e **istemeden**
   dahil oldu; zararsızdır (kayıtsız, inert dosyalar) ama tarih yeniden yazılmadı.
+
+---
+
+## Tur: BR-AST kapatma turu (backend-dev-2, 11:25–12:15 UTC)
+
+### Bağlam
+`yonetim/backlog.md`'de 31 açık `BR-AST` kartı vardı ve çoğu aynı gün ölçülmüştü.
+Görev kapatmaktı: işi bitmiş kartın durum metnini kapanış biçimine çevirmek, gerçekten
+iş olanı yapmak, gerçekten bloke olanı **engeli adıyla** yazmak.
+
+### Yapılanlar
+
+#### 1. BR-AST-81 — DND'nin ANLIK yolu (ARI device state) uygulandı
+- **Neden:** DND yalnız config'te (`Busy(20)`) uygulanıyordu; karar ancak `pbxtr-confd`'nin
+  bir sonraki çekimi (5 dk) + `dialplan reload` ile yürürlüğe giriyordu. Arada agent
+  "susturdum" der, telefonu **çalardı**. Karar #76 Ş76-12 kriteri (b′) tam bunu istiyordu.
+- **Ne yapıldı:**
+  - `AsteriskObjectName.DndDeviceName/DndDeviceState` → `Stasis:pbxtr-{tref}-dnd-{ext}`
+    (tenant önekli; device state ad alanı Asterisk'te **global**).
+  - `ConfigRenderer.DndGatedActions`: her dahiliye **pozitif** kapı
+    `ExecIf($["${DEVICE_STATE(...)}" = "BUSY"]?Busy(20))`. Config'teki `Busy(20)`
+    **silinmedi** (ikinci katman: anlık ilan kalıcı değil).
+  - `AriDndDeviceStateAnnouncer`: ARI soketi her açıldığında (`AriStasisApp.AnnounceDndAsync`)
+    DND'li her dahili için `PUT deviceStates/Stasis:...?deviceState=BUSY`. Tur
+    `IJobTickRunner`'dan geçer (`job_runs` izi + lider kilidi, yeni kilit
+    `dnd-device-state-announce` = 40); çapraz-tenant keşif `CrossTenantReadAudit` ile
+    denetlenir; hata davranışı **FAIL-OPEN** (ilan patlarsa soket DÜŞMEZ).
+  - Mimari envanterler güncellendi: `CrossTenantScopeSurfaces.RawSetConfigCalls` ve
+    `RawSqlAllowlistTests.Allowed` (ikisi de bekçi; eklenmeseydi build kırmızıydı).
+- **Ş76-12a kırmızı çizgi:** dal **yalnız `= "BUSY"`**. `!= "NOT_INUSE"` yasak — restart
+  sonrası her ad `UNKNOWN`'dur ve negatif dal düğümdeki **her dahiliyi** DND'ye sokardı.
+  Negatif test: `ExtensionDndRenderTests.Dnd_kapisi_NEGATIF_dal_kullanmaz`.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/AsteriskObjectName.cs`,
+  `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Asterisk/AriDndDeviceStateAnnouncer.cs` (yeni),
+  `.../AriStasisApp.cs`, `.../TelephonyServiceCollectionExtensions.cs`,
+  `src/Pbxtr.Infrastructure/Platform/Jobs/BackgroundJobLocks.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/{ExtensionDndRenderTests,LocalDialContactsTests,AriDndDeviceStateAnnouncerTests}.cs`,
+  `tests/Pbxtr.Architecture.Tests/{CrossTenantScopeSurfaces,RawSqlAllowlistTests}.cs`
+- **Sonuç / doğrulama:** 10 yeni/iki güncellenmiş test yeşil. **İki mutasyon KIRMIZI:**
+  (a) dal → `!= "NOT_INUSE"` (3 test düştü), (b) cihaz adından tenant öneki kaldırıldı
+  (4 test düştü). `Modules.Telephony` 1301 geçti, `Modules.Provisioning` 145 geçti,
+  `Architecture` 707/709 (kalan 2 kırmızı bu işe ait değil: `DeployPrivilegeTests/setcap`
+  ve `TenantLeakCoverage/AgentSkillProfile` — ikisi de başka ajanın commit edilmemiş işi).
+- **Commit:** `d030c8c5`
+
+#### 2. BR-AST-110 — açık ölçüm yapıldı, "AstDB registrar" dalı DÜŞTÜ
+- **Neden:** kart, ARI envanterindeki ~500 ölçüm kalıntısı temizlenmeden ARI tabanlı
+  hiçbir eşiğin kalibre edilemeyeceğini söylüyordu; açık soru "kalıntı `max_expiry`
+  sonrası kendiliğinden düşüyor mu" idi.
+- **Komutlar (176.88.41.220, salt-okunur):**
+  ```bash
+  date -u
+  docker exec pbxtr-asterisk asterisk -rx "pjsip show aor t0007-wrtc-1042" | grep -i expir
+  docker inspect -f "{{.State.StartedAt}} {{.RestartCount}}" pbxtr-asterisk
+  # ARI sayımı: kimlik pbxtr-app env'inden değişkene alındı, DEĞER hiçbir çıktıya yazılmadı
+  ```
+- **Sonuç:** `maximum_expiration = 7200` / `default_expiration = 3600` sn; kalıntılar
+  konteyner **6 gün 10 saat** ayaktayken de duruyordu → süre bekleme **çözüm değil**.
+  Ama konteyner 04:34:50 UTC'de yeniden başlamış ve envanter **509/505 → 7** olmuş
+  (6 gerçek + 1 yeni kalıntı) → kalıntı **süreç belleğinde**. CLI `core restart`
+  kullanılmadı, yasağı duruyor. Kurula dönecek katalog sorusu **yok**.
+- **Commit:** `ba5ea3c3`
+
+#### 3. BR-AST-87 (c) — çalışma disiplini artık DEPODA yazılı
+- **Neden:** (c) "ölçüm betikleri trap ile temizlesin" diyordu ama kalıntıyı bırakan
+  komutlar ad-hoc'tu; depoda düzeltilecek dosya yoktu, yani kalem görünmez bir kuraldı.
+- **Ne yapıldı:** `deploy/asterisk-conf-sinir.txt`'e *"OLCUM KALINTISI — ARI /endpoints"*
+  bölümü eklendi (yalnız yorum satırı; `awk '$1 == "IMAJ"'` ayrıştırıcısı etkilenmez):
+  tenant önekli ad + `trap ... EXIT` + ölçüm öncesi/sonrası sayım.
+- **Vacuity kontrolü:** kural boşa değil — restart **sonrasında** bir tur daha 1 kalıntı
+  (`PBXTR-OLCUM-SEC22`) bırakmış.
+
+#### 4. BR-AST-89 — engel adı DEĞİŞTİ (ölçüldü)
+- Kartın yazılı engeli "tek ajanlı pencere" idi; bu turda o pencere **alındı**:
+  `flock /tmp/pbxtr-agent.lock -c 'docker restart pbxtr-app'`, lider devri gerçekleşti
+  (`AMI baglandi`, `ARI Stasis uygulamasi 'pbxtr' acildi`), ilk ~5,5 dk `4803` = **0**.
+- **Ama ölçüm VACUOUS:** aynı pencerede `call_events` = **0** (son 20 dk). Çelişki ancak
+  aynı `linkedid` iki tenant koduyla çözülürse doğar. Yeni engel: **sıfır çağrı trafiği**
+  (kayıtlı SIP/WebRTC istemcisi yok) — `BR-AST-72`/`BR-AST-80` ile aynı ortam engeli.
+
+#### 5. Backlog — 12 kart kapanış/engel biçimine geçirildi
+- **KAPANDI (5):** `BR-AST-54` (ölçüm kartı, canlı A/B: sarkan `auth=` **fail-closed**,
+  INVITE → 500), `BR-AST-87`, `BR-AST-97` (kalan iş `BR-SYS-93`), `BR-AST-98`, `BR-AST-110`.
+- **KARAR BEKLEYEN (5):** `BR-AST-39`/`46` (A14), `63` (ADR-015 A2), `64` (ADR-015 A3),
+  `92` (ürün: 9 dilin ses kaynağı). Bunlar kod işi taşımıyor; `karar bekleyen` kovası
+  `backlog`'dan farklı ve yanlış yeşil değil.
+- **Yazım:** yalnız Durum hücresi, tek satır, `|` yok, eski metin `**Önceki kayıt:**`
+  altına taşındı. `clickup-cikar.js` rc=0 (696 kart), `clickup-senkron.js` yazdı ve
+  `--kuru` **fark 0 / izde olmayan 0** doğruladı.
+
+### Kararlar
+- **DND iki katmanlı kalır:** anlık device state kapısı + config'teki `Busy(20)`. Yalnız
+  anlık kapıya güvenmek DND'yi ARI'nin ayakta olmasına bağımlı yapardı.
+- **İlan FAIL-OPEN'dır.** DND yasal bir kapı değil bir tercihtir; fail-closed olsaydı
+  ARI'nin her hıçkırığı düğümdeki bütün dahilileri susturacaktı.
+- **Kurul kararı bekleyen kart `karar bekleyen`e yazılır, `Bitti`ye değil.** Açık işi
+  kapalı göstermek, kapalıyı açık göstermekten kötüdür (CLAUDE.md §14).
+
+### Açık kalanlar / sonraki adım
+- **`BR-AST-81`'in canlı ayağı YAYIN'a bağlı:** kendi soketimizi kapatıp yeniden
+  bağlanınca DND'nin yeniden BUSY ilan edildiğini görmek, kod sunucuya inmeden ölçülemez
+  (`BR-AST-103`/`105` ile aynı sınıf).
+- **Ortam engeli beş kartı birden tutuyor:** `72`, `80`, `89`, `46`, `98`(ses ayağı) —
+  hepsi test sunucusunda **kayıtlı bir SIP/WebRTC istemcisi** istiyor. Bu tek bir ortam
+  işidir ve beş kartı birden açar.
+- **Kurul gündemi biriktir:** A14 (`39`/`46`), ADR-015 A1/A2/A3 (`62`/`63`/`64`),
+  Ş42-8 (`58` → `104`), Ş50-4 (`74`), Karar #40 (`54` kapandı ama karar yazılmadı),
+  ürün: 9 dilin ses kaynağı (`92`).
