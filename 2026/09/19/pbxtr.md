@@ -985,3 +985,188 @@ Masa telefonu nesnesi ve `t0012` nesneleri yok. 2026-09-18 ölçümü **bayat de
 - Düzeltme **sunucuda ölçülmedi** (yeni ikili teslim edilmedi); kırılım
   anahtarlarının gerçekten yazıldığı ancak yayından sonra görülür.
 - `BR-AST-58`/`BR-AST-61` teslim bekliyor; `BR-AST-59` engeli değişmedi.
+
+---
+
+## Tur — linux-uzmani: ağ katmanında SSRF kapısı + yedeğin kurulum yolu (2026-09-19)
+
+### Bağlam
+İki iş: (1) `BR-SEC-21` (b) — SSRF'e karşı **ağ katmanında ikinci savunma**;
+bugüne kadar tek savunma uygulama katmanıydı (`OutboundHostGuard`). (2) `kapi_84`
+sunucudaki yedek yapılandırmasının sapmasını **ölçüyor ama kapatamıyor** —
+`deploy/` altında kurulum betiği yoktu.
+
+Sunucu: `176.88.41.220` (test/sunum). İlk komut `date -u` (uzak damga ile yerel
+tarihi karşılaştırmamak için).
+
+### 1. BR-SEC-21 (b) — `deploy/nftables-egress.conf` + `deploy/nftables-egress-kur.sh`
+
+**Neden:** kart üç ölçülmüş bulguyla geliyordu: `nftables.conf` sunucuda hiç yüklü
+değil, fiili egress ufw'den geliyor ve `DOCKER-USER` boş, depodaki iskelet yanlış
+hook'ta (`chain output`, oysa `pbxtr-app` konteyner).
+
+**Verdiğim üç karar ve gerekçeleri:**
+
+1. **Kural `deploy/nftables.conf`'a YAZILMADI, ayrı tabloya (`inet pbxtr_egress`)
+   yazıldı.** O dosya olduğu gibi **yüklenemez**: `MGMT_NETS` hâlâ RFC 5737
+   dokümantasyon adresi (`203.0.113.0/24`) ve `chain input` `policy drop` — yüklersen
+   SSH anında kesilir. SSRF kapısını oraya yazmak, kapıyı *"bir gün tüm INPUT
+   politikası yazılırsa"* koşuluna bağlamak olurdu. Yeni tablonun **hiçbir zinciri
+   `policy drop` değil**, `flush ruleset` yok, yalnız `ip saddr 172.28.0.0/24` taşıyan
+   pakete dokunuyor. Yükleme sonrası ufw/Docker/fail2ban tabloları **değişmedi**.
+
+2. **Kartın istediği FORWARD ikizi YETMİYOR — INPUT ikizi de yazıldı.** Ölçüm:
+
+   ```bash
+   ip route get 172.17.0.1 from 172.28.0.11 iif br-9ae916ee4dc5  # -> local ... dev lo
+   ip route get 1.1.1.1    from 172.28.0.11 iif br-9ae916ee4dc5  # -> via 176.88.41.193 dev ens160
+   ```
+
+   Konteynerden çıkan paket **hedefe göre iki ayrı hook'a** düşer ve SSRF'in en
+   değerli hedefi (host'un kendi adresleri: `172.17.0.1` docker0, `172.18.0.1`
+   br-lab, `172.28.0.1` gw, `100.106.82.119` tailscale0) **INPUT'a** düşer. Kural
+   yokken `pbxtr-app` → `172.17.0.1:22` **AÇIKTI**. Yalnız FORWARD ikizi yazılsaydı
+   kapı kurulmuş **görünür**, o yol açık kalırdı — yani vacuous bir kapı.
+
+3. **CGNAT `100.64/10` ağda bilerek drop EDİLMEDİ.** `OutboundHostGuard.cs:183` onu
+   uygulama katmanında zaten reddediyor; ağda drop etmek CLAUDE.md §3.0'ın Asterisk
+   adresini (`100.106.82.119` = bu host'un `tailscale0`'ı — ölçüldü) keser ve SSRF
+   reddi **sessiz bir telefon kesintisine** dönüşürdü. İkinci savunmanın birinciyle
+   aynı sınıfları taşıması şart değil; şart olan **yüklenebilir** olması.
+
+**Ölçüm (pozitif + negatif + mutasyon, hepsi sunucuda):**
+
+- `nft -c -f` ilk koşuda **gerçek hata yakaladı**: `define X = { }` → *Set is empty*.
+  Adlandırılmış sete çevrildi.
+- Yükleme **5 dk geri dönüş zamanlayıcısıyla** yapıldı.
+- POZİTİF: `1.1.1.1:443` AÇIK, DNS OK, pg `5432` AÇIK, AMI `5038` AÇIK,
+  `https://127.0.0.1/health` **200**, 6 konteyner healthy.
+- NEGATİF: `172.17.0.1:22` / `172.18.0.1:22` / `172.28.0.1:22` **KAPALI** (önce AÇIKTI).
+- FORWARD ikizi **paket düzeyinde**: `ssrf_drop_forward` **9 → 18**, aynı turda
+  `ssrf_drop_input` **12 → 12** değişmedi. Bağlantı sonucu ayırt edici **değil**
+  (drop da timeout verir, "kimse yok" da) → ayırt edici **sayaç farkıdır**.
+- MUTASYON 1 (INPUT drop → accept): üç hedef **AÇIK** döndü, kurulum **KIRMIZI**
+  yandı ve kuralı **geri aldı**.
+- MUTASYON 2 (FORWARD sınıfı `203.0.113.0/24`'e daraltıldı): sayaç **0 → 0**,
+  *"FORWARD ikizi VACUOUS"* **KIRMIZI**. İkisi bağımsız: biri kırmızıyken öteki yeşil.
+
+**Kurulum betiği kendi iki hatasını üretti (ikisi de koşturunca çıktı):**
+
+- `systemd-run --unit` ikinci koşuda *"unit already exists"* ile reddediyordu →
+  temizlenecek nesne `.service` **değil `.timer`**'dır (`reset-failed` ile).
+  Düzeltilmeseydi betik **ikinci koşuda hep kırmızı** olurdu — kapıyı fiilen kaldıran
+  hâllerden biri.
+- İlk sürümün üç negatif hedefi de host-yerel olduğu için **FORWARD zincirini hiç
+  ölçmüyordu** — kartın istediği ikiz kurulmuş görünüp ölçülmemiş olacaktı.
+
+**Sunucuda devrede:** `/etc/nftables.d/pbxtr-egress.conf` (sha `4fe29048`),
+`pbxtr-nftables-egress.service` **enabled+active**,
+`ExecStart=/usr/sbin/nft -f /etc/nftables.d/pbxtr-egress.conf`, `ExecStop` kuralı
+**kaldırıyor** (yoksa "servis durdu ama kural duruyor" hâli denetlenemez),
+zamanlayıcı artığı **0**.
+
+**Kapsam dışı (açıkça):** konteynerin kendi `127.0.0.1`'i host hook'larına hiç
+uğramaz → yalnız `OutboundHostGuard` kapatır; dosya kapattığını iddia **etmez**.
+IPv6 kuralı **yazılmadı** çünkü `pbxtr_ic` ağı IPv6 taşımıyor (ölçüldü); yazılsaydı
+hiçbir paketle eşleşmeyen bir satır olurdu.
+
+### 2. BR-SYS-124 (yeni kart) — `deploy/pbxtr-yedek-kur.sh` + `kapi_85`
+
+**Neden:** `kapi_84` sapmayı görünür kılıyor, **düzeltmiyor**; kırmızı çıktısı
+operatöre elle `scp`/`install` reçetesi basıyordu → düzeltme yolu **insan hafızası**.
+
+**Bu turda ölçülen ve kartta olmayan kusur — `kapi_84`'ün kapsamı 7'de 2.**
+Kapı YEŞİLKEN gerçek bir sapma duruyordu:
+
+```
+pbxtr-yedek-tatbikat.service.d/10-compose-yolu.conf   depo 7e68a913 / sunucu 7261c18f
+```
+
+Kapı o dosyaya **hiç bakmıyor**. Yani *"yedek yapılandırması depoyla birebir"*
+iddiası bugün **yanlıştı** ve yeşil kapının altında duruyordu.
+
+**Ölçüm zinciri:** `--olc` sapmayı buldu (7'de 1) → sunucudaki sürüm
+`/root/10-compose-yolu.conf.oncesi-20260919`'a yedeklendi → kurulum + `daemon-reload`
+→ **bağımsız** doğrulama: `--olc` 7/7 birebir **ve** `kapi_84` TAMAM →
+`systemctl show ... -p Environment` yedi adın yedisini de taşıyor
+(`PBXTR_YEDEK_PG_KONTEYNER` dahil; **değer sütunu kesilerek** okundu),
+`Invalid environment assignment` **0**.
+
+**Uçtan uca mutasyon:** sunucudaki `/usr/local/sbin/pbxtr-yedek` değiştirildi
+(`c6e6a7b4` → `f4bf4585`) → `kapi_84` **KIRMIZI** VE `--olc` **KIRMIZI**, aynı
+dosyayı gösterdiler; betikle düzeltildi → ikisi de yeşil. Yani kurulum betiği,
+kapının **raporladığı** şeyi gerçekten kapatıyor.
+
+**`kapi_85`** (`deploy/yerel-kapilar.sh`, kapı sayısı 83 → 84). Emsal `kapi_84`:
+kapı konteynerinde ssh yok, oraya ssh'li kapı koymak **hep-kırmızı kapı** demek ve o
+kapıyı fiilen kaldırır → kapıda yalnız `--oz-test` koşar. Öz-testin ölçtüğü vacuity
+**bugünkü sapmayı üreten hata sınıfının ta kendisi**: `ESLEME` tablosu elle yazılmış
+7 satır; `deploy/` altına 8. dosya eklenirse betik onu kurmaz ve `--olc` *"7'nin
+7'si birebir"* diye yeşil yanar. Öz-test tabloyu diskle **iki yönlü** sayar
+(tabloda hayalet yok / tabloda boşluk yok). Mutasyonla doğrulandı: 8. dosya eklendi
+→ **KIRMIZI** (dosya adıyla), geri alındı → **YEŞİL**.
+
+**Betiğin bilerek yapmadıkları:** yedek **almaz** (elle başlatılan yedek,
+zamanlanmış yedeğin kanıtı değildir — `BR-SYS-119`'un yanlış yeşili tam olarak böyle
+üretilmişti); zaten `active` timer'ı **restart etmez** (restart,
+`ActiveEnterTimestamp`'i sıfırlar ve `kapi_84`'ün 25 saatlik penceresini baştan
+başlatır, yani kapının kendiliğinden sertleşmesini erteler); **sır okumaz**.
+
+### 3. Yan bulgu — pano yanlış okuyordu
+
+`BR-SEC-21` ClickUp'ta **yanlış `complete`** görünüyordu: durum hücresi `KAPANDI`
+taşıdığı için `yonetim/arac/clickup-durum.js`'in 50. satırı eşleşiyordu, oysa (c)
+açık. Hücre `Kismen` ile düzeltildi → `in progress`. `BR-SYS-119` de benim
+`Önceki kayıt:` çıpam yüzünden `backlog`'a düşmüştü (çıpa, sonrasını **keser** ve
+orijinal `KISMEN KAPANDI` metni kesilen kısımda kalmıştı) → düzeltildi.
+Pano son durum: `fark olan kart: 0, izde olmayan: 0`.
+
+### Dokunulan dosyalar
+
+- `deploy/nftables-egress.conf` (yeni)
+- `deploy/nftables-egress-kur.sh` (yeni)
+- `deploy/pbxtr-yedek-kur.sh` (yeni)
+- `deploy/yerel-kapilar.sh` (`kapi_85`)
+- `yonetim/backlog.md` (BR-SEC-21, BR-SYS-119, BR-SYS-124)
+- `yonetim/arac/clickup-kart-eslemesi.json`
+
+### Komutlar
+
+```bash
+ssh root@176.88.41.220 'date -u'
+nft -c -f /etc/nftables.d/pbxtr-egress.conf
+bash deploy/nftables-egress-kur.sh --kuru      # yazmaz, yalniz olcer
+bash deploy/nftables-egress-kur.sh             # geri donus timer + yukle + yokla
+sh   deploy/pbxtr-yedek-kur.sh --oz-test       # kapi govdesi (ssh gerekmez)
+sh   deploy/pbxtr-yedek-kur.sh --olc           # 7 dosya, sunucuyla karsilastir
+sh   deploy/pbxtr-yedek-kur.sh                 # sapanlari kur + daemon-reload
+sh   deploy/yedek-sunucu-sapma.sh              # BAGIMSIZ dogrulama (kapi_84)
+```
+
+### Kararlar
+
+- **Yüklenemeyen bir kural setinin içine güvenlik kapısı yazılmaz**; kapı ayrı,
+  kendi başına yüklenebilir bir tabloya yazılır.
+- **Firewall değişikliği geri dönüş zamanlayıcısı olmadan yüklenmez**; betik bunu
+  fail-closed zorlar (zamanlayıcı kurulamazsa **yüklemez** — bu davranış sahada
+  bir kez tetiklendi ve doğru çalıştı).
+- **Kuran ve doğrulayan ayrı betiklerdir**; aksi hâlde doğrulama kendi yazdığını okur.
+- **İkinci savunma birinciyle aynı sınıfları taşımak zorunda değildir** (CGNAT
+  örneği): şart olan, ikinci savunmanın yüklenebilir ve kesinti üretmez olmasıdır.
+
+### Açık kalanlar / sonraki adım
+
+- Egress kuralı yalnız **test/sunum** sunucusunda kuruldu; başka bir ortamda koşmadı
+  — **ölçemedim**.
+- `egress_allow` / `host_allow_ports` setleri **boş**; bu ölçülmüş bir boşluktur
+  (app'in kurulu TCP soketlerinin tamamı `172.28.0.0/24` içinde: pg `172.28.0.2:5432`,
+  redis `172.28.0.4:6379`, ARI `172.28.0.12:8088`, AMI `172.28.0.12:5038`).
+  Fail-closed ve kasıtlı.
+- `kapi_84`'ün kendi karşılaştırması **hâlâ 7'de 2** → `BR-SYS-119`'a yazıldı.
+  Kalan iş: (1) ayağını 7 dosyaya genişlet ya da `--olc`'yi çağır.
+- `BR-SEC-21` (c) `webhook_deliveries` boyut eşiği değişmedi (Ş76-10/3 sıra kilidi).
+- **Tam kapı takımı bu turda koşmadı**: paralel iki ajan aynı depoda koşuyordu
+  (defter: *iki yayın koşusu üst üste binmez*). `kapi_85` gövdesi tek başına yeşil +
+  mutasyonla kırmızı, `sh -n deploy/yerel-kapilar.sh` OK, kapı sayacı 84.
+
+**Commit:** `89eb4e1c` — BR-SEC-21(b) KAPANDI + BR-SYS-124 acildi
