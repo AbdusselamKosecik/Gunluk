@@ -1065,6 +1065,99 @@ iddiasına katlıyor demektir. 8 → **10 test**.
 - Kapalı **484** (turun başında 477) · açık **164**
 - Sunucu temiz: 0 aktif kanal, geçici bağlamlar silindi, t0007 verisine dokunulmadı
 
+### 89. Karar #74 — ölçülmüş bir hızlanma, KARAR OLMADAN geri çekildi
+
+- **Neden:** `BR-DB-40`'ın ölçümü RLS yükleminde `OR` operandlarının sırasını değiştirmenin
+  çapraz kipte **943 ms → 46 ms** (~20×) getirdiğini gösterdi. Öneri kurula gitti.
+- **Ne oldu:** Kurul **bölündü** — önce yalnız üç kilit üye (CTO, DB lideri, Şeytan) çağrıldı,
+  çünkü önerinin **ölçülmemiş bir ön koşulu** vardı: *"yeni sıra kurulu veritabanlarına
+  ulaşıyor mu?"* Üçü de bağımsız ölçtü, cevap **HAYIR**:
+  `pbxtr_reassert_hardening()` (`deploy/db/01-rls-template.sql:3121-3238`) dört blok koşar ve
+  bunların içinde **`pbxtr_apply_tenant_rls` çağrısı SIFIRDIR.** Şablonun tamamında da toplu
+  çağrısı yok. Yani tazeleme migration'ı fonksiyon **gövdesini** günceller ama
+  `<tablo>_tenant_isolation` policy'leri `pg_policy`'de **eski metinle** durur. Yeni sıra
+  yalnız **taze kuruluma** gelirdi.
+- **İkinci ölçüm daha kötüsünü söyledi:** trafiğin ~%99'u olan `cross=off` kipinde öneri
+  **kazanç vermiyor**, medyanda ~%3 **kaybettiriyor** (b1 928/927/917/952 ms ↔ b5
+  958/1055/961/957 ms). Asıl kazanç b4'te — `app_current_tenant()`'ı SQL gövdeli yapmakta
+  (140 ms, ~6,7×) ve o **policy metnine hiç dokunmuyor**.
+- **DB liderinin yakaladığı gizli tuzak:** naif bir `FOR tbl IN … PERFORM pbxtr_apply_tenant_rls(tbl)`
+  döngüsü, `01:359-361`'deki `ELSE … DROP POLICY IF EXISTS <tablo>_dealer_scope` dalı yüzünden
+  **beş tablonun bayi policy'sini sessizce düşürürdü** (`call_events`, `cdr`, `queues`,
+  `tickets`, `user_roles`). Bayi alt tenantlarını okuyamaz hâle gelirdi — **hatasız, 0 satırla.**
+- **Sonuç:** öneriyi **geri çektim**; 7 üye **bilerek çağrılmadı**. Çürümüş bir öneri için
+  10 üyelik tur açmak kurulu tören hâline getirir.
+- **Dokunulan dosyalar:** `yonetim/kurul-kararlari.md` (Karar #74 negatif kayıt),
+  `yonetim/backlog.md` (`BR-DB-40` yön değişikliği, `BR-QA-99` açıldı)
+- **Commit:** `631fad8f` — Karar#74 GERI CEKILDI
+
+**Bu turun kalıcı çıktısı bir NEGATİF SONUÇTUR ve kayda geçmesinin sebebi budur:**
+*ölçülmüş bir hızlanma, teslim yolu ölçülmeden bir karara dönüştürülemez.*
+
+Ayrıca kurulun kaydettiği, karar kapsamı dışında iki şey: (1) aynı RLS yüklemi **üç ayrı yerde,
+üç ayrı yoldan** yazılı (`01:315-316` şablon, `CdrSqlBuilder.cs:74` + `PostgresCdrSearch.cs:22`
+ham SQL, `02-guards.sql:1651` donmuş dize + üç migration kopyası) → şablon düzeltilirse ürün
+**iki sıraya birden** sahip olur (`BR-QA-99`); (2) `OR` operand sırası PostgreSQL'de **bir
+sözleşme değil planlayıcı davranışıdır** — kazanç bir sürüm yükseltmesinde sessizce kaybolur
+ve hiçbir test kırmızı olmaz.
+
+### 90. Güvenlik turu — `T` bayrağı düştü, iki yeni yüzey açıldı
+
+- **`BR-SEC-17` — BİTTİ.** `Dial(…,30,tT…)` içindeki **büyük `T`** transfer yetkisini
+  **arayana** verir (küçük `t` arananadır), ve o satır `-local` bağlamında — oraya bugün zaten
+  dış çağrı giriyor (kuyruk üyeliği `Local/{no}@pbxtr-{kod}-local/n`). Toll-fraud yüzeyi.
+  `T`, `ConfigRenderer.cs`'de **7 üretici noktadan** düşürüldü (satır ~1015, 1122, 1447, 1513, 2261)
+  **ve** `ProvisioningRevisionService.cs:551,795`'ten — ikincisi atlanırsa santral
+  Sınıf-B `queue-target` anlık görüntüsünden **eski değeri okumaya devam ederdi.**
+- **Negatif kapı:** `tests/Pbxtr.Api.Tests/Modules/Telephony/DialTransferFlagGuardTests.cs` —
+  yalnız `Dial()`/`Queue()` **seçenek alanını** ayrıştırır (metnin rastgele yerindeki `T`
+  harfini değil), `T` yok der **ve** `t` var der (vacuity karşıtı: küçük `t` de silinseydi
+  test sessizce yeşil kalırdı).
+- **Kendi kaçırdığım kırmızı:** `persistentmembers` düzeltmesini merge ederken yalnız
+  `dotnet build` + Architecture koşmuştum; `ConfigRenderGuardTests` HEAD'de **kırmızı kalmış**.
+  SEC ajanı yakaladı ve muafiyeti *gevşeterek değil daraltarak* düzeltti (tam olarak
+  `queues.conf` + tam `[general]`, `ConfigRenderGuard.cs:464-479` ile birebir).
+- **`BR-SEC-25` (CTO Ş73-7) ölçülürken öncül daraldı ama ayakta kaldı:**
+  `SET "app.cross_tenant" = 'on'` taşıyan fonksiyon sayısı 2 değil **6**; 4'ü `RETURNS trigger`
+  olduğu için doğrudan çağrılamıyor. Geriye kalan gerçek yüzey **`BR-SEC-26`** olarak açıldı:
+  **`public.*` fonksiyonların `proacl`'ini ölçen hiçbir bekçi yok** — bir
+  `REVOKE … FROM PUBLIC` bekçisiz yazılırsa bir sonraki `CREATE OR REPLACE`'te **sessizce**
+  geri alınır ve kimse görmez.
+- **Commit:** `de469922` (BR-SEC-17 + kapı) · `8b1d9f76` (merge) · `3645c08a` (BR-SEC-26 kartı)
+
+### 91. `BR-DOC-21` — belge kodu yanlış tarif ediyordu, dört yüzeyde düzeltildi
+
+- **Neden:** CLAUDE.md §3.2 *"bu uçlar Redis'ten servis edilir; PostgreSQL sıcak yolda değildir"*
+  diyordu. Beş Sınıf-B ucunun hepsi tek tek ölçüldü ve cümle **koşulsuz doğru değil**:
+
+  | Uç | Sıcak yolda fiilen ne var |
+  |---|---|
+  | `queue-target` | **Saf Redis** — DbContext yok; önbellek düşerse `503` (`QueueTargetEndpoints.cs:33,69,73`) |
+  | `route-decision` | Handler **transaction açıyor** (`RouteDecisionEndpoints.cs:258-261`); önbellek ıskasında ve TTL dönümünde EF sorgusu koşuyor |
+  | `call-permission` | **Tamamen PostgreSQL, önbellek YOK** — `EfTenantSuspensionProbe.cs:38-43`, `EfBlacklistDirectory.cs:67`, `EfTenantSettings.cs:414,465`, `EfCallAttemptLedger.cs:59` |
+  | `call-result` | PostgreSQL yazar; Redis yalnız idempotens rezervasyonu |
+  | `screen-pop` | **Kodda YOK** — `src/` altında sıfır eşleşme. Sözleşmede tanımlı, uç hiç yazılmamış. |
+
+  `call-permission`'ın önbelleksizliği **kaza değil**: Karar #12/5 onu bilerek yasaklıyor
+  (fail-closed kapıda önbellek "yeni yasak TTL boyunca görünmez" hatasını sokar).
+- **Ne yapıldı:** cümle **silinmedi**, üzeri çizildi + `DÜZELTİLDİ` mezar taşı bloğu eklendi;
+  aynı düzeltme **dört yüzeye**: `CLAUDE.md:196`, `AGENTS.md:138`,
+  `doc/mimari/api-kontrat-v1.md:1031`, `.claude/agents/backend-lider.md:22`.
+- **Kurulun zaten doğruyu bildiği ortaya çıktı:** `Karar #65 Ş65-3.5` migrate penceresinde
+  *"`call-permission` red sayısı"* ölçümünü şart koşuyor — yani **aykırı olan belgeydi**, kod değil.
+- **Bekçi:** `tests/Pbxtr.Architecture.Tests/ClassBHotPathDataSourceTests.cs` (3 test).
+  Pozitif (`call-permission` zinciri `PbxtrDbContext` taşır, `ITenantCache` taşımaz) +
+  **kontrol grubu** (`QueueTargetEndpoints` tam tersi — jeton kümesi ayrıştırıcı) + belge testi
+  (yanlış cümle üç belgede ancak `~~` ile geçebilir; koşulsuz geri yazılırsa **ve tamamen
+  silinirse de** kırmızı). Mutasyon **3/3** yakalandı.
+- **Yanında kapananlar:** `BR-OPS-03` kapandı, kalan tek kalem `BR-OPS-16` olarak açıldı
+  (oto-cevaplanan çağrı `call_events`'te işaretlenmiyor → terk oranı paydası ayrılamıyor).
+  `BR-OPS-11` (3) kapandı, 4 kalem açık kaldı. `BR-OPS-14` (b) **üretilemedi** — webhook
+  migration'ı sunucuda hâlâ uygulanmamış (`__EFMigrationsHistory` = 0), ölçülecek ACCESS
+  EXCLUSIVE edinimi henüz yok; **sahte ölçüm üretilmedi.**
+- **Commit:** `bed1a5b0`, merge ile main'e alındı.
+
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
