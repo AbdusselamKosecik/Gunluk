@@ -279,6 +279,93 @@ karar kaydı yazılmamıştı.
   yaz ve çıkış kodunu **kendi satırında** oku. `grep -c`/`grep -q` bir **koşuldur**, bir
   sayaç değil.
 
+### 44. KİP DEĞİŞTİ — kullanıcı hızdan şikâyetçi oldu, ekran teslimine geçildi
+
+- **Kullanıcı ne dedi:** önce *"neden bu kadar yavaşsın"*, ardından kipi birebir sabitledi:
+  *"ekranları öncelik alarak maddeleri test etmeden çıkarır mısın. çalışsın ama asterisk
+  hariç diğer entegrasyonları kontrol etmeye çalışma."*
+- **Haklıydı ve sebebi ölçülebilir:** o ana kadar bir turda **üç kurul oturumu, beş mutasyon
+  turu ve iki kapı** yapmıştım — hiçbiri kullanıcıya **ekran** olarak görünmedi.
+- **Ne yapıldı:**
+  1. Saatlerdir asılı duran **iki ssh döngüsü** kesildi — ikisi de sunucuda hiç ateşlenmeyen
+     bir retention job'ını bekliyordu ve hedef değerlendirmesini **125 dakika** erteletmişlerdi.
+  2. Az önce başlatılan **dört backend/ölçüm ajanı durduruldu** (yeni talimatın tersini
+     yapacaklardı).
+  3. Yerine **dört frontend ajanı ayrı worktree'lerde** başlatıldı; görevlerinde açıkça
+     *"test yazma, mutasyon koşma, Asterisk dışı entegrasyonu kurcalama"* yazılıydı.
+- **Worktree kararı doğruydu:** dört ajan aynı `src/Pbxtr.Web` ağacında çalışsaydı sürekli
+  çakışırlardı; ayrı worktree'de çakışma **merge anına** ertelendi ve orada tek elden çözüldü.
+
+### 45. Dört ekran dalı indi — 13 kart bitti, 7'si bilerek KISMEN
+
+| Ne | Sonuç |
+|---|---|
+| **Ekran #64 Sesli Mesaj Kutusu** | Yeni ekran, `/voicemail`. **70 → 71 ekran.** FIFO, `overdue`/`havuz` süzgeçleri, satır içi Dinle/Geri ara/Bana al/Havuza iade/Kapat. İndirme yok (§13/2), bedeli oynatıcıda geri-sar 10sn + 0,75x–1,5x |
+| **#49 Entegrasyonlar sekmesi** | Webhook'un **8 ucu vardı, hiçbir yüzeyi yoktu** — teslim arızası müşterinin telefonundan öğreniliyordu. İki kapı birden: `integration.read` **ve** `useHasFeature('integrations')` |
+| Otomatik mola anahtarı | Sunucu ayağı haftalardır hazırdı, **ekranı yoktu** |
+| Realtime sessizlik | `useRealtimeSilence` yalnız wallboard'daydı → #12, #13, canlı kuyruklar ve #15'e yayıldı |
+| 12 glif | Self-host fontların `unicode-range`i **dışındaydı** → webfonttan hiç çizilmiyordu; 6'sı inline SVG, 6'sı 9 dilde Latin-1 karşılığı |
+| DND, alarm kaynak ekseni, "Üretildi" yalanı, kısmi agent sessizliği | İndi |
+
+**İki kart ölçüldü ve iş YAPILMADI** (`BR-FE-87`, `BR-FE-57`) — zaten bitmişlerdi; bayat olan
+kartın kendisiydi. Ajanlar önce ölçtüğü için boşuna iş üretilmedi.
+
+**Yedi kart bilerek `Kısmen`:** UI ayağı bitti ama **veri sunucudan gelmiyor** (`dnd`,
+`presentOnPbx`, `registration`, teslim tarihi). Ajanlar **uydurmadı, ekranı susturdu** ve
+bildirdi. `Bitti` yazmak panoda kapalı gösterir ve kalan yarıyı kaybederdi → `BR-BE-186/187/188`
+ve `BR-FE-103` açıldı.
+
+### 46. Turun en pahalı bulgusu: bayat üretilmiş dosya ekranları GÖRÜNMEZ yapıyordu
+
+- **Neden:** Canlı izleme ajanı kapsam dışı bir şey fark etti ve **kendi commit'ine almayıp
+  bildirdi**: `src/Pbxtr.Web/src/app/screens/system-roles.generated.ts` **bayat**.
+- **Ölçüm:** üreticiyi koşturdum, fark **yalnızca ekleme**:
+
+  ```
+  + integration.read   + integration.write
+  + voicemail.read     + voicemail.manage
+  ```
+
+  **Hiçbir izin kaybolmuyor.**
+- **Sonucu:** sunucu rol tohumu ilerlemiş ama üretilmiş dosya commit edilmemiş → o izinlere
+  bağlı ekranlar **SPA'da hiç çizilmiyordu**. Belirti sessiz: hata yok, **ekran yok**. Aynı
+  turda açtığımız #64 ve #49 Entegrasyonlar sekmesi bunsuz **görünmeyecekti**.
+
+### 47. i18n çatışma çözücümün kuralı YANLIŞTI ve fiilen hata üretti
+
+- **İlk sürüm:** paylaşılan anahtarda *"dalınkini al"*. Glif düzeltmesi dalını merge ederken
+  doğruydu.
+- **Sonraki merge'de patladı:** sesli mesaj dalı glif düzeltmesinden **önce** dallanmıştı, yani
+  "dalın tarafı" **eski glifi geri getirdi** — `« Listeye dön` → `← Listeye dön`. Yani
+  `BR-FE-74`'ü **sessizce geri aldım.**
+- **Nasıl yakalandı:** çıktıya baktım. `tr.json`'da dört anahtarı elle okudum ve eski glifleri
+  gördüm. Betiğin kendisi "22 glif ikamesi" diyordu ve **yanlış yöne** ikame ediyordu.
+- **Düzeltme:** kural **taraf** değil **içerik** seçiyor artık — *kötü glif taşımayan taraf
+  kazanır*. Ve doğrulama çıktıya eklendi: her dil için **`KALAN kötü glif: 0`**.
+- **Ders:** bir merge çözücüsünde "hangi taraf" bir **konum** ifadesidir ve dalların yaşına
+  göre anlamı değişir. Doğru çözücü **içeriğe** bakar. (Aynı sınıf: `[[backlog-durum-sutunu-cipayla-bulunur]]`
+  — `h[4]` de `h[-1]` de yanlıştı, çıpa gerekiyordu.)
+
+### 48. İki tarafı ayrı ayrı doğru olan bir çift, birleşince yanlış rapor üretti
+
+- Ajan *"`limit` sunucuda doğrulanmıyor olabilir, DoS yüzeyi"* diye bildirdi. Ölçtüm:
+  **endişe yersiz** — `EfWebhookAdministration.cs:336` `.Take(Math.Clamp(limit, 1, 200))`.
+- **Ama altından gerçek bir kusur çıktı:** istemci `MAX_PAGE = 500` gönderiyordu, sunucu
+  **200'e kırpıyor** ve istemci bunu **hiç görmüyordu**. Sonuç: *"sayfa doldu mu"*
+  karşılaştırması 500'e bakıp **daima "dolmadı"** diyordu → *"en eski bekleyen teslimin yaşı"*
+  satırı `en az` önekini **hiç basmıyor** ve ölçülen değer **kesin sanılıyordu**.
+- İki taraf da kendi içinde doğruydu; **sözleşme** yanlıştı. `MAX_PAGE` 200 yapıldı ve sebebi
+  koda yazıldı. Kalanı `BR-FE-103`.
+- Bu, `[[kart-onculu-olculmeden-yazilmaz]]`ın birebir tekrarı: **teşhis yanlış çıktı ama
+  altından daha kötü, gerçek bir kusur çıktı.**
+
+### 49. Ölçüm
+
+- `npx vitest run` → **220/220 dosya yeşil** (tur başında 3 kırmızıydı, 218 dosyaydı).
+- `npx tsc -b` rc=0, `npm run build` rc=0.
+- ClickUp: 5 yeni kart, 19 durum güncellemesi → **`fark olan kart: 0, izde olmayan: 0`**.
+- **Commit:** `661e343d`, `4eb48550`, `d76887ae`, `8d7168ef`, `3f5b8985`, `27570109`, `d7f77451`
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
