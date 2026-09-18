@@ -1362,3 +1362,53 @@ maskenin o dosyada **uygulandığını** kanıtlayamıyorsan maske yoktur. Hafı
 - `dotnet test tests/Pbxtr.Api.Tests --filter "~Modules.Telephony"` tam koşusu hâlâ
   **ÖLÇÜLMEDİ** (eşzamanlı ajan yükü altında testhost çökme riski).
 - BR-SEC-16 sır rotasyonu: ajanlar bitince.
+
+### 99. "Tarihçe" durum sanılıyordu — 14 bitmiş kart açık görünüyordu
+
+- **Neden:** `Bitti` ile BAŞLAYAN 16 kart panoda hâlâ `in progress` duruyordu. Sebebi
+  aradım: `yonetim/arac/clickup-durum.js` kural 1 (`Kısmen` geçerse → in progress)
+  **tüm hücreyi** tarıyordu. Uzun hücrelerde `Kısmen` çoğu kez GÜNCEL durumda değil,
+  `Önceki kayıt:` **tarihçesinde** geçiyor.
+- **Ölçüm (konum/uzunluk):** `BR-AST-28` 303/565, `BR-SYS-91` 2583/4014,
+  `BR-QA-88` 706/1754 — üçünde de eşleşme tarihçedeydi. Kontrol örneği `BR-DB-65`
+  82/2259 → **güncel** parçada, yani doğru şekilde açık.
+- **Ne yapıldı:** Hücre `Önceki kayıt:` çıpasından kesiliyor, kurallar yalnız öncesine
+  uygulanıyor. **Sınır bilerek dar:** çıpa yoksa hiçbir şey atılmaz; güncel parçadaki her
+  `Kısmen` aynen ısırır (CLAUDE.md §14: açık işi kapalı göstermek daha kötüdür).
+- **Dokunulan dosyalar:** `yonetim/arac/clickup-durum.js`, `yonetim/arac/clickup-durum.test.js`
+- **Doğrulama:** 5 yeni assert, **ikisi ters yön** (güncel parçadaki `Kısmen` ısırmalı).
+  **Mutasyon:** kesme geri alındı → takım **KIRMIZI** (rc=1); geri kondu → yeşil (rc=0).
+- **Sonuç:** 20 kart yeniden sınıflandı (14 → complete, 6 → backlog).
+  `505/81/69/3/5` → `519/63/75/3/3`. Açık kart **158 → 144**.
+- **Commit:** `5f3d6225`
+- **ClickUp:** 2 kart açıldı (BR-QA-100/101), 20 durum yazıldı, doğrulama
+  `fark olan kart: 0, izde olmayan: 0`.
+
+### 100. EPIC toplayıcı kartlarının eksik alt numaraları ölçüldü
+
+Yedi EPIC kartı "alt kart numarasının backlog'da satırı yok" diye bekliyordu. Numara
+yokluğu iki şeyden biri olabilir: iş başka kart altında yapılmış (numara bayat), ya da iş
+gerçekten yok. **Kaynak taramasıyla ayrıldı:**
+
+| Epic | Kalan GERÇEK iş |
+|---|---|
+| **BR-B1/B2** geri arama | Çıkış tarafı ayakta (`callback_entries`, `CallbackRunJob`, `CallbackDispatcher`, `CallbackBoardPanel`). Eksik olan **talep alma yarısı**: `callback_digit` kuyruk ayarı (0 eşleşme), `[…-qexit-…]` dialplan bağlamı (0), `UserEvent` alım ucu, `queue_optin` kökeni/FIFO önceliği (0), `callSource` rozeti (yalnız bir yorumda), `callback_requested` SLA sınıfı (0). **Uyarı:** C#'ta `callback` kelimesi delege anlamında 397 dosyada geçiyor — gürültü. |
+| **BR-7** yetenek yönlendirme | Sunucu TAM (migration `20260917210658_SkillBasedRouting`, 8 uç `SkillAdminEndpoints.cs`). Web'de `/skills` çağrısı **0 eşleşme** → ön yüzün tamamı yazılacak. |
+| **BR-C2-1/2** webhook | Backend + ön yüz VAR (`WebhookOutboxWriter`, `WebhookDeliveryDispatcher`, `WebhooksPane.tsx`). Kalan **yalnız sistem ayağı**: `st48-kilit.nft` webhook egress sınıfı (0 eşleşme), `pbxtr.service` `IPAddressDeny/Allow` (0), ve `BR-BE-31` SSRF kapısının SMTP/S3 ayağı (ADR-019 §4 borcu). |
+| **BR-KAPANIS** | `purge_call_data()` izin listesinde `webhook_outbox`, `webhook_deliveries`, `callback_entries` **YOK** (`20260918090000_VoicemailRetentionAllowlist.cs:155,160`). Gövde donmuş md5 ile korunuyor (`deploy/db/sys-functions.expected:16`) → tek migration + tek md5 tazelemesi. Purge runbook'u hiç yok. |
+| **BR-15** izin CSV | Uç yok; mekanizma olgun (6 örnek, `Results.File(..., "text/csv; charset=utf-8", …)`). **Kartın öncülü yanlış:** izin satırında telefon kolonu yok, numara serbest nottadır → doğru redaktör `FreeTextRedactor`, kartın andığı `PhoneSurfaces.Export` değil. |
+
+## Kararlar
+- **Durum eşleyicide tarihçe, durum değildir.** Kural sınırı dar tutuldu: çıpa yoksa
+  hiçbir şey atılmaz. Gerekçe CLAUDE.md §14.
+- **Kart numarasının yokluğu, işin yokluğu demek değildir** — ikisi ayrı ölçülür.
+  Yedi EPIC'ten üçünde iş yapılmıştı, numara bayattı.
+
+## Açık kalanlar / sonraki adım
+- 8 ajan paralel: SEC(11), DB(16), AST(27), BE(27), QA/FE/DOC(16), SYS/OPS(19),
+  BR-7 ön yüz, BR-15 CSV.
+- `backlog.md` ajanlar bitene kadar bana kapalı (çakışma) — EPIC satırları sonra yazılacak.
+- **Yayın hattı kendiliğinden koşturulmuyor:** iki koşu bellek yetersizliğinden öldürüldü,
+  talimat "yalnız istenirse". 8 kart (BR-DB-69/74/79/84/88, BR-BE-150/119, BR-AST-103) o
+  yüzden bloke.
+- BR-SEC-16 + BR-SEC-28 sır rotasyonu: ajanlar bitince, bende.
