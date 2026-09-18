@@ -4556,3 +4556,77 @@ eşleşme ölçülerek doğrulandı, üzerine yazmadan önce:
 - `BR-QA-114`: `SlaAggregationJob` SQL'i gerçek PG'ye karşı ölçülmedi.
 - `BR-DB-100` kurula gidecek (iki blob + `callback_entries` RLS genişletmesi).
 - `BR-SEC-16` + `BR-SEC-28` sır rotasyonu.
+
+---
+
+## Ek tur — `kapi_71` (şablon ↔ tazeleme defteri) KIRMIZI, kapatıldı
+
+### Bağlam
+`deploy/yerel-yayin.sh --sadece-kapilar` yayını bloke etti:
+`IHLAL: 02-guards.sql: GOVDE DEGISTI (defter 0f77294b…, gercek 7b4c041a…)`.
+
+### 1. Sebep ölçüldü (kapı doğru davranıyordu — gevşetilmedi)
+- **Neden:** `85d4139b` (BR-DB-93) `deploy/db/02-guards.sql` içindeki
+  `pbxtr_sys_function_expectations()` md5 envanterini ve
+  `pbxtr_assert_sys_functions_frozen()` dondurulmuş toplam hash'ini tazeledi
+  (`call_data_retention_lag`, `call_data_retention_plan`, `purge_call_data` +
+  `8dc49b1d…` → `c732d80e…`). Envanter **şablonun içindedir**.
+- **Belirti sessiz DEĞİL, fail-closed:** EF uygulanmış migration'ı yeniden koşmaz.
+  Yeni tazeleme yazılmazsa yükseltilen DB'de fonksiyon gövdeleri YENİ
+  (`20260918230000` `CREATE OR REPLACE` eder), envanter ESKİ kalır →
+  `pbxtr_assert_sys_function_guard()` `SYS_FUNCTION_SOURCE_DRIFT` ile düşer,
+  **uygulama hiç açılmaz.** Taze zincir yeşil, yükseltilen kurulum kilitli.
+
+### 2. Tazeleme migration'ı
+- **Dosya:** `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918233000_GuardsTemplateRefreshCallDataAllowlist.cs`
+- **Damga çakışması ÖNCE ölçüldü:** dizin tazelendi, bugünün en yenisi `20260918230000`;
+  `20260918233000` ve sonrası boş. **Sıra bağlayıcı:** 230000 gövdeyi değiştirir,
+  233000 envanteri tazeler (ters sırada aynı drift, ters yönde).
+- **Gövde:** `SET LOCAL lock_timeout='5s';` + `DeployDbScripts.Read(DeployDbScripts.Guards)`.
+  Emsal `20260918130000` / `20260918180000` ile aynı desen; şema değiştirmez,
+  `pbxtr_assert_*` iddiası koşmaz (Karar #23 / Ş23-7).
+- `PbxtrDbContextModelSnapshot.cs`'e **dokunulmadı** (model değişmiyor), Designer dosyası yok
+  (emsaller de böyle: `[DbContext]`/`[Migration]` öznitelikleri satır içi).
+
+### 3. `Down()` — emsalden BİLEREK ayrıldı
+`130000`/`180000` boş `Down` taşır: orada geri alma ölçülmüş bir kusuru geri getirirdi.
+**Burada tersi:** EF ters sırada koşar → önce bu `Down`, sonra `230000`'in `Down`'ı
+(üç gövdenin ölçülmüş önceki kopyası). Envanter burada eski değerlere dönmezse
+"geri alınmış" DB `SYS_FUNCTION_SOURCE_DRIFT` ile **açılmazdı**.
+`Down` gövdesi `85d4139b^:deploy/db/02-guards.sql` satır **1952-2035**'in birebir
+kopyasıdır (emsal `20260915120000_TenantColumnWriterGate.cs:193-195`); yıkıcı adım yok
+(`DROP` yok, `CREATE OR REPLACE` aynı imza).
+
+### 4. Defter
+`deploy/db/sablon-refresh.expected`, 02 satırı:
+- önce: `0f77294b242c102fc121932e3f6bbcc9a0e1bf78e2980f5846abb024141a44dc|20260918180000_GuardsTemplateRefreshWebhookRetention`
+- sonra: `7b4c041a10066782dcbcb50843b3e6c63f3f4a4ece20164728f96faeddaa80ee|20260918233000_GuardsTemplateRefreshCallDataAllowlist`
+
+### 5. Ölçüm (ubuntu:24.04 konteyneri — Windows host'ta DEĞİL)
+```bash
+docker run --rm -v //x/GitHub/Pbxtr/pbxtr://repo -w //repo ubuntu:24.04 sh -c \
+  "apt-get install -y -qq git; git config --global --add safe.directory /repo; \
+   sh deploy/sablon-refresh-kapisi.sh; sh deploy/sablon-refresh-kapisi.sh --oz-test"
+```
+- öz-test: **OZ-TEST GECTI (9/9)**, rc=0 (m7/m8 dahil — K6 canlı)
+- ölçüm (commit'ten SONRA): iki satır da **TEMIZ**, rc=0;
+  `02-guards.sql -> 20260918233000_… [K6: govde 6ed2f55d, be44d534 eklendiginde de ayniydi]`
+- `dotnet build Pbxtr.Infrastructure`: 0 Warning, 0 Error
+
+### 6. Açık — contract kapısı (BİLEREK yazılmadı)
+`deploy/migration-compatibility-guard.py` bu migration için kurul onay satırı istiyor.
+**Yazılmadı** (Karar #48 birebir blob sha ister; onay kurul işidir).
+- blob: `38506ef55b2f7cf99cc5729c2d5161d94ca91524`
+- bulgu: `deploy/db/02-guards.sql (DeployDbScripts.Guards) icerigi:
+  contract/destructive desen: ALTER (TABLE|COLUMN|TYPE) (ilk satir 848, 2 eslesme)`
+  + `ham SQL normal deploy'da fail-closed reddedildi` — emsal `20260918180000` ile
+  **birebir aynı** bulgu kümesi.
+- Kapı bu commit'ten **önce de** kırmızıydı (`20260918230000` da onaysız) → bu
+  kırmızılığın sahibi bu tur değil.
+
+**Commit:** `be44d534` — BR-DB-93 devami: 02-guards.sql tazeleme migration'i (20260918233000) + defter
+
+### Bu turun kararı
+- Kapı **gevşetilmedi**; borç kapıyı susturarak değil, tazeleme migration'ı yazarak ödendi.
+- `yonetim/` altına dokunulmadı; `git add -A` / `git stash` kullanılmadı
+  (paralel ajanlar çalışıyordu) — `git commit --only -- <yollar>` ile tek adım.
