@@ -539,3 +539,202 @@ tekrarı.)
   çizer; sekme açık kalırsa değer tazelenene kadar donar. Tahtanın `at` alanı
   bunu görünür kılar ama tazeleme bir sonraki karttır (istemcide sayaç
   döndürmek, bu turda kapatılan türetme yasağını geri açardı).
+
+---
+
+# pbxtr — 2026-09-19 (backend-dev-1 turu: BR-BE-202 / 190 / 195 / 194)
+
+## Bağlam
+
+`backend-lider` dört kart verdi. Üçü "bloke" ya da "kurul bekliyor" durumundaydı;
+ikisinin kart metnindeki teşhis **ölçünce eksik çıktı.** Paralel ajanlar aynı anda
+`RedisLiveOperationsView.cs`, `EfAnalyticsQuery.cs`, `MissedCallEndpoints.cs` ve
+`SlaWindowStore.cs` üzerinde çalışıyordu; o dosyalara dokunulmadı.
+
+## Yapılanlar
+
+### 1. BR-BE-202 — mutabakat HER ZAMAN `not_applied` okuyor
+
+- **Neden:** süpervizör müdahalesi santralde çalışıyor ama panel "uygulanmadı" diyor.
+  Asıl tehlike ikincil: operatör zamanla o satırı okumayı bırakır ve **gerçek** bir
+  `not_applied` geldiğinde de kimse bakmaz.
+- **Teşhis ölçüldü ve DOĞRU çıktı ama EKSİKTİ.** Kart "uç `after[member]`'a GUID
+  yazıyor" diyordu; doğru. Ama altında şu vardı:
+  `AgentInterventionResult.Indeterminate()` üye adresini **hiç taşımıyordu**
+  (`MemberEndpoint = null`). Yani "uç doğru değeri yazsın" demek yetmiyordu —
+  değer ucun elinde yoktu.
+- **Kartın (b) seçeneği ölçümle elendi:** "resolver GUID→arayüz çözsün" dersek
+  türetme `tenantCode + dahili` ister ve dahili müdahaleden sonra değişmiş olabilir.
+  Bu zaten `IAgentIntervention.cs`'de **yazılıydı**; kart onu görmemiş.
+- **Ne yapıldı:** adres sonuçla taşınıyor. `after` gövdesi
+  `LiveEndpoints.BuildInterventionAfter`'a çıkarıldı ve **metot `userId` almıyor** —
+  aynı regresyon yapısal olarak yeniden yazılamaz. Adres yoksa alan yazılmaz
+  (fail-closed → mutabakat `unknown`). Aynı kusur `AgentEndpoints` self-state
+  yolunda da vardı, o da düzeltildi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/Realtime/LiveEndpoints.cs`,
+  `src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs`,
+  `src/Pbxtr.Domain/Modules/Live/IAgentIntervention.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/AgentInterventionService.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/QueuePushReconciliationJob.cs`
+  (`PendingPush` private→internal),
+  `tests/Pbxtr.Api.Tests/Modules/Realtime/LiveAgentActionReconciliationNamespaceTests.cs`
+- **Vacuity kapısı uçtan uca:** gövde **üretim serializer'ından**
+  (`AuditPayloadSerializer`) geçip işin kendi çözücüsüne (`PendingPush.From`) ve
+  `QueuePushResolver`'a veriliyor. Yalnızca "member GUID değil" deseydim, alanı boş
+  bırakan bir uygulama da yeşil kalırdı.
+- **Mutasyon:** member'a GUID geri yazıldı → 5 testin **3'ü kırmızı.**
+- **Commit:** `78285240`
+
+### 2. BR-BE-190 — `PbxtrTakeoverRequeued`'in üreticisi yoktu
+
+- **Neden:** `BR-AST-95` kanal değişkenini kaldırınca dialplan üreticisi düştü.
+  `Half` ve `Aborted` basılıyor, `Requeued` **hiç** basılmıyordu — yani devralmadan
+  sonra **yaşayan** çağrının izi kalmıyor, süpervizör "çağrı ne oldu" sorusunun
+  olumlu cevabını göremiyordu.
+- **Kart "bloke" diyordu — ölçünce DEĞİLDİ.** Öncül `BR-AST-107` kapanmış ve
+  `ConfigRenderer.ConfBridgeRegisteredOnPbx` `true` yapılmıştı. Kartın durum hücresi
+  bayattı.
+- **Kartın açıkça "ÖLÇÜLMEDİ" dediği kalem santralde ölçüldü** (`176.88.41.220`):
+  `ConfbridgeJoin` bugünkü `read` sınıfıyla **geliyor** — `Privilege: call,all`;
+  okuma sınıfı `system,call,agent,user,cdr,dialplan`. **Yazma kümesine dokunulmadı**
+  (Karar #46 / Ş-46-1 kilidi aynen duruyor).
+- **Kartta olmayan bir eşik bulundu:** `BridgeNumChannels` = gerçek katılımcı **+ 1**.
+  ConfBridge her konferans için bir **anons kanalı** açıyor
+  (`CBAnn/pbxtr-ctl-annprobe-00000014;1`, `core show channels` ile doğrulandı).
+  Ölçülen dizi: `ConfbridgeStart`=1, 1. katılım=2, 2. katılım=3.
+- **Bu yüzden işaret ilk katılımda DEĞİL, BULUŞMADA basılıyor.** Kartın önerdiği
+  "konferans adı önekiyle süz" tek başına yanlış olurdu: tek başına giren bacağa
+  `Requeued` yazmak, hemen ardından `Aborted` ile ölen bir çağrıyı çizelgede
+  "yaşadı" göstermek demekti.
+- **Konferans adı tek kaynağa bağlandı** (`TakeoverSignals.ConferencePrefix`):
+  dialplan üreticisi ile eşlemenin öneki ayrı yazılsaydı biri değiştiği gün işaret
+  **sessizce hiç doğmazdı** — kartın ilk oluş sebebinin birebir tekrarı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/TakeoverSignals.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Asterisk/AmiEventMapper.cs`,
+  `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/AmiTakeoverRequeuedMappingTests.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/Fixtures/ami-confbridge-takeover-capture.txt`
+- **Komutlar (sunucuda, python + AMI soketi):**
+
+  ```bash
+  ssh root@176.88.41.220 'docker exec pbxtr-asterisk asterisk -rx "manager show user pbxtr"'
+  ssh root@176.88.41.220 'docker exec pbxtr-asterisk asterisk -rx "module show like confbridge"'
+  # + AMI'ye login olup ConfBridge'e kanal sokan gecici python betigi
+  ```
+
+  Sır hiçbir çıktıya yazılmadı: betik `pbxtr.d/credentials/ami.conf`'u kendisi okudu
+  ve değeri yalnızca sokete verdi.
+- **Temizlik doğrulandı:** geçici `brbe190probe` bağlamı silindi, `0 active channels`,
+  konferans listesi boş, `/tmp` betikleri silindi.
+- **Mutasyon:** `ConfbridgeJoin` dalı silindi → 2 test kırmızı; eşik `3→2` →
+  tek-bacak testi kırmızı.
+- **Commit:** `78285240`
+
+### 3. BR-BE-195 — monotonik `MeasuredAt`
+
+- **KARTIN ÖNERDİĞİ ÇÖZÜM KARTIN KENDİ KABUL ÖLÇÜTÜNÜ GEÇEMİYORDU.** Kart
+  "oku-karşılaştır-yaz" diyor **ve** "iki eşzamanlı aktörle ölçülür" diyordu. O üç
+  adımdır: A okur (eski), B okur (eski), B YENİ'yi yazar, A ESKİ'yi yazar → eski
+  kazanır. Yani tek aktörlü testte yeşil yanar, korumayı **hiç kurmaz.**
+- **Ne yapıldı:** karşılaştırma + yazım **tek atomik işlem** —
+  `ITenantCache.TrySetIfNewerAsync` + `RedisTenantCache`'te Lua betiği. Gerekçe aynı
+  dosyada `TryAddAsync`/`GetAndRemoveAsync` için **zaten yazılıydı** ("iki komuta
+  bölünmesi yasaktır").
+- **Damga ayrı bir anahtarda** (`<key>:at`) ama bu bir bölünme değil: iki anahtarı da
+  **aynı betik** yazıyor ve okuyor. Lua'da JSON ayrıştırmamak için. İkisi de tenant
+  önekli — önek olmasaydı bir tenant'ın yazımı ötekinin satırını sessizce düşürürdü
+  (ayrı test).
+- **`MeasuredAt` ≠ `SinceAt`:** `SinceAt` "bu duruma ne zaman girildi" (süre sayacı),
+  `MeasuredAt` "bu bilgiyi ne zaman öğrendik" (sıralama). Tek alanla yapılsaydı ya
+  sayaç sıfırlanırdı ya sıralama bozulurdu.
+- **Kaynak olayın SANTRAL damgası** (`telephonyEvent.At`), yazım anı değil: resync
+  toplu işler ve gecikmeli yazar; yazım anı kullanılsaydı **eski ölçüm en yeni
+  damgayı alırdı** ve düzeltmek istediğimiz ezmeyi biz yapardık.
+- **Varsayılan arayüz uygulaması bilerek patlıyor** (`NotSupportedException`).
+  Müsamahakâr bir varsayılan 23 test ikizini yeşil bırakıp üretim korumasını
+  ölçülmemiş kılardı (kayıtlı ders: *test ikizi üretimden müsamahakâr*).
+- **Ölçüm GERÇEK Redis'te**, 40 turluk iki-aktör yarışı: 6/6 geçti.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Platform/Tenancy/ITenantCache.cs`,
+  `src/Pbxtr.Infrastructure/Caching/RedisTenantCache.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Live/RedisLiveStateStore.cs`,
+  `src/Pbxtr.Infrastructure/Telephony/Pipeline/TelephonyEventPipeline.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/LiveAgentMonotonicWriteTests.cs`
+- **Mutasyon:** `SetAsync`'e düşürüldü → 2 test kırmızı; Lua `>` → `>=` →
+  `Esit_damga_YAZAR` kırmızı.
+- **Commit:** `921dd1c2`
+
+### 4. BR-BE-194 — doluluk (occupancy) tanımı + metriğin kendisi
+
+- **Kurul dağıtıldığı için tanımı ben yaptım, dar tuttum ve kartta gerekçelendirdim.**
+- **Kapalı küme `LiveAgentStatuses.All`'tan TÜRETİLDİ, uydurulmadı:**
+  - **PAY:** `on_call + acw`
+  - **PAYDA:** `available + on_call + acw`
+  - **DIŞI:** `break`, `offline`, `ringing`
+- **`break` paydaya konmadı.** Mola yetkilendirilmiş bir yokluktur; paydaya konsaydı
+  metrik molaya çıkan agenti cezalandırırdı — `BR-BE-135` / `BR-OPS-02` ile **aynı
+  kusur sınıfı** (agentin kontrolünde olmayanı performansına yazmak). Mola süresi
+  fonksiyonun **imzasında bile yok**, kazara eklenemesin diye.
+- **`ringing` dışıdır ve bu bir TERCİH DEĞİL, ÖLÇÜLEMEYİŞTİR:** ürün ringing süresini
+  hiçbir kovaya yazmıyor (`AgentTimelineSlot` belgesi bunu zaten söylüyor).
+  **Sapmanın yönü yazıldı:** payda eksik olduğu için doluluk **yukarı** sapar.
+- **Payda sıfırsa `null`, `0` değil.** `0` "agent hiç çalışmadı" der ve bu bir
+  performans iddiasıdır; tümüyle molada geçen bir saat panelde %0 doluluk göremez.
+- **Metrik ürüne bağlandı** (*kod var, koşan yok* olmasın): `#22` Agent Çizelgesi ucu
+  saat ve gün başına `occupancy` döndürüyor. `CallReportCatalog` ve
+  `AgentPerformanceEndpoints`'teki "doluluk üründe YOK" notları düzeltildi; ikisi de
+  artık nerede **olduğunu** ve aynı sayıyı ikinci kaynaktan türetmediğini söylüyor.
+- **`BR-BE-135` / `BR-BE-171`(b) için açık ve TEK bağlı nokta: `deductedSec`**
+  (yalnız `available`'dan düşer, onu aşamaz). O iki kartın "kırmızı yanabileceği kod
+  yolu yok" engeli kalktı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Live/AgentOccupancy.cs`,
+  `src/Pbxtr.Api/Modules/Realtime/TimelineEndpoints.cs`,
+  `src/Pbxtr.Domain/Modules/Reporting/CallReportCatalog.cs`,
+  `src/Pbxtr.Api/Modules/AgentDesk/AgentPerformanceEndpoints.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Live/AgentOccupancyTests.cs`
+- **Mutasyon (üçü de):** `break` paydaya eklendi → kırmızı; payda sıfırken `0`
+  döndürüldü → kırmızı; `LiveAgentStatuses`'a `training` eklendi → kapalı küme
+  bekçisi kırmızı ("Doluluk tanimi su durumlar icin SUSUYOR: training").
+- **Commit:** `921dd1c2`
+
+## Ölçüm sonuçları
+
+- `dotnet build pbxtr.sln` → **0 hata.**
+- `Pbxtr.Api.Tests` (`Modules.Live` + `Modules.Realtime` + `Modules.Telephony`):
+  **1674 geçti, 1 kırmızı, 2 atlandı.** Kırmızı benim değil:
+  `ScriptPublishedEventTests.Istemci_olay_listesi_sunucu_katalogunu_kapsar` — sunucu
+  realtime olay kataloğunda istemci listesinde olmayan bir olay var; dokunmadığım iki
+  dosya (`RealtimeProvider.tsx`, `RealtimeEventTypes`). `git diff` ile doğrulandı.
+- `Pbxtr.Integration.Tests / LiveAgentMonotonicWriteTests`: **6/6** (gerçek Redis).
+- ClickUp: `fark olan kart: 0, izde olmayan: 0`.
+
+## Kararlar
+
+- **Kart teşhisi bir hipotezdir, ölçüm değil.** Dördün ikisinde kart metni eksik ya
+  da bayattı: `BR-BE-202`'de asıl kusur bir katman daha aşağıdaydı, `BR-BE-190`
+  "bloke" yazıyordu ama öncülü kapanmıştı. **Önce ölç.**
+- **Bir kartın önerdiği uygulama, kartın kendi kabul ölçütünü geçemeyebilir.**
+  `BR-BE-195` bunun ders kitabı örneği: "oku-karşılaştır-yaz" + "iki eşzamanlı
+  aktörle ölç" aynı kartta yazıyordu ve **birbiriyle çelişiyordu.**
+- **Sahte bir varsayılan, eksik bir uygulamadan kötüdür.** `TrySetIfNewerAsync`'in
+  varsayılanı patlıyor; `SetAsync`'e sessizce düşseydi koruma hiç kurulmadan
+  "kuruldu" görünürdü.
+- **Fikstür provenansı satır satır yazılır.** Gerçek santral kaydından hangi blok
+  harfiyen, hangisi türev ve türevde **ne** değişti — hepsi dosya başlığında.
+  Ölçemediğim tek şeyi (`BridgeNumChannels: 3` + eşleşen `Linkedid` tek blok) ve
+  **neden** ölçemediğimi de oraya yazdım.
+- **`null` ≠ `0` bir kez daha:** doluluk metriğinin tamamı bu ayrımın üstünde duruyor.
+
+## Açık kalanlar / sonraki adım
+
+- **`ScriptPublishedEventTests` kırmızı ve sahibi başkası:** sunucu realtime olay
+  kataloğuna eklenen bir olay `Pbxtr.Web`'deki `REALTIME_EVENTS` listesine
+  yazılmamış. Kart açılmalı.
+- **Uçtan uca gerçek devralma koşulmadı** (`BR-BE-190`): iki kayıtlı SIP ucu gerekir.
+  Bugün ölçülen şey olayın **geldiği** ve **şeklidir**, akışın tamamı değil.
+- **`BR-BE-195` için canlı resync/olay yarışı ölçülmedi:** yarış gerçek Redis'te 40
+  turla ölçüldü ama gerçek santral olay akışıyla değil.
+- **Bu dosyanın önceki bölümündeki "`Modules.Realtime` kırmızı, paralel ajanın yarım
+  `TrySetIfNewerAsync` işi" notu KAPANDI** — o yarım iş buydu, bu turda bitti.
+  `AgentInterventionTests` ve `LiveAgentDndStoreTests` artık yeşil.
+- **`BR-BE-135` ve `BR-BE-171`(b) artık yazılabilir:** payda var, bağlanacak nokta
+  (`deductedSec`) açık ve tek.
