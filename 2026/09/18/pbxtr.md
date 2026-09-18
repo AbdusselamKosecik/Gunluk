@@ -1656,3 +1656,43 @@ tarafi tamamen olu koddu, hicbir ekran o uclari cagirmiyordu.
   listesi de yok. Uydurma veri cizilmedi. Kolon isteniyorsa once uc genisletilmeli.
 - `auditActionParity` kirmizisi: `aud.a.leaveExported` dokuz katalogda eksik
   (`AuditActions.cs:750`). Leave export isini yuruten ajanin isi.
+
+### BR-15 — #50 izin listesi CSV disa aktarimi
+
+- **Neden:** #50 ekraninda liste vardi, disa aktarim yoktu; kalip depoda olgun
+  (CDR/cari/denetim/rapor/analitik/script = 6 emsal).
+- **Ne yapildi:** `GET /api/v1/leaves/export` — liste ucuyle **AYNI** filtre
+  (`from`/`to`, 14 gun varsayilan, 92 gun tavan) ve **AYNI** yetki (`leave.read`),
+  cikti CSV. Bicim `CsvCells`ten gelir (BOM + `;` + CRLF + formul enjeksiyonu
+  korumasi); ikinci bir koruma kopyasi yazilmadi.
+- **Maskeleme:** izin satirinda telefon **kolonu yok**; numara benzeri dizi
+  serbest `Note` alanina girer ve CSV'ye `FreeTextRedactor.Redact`ten **gecerek**
+  yazilir (liste ucundeki `LeaveDto.From` ile birebir ayni karar).
+  `PhoneSurfaces.Export` bu yuzeye UYMAZ, kullanilmadi.
+- **Denetim:** yeni eylem `leave.exported`; kayit **dosyadan once** yazilir.
+  Govdede not metni TASINMAZ — yalnizca `noteRedacted` bayragi, satir sayisi ve
+  pencere yazilir.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/Leaves/LeaveEndpoints.cs`,
+  `src/Pbxtr.Api/Modules/Leaves/LeaveExportCsv.cs` (yeni),
+  `src/Pbxtr.Domain/Platform/Audit/AuditActions.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Leaves/LeaveEndpointTests.cs`,
+  `src/Pbxtr.Web/src/app/screens/system/auditView.ts`, 9 i18n katalogu.
+- **Sonuc / dogrulama:** `LeaveEndpointTests` 15/15 (rc=0).
+  **MUTASYON:** `LeaveExportCsv`ten `FreeTextRedactor.Redact` kaldirilinca yalnizca
+  `Disa_aktarimda_nottaki_numara_maskelidir` KIRMIZI (1 failed / 14 passed), geri
+  alininca 15/15. `Platform.Authorization|Delivery|Privacy|Leaves` birlikte 410/410.
+  `npx vitest run` 1985/1985.
+- **Commit:** `dd4b14c8`
+
+#### Bu turda olculen iki tuzak
+
+- **`--artifacts-path` iki bekciyi SAHTE kirmizi yakiyor:** paralel ajanlarin
+  testhost'u depo ici `bin/`i kilitledigi icin ayri artifacts yoluna kacildi;
+  `RoleScreenMatrixTests.Matris_belgesi_guncel` ve
+  `DocumentedEndpointRealityTests` "pbxtr.sln bulunamadi" ile dustu — ikisi de
+  depo kokunu cikti agacindan yukari arayarak buluyor. Depo ici cikti ile
+  ayni iki test YESIL. Ayni tuzak `Pbxtr.Api.Tests.csproj` icinde de yazili.
+- **`auditActionParity` mandali arka uctan tetiklenir:** `AuditActions.cs`e
+  eklenen her eylem, istemcide `ACTION_VIEW` + bir filtre grubu + dokuz
+  i18n katalogu ister. Arka uc karti frontend isi uretir; kart yazilirken
+  gorunmuyordu.
