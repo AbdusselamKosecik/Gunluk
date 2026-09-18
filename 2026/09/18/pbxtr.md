@@ -3339,3 +3339,311 @@ Bu turun hedefi: 17 açık BR-DB kartını (16, 35, 40, 44, 50, 52, 67, 69, 70, 
   (`AriStasisApp.cs`, `AriDndDeviceStateAnnouncer.cs`) yüzünden geçici olarak
   derlenmedi; mutasyon ölçümü bu yüzden **kaynağı okuyan** bekçilerle `--no-build`
   koşuldu.
+
+---
+
+## Tur: pbxtr-qa kapatma turu (QA + FE + EPIC kartları)
+
+**Commit:** `1b137b3c` — *pbxtr-qa kapatma turu: 2 yeni kapi, 1 gercek kusur, 10 kart devredildi*
+
+### Bağlam
+Hedef: `yonetim/backlog.md`'de açık kalan 15 QA kartı, 2 FE kartı ve 7 EPIC toplayıcısını
+kapatmak. Her kart üç hâlden birine sokulacaktı: (1) iş bitmiş ama durum metni kapanış
+biçiminde değil → doğru metni yaz; (2) iş var ve yapılabilir → YAP; (3) gerçekten bloke →
+**engeli adıyla** yaz.
+
+### Yapılanlar
+
+#### 1. BR-QA-105 — `--artifacts-path` evreni kapatıldı, gerçek bir kusur çıktı
+- **Neden:** aynı gün ÜÇ kez `--artifacts-path` altında sahte kırmızı çıkmıştı. Kart
+  "önce evreni kapat" diyordu.
+- **Ne yapıldı:** `tests/**/*.cs` tarandı; depo kökü arayan **27 dosya** (12 Api / 12
+  Architecture / 3 Integration). Tanım iki uçlu yazıldı: (a) yorum olmayan satırda
+  `.Parent` veya `GetDirectoryName`, (b) `*.sln` / `CLAUDE.md` dize sabiti.
+- **Sayaç kendi filtresine karşı ölçüldü** (defter dersi): bağımsız `grep -rl` birleşimiyle
+  27 = 27, iki yönde de fark 0. İlk tanım yalnız `.Parent` arıyordu ve ÜÇ dosyayı
+  kaçırıyordu (`AgentStateHistoryTests`, `ScriptPublishedEventTests`,
+  `ProvisioningTenantPrefixGuardTests` — üçü de `string` üzerinde `Path.GetDirectoryName`).
+- **GERÇEK KUSUR (kartta yoktu):** `TenantLeakCoverageTests.cs:289` kök işaretçisini
+  `"Pbxtr.sln"` (büyük P) arıyordu; depoda izlenen dosya `pbxtr.sln`. Windows'ta
+  büyük/küçük harf duyarsız olduğu için tutuyordu, **kapıların koştuğu Linux'ta hiç
+  tutmaz** → sınıfın tamamı üründe kusur yokken kırmızı yanardı. Düzeltildi.
+- **Dokunulan dosyalar:** `deploy/ci/depo-koku-arayan-test-kapisi.py`, `…-selftest.py`,
+  `depo-koku-arayan-test-envanteri.json`, `deploy/yerel-kapilar.sh` (kapi_78),
+  `tests/Pbxtr.Architecture.Tests/TenantLeakCoverageTests.cs`
+- **Doğrulama:** öz-test 6 vaka (1 pozitif, 3 mutasyon KIRMIZI, 2 negatif YEŞİL); ayrıca
+  **gerçek depoda** işaretçi büyük P'ye döndürülünce kapı KIRMIZI, geri alınınca YEŞİL.
+
+#### 2. BR-QA-103 — konteyner ayrıcalık kapısı (kapi_79)
+- **Neden:** Ş37-14 belgede vardı, kodda yoktu (`privileged`/`cap_add`/`network_mode`
+  taraması 0 satır).
+- **Mevcut veri kapı kurulmadan ÖNCE ölçüldü:** 4 compose + 4 Dockerfile = 8 dosya,
+  gerçek isabet **0**, tek eşleşme bir YORUM (`pbxtr-demo/docker-compose.yml:850`).
+  Kartın "3 Dockerfile" sayımı bayatlamış (`deploy/yerel-kapilar.Dockerfile` eklenmiş).
+- **İki ayrı eleme gerekti:** (a) yorumlar — elenmeseydi kapı DOĞDUĞU GÜN kırmızı olurdu;
+  (b) `setcap cap_net_raw+ep` (Dockerfile:152-154) — bu dosya bazlı yetenek, konteyner
+  geneli `cap_add`'in ALTERNATİFİDİR; kapı orayı yaksa doğru tasarımı cezalandırırdı.
+- **Doğrulama:** öz-test 8 vaka (1 pozitif, 5 mutasyon KIRMIZI, 2 negatif YEŞİL); gerçek
+  depoda `docker-compose.dev.yml`'e `privileged: true` eklenince KIRMIZI, geri alınca YEŞİL.
+
+#### 3. BR-QA-106 — çıkarıcı artık mutabakat basıyor
+- **Neden:** `clickup-cikar.js` devredilen satırları sessizce düşürüyordu; kaynak ile araç
+  toplamı arasındaki fark hiçbir yerde raporlanmıyordu.
+- **Ne yapıldı:** kaynak satır sayacı + devredilen satırların "düşen satır N → tutulan
+  satır M" raporu + `kaynak = kart + devredilen + çözülemeyen` eşitliği (tutmazsa durur)
+  + mükerrer kimlikte iki satır numarasını birden yazan hata metni.
+- **Sonuç:** `MUTABAKAT: kaynak 679 = kart 676 + devredilen 3 + cozulemeyen 0`.
+- **Kapı kendini aynı turda kanıtladı:** paralel bir ajan `BR-BE-194/195/196` ve
+  `BR-QA-107` numaralarını benimkilerle aynı anda aldı; uyarı satır numaralarıyla anında
+  yandı ve kartlar yeniden numaralandı. Eski araç bunu sessizce yutardı.
+
+#### 4. BR-QA-102 / BR-QA-104 — iki kartın da ÖNCÜLÜ bayat çıktı
+- **BR-QA-102** ("403 ekranı eksik yetkiyi adıyla söylemiyor"): iş `BR-FE-78` (Ş37-6) ile
+  inmiş. Zincir tek tek doğrulandı — `registry.ts:961` `permission` VE `permissionsAll`'ı
+  **ikisini birden** okuyor (defter: tek alana bakan ölçüm yanlış yeşil verir),
+  `AppRoutes.tsx:170` → `ForbiddenScreen.tsx`, `sys.forbiddenMissing` **9 dilin 9'unda**,
+  testler `registry.test.ts:89,103,117,131` + `ForbiddenScreen.test.tsx:28,38,62`.
+- **BR-QA-104** ("denetim ucu tek değerli Action filtresi"): çoklu eylem `BR-BE-131` ile
+  inmiş (`MaxActions = 20`, `AuditMultiActionFilterTests` 3 test) ve ön yüz kümesi de var
+  (`PERSONAL_DATA_ACCESS_ACTIONS`). **Kalan gerçek boşluk ön yüzdeydi:** kümenin hiçbir
+  testi yoktu → `personalDataAccessParity.test.ts` yazıldı (K1 altın liste, K2 aile
+  kapsamı, K3 `ACTION_VIEW` paritesi, K4 `preset:` ön ek ayrımı).
+- **Mutasyon:** kümeden `system.capture.downloaded` çıkarıldı → K1+K2 KIRMIZI; geri alınca
+  4 passed. Boşluğun bedeli somuttu: bir KVKK talebinde pcap indirmeleri sessizce düşerdi.
+
+#### 5. KRİTİK bulgu — `BR-QA-109` açıldı
+`TenantLeakCoverageTests` **ana dalda KIRMIZI**: `EfAgentSkillProfile` adaptörü tenant
+sızıntı testi olmadan inmiş. `dotnet test --filter TenantLeakCoverageTests` →
+`Failed 1, Passed 3`.
+
+> **DÜZELTME — bu günlüğün daha önceki bir turunda yazılan attribution YANLIŞ.**
+> Orada bu kırmızı *"paralel bir ajanın uçuştaki işi"* diye geçilmişti. Ölçüldü:
+> `git log -1 -- src/Pbxtr.Infrastructure/Modules/EfAgentSkillProfile.cs` →
+> **`2d57f64d` (commit'li)**, ve `git status --porcelain` o dosya için **boş**. Yani
+> uçuşta değil, **ana dalda duran gerçek bir kabul eksiği**. `BR-7`'nin agent ayağı
+> tenant izolasyonu bekçisini kırmızı bırakarak indi; bu yüzden `BR-7` "bitti" sayılamaz.
+
+#### 6. EPIC toplayıcıları ve 10 devredilen kart
+- **Bölündü (complete):** `BR-B1`, `BR-B2`, `BR-9`, `BR-KAPANIS`.
+- **in-progress kaldı:** `BR-7` (KRİTİK `BR-QA-109`'a bağlı), `BR-8` (kartsız bir canlı
+  Asterisk ölçümü kaldı).
+- **Açılan 10 kart:** `BR-QA-109`, `BR-DB-92` (`callback_digit`), `BR-DB-93`
+  (`purge_call_data()` allowlist), `BR-AST-111` (qexit dialplan), `BR-BE-197` (UserEvent
+  alım ucu), `BR-BE-198` (`queue_optin` + FIFO), `BR-BE-199` (`callback_requested` SLA),
+  `BR-FE-114` (`callSource` rozeti), `BR-FE-115` (#49 off-hours anahtarı), `BR-SYS-116`
+  (purge runbook).
+- Geri aramanın **talep alma** yarısının üründe hiç olmadığı bağımsız doğrulandı:
+  `callback_digit` 0, `qexit` 0, `queue_optin` 0, `callback_requested` 0, `callSource` 1
+  (o da bir yorum). Ölçüm tuzağı kartlara yazıldı: C#'ta `callback` delege anlamında 397
+  dosyada geçer, düz grep bu işi "zaten var" gösterir.
+
+#### 7. Bloke kartlar — engel ADIYLA yazıldı
+`BR-QA-07` + `BR-6` → Netgsm **hesabı** (kod borcu değil). `BR-QA-79` → canlıda 0 kayıtlı
+cihaz / 0 trunk. `BR-QA-55`/`BR-QA-57` → digest-pinli Linux Playwright imajı yok (Karar #44;
+Windows üretimi reddedildi). `BR-QA-95` → makinede eşzamanlı ajanlar. `BR-QA-06`/`51`/`86`/
+`100` + `BR-FE-108` → kurul gündemi.
+
+### Kararlar
+- **BR-QA-79'un (2) maddesindeki düzeltme korundu:** ceza değiştiren yol VARDIR
+  (`SkillRouting.cs:155` → `EfSkillAdministration.cs:457-470,484` → `QueueMembershipPush.cs:464`);
+  canlı defterde 0 satır olması *"yol yok"*un değil *"böyle bir değişiklik yapılmadı"*nın kanıtı.
+- **`BR-FE-111` bilerek `Kapsam dışı` ile BAŞLATILMADI.** O yazım panoyu `complete` yapardı
+  ve ERTELENMİŞ bir işi bitmiş gösterirdi. İş devredilmedi, ertelendi.
+- **`BR-6`'da bir yanlış yeşil yakalandı ve düzeltildi:** metindeki *"…onayıyla kapandı"*
+  ifadesi `Kapandı → complete` kuralını tetikliyor, BLOKE bir kartı panoda KAPALI
+  gösteriyordu. *"karara bağlandı"* olarak değiştirildi.
+
+### Açık kalanlar / sonraki adım
+- **`BR-QA-109` KRİTİK ve `BR-7`'nin önünde duruyor** — `backend-dev-1` + `db-lider`.
+- **`BR-QA-95` hâlâ koşturulamadı:** kabul ölçütü *"tam takımda ardışık N koşu yeşil"* ve
+  tur boyunca ağaçta 26 yabancı değişiklik vardı. Takım sakinken koşulmalı.
+- **Ölçülen araç zayıflığı (kart açılmadı):** `clickup-durum.js` güncel parçada geçen her
+  `bitti`/`Kısmen` kelimesini kurala sokuyor; bölünmüş bir toplayıcı, metninde *"sunucu
+  ayağı bitti"* yazdığı için `in progress` görünebiliyor. Muhafazakâr yön doğru (açık işi
+  kapalı göstermek daha kötü) ama **kapanış metnindeki kelime seçimi panoyu belirliyor** —
+  bu bir tuzak ve yazarken bilinmeli.
+- **Attribution notu:** `deploy/ci/*.py` ve yeni vitest dosyası `git add` ile stage'lendikten
+  sonra, benim commit'imden önce paralel bir ajanın `aecd1ac5` commit'i tarafından süpürüldü.
+  İçerik doğru ve `git diff HEAD` boş; ama bu, aynı anda çalışan ajanların **index'i
+  paylaştığının** somut kanıtı — `git add` ile `git commit` arasındaki pencere güvenli değil.
+
+---
+
+## Linux/sistem turu — BR-SYS-102 + BR-SYS-115 (commit `aecd1ac5`)
+
+### Bağlam
+Hedef: `yonetim/backlog.md`'deki 20 açık sistem/ops/güvenlik kartını üç hâlden birine
+oturtmak — (1) iş bitmişse kapanış metni, (2) iş varsa yap, (3) gerçekten bloke ise
+**engeli adıyla** yaz. Karar #76 iki kartı fiilen "yapılabilir" hâle getirmişti
+(Ş76-19 → BR-SYS-102, Ş76-17 → BR-SYS-115); ikisi de bu turda yapıldı.
+
+### Yapılanlar
+
+#### 1. BR-SYS-102 — Ş76-19: curl + digest + çekim ölçümü tek pakette
+- **Neden:** `pbxtr-confd`'nin `nginx` kipi isteği nginx konteynerindeki **BusyBox
+  wget** ile atıyordu. BusyBox wget 4xx gövdesini diske hiç yazmaz ve `Retry-After`
+  okunamaz → 403'ün üç sebebinden (`NODE_NOT_PINNED` / `NODE_MISMATCH` /
+  `IP_NOT_ALLOWED`) hangisi olduğu görünmüyordu. Ayrıca anahtar
+  `--header="X-Pbxtr-Key: ${K}"` olarak wget'in **argv**'sine giriyordu; o argv
+  konteyner içinde `/proc/<pid>/cmdline` ve `ps` çıktısında görünür.
+- **Ne yapıldı:**
+  - `nginx` kipi curl'e geçti; anahtar **`-H @dosya`** ile veriliyor (dosya
+    `X-Pbxtr-Key: <değer>` SATIRI içerir — çıplak sır `-H @` ile verilseydi curl onu
+    başlık **adı** sanır, istek anahtarsız gider ve arıza "anahtar yanlış" (401) gibi
+    görünürdü). Hem çekim hem medya dalında.
+  - **wget'e sessiz düşme yasaklandı:** `nginx_curl_kapisi()` konteynerde curl
+    yoksa alarm basıp `exit 64` verir (fail-static — çağrı akışı etkilenmez,
+    provisioning donar).
+  - "nginx kipinde kod OKUNAMADI" dalı kaldırıldı; eski ölçüm kayıt için **üstü
+    çizili** bırakıldı.
+  - Digest sabitleme **depo metni kapısı** olarak kuruldu. Registry'ye soran kapı
+    **kurulmadı** (ağ ister, çevrimdışı varsayımını ihlal eder — Ş76-19 birebir).
+    Muafiyet **kapalı kümedir**: yalnız `PBXTR_IMAGE` ve `PBXTR_ASTERISK_IMAGE`;
+    yeni bir parametrik imaj satırı kapıyı kırmızı yakar.
+- **Dokunulan dosyalar:** `deploy/pbxtr-confd-dugum.sh`,
+  `deploy/pbxtr-confd-selftest.sh`, `deploy/ci/imaj-digest-kapisi.py` (yeni),
+  `deploy/ci/imaj-digest-kapisi-selftest.py` (yeni), `deploy/yerel-kapilar.sh`
+  (`kapi_80`), `docker-compose.dev.yml`, `pbxtr-demo/docker-compose.yml`
+- **Komutlar:**
+  ```bash
+  python deploy/ci/imaj-digest-kapisi.py          # TABAN: 8 ihlal, rc=1
+  # pinler yazıldıktan sonra
+  python deploy/ci/imaj-digest-kapisi.py          # rc=0
+  python deploy/ci/imaj-digest-kapisi-selftest.py # 16/16
+  bash deploy/pbxtr-confd-selftest.sh             # 193 iddia geçti, rc=0
+  ```
+- **Sonuç / doğrulama:** Vacuity üç ayakta: **pozitif** (digest'siz satır → kırmızı),
+  **negatif** (satır silinince taban delinir → kırmızı; "0 ihlal" yeşili
+  üretilemez), **mutasyon** (kısa/uzun/BÜYÜK hex, sha512, digest ortada,
+  bilinmeyen parametrik değişken; iki yanlış-pozitif adayı yeşil kalmalı diye ayrıca
+  ölçüldü). confd tarafında yeni **F27** (nginx kipinde 4xx kodu OKUNUR), yeni
+  **F27b** (curl yokken `exit 64` + alarm + **wget argv defteri BOŞ** — sahte wget
+  shim'de duruyor, yani düşüş fiziksel olarak mümkündü), yeni mutasyon **m16**
+  (curl kapısı kaldırılır) ve **m23** (anahtar yeniden argv'ye gömülür) ikisi de
+  yakalandı.
+
+##### Ölçülen sürpriz — pinin gerekçesi bu depoda ZATEN gerçekleşmişti
+Sunucudaki imajların `RepoDigests`'i ile etiketlerin **bugün** gösterdiği digest'ler
+karşılaştırıldı (`docker buildx imagetools inspect`, 2026-09-18 11:36Z):
+
+| imaj | sunucu koşuyor | etiket bugün |
+|---|---|---|
+| `postgres:16-alpine` | `57c72fd2…` | **`3c5c8892…` (KAYMIŞ)** |
+| `redis:7-alpine` | `e7723ff7…` | **`520775a4…` (KAYMIŞ)** |
+| `nginx:1.27-alpine` | `65645c7b…` | `65645c7b…` (aynı) |
+
+Yani *"etiket sabit, içerik değişti"* bir varsayım değil **ölçülmüş bir olgudur**.
+Ayrıca `docker manifest inspect postgres:16-alpine@sha256:57c72…` **başarısız**
+(`manifest verification failed` — CLI etiket↔digest uyumunu doğruluyor) ama
+`docker pull` aynı referansla **rc=0** ile çekti: pull digest'e bakar, etiketi yok
+sayar. Yani `tag@digest` biçimi güvenli; ilk "çözülmedi" ölçümü **aracın** sınırıydı,
+pinin değil. `minio/*` iki referans `denied / unauthorized` döndü (Docker Hub anonim
+sınırı) — digest'ler docker'ın kendi kaydından geldiği için geçersiz değil, yalnız
+bağımsız doğrulanamadı.
+
+##### I17 için yeni kod yazılmadı ve sebebi ölçüldü
+"Çekimin fiilen gerçekleştiğini ölçen pozitif işaret" **zaten var**:
+`api_keys.last_bundle_served_at` + `PlatformRollupJob`'un 15 dk check-in yapmayan
+düğüm alarmı (`ProvisioningNodeBundleEndpoints.cs:396-398`), `IProvisioningPullStamp`,
+`SystemHealthProbe.cs:1614`. İkinci bir sayaç aynı soruya ikinci bir doğruluk kaynağı
+koyardı.
+
+#### 2. BR-SYS-115 — Ş76-17: yedek biriminin üretim topolojisi
+- **Neden:** `pbxtr-yedek.service.d/10-compose-yolu.conf` `User=root` + docker.sock
+  yolunu *"bu topolojide başka yol YOKTU"* diye gerekçelendiriyordu. Kurul iki soru
+  sordu: paket hangi kaynaktan, ve host'tan `...:5432`'ye bağlantı **fiilen** açılıyor mu.
+- **Komutlar (sunucu, ilk satır `date -u` = 2026-09-18 11:45Z):**
+  ```bash
+  ss -ltnp | grep 5432
+  timeout 5 bash -c 'exec 3<>/dev/tcp/100.106.82.119/5432'
+  docker run --rm --network host -e PGPASSWORD="$PBXTR_PG_APP_PASSWORD" \
+    postgres:16-alpine psql -h 100.106.82.119 -U pbxtr_app -d pbxtr -tAc 'select 1'
+  apt-cache policy postgresql-client-16 ; apt-cache policy postgresql-client
+  docker exec pbxtr-postgres psql -U postgres -tAc 'show server_version'
+  ```
+- **Sonuç / doğrulama:**
+  - **(ii) TCP yolu ZATEN AÇIK.** `LISTEN 100.106.82.119:5432 (docker-proxy)`,
+    `/dev/tcp` **açıldı**, host ağ ad alanında `select 1` → **1**. Drop-in'in
+    *"daha geniş dinletmek yeni saldırı yüzeyi açar / başka yol yoktu"* gerekçesi
+    **yanlış öncüldür**; genişletilecek bir şey yok. İki dosyada düzeltildi, eski
+    cümle **kayıt için üstü çizili**.
+  - **(i) Paket kaynağı:** `postgresql-client-16` arşivde **YOK**;
+    `postgresql-client` adayı **18+290ubuntu1** (`resolute/main`); PGDG deposu
+    **tanımlı değil**; sunucu **16.14**. → kaynak **PGDG deposu** ya da **çevrimdışı
+    `.deb`** olmak zorunda. Dağıtım paketi (18) ana sürüm kapısından geçmez.
+  - **`pg_ana_surum_kapisi()`** eklendi (`yedek_al`'ın ilk satırı). Yön simetrik
+    değil: istemci ESKİ → `pg_dump` zaten reddeder (gürültülü); istemci YENİ →
+    **dump alınır ama eski sunucuya geri yüklenemez** — yedek her gece yeşil görünür,
+    arıza yalnız geri dönüş anında çıkar. O dal fail-closed. Sürüm okunamazsa kapı
+    yedeği **durdurmaz** (kapının kendi arızası yedeği öldürmesin).
+  - **Üretim topolojisi yazıldı:** `User=postgres` ile dondurulamaz (`id postgres`
+    → *no such user*) → kabuksuz **`pbxtr-yedek`** sistem kullanıcısı, TCP + `.pgpass`
+    (0600), docker soketine erişim **yok**. `User=root` + docker.sock **üretime
+    çıkmaz**; drop-in üretimde kurulmaz.
+- **Dokunulan dosyalar:** `deploy/pbxtr-yedek.sh`,
+  `deploy/pbxtr-yedek.service.d/10-compose-yolu.conf`
+
+#### 3. BR-SYS-111 — üç iş kaleminin üçü de kapalı çıktı
+Ölçüldü: (1) bekçi artık migrate/açılıştan çağrılıyor
+(`MaintenanceRunner.cs:263`, `20260918130000_GuardsTemplateRefresh.cs:24`) →
+yükseltilen DB de ölçülüyor; (2) refresh migration'lar var
+(`20260918120000_RlsTemplateRefresh.cs` + `…130000`); (3) "şablon gövdesi değişince
+refresh migration şart" kuralı `deploy/sablon-refresh-kapisi.sh` ile kapıya bağlı.
+**Kalan tek şey kartın vacuity ölçütü ve o bloke:** sunucuda
+`SELECT pbxtr_assert_role_settings_guard()` → *No function matches* ve
+`__EFMigrationsHistory` en son `20260915122000` — bekçi orada **henüz kurulu değil**,
+negatif ölçüm fiziksel olarak yapılamıyor. `deploy/db-rol-ayarlari-kapi.sh` bir
+**metin** kapısıdır ve canlı `proconfig` okumaz; ölçütün yerine geçmez.
+
+#### 4. BR-SYS-107 — ön koşul ölçüldü, aciliyet sıfır
+`docker exec pbxtr-asterisk ls /var/spool/asterisk/recording/` → **No such file or
+directory**; `pbxtr-vm` altında **0 dosya**. `Record()` ara dizinleri ilk kayıtta
+kendisi açar → dizin yoksa **hiç sesli mesaj kaydedilmemiş**. Disk baskısı **0 bayt**,
+büyüme hızı **ölçülemez (örnek yok)**, host diski %21. Engel adıyla yazıldı:
+**`BR-BE-176`** (üretici taraf, kurula gidecek) kapanmadan retention dalı
+boyutlandırılamaz ve "yalnız rapor kipinde bir döngü" ölçütü **vacuous** olur.
+
+#### 5. Kalan 14 kart — engeller adıyla yazıldı
+`BR-SYS-49` (BR-BE-59 P2 ayağı + sağlayıcı hesabı), `BR-SYS-51` ve `BR-SYS-60`
+(sunucuda tek sahiplik penceresi), `BR-SYS-109` (kullanıcı onayı — CLAUDE.md §3.1
+sınır metni), `BR-OPS-01/02/16` (iş backend'de, sahip `backend-dev-2`),
+`BR-OPS-04` (mail bir **kullanıcı tercihi**; `mail_settings` = 0 satır + yayın),
+`BR-OPS-06` (tasarım sahibi `yazilim-mimari`), `BR-OPS-09` (`pbxtr-decide` santralde
+**yüklü değil** → (4) ölçülemez; (2)(3) dialplan sahibinde), `BR-OPS-11` (üç kalem de
+tek sahiplik / yıkıcı işlem ister), `BR-OPS-14` (webhook migration'ı sunucuda
+uygulanmamış → ölçülecek ACCESS EXCLUSIVE edinimi yok), `BR-SEC-26`/`BR-SEC-29`
+(**`BR-DB-91` ölçümü** — Ş76-2, kapatılmadı, bağımlılık yazıldı).
+
+### Kararlar
+- **Digest kapısı registry'ye sormaz.** Ş76-19'un gerekçesi aynen uygulandı: ağ isteyen
+  bir kapı çevrimdışı varsayımını ihlal eder ve gürültüden kırmızı olur. Kapı depo
+  metnini ölçer; "bu digest bugün registry'de duruyor mu" sorusu **kapının işi değildir**.
+- **Muafiyet kapalı küme.** Parametrik olan her imajı muaf saymak, kapıyı ilk yeni
+  serviste sessizce gevşetirdi.
+- **Kapı numarası yazdıktan sonra da doğrulanır (Ş76-24).** Bu turda `kapi_78`
+  alındı, **aynı gün başka bir ajan aynı numarayı almıştı**; `uniq -d` kontrolü
+  yazımdan sonra koşturulduğu için yakalandı ve numara `kapi_80` oldu. Belirti "kapı
+  kırmızı" değil, **iki kapıdan birinin hiç koşmaması** olurdu.
+- **Yanlış yeşil yapılmadı.** "Ölçüldü — iş yok" çıplak hâli kapanış sayılmaz
+  (CLAUDE.md §14); bu turda ele alınmayan kartlar **kapatılmadı**, engelleri adıyla
+  yazıldı.
+- **Backlog Durum sütunu çıpayla bulunur.** `clickup-cikar.js:80-86` Durum'u *son
+  P0..P3 hücresinden iki sonraki* hücre olarak okur. Ölçüldü: `BR-SYS-49` ve
+  `BR-SYS-51` satırlarında önceki turun durum metni **Şart** kolonuna düşmüştü, yani
+  panoya hiç gitmemişti. Bu turun metinleri doğru kolona yazıldı, Şart'a dokunulmadı.
+
+### Açık kalanlar / sonraki adım
+- **`BR-AST-108` artık başlayabilir:** ön koşulu (ajanın 4xx gövdesini ve
+  `Retry-After`'ı okuyabilmesi) bu turda kalktı.
+- **BR-SYS-111'in vacuity ölçümü** bir sonraki yayından sonra canlıda ya da yerel tek
+  kullanımlık `postgres:16` konteynerinde yapılmalı.
+- **`pbxtr-yedek` üretim topolojisi** yazıldı ama **kurulmadı**: paket kaynağı
+  (PGDG mi çevrimdışı `.deb` mi) bir karardır ve kullanıcıya/kurula aittir.
+- Bu tur `deploy/yerel-kapilar.sh` ve `yonetim/backlog.md` üzerinde **paralel ajanlarla
+  aynı anda** çalıştı. Commit'e yalnız bu turun değişiklikleri alındı: `kapi_80` bloğu
+  HEAD kopyası üzerine ayrı üretilip `git hash-object` + `git update-index` ile
+  stage'lendi, backlog'da ise 18 kart satırı HEAD kopyasına **kart kimliğiyle** taşındı
+  (satır numarasıyla değil — diğer ajan satır eklemiş olabilir). Yine de commit anında
+  başka bir ajanın `git add`'i index'e girdiği için `deploy/ci/depo-koku-arayan-*`,
+  `deploy/ci/konteyner-ayricalik-*` ve bir `.test.ts` dosyası bu commit'e **istemeden**
+  dahil oldu; zararsızdır (kayıtsız, inert dosyalar) ama tarih yeniden yazılmadı.
