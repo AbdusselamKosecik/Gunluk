@@ -5937,3 +5937,83 @@ testi, ve #12/#13 "Müsait ama çalmıyor" sebep rozeti.
 tarafından `433b6de8` ("BR-AST-58/61/115…") içine süpürüldü. **İçerik korundu**, kaybolan
 yalnızca commit mesajıdır — kayıtlı dersin ("ajan çalışırken `git add -A` yapma") canlı
 tekrarı. Kalan beş dosya `git commit --only` ile ayrı commit'lendi (`2a6d39a1`).
+
+---
+
+### BR-BE-207 — zamanlanmış raporlar SESSİZCE hiç koşmuyordu (backend-dev-2)
+
+- **Neden:** `report_schedules_tenant` ve `report_deliveries_tenant` policy'leri
+  `20260904170000_ReportSchedules.cs:190-200`'de **elle** yazılmış ve şablondan
+  (`pbxtr_apply_tenant_rls` → `… OR app_is_cross_tenant()`) sapmıştı: çapraz dal yoktu.
+  Her iki işin de keşif fazı **ham SQL**'dir (EF query filter yok) ve oturumda yalnızca
+  `app.cross_tenant`'ı açar; `app.tenant_id` ise **sistem tenant'ıdır**. Çapraz dal
+  olmayınca `tenant_id = app_current_tenant()` her müşteri satırında FALSE eder →
+  `due` boş döner, döngüye hiç girilmez, iş **`return 0` ile BAŞARILI biter.**
+  Alarm yok, sayaç yok, günlükte satır yok. `callback_entries` ile birebir aynı desen.
+
+- **Ne yapıldı — iki ayak.**
+  1. **Hizalama:** `20260918234000_ReportRlsCrossTenantAlignment` — iki `ALTER POLICY`,
+     `lock_timeout 5s`, `Down()` önceki metni **birebir** geri yazar. Emsal
+     `20260918230000`'ın `callback_entries` düzeltmesi taklit edildi (o dosyaya
+     dokunulmadı; defterde onaylı blob'u var).
+  2. **Sessizlik:** `CrossTenantDiscoveryProbe` — keşif kapsamı **kapanmadan önce**
+     iki sayı ölçer: sınırlı (LIMIT 1000) **görünür satır** sayımı + `pg_class.reltuples`.
+     `reltuples` **RLS'e tabi değildir** (katalog okuması) — "satır fiziksel olarak var ama
+     ben göremiyorum"un tek doğrudan kanıtı budur. Beş sinyal, üç seviye:
+     `Invisible` → **Error**, `EmptyButVisible` → Information,
+     `EmptyUnconfirmed`/`Unmeasured` → Warning. Sayaç
+     `pbxtr.jobs.cross_tenant_discovery_total{job,signal}` (kapalı etiket kümesi).
+     Sağlık ekranı: yeni **`report-production`** satırı (`pbxtr_sys.job_runs`,
+     `outcome='leader' AND processed_count > 0`).
+
+- **Dokunulan dosyalar:**
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918234000_ReportRlsCrossTenantAlignment.cs`,
+  `src/Pbxtr.Infrastructure/Platform/Jobs/CrossTenantDiscoveryProbe.cs`,
+  `src/Pbxtr.Infrastructure/BackgroundJobs/ReportScheduleJob.cs`,
+  `src/Pbxtr.Infrastructure/BackgroundJobs/ReportDeliveryDrainJob.cs`,
+  `src/Pbxtr.Api/Platform/Health/SystemHealthProbe.cs`,
+  `src/Pbxtr.Domain/Platform/Observability/ISystemHealthProbe.cs`,
+  `src/Pbxtr.Web/src/app/screens/system/platformApi.ts`, `…/i18n/messages/*.json` (9 dil),
+  `tests/Pbxtr.Architecture.Tests/RawSqlAllowlistTests.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/SystemAdmin/{CrossTenantDiscoverySilenceTests,ReportProductionHealthTests}.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/ReportSchedulesCrossTenantRlsTests.cs`.
+
+- **Sonuç / doğrulama — ÖNCE/SONRA ölçüldü.** Gerçek migrate edilmiş DB, `pbxtr_app` rolü,
+  ürünün oturum biçimi (GUC dolu + **başka** tenant + `cross_tenant` açık). Aynı satır,
+  aynı sorgu: hizalanmışken **1**, policy `Down()` metnine geri alındığında **0**,
+  geri yazınca yine **1**. Mutasyon migration dosyasına değil **kurulu veritabanına**
+  uygulandı. `dotnet build pbxtr.sln` → 0 hata / 0 uyarı. Testler: Api.Tests yeni **14/14**,
+  health ailesi **64/64**, Integration **2/2**, Architecture **724/728** (4 kırmızının üçü
+  de aynı anda süren başka ajanların dosyaları: `SlaAggregationJob` 6→7,
+  `CallbackLedger` borç listesi, `WebhookDeliveryRetentionJob` GUC envanteri).
+
+- **Commit:** `cc4629dd` — BR-BE-207: rapor RLS capraz dali hizalandi + kesif sessizligi kirildi
+
+#### Kararlar
+- Sağlık satırı **gün eşiği taşımaz**: hiç zamanlanmış rapor tanımlamamış bir kurulumda
+  sabit bir eşik sürekli yanardı. Üç değerli; **yeşil dalı erişilebilir** (tek bir başarılı
+  üretim yakar) — Karar #46/2'nin "kaynağı olmayan kalıcı gri satır körleştirir" dersi.
+- `reltuples` **yalnızca pozitif yönde** kanıt sayılır. `-1`/`0` "tablo boş" diye okunsaydı,
+  hiç `ANALYZE` görmemiş bir tabloda gerçek bir körlük "boş tablo" diye **susturulurdu**.
+- `call-permission` benzeri bir fail-closed kapı değildir: yoklama düşerse iş durmaz,
+  sinyal `Unmeasured` olur ("soramadım" ≠ "göremedim").
+
+#### Yan bulgular (ölçüldü)
+- **Test ikizi üretimden müsamahakâr.** `ReportScheduleJobDbTests` /
+  `ReportDeliveryDrainJobDbTests` bu arızayı **göremezdi**: `Faz2Database` fikstürü DB'yi
+  `SuperUserConnectionString` ile ve `EnsureCreatedAsync()` ile kurar → migration hiç koşmaz,
+  **policy'ler tabloda yoktur** ve bağlantı RLS'e tabi değildir. Üstelik o iki test bugün
+  HEAD'de zaten kırmızıdır (`pbxtr_webhook_event_types() does not exist` — `EnsureCreated`
+  migration fonksiyonlarını üretmez). **Ayrı kart konusu.**
+- **Beş policy daha** Up tarafında çapraz dal taşımıyor: `appointments`, `contact_notes`,
+  `dashboard_layouts`, `ip_access_rules`, `sms_templates`. Ama **hiçbiri arka plan işi
+  tarafından okunmuyor** (grep: 0) → aktif değil **latent** aykırılık.
+- **22 iş daha** aynı deseni koşuyor (çapraz keşif + boş kümede sessizlik) ve hiçbirine
+  dokunulmadı; Ş78-S6'nın genel kuralı onlar için açık. Liste `backlog.md`'deki kartta.
+
+#### Açık kalanlar / sonraki adım
+- `deploy/migration-contract-onay.blobs` dosyasına `20260918234000` için **Karar#78**
+  satırı gerekiyor — kart sahibi yazmadı, kurul/lider yazacak. Yazılmazsa `kapi_07`.
+- Tur boyunca depo **çok ajanlı**ydı: `dotnet build` beş kez yabancı derleme hatasıyla
+  düştü, testhost DLL kilitledi, `yonetim/backlog.md` düzenlemem bir kez daha paralel
+  ajan tarafından süpürüldü (içerik korundu). Kayıtlı derslerin canlı tekrarı.
