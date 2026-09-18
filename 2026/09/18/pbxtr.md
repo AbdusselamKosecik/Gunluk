@@ -1696,3 +1696,152 @@ tarafi tamamen olu koddu, hicbir ekran o uclari cagirmiyordu.
   eklenen her eylem, istemcide `ACTION_VIEW` + bir filtre grubu + dokuz
   i18n katalogu ister. Arka uc karti frontend isi uretir; kart yazilirken
   gorunmuyordu.
+
+---
+
+### DB kartlari turu — 16 acik `BR-DB-*` karti kart kart olculdu (db-lider)
+
+- **Neden:** `yonetim/backlog.md`'de 16 `BR-DB-*` karti acikti (`BR-DB-16, 35, 36, 40,
+  44, 46, 50, 52, 55, 65, 67, 70, 72, 76, 82, 89`). Bircogu "olculdu, bekliyor" diye
+  aylardir duruyordu; hangisinin GERCEK is tasidigi, hangisinin defter kusuru oldugu
+  ayrilmamisti. `BR-DB-69/74/79/84/88` YAYIN'a bagli oldugu icin dokunulmadi.
+- **Yontem:** her kart icin once DURUM hucresi okundu, sonra kartin **iddiasi kodda /
+  semada yeniden olculdu** (`dosya:satir`). Kartin kendi teshisi yanlis ciktiginda dogru
+  bulgu yazildi. Onceki metinler **silinmedi**, `Onceki kayit:` capasinin arkasina
+  tasindi.
+
+#### 1. `BR-DB-89` — sesli mesaj sonuc kodu FK si RESTRICT (TEK UYGULANAN IS)
+
+- **Neden:** Karar #71 (Seytan itiraz 9) **sartli** bir talimat tasiyordu: "sonuc
+  kodlari gercekten SILINIYORSA `closed_result_code_id` dali `SET NULL` yerine
+  `RESTRICT` olmali". Sartin kosulu `BR-DB-82` turunda olculup DOGRU cikmisti (hard
+  DELETE, soft-delete alani yok). Yani bu yeni bir karar degil, **sartin kapanmasiydi**
+  — kurula geri sormaya gerek yoktu.
+- **Ne yapildi:** migration `20260918160000_VoicemailResultCodeRestrict`
+  (`DROP CONSTRAINT` + `ADD CONSTRAINT ... ON DELETE RESTRICT` + `COMMENT ON COLUMN`);
+  `Down` tam simetrik ve kayipsiz (onceki kolon listeli `SET NULL (closed_result_code_id)`
+  govdesini BIREBIR geri yazar). EF modeli + `PbxtrDbContextModelSnapshot` hizalandi.
+  `NOT VALID` + ayri `VALIDATE` bolmesi BILEREK YAPILMADI: EF migration'i tek
+  transaction icinde kosar, o yuzden bolme AEL'i kisaltmaz — yalnizca kisalttigi
+  izlenimini verirdi (gerekce migration ozetinde yazili).
+- **Dokunulan dosyalar:**
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918160000_VoicemailResultCodeRestrict.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/VoicemailConfiguration.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/PbxtrDbContextModelSnapshot.cs`,
+  `tests/Pbxtr.Architecture.Tests/VoicemailResultCodeRestrictGuardTests.cs`,
+  `deploy/migration-contract-onay.blobs`
+- **Komutlar:**
+
+      git hash-object src/.../20260918160000_VoicemailResultCodeRestrict.cs
+      # -> 69c0b6a0...; defter satiri: "<sha> <yol> Karar#71"
+      docker run --rm -v /x/GitHub/Pbxtr/pbxtr:/w -w //w python:3.12-slim sh -c \
+        "git config --global --add safe.directory /w; \
+         python3 deploy/migration-compatibility-guard-selftest.py && \
+         python3 deploy/migration-compatibility-guard.py"
+      dotnet test tests/Pbxtr.Architecture.Tests --no-build
+
+- **Sonuc / dogrulama:** `kapi_07` konteynerde kosturuldu ->
+  "ONAYLI (Karar#71) ... migration compatibility guard: OK", rc=0.
+  **MUTASYON:** `DeleteBehavior.Restrict` -> `SetNull` yapilinca
+  `Model_sonuc_kodu_FK_sini_RESTRICT_olarak_bildirir` KIRMIZI
+  (Expected: Restrict / Actual: SetNull); geri alinip **yeniden derlendikten sonra**
+  yesil. (Ilk geri alma kosusu hala KIRMIZI dondu cunku ikili tazelenmemisti — kayitli
+  ders dogrulandi.) Mimari takim 693 gecti / 1 kaldi; kalan `DeployPrivilegeTests` bu
+  isle ilgisiz (baska bir turun `deploy/pbxtr-yedek*.service.d` dosyalari).
+  **OLCULMEYEN (yazili sapma):** gercek PG'de `DELETE FROM public.result_codes` ->
+  `23503`. `voicemail_messages` hicbir ortamda kurulu degil (`BR-DB-79`: canlida
+  `to_regclass` NULL) — yani o iddia bu turda URETILEMEZ.
+- **Commit:** `f8c229a0` (+ contract satiri `e979c579`) — asagidaki tuzaga bakin.
+
+#### 2. `BR-DB-40` — Karar #74'un verdigi olcum yapildi, sonuc NEGATIF
+
+- **Neden:** Karar #74 db-lider'e yazili bir is birakmisti: "regex'li SQL-govdeli
+  `app_current_tenant()` normal + capraz kipte olculur; kazanc varsa yeni kurul turu".
+  Karar #74 ayrica UYARMISTI: onceki olcumdeki `olc_current_tenant_sql()` bicim
+  kontrolunu TASIMIYORDU, yani "~36x" rakami korumayi ATAN bir govdeyle alinmisti.
+- **Ne yapildi:** `deploy/br-db-40-sql-govde-regexli-olcumu.sql` yazildi; aday (b6) regexi
+  TASIR ve negatif kontrolle dogrulanir. PG 16.15 konteynerinde kosuldu, ham cikti
+  `doc/analiz/br-db-40-sql-govde-regexli-olcumu-2026-09-18.txt` olarak depoya girdi.
+- **Sonuc:** **aday kazandirmiyor.** Capraz kip / filtresiz 270k: b1 621/643/627 ms,
+  **b6 599/593/595 ms (~%5)**, b4 (regexsiz, aday DEGIL) 103/99/98 ms. Normal kip /
+  100k: b1 231/227/246/230, b6 221/215/216/215, b4 39/35/36/35.
+  **MEKANIZMA GORULDU:** b6'nin govdesi plana **satir icine alindi** (`Filter` icinde ham
+  `CASE WHEN ... ~* ...`, fonksiyon cagrisi yok) ve YINE yavas -> baskin maliyet cagri
+  yolu degil **regexin kendisi** (satir basi ~2,3 us'nin ~1,9 us'si). Bu, kartin (B)
+  gerekcesini ("regex satir basina kossaydi inline esit cikardi") curutur.
+  Negatif kontrol: bozuk GUC'ta b1 NULL, b6 NULL, b4 **22P02** (fail-LOUD).
+  Izolasyon: cross=off'ta ucu de 100.000 satir, bozuk GUC'ta b1/b6 **0**.
+  `01-rls-template.sql`'e **dokunulmadi** (S36-3).
+
+#### 3. Kapanan ote bes kart
+
+- **`BR-DB-82` / `BR-DB-65`** — is zaten bitmisti; panoda ACIK gorunmelerinin sebebi bir
+  **defter kusuruydu**: durum hucresi basta `Bitti` tasiyor ama GUNCEL parcada bir
+  yarim-is sifati geciyordu ve `clickup-durum.js` kural 1 onu bu kartin durumu saniyordu
+  (tarihce capasi `Onceki kayit:` o kelimeden SONRA basliyordu). Metinler yeniden
+  yazildi. `BR-DB-82` kaynaktan dogrulandi: kisit `(tenant_id, linked_id, box_ref)`
+  (`VoicemailConfiguration.cs:182-184`), `ON CONFLICT` (`RecordingTransferJob.Voicemail.cs:172`)
+  **ve** aday sorgusundaki `NOT EXISTS` (`:111-116`) ucu birden genisletilmis.
+- **`BR-DB-36` / `BR-DB-46`** — ikisi de KOSULA BAGLI olcum kartiydi ve tetikleri
+  atesLENMEDI (`script_publications` 0 satir / 32 kB; `call_data_retention_lag()` dort
+  hedefte de `oldest_age_days = NULL`). Kartlarin KENDI vacuity uyarilari kapanisin
+  gerekcesi oldu: bugunku veriyle yapilacak her olcum "sorun yok" der.
+  `BR-DB-46` icin tetik artik depoda bir betik:
+  `deploy/br-db-46-retention-partition-tetigi.sql` (salt-okunur; T1/T2 esikleri ve
+  ayrica "bu olcum bugun ANLAMLI mi" kolonu).
+- **`BR-DB-55`** — olculdu ve `BR-DB-76` ile **ayni is** cikti (ayni tablo, ayni iki kol);
+  ayri durmalari kurula ayni karari iki kez sorduruyordu. Olcumleri `BR-DB-76`'ya tasindi.
+
+#### 4. `BR-DB-70` — kartin ENVANTERI eksik cikti
+
+Kart ham `set_config('app.cross_tenant','on')` kullanan **7 dosya** sayiyordu. Gercek
+sayim: **45 dosya** (21 migration + **24 kosan kod**). Ustelik kartin (i)/(ii) ikili
+ayrimi yanlis — `LeaveEnforcementJob`, `QueueMembershipSyncJob`, `OutsideHoursBreakJob`,
+`TrunkHealthSnapshotJob`, `SlaAggregationJob`, `PlatformRollupJob`,
+`RecordingTransferJob.Voicemail` kartta "zaten daraltilmis" diye sayiliyor ama AYNI
+dosyalar ayri bir kod yolunda capraz kipi de aciyor.
+
+#### 5. Defter ve pano
+
+- **Sutun kaymasi duzeltildi (3 satir):** `BR-DB-36` (6 kolon — bayat bir not DURUM'un
+  onune girmisti), `BR-DB-40` (6 kolon), `BR-DB-50` (7 kolon — DURUM'daki bir regex
+  kacissiz boru karakteri tasiyordu). Hepsinde fazla hucreler DURUM'a `/` ile geri
+  birlestirildi; SART hucresine DOKUNULMADI.
+- **ClickUp:** `--kuru` -> olustur (yeni 0) -> senkron (**yazilan 34**) -> `--kuru`
+  (`fark olan kart: 0, izde olmayan: 0`).
+- **Commit:** `52092507`
+
+## Kararlar (DB turu)
+
+- **Sartli bir kurul karari, sarti OLCULEREK kapandiginda yeniden kurula gitmez.**
+  `BR-DB-89` bu gerekceyle uygulandi: Karar #71 "siliniyorsa RESTRICT olmali" diyordu,
+  `BR-DB-82` "siliniyor"u olctu. Yeni karar degil, sartin sonucudur.
+- **Tetigi atesLENMEMIS bir olcum karti ACIK IS DEGILDIR** — ama ancak tetik depoda
+  kosturulabilir bir betikse kapatilir. `BR-DB-46` icin betik bu yuzden once yazildi.
+- **Iki kart ayni isi tarif ediyorsa birlestirilir** (`BR-DB-55` -> `BR-DB-76`): kurula
+  ayni karari iki kez sormak karari geciktiriyor.
+
+## Acik kalanlar / sonraki adim (DB turu)
+
+- **9 kart kurulda:** `yonetim/kurul-gundem-2026-09-18-db.md` (Q1 BR-DB-40 yon karari,
+  Q2 BR-DB-76+55 retention, Q3 BR-DB-50 contract onayi, Q4 BR-DB-70 buyuyen kapsam,
+  Q5 BR-DB-72 sozlesme, Q6 BR-DB-44 uc yazili onay, Q7 BR-DB-16, Q8 BR-DB-35,
+  Q9 BR-DB-67).
+- **`BR-DB-52`** acik kalir: kalan iki kalem (SURE kaydi, `budget-exceeded` nisani)
+  yalniz canli yikici kosuyla olculur ve her kosu 1 saatlik kuru kosu kapisini bastan
+  bekler.
+- **`BR-DB-89`'un canli dogrulamasi `BR-DB-79`'a baglidir** — `voicemail_messages`
+  sunucuda hala YOK; zincir uygulanana kadar `23503` olcumu uretilemez.
+
+## Bu turda olculen tuzak — PARALEL AJAN COMMIT'I SUPURDU
+
+`git add <yollar>` ile stage edilen dosyalarim, ben commit'lemeden once **baska bir
+ajanin commit'i tarafindan supuruldu**: `BR-DB-89`'un migration'i, testi, EF
+degisikligi ve olcum betikleri `f8c229a0` ("BR-SYS-114: zamanlanmis yedek...") icinde,
+contract onay satiri ise `e979c579` ("BR-QA-98: sablon cipasi...") icinde durdu. Kendi
+`git commit --only -- <yollar>` cagrim "no changes added to commit" dedi.
+
+**Ders:** paralel ajan calisirken `git add` ile commit arasindaki pencere paylasilan bir
+kaynaktir. Is kaybolmadi ama **commit mesaji kayboldu** — degisikligin gerekcesi artik
+yalniz kod yorumlarinda ve bu gunlukte. Guvenli bicim `git add` + `git commit` yerine
+tek adimda `git commit --only -- <yollar>` (index'e hic dokunmaz).
