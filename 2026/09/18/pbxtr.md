@@ -6017,3 +6017,24 @@ tekrarı. Kalan beş dosya `git commit --only` ile ayrı commit'lendi (`2a6d39a1
 - Tur boyunca depo **çok ajanlı**ydı: `dotnet build` beş kez yabancı derleme hatasıyla
   düştü, testhost DLL kilitledi, `yonetim/backlog.md` düzenlemem bir kez daha paralel
   ajan tarafından süpürüldü (içerik korundu). Kayıtlı derslerin canlı tekrarı.
+
+##### Düzeltme (aynı tur, sonradan alınan ölçüm)
+Yukarıda *"`PublicCrossTenantFunctionAclGuardTests` derlendi ama yeşil koşusu alınamadı"*
+yazıyordu; **artık geçerli değil, kayıt için silinmedi.** Paralel ajanların yarım işi
+geçtikten sonra koşu alındı:
+
+- İlk gerçek koşu **kırmızıydı ve sebebi benim SQL'imdi**: `ORDER BY 1 COLLATE "C"` →
+  `42804: collations are not supported by type integer` (PostgreSQL `1`'i sıra numarası
+  değil tamsayı sabiti sayıyor). `ORDER BY signature COLLATE "C"` de olmadı (`42703` —
+  `COLLATE` ifade bağlamı zorluyor, takma ad çözülmüyor). `COLLATE` kaldırıldı; sıralama
+  zaten yalnız okunabilirlik içindir, karşılaştırmalar C# tarafında `StringComparer.Ordinal`.
+- **4/4 geçti.**
+- **Mutasyon ÜRÜN TARAFINDA:** migration'daki ikinci `REVOKE` devre dışı bırakıldı,
+  **yeniden derlendi** ve koşuldu → **2 test KIRMIZI** (defter ayağı + sızıntı ayağı);
+  geri alındı, **yeniden derlendi** → **4/4 yeşil**, `git diff` boş.
+- **Commit:** `7260abc2`
+
+**Tur boyunca ölçülen ikinci gerçek:** `dotnet build pbxtr.sln` bu makinede paralel
+ajanlar yüzünden **13 denemeden 2'sinde** yeşil oldu (yarım C# düzenlemeleri + `testhost`
+DLL kilitleri). "Build kırmızı" bulgularının çoğu benim değişikliğim değildi; hata
+satırındaki **dosya adına bakmadan** hiçbirini kendi işime yazmadım.
