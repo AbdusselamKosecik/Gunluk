@@ -691,6 +691,176 @@ olabilir ve `.pcap` çok-tenantlı bir dosyadır. Yeni sabit 46; snaplen 104; **
 - Sunucu temiz bırakıldı: `zz-*` dosyaları yok, `pbxtr-mmtest` context'i yok, `core show channels`
   → 0 aktif; yalnız `dialplan reload` kullanıldı, demo tenant verisine dokunulmadı
 
+### 67. Kurul Karar #72 — kurul, önerilen blob'u ONAYLAMADI
+
+`kapi_07` kırmızıydı: `20260918120000_RlsTemplateRefresh` contract RED alıyordu. Defterin kural 4'ü
+*"bayrakla onay yoktur"* dediği için kendim geçemezdim → 10 üyelik kurul.
+
+**Sonuç 10/10 ŞARTLI — ama onay önerdiğim blob'a verilmedi.** Üç üye (CTO, Şeytan, DB lideri) dosyanın
+**kendisinde** ölçülmüş kusur buldu. Backend lideri haklı olarak *"dosyaya dokunma, blob bozulur"* dedi;
+ama o uyarı **var olan** bir onayı korur — **defterde henüz satır yoktu**, yani blob serbestti.
+Önce düzelttim, sonra **düzeltilmiş gövdeyi** onayladım: `db0c858b…` → **`1ec6f0ec…`**.
+
+Bu, defterin Kural 2'sinin (*"dosyanın tek baytı değişirse sha değişir"*) doğru yönde işlediğinin
+kanıtı oldu: kurul bir **içeriği** onayladı, bir **yolu** değil.
+
+### 68. Migration'da düzeltilen üç ölçülmüş kusur
+
+**1. `SET LOCAL lock_timeout` yoktu.** Depoda 12 emsal var — ve bu kararın **kendi emsal gösterdiği**
+iki migration da dâhil. DB lideri katmanları ayırdı ve boşluk göründü:
+
+| Katman | Değer | Durum |
+|---|---|---|
+| Rol tabanı (`00-roles.sql`) | `pbxtr_owner` 10 s | var (gevşek taban) |
+| Fonksiyon (`ALTER FUNCTION … SET`) | `reassert_hardening` 2 s, `ensure_future_partitions` 5 s | var |
+| **İşlem (`SET LOCAL`)** | — | **BOŞTU** |
+
+Fonksiyon katmanı yalnız o iki fonksiyonun **içini** korur. Şablonun geri kalanı — 39
+`CREATE OR REPLACE FUNCTION`, 8 `REVOKE`, 8 `GRANT` — `pg_proc` satırlarında kilit alır ve 10 s'lik
+gevşek tabana düşüyordu. 5 s eklendi (emsalle aynı).
+
+**2. *"Nesne YARATMAZ"* cümlesi yanlıştı — turun en değerli bulgusu.** Şeytan buldu, DB lideri ve
+backend lideri bağımsız doğruladı:
+
+```
+01-rls-template.sql:1952  ->  pbxtr_sys.ensure_future_partitions(3)
+01-rls-template.sql:1610  ->  EXECUTE format('CREATE TABLE %s PARTITION OF %s ...')
+```
+
+Yani migration `cdr` / `call_events` / `audit_log` **ebeveyninde ACCESS EXCLUSIVE** alıp tablo
+yaratabiliyor. `SuppressTransaction` taşımadığı için kilitler COMMIT'e kadar **tutuluyor**.
+Yanlış özet yüzünden bu migration *"bakım penceresi gerektirmez"* diye okunuyordu — **gerektiriyor**.
+
+**3. `Down` NO-OP gerekçesi olgusal olarak yanlıştı.** Yorum *"o gövdenin metni artık depoda YOKTUR —
+yani geri alma yazılabilir bile değildir"* diyordu. Şeytan tek komutla çürüttü:
+`git show accd8da1^:deploy/db/01-rls-template.sql`. Yani geri alma **yazılamaz değil, yazılmak
+istenmiyor**. Kararı **korudum**, gerekçeyi değiştirdim — ve doğru gerekçe daha güçlü çıktı:
+`Down` **simetrik olamaz**, çünkü `ensure_future_partitions`'ın yarattığı partition'ları düşürmek
+**veri silmek** olurdu. "Tam geri alma" yazmak bugünkü NO-OP'tan **daha tehlikeli** olurdu.
+
+### 69. DB liderinin ölçtüğü açık: `kapi_71` kendi başlığındaki iddiayı tutmuyor
+
+`sablon-refresh.expected` başlığı şunu **emrediyordu**:
+
+> *"Sırayı atlayıp yalnızca sha'yı güncellemek kapıyı yalancı yeşil yapmaz: K5 kontrolü 'defterdeki
+> ad, şablonu uygulayanların en yenisi mi' diye sorar."*
+
+DB lideri depo ağacının kopyasında ölçtü: 01'e satır ekledi, **yeni migration yazmadı**, defterdeki
+sha'yı güncelledi → **kapı rc=0, YEŞİL**. Sebep `sablon-refresh-kapisi.sh:124-134`: K5 *"defterdeki ad
+en yeni uygulayıcı mı"* diye sorar ve `RlsTemplateRefresh` yeni bir tazeleme yazılmadığı sürece
+**sonsuza kadar en yenidir**.
+
+Yani **bu kararın kapattığı delik, bir sonraki 01/02 değişikliğinde aynen geri açılıyor** ve kapı
+bunu görmüyor. Kapı o sınıfı **bir kez** yakaladı, tekrarını yakalamıyor.
+
+Başlıktaki yanlış cümleyi `!!!` bloğuyla düzelttim (silmedim — bugün insan hafızasını **yanlış yönde**
+rahatlatıyordu). Kalan iş `BR-DB-87`: K5'e **git tarihi sırası** eklenecek. Uygulanabilirliğini
+ölçtüm — şablona son dokunan commit `accd8da1`, migration `04b568e7` ile **sonra** eklenmiş, doğru yön.
+
+### 70. Asterisk uzmanının bulduğu belge yalanı — bir yazım hatası değil, KARAR BOZAN bir cümle
+
+CLAUDE.md §3.2 diyor ki: *"bu uçlar Redis'ten servis edilir; PostgreSQL sıcak yolda değildir."*
+**Kod aksini yapıyor.** `call-permission` zincirinin **ilk** adımı:
+
+```
+EfTenantSuspensionProbe.cs:38-43  ->  db.Tenants.AsNoTracking().Where(t => t.Id == tenantId)...
+```
+
+Önbellek **bilinçli olarak yok** (Karar §12/5). Günlük deneme halkası ayrıca `call_attempts` sayıyor.
+Ve şablon **ikisini de** kilitliyor (`01:918-919` `tenants` FORCE; `01:3157,3173-3190` append-only
+ebeveynler, `call_attempts` **adıyla** sayılı). Uç **fail-closed** olduğu için sonuç:
+**giden arama, migrate penceresi boyunca durur** ve agent "arama engellendi" görür.
+
+Bunun neden bir yazım hatası olmadığı: o cümle durduğu sürece **her** kilit/migration kararı
+*"çağrı anını etkilemez, çünkü Redis"* diye geçiyor. Bugün tam olarak bu oldu — ben kurula gönderdiğim
+metinde o cümleyi **alıntıladım**. `BR-DOC-21`.
+
+### 71. Linux uzmanı benim çerçevemi de düzeltti
+
+Kurula *"kapı kırmızıyken hangi başka kapılar ölçülmemiş kalıyor"* diye sormuştum. Cevap: **hiçbiri.**
+`kapi()` gövdeyi alt kabukta koşturur, `exit`i hapseder, `KIRMIZI=1` yapar ve **71 kapının tamamı**
+koşar (`yerel-kapilar.sh:133-181`). Kayıp yalnızca **yayın yolundadır**. Aciliyet gerçekti ama
+gerekçem yanlıştı — ve "depo kırmızı, acele et" tam olarak kapının durdurmak için var olduğu argüman.
+
+Aynı üye ayrıca *"45 nesnede ACCESS EXCLUSIVE"* ifademin **abartılı** olduğunu gösterdi: şablonda
+**tek bir top-level `ALTER TABLE` yok**; 12 eşleşmenin hepsi fonksiyon gövdesi. Kilit alan tek
+çalıştırılan ifade `01:3249`'daki `DO` bloğu ve o da yalnız **sapmış** nesnelere dokunuyor.
+
+### 72. Backend liderinin emsale sığınmayı reddetmesi
+
+Karar #70 Q1-b *"Emsal bir BİÇİMİ onaylar, bir İÇERİĞİ ASLA"* diyor. Backend lideri bunu ciddiye aldı
+ve 3945 satırın **top-level ifade sınıflandırmasını** yaptı:
+
+```
+39 CREATE OR REPLACE   36 COMMENT ON   8 REVOKE ALL   8 GRANT EXECUTE   3 DO $$
+```
+
+Kapının yakaladığı `ALTER TABLE` (305) ve `DROP TABLE` (2599) **fonksiyon gövdesi içinde
+`EXECUTE format(...)` dizesi**. Yani kapının RED'i **metin düzeyinde doğru, semantik düzeyinde yanlış
+pozitif**. Bu, Şeytan'ın *"dördüncü tazeleme onayı hangi ölçütle reddedilir"* sorusunun da cevabı:
+**ölçüt bu sınıflandırmadır** — top-level'da gerçek bir `ALTER/DROP` çıkarsa onay verilmez.
+
+Aynı üye `dotnet ef`'in bu depoda **hiç koşmadığını** da ölçtü (`Pbxtr.Api` `EFCore.Design`
+referansı taşımıyor) ve EF'in `IMigrationsAssembly` servisini doğrudan sorguladı: 198 migration,
+sıra `RlsTemplateRefresh` **önce**, `VoicemailSlaDaily` **sonra**. `Designer.cs` yokluğu sorun değil —
+keşif ölçütü `[Migration("…")]` niteliğidir ve Designer'sız migration bu depoda **yerleşik**.
+
+### 73. Şeytan'ın en rahatsız edici itirazı: kurul oy vermeden iş zaten yapılmıştı
+
+Migration + `MaintenanceRunner.cs:230` + `sablon-refresh.expected:25` + `kapi_71` **aynı commit'te**
+(`04b568e7`) inmişti. Yani kurula sunulan seçenek "onayla / reddet" değil, **"onayla / üç commit'i
+geri al"**dı. Bu CLAUDE.md §7'nin (kurul onayı → plan → başla) tam tersi.
+
+İtiraz haklıydı ve tutanağa **aynen** geçti. Geri alma listesini de yazdım — ve ölçülmüş sonuç şu:
+bu geri alma yapılırsa `kapi_71` kırmızıya döner **ve** yükseltilen her DB'de açılış assert'i düşer →
+**uygulama hiç açılmaz.** Yani bugün RED, depoyu bugünkünden kötü bir yere götürürdü. Bu bir mazeret
+değil; bir sonraki contract migration'ında kurul **önce** toplanacak.
+
+### 74. Şeytan'ın kanıt öncülünü çürütmesi — `BR-SYS-111` kapanmadı
+
+Karar metnimde dört ölçüm kanıtı saymıştım. Şeytan üçünü çürüttü:
+
+| Bulgu | Gerçek |
+|---|---|
+| `pbxtr_role_settings_guard` YOK | **02-guards.sql**'de, 01'de sıfır geçiş — 01 hakkında hiçbir şey söylemez |
+| `pbxtr_assert_role_settings_guard` YOK | aynı |
+| `pbxtr_hardening_deadline` YOK | `accd8da1` ile **bugün doğdu**, sunucu 13 migration geride → **totoloji** |
+| `proconfig` boş | tek kalan — ve **bayatlıkla birebir aynı görünür** |
+
+Yani "ölçüldü" dediğim şeyin **ayırt edici gücü sıfırdı**. Onay bu kanıta dayanmadı (kod okuması +
+backend liderinin geri-alma ölçümü taşıdı), ama `BR-SYS-111` **kapanmadı** — ayırt edici A/B hâlâ borç.
+Kartı `Kısmen`de bıraktım ve borcu durum hücresine yazdım.
+
+`[[karar-yazilmis-ama-uygulanmamis]]` bu turda **kendi metnimde** çıktı: ölçmediğim bir şeyi
+"ölçüldü" diye etiketlemiştim.
+
+### 75. Açılan kapılar ve kartlar
+
+**Kapılar (ikisi de mutasyonla doğrulandı):**
+- `RlsTemplateRefresh` → `MESAI_MUAFIYETI_YASAK` (ikinci ad). Öz-test **13 → 14**; yeni negatif vaka
+  olmadan tek elemanlı döngü ikinci adı hiç ölçmezdi.
+- **14 haneli damga tekrar edemez** (`MigrationDiscoveryGuardTests`). Architecture **684 → 685**.
+  Bugünkü çift tesadüfen doğru sırada: `VoicemailSlaDaily` 01'de tanımlı `pbxtr_apply_tenant_rls`'i
+  çağırıyor ve `R < V`. Yarın `…120000_Abc` eklenirse bağımlılık **sessizce** ters döner ve yeni tablo
+  **RLS'siz** kalır. Muafiyet listesi boşaltılınca test kırmızı → vacuous değil.
+
+**Kartlar:** `BR-DB-87` (K5 açığı), `BR-DOC-21` (§3.2 belge yalanı), `BR-FE-106` (#26 şema tazeliği —
+sunucudaki DB 13 migration geride ve **hiçbir ekran söylemedi**), `BR-FE-107` (saha şikâyeti: panel
+sessizce donuyor, sonuç kodu kayboluyor, ACW kilitli kalıyor, wallboard bayat veriyi canlı gösteriyor).
+
+Son ikisi kurul kapsamı **dışındaydı** — kart edilmeselerdi kaybolurlardı. `[[clickup-her-islemde-guncellenir]]`.
+
+### 76. Ölçüm
+
+- `kapi_07` **rc=0**, `ONAYLI (Karar#72)`; öz-test OK
+- **MUTASYON:** onay satırının son hanesi bozuldu → rc=1; geri alındı → rc=0
+- `sablon-refresh-kapisi` öz-test **7/7**, koşu rc=0
+- `yayin-onkosul-selftest` **14 geçti / 0 kaldı**
+- Architecture **685/685** Passed, Skipped 0 · **MUTASYON:** damga muafiyeti boşaltıldı → Failed 1
+- `dotnet build` 0 Warning, 0 Error
+- ClickUp **`fark olan kart: 0, izde olmayan: 0`** (643 kart, 4 yeni açıldı)
+- Backlog 642 → **646** kart satırı (3'ü kasıtlı "yerini satır N aldı" mükerreri)
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
