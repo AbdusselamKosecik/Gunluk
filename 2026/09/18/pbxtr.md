@@ -2469,3 +2469,140 @@ envanterin elle tutulmasını yasakladı.
   çıkarılıp `--dondur` koşulmalı; aksi halde o üç dosya kalıcı olarak ölçüm dışıdır.
 - Ş76-7 daraltma dalgası artık güvenilir bir tabana sahip: D1–D4 risk sınıfları
   bu 61 açıcı üzerinden bölünebilir.
+
+---
+
+## Karar #76 / Ş76-21 — BR-7'nin AGENT ayağı: "Yeteneklerim" kutusu
+
+### Bağlam
+
+Aynı gün `57b98820` ile BR-7 yetenek yönlendirmesinin **yönetim** yüzeyleri
+yazılmıştı (#03 katalog sekmesi, #02 yetkinlik ataması, kuyruk formu, üye
+listesi). Kurulda çağrı merkezi agenti itiraz etti ve **haklı çıktı**: brief
+eksikti. Ölçüm: `src/Pbxtr.Web/src/app/screens/agent/` ve
+`src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs` altında yetenek/skill için
+**sıfır eşleşme**. Yani yetenek ve seviye agent'a **atanabiliyordu ama agent onu
+hiçbir yerde göremiyordu.**
+
+cm-agent'in gerekçesi (karar kaydında): *"seviyem yanlış girilmişse ekranda uyarı
+yok; zor çağrıları yemeye devam ediyorum, AHT'm şişiyor — kontrolümde olmayan bir
+şey beni ölçüyor."*
+
+### Yapılanlar
+
+#### 1. Sunucu ayağı — iki kol ölçüldü, (a) seçildi
+
+- **Neden:** Karar iki kol bırakmıştı: (a) mevcut agent ucuna alan eklemek,
+  (b) `GET /api/v1/users/{id}/skills` ucunu agent'a açmak.
+- **Ölçüm (b için, kol elendi):**
+  - `SkillAdminEndpoints.cs:88` → uç `user.read` ister.
+  - `SkillAdminEndpoints.cs:77-88` → `userId` **rotadan** gelir ve
+    `ITenantContext.UserId` ile **karşılaştırılmaz**; yani uç çağıranın kendisi
+    olup olmadığına bakmaz.
+  - `permissions.seed.json` → agent rolü `bundle.call` + `bundle.console` +
+    `ticket.read/write`, `voicemail.read`. Etkin kümede **`user.read` YOK**,
+    **`queue.read` YOK**.
+  - Sonuç: yetkiyi vermek bir kutu için tenant'ın tüm kullanıcı yönetimini **ve
+    başka agent'ların yetkinliğini** açardı.
+- **Ne yapıldı (a):** yeni dar uç `GET /api/v1/agent/skills`, yetki `call.handle`.
+  Port `IAgentSkillProfile.GetMineAsync()` **`Guid` parametresi almaz**; kullanıcı
+  `ITenantContext`ten çözülür → başka agent'ın yetkinliği **bu arayüzde ifade
+  edilemez** (daraltma yüzeyde değil **tipte**).
+- **`/agent/state`'e alan EKLENMEDİ ve bu bilinçli:** Ş76-23 tolerans tablosu o
+  ucun rozet tazeliğini ≤ 1 sn'ye bağlıyor ve uç her çağrı/durum olayında yeniden
+  çekiliyor. Yetenek ve üyelik **statik yapılandırmadır**; iki JOIN'i o yola
+  koymak, hiç değişmeyen bir veriyi her rozet tazelemesinde okumak olurdu.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/AgentDesk/IAgentSkillProfile.cs`
+  (yeni), `src/Pbxtr.Infrastructure/Modules/EfAgentSkillProfile.cs` (yeni),
+  `src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs`,
+  `src/Pbxtr.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs`,
+  `doc/mimari/api-kontrat-v1.md`.
+
+#### 2. Ekran — sekme değil, sağ kolonda kutu
+
+- **Neden:** karar metni birebir *"ayrı sekme olmaz — çağrı sırasında kimse sekme
+  değiştirmez"*.
+- **Ne yapıldı:** `MySkillsPanel` #09 masasının `<aside>`ına kondu → **her
+  sekmede**, çağrı ekranından çıkmadan görünür. **Ekran kayıt defterine satır
+  eklenmedi** (Karar #29: *"Yeni ekran yok"*).
+- **Salt-okunur, ve bu bir UI tercihi değil:** hiçbir `input`/`select` çizilmez,
+  tek düğme "Yenile" (bir okuma). Yazma yüzeyi #02'de, `user.write` arkasında.
+  Çizilseydi agent kendi kademesini yükseltip **kendisini ölçen sayıyı kendisi
+  ayarlardı**.
+- **Üç ayrı boşluk, üç ayrı cümle:** `catalogEmpty` (tenant yetenek yönlendirmesi
+  kullanmıyor — nötr) / katalog dolu ama atanmamış (agent'ın süpervizöre soracağı
+  eksik) / hiç kuyruk üyeliği yok. Tek cümleye indirseydik **ikinci halde agent tam
+  olarak sessiz kalırdı** — kutunun varoluş sebebi o sessizliği kaldırmaktı.
+- **Seviye gereksinimin altındaysa satır susmaz.** Üyelik normalde seviyeden
+  türetilir, yani bu hal oluşmamalı; oluştuysa mutabakat kaçmıştır ve agent'ın
+  süpervizöre göstereceği tek kanıt odur.
+- **Dokunulan dosyalar:** `MySkillsPanel.tsx`, `MySkillsPanel.test.tsx`,
+  `skillProfileApi.ts`, `AgentDeskScreen.tsx`, `AgentDesk.module.css`,
+  9 i18n kataloğu (14 anahtar × 9).
+
+#### 3. Ş76-22'ye uyuldu
+
+- #12/#13'e **dokunulmadı**, penalty kolonu **eklenmedi** (boş/sıfır gösteren biri
+  de çizilmedi).
+- Kutudaki kademe sayısı o yasağın kapsamında değil: orada yasaklanan şey **N
+  üyelik taşıyan AGENT satırına** tek bir penalty yazmaktı; burada **satırın
+  kendisi bir kuyruktur**, belirsizlik yok.
+
+### Komutlar / doğrulama
+
+```bash
+npx tsc -b --force                       # EXIT=0
+npx vitest run                           # 1997/1997 geçti (223 dosya)
+dotnet test tests/Pbxtr.Api.Tests --filter AgentSkillProfileEndpointTests   # 9/9
+```
+
+**Mutasyonlar (ikisi de kırmızı yandı):**
+- `catalogEmpty` dalı kapatıldı → `MySkillsPanel.test.tsx` 3. test KIRMIZI.
+- DI kaydı silindi → `Port_uretim_bilesiminde_kayitlidir` KIRMIZI. Bu test
+  bilerek yazıldı: diğer testler portu `Replace` ile ikame ediyor ve **`Replace`
+  kayıt yoksa ekler** — DI satırı hiç yazılmasaydı dosya yeşil kalır, uç yalnızca
+  üretimde 500 verirdi.
+
+**Negatifler:** yetkisiz çağıran 403; PUT/POST/PATCH/DELETE → 404/405 (hangi kodun
+döndüğü **ölçüldü**, varsayılmadı); `call.handle` taşıyan agent
+`GET /users/{id}/skills` çağırırsa **403**.
+
+### Kararlar
+
+- **Yeni yetki üretilmedi.** Uç `call.handle` altındadır (agent'ın zaten taşıdığı
+  yetki); `user.read` genişletilmedi.
+- **Agent başkasının yeteneğini GÖREMEZ** — ve bu bir kontrol değil, bir **tip
+  kısıtıdır**: portta `userId` parametresi yok.
+- **Canlı tazelenme yazılmadı.** Yetenek değişimi için WebSocket olayı yok ve
+  uydurulmadı; `queue.*` olayları `live.queue.read` ister, agent o odaya giremez
+  (QueuesTab ile aynı ölçüm). Hiç tetiklenmeyecek bir "canlı" vaadi yerine
+  "Yenile" düğmesi dürüst.
+
+### Yol boyu yakalanan tuzak — paylaşılan dosyada başka ajanın yarım işi
+
+i18n katalogları ve Infrastructure DI uzantısı o sırada **başka ajanların açık
+işini** de taşıyordu (`aud.tLeave` / `WebhookDeliveryRetention`). `git add <yol>`
+onları da alır ve **başka ajanın yarım işini benim commit mesajımla ana dala
+iterdi.** Çözüm: indeks girdileri `git hash-object -w --path` + `git update-index
+--cacheinfo` ile **HEAD üzerine yalnız benim eklemem uygulanarak** üretildi;
+çalışma ağacı hiç değiştirilmedi. Commit sonrası doğrulandı: staged blob'da
+`WebhookDeliveryRetention` = 0, `aud.tLeave` = 0; çalışma ağacında ikisi de
+**duruyor**.
+
+İkinci tuzak: Python `utf-8-sig` ile yazmak DI dosyasına **BOM ekledi** ve diff'te
+`using` satırı değişmiş göründü; baytla kaldırıldı.
+
+Üçüncü tuzak: .NET derlemesi üç kez paralel ajanların yarım işi yüzünden kırmızıydı
+(Voicemail `BoxRef`, `AuditTargets.WebhookDeliveryLog`, test projesinde 26 hata).
+**Hiçbiri benim değildi** — hata listesinde `AgentSkillProfile` eşleşmesi 0 olarak
+ölçüldü ve yeşile dönene kadar beklendi.
+
+- **Commit:** `2d57f64d` — Ş76-21: BR-7'nin AGENT ayağı — "Yeteneklerim" kutusu.
+  Push edildi.
+
+### Açık kalanlar
+
+- Ş76-22'nin **sebep rozeti** (`yedek kademe` / `yetenek eşleşmiyor` / `wrapup`)
+  ayrı kart ve bu sprinte alınmadı; sapmanın `doc/prototip-urun-farklari.md`'ye
+  **BİLİNÇLİ** yazılması o kartın işi.
+- `yonetim/backlog.md`'ye bu turda **dokunulmadı** (talimat).
