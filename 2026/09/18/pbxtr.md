@@ -861,6 +861,210 @@ Son ikisi kurul kapsamı **dışındaydı** — kart edilmeselerdi kaybolurlard�
 - ClickUp **`fark olan kart: 0, izde olmayan: 0`** (643 kart, 4 yeni açıldı)
 - Backlog 642 → **646** kart satırı (3'ü kasıtlı "yerini satır N aldı" mükerreri)
 
+### 77. Kurduğumuz kapı, kurulduğu ilk koşuda bizi yakaladı
+
+`BR-DB-87` kapandı: `kapi_71`'e **K6** eklendi — *"defterdeki tazeleme EKLENDİĞİNDE şablonun
+blob'u, bugünkü blob mu?"* Ajan kartın önerdiği `merge-base --is-ancestor` çözümünü denedi ve
+**çürüttü** (merge commit'i "son dokunuş" sayılıyor, migration onun atasında ekleniyor → yanlış
+kırmızı), yerine **içerik** karşılaştırması koydu.
+
+Ve kapı ilk koşuda şunu bastı:
+
+```
+IHLAL: 02-guards.sql: GIT SIRASI BOZUK -- defterdeki tazeleme
+  20260918090000_VoicemailRetentionAllowlist EKLENDIGINDE (60c6c210) sablonun
+  govdesi 878f34a2… idi, BUGUN c4d47887…
+```
+
+Kendim doğruladım: `git rev-parse 60c6c210:deploy/db/02-guards.sql` ≠ `git hash-object` diski.
+01 için **eşleşiyor**, 02 için **eşleşmiyor**. Fark `accd8da1`: `pbxtr_role_settings_guard()` ve
+`pbxtr_assert_role_settings_guard()` 02'ye o migration'dan **sonra** eklenmiş.
+
+Eski K5 bu hâli **TEMİZ** gösteriyordu, çünkü *"defterdeki ad en yeni uygulayıcı mı"* sorusu
+sonsuza kadar sağlanıyordu.
+
+### 78. Şeytan dün haklıydı ve biz onu yanlış okuduk
+
+Karar #72'de Şeytan aynen şunu yazmıştı:
+
+> *"`pbxtr_role_settings_guard` ve `pbxtr_assert_role_settings_guard` **02-guards.sql**'dedir…
+> 02'yi tazeleyen migration `20260918090000`'dır ve **zaten Karar #71 ile onaylanmıştır**."*
+
+Ben bunu *"demek ki o bulgular kapsanmış"* diye okudum ve **eledim**. O migration onaylanmıştı
+ama **bayattı**. Şeytan'ın işaret ettiği sunucu ölçümü (`pbxtr_assert_role_settings_guard` = YOK)
+aslında **gerçek ve daha kötü ikinci bir deliği** gösteriyordu.
+
+CTO kusura bir ad koydu ve adı doğru: **örnek-kapsamlı ölçüm, sınıf-kapsamlı karar.** Evren iki
+elemanlıydı — `{01, 02}` — ve yarısını ölçtük. *"İki elemanlı bir evrende yarısını ölçmek, ölçüm
+değil seçimdir."*
+
+Ağırlaştırıcı olan kısım şu: sinyali bir **ölçümle değil, bir kategori iddiasıyla** eledim.
+Karar kaydında ölçülmüş eleme ile ölçülmemiş eleme **aynı görünüyor** — bu yüzden kusur kaydın
+kendisinde de görünmez oldu. Yeni kural karara geçti: **Şeytan itirazı kategori iddiasıyla
+kapatılamaz**; ya ÖLÇÜM ya KART, ve hangisi olduğu yazılır.
+
+### 79. P0 gerçekti — ve DB lideri onu gerçek PostgreSQL'de yeniden üretti
+
+İddia: `MaintenanceRunner.cs:230` açılış kapısı `pbxtr_assert_role_settings_guard()` çağırıyor,
+yükseltilen DB'de fonksiyon yok → uygulama açılmaz. Atılır bir `postgres:16-alpine`'e
+`00-roles` + `01` + **`02@60c6c210`** yüklendi:
+
+```
+ERROR:  function pbxtr_assert_role_settings_guard() does not exist
+--- tazeleme uygulandiktan sonra ---
+NOTICE: ROLE SETTINGS GUARD (BR-SYS-105): temiz (0 ihlal).
+```
+
+`pbxtr_role_settings_guard` **01'de 0 kez, 02'de 4 kez** geçiyor — yani **#72 bu deliği
+kapatamazdı.**
+
+### 80. Ama P0 cümlem abartılıydı — ve Şeytan bunu da yakaladı
+
+*"Yükseltilen her kurulumu kilitler"* dedim. Ölçtüm, yanlış:
+`MigrationStartupGate.cs:154-159` `pending.Count == 0` ise **erken dönüyor** → `GuardAsserts`
+hiç koşmuyor. Doğru cümle: **bekleyen migration taşıyan bir yayında** ısırır — ki bir sonraki
+yayın öyle.
+
+Ve itirazın ikinci yarısı yeni bir bulgu: bekçi, **elle DDL veya restore ile sapmış şemayı
+tanımı gereği göremez** (o senaryolarda bekleyen migration yoktur). Oysa `MaintenanceRunner.cs:215-220`
+kendi gerekçesinde *"şemayı migration dışı yollarla bozan değişiklikleri yakalayan TEK yer"*
+olduğunu yazıyor. Yani bekçi, **yakalamak için var olduğu sınıfı görmüyor.** → `BR-SYS-112`.
+
+### 81. Aynı hatayı aynı tur içinde tekrar yaptım
+
+Yazdığım migration'ın gerekçesi şöyleydi: *"02'nin `CREATE OR REPLACE FUNCTION` / **GRANT** /
+**REVOKE** ifadeleri `pg_proc` satırlarında kilit alır."*
+
+**02'de top-level `GRANT` veya `REVOKE` sıfır adettir.** Dört üye ayrı ayrı ölçtü. Gerekçeyi
+01'den **kopyalamıştım** — yani dün `RlsTemplateRefresh`'te *"Nesne YARATMAZ"*ı düzelttiğimiz
+hatanın birebir tekrarı, **aynı gün**.
+
+Yerine ölçülen envanter yazıldı:
+
+| Top-level ifade | Adet |
+|---|---|
+| `CREATE OR REPLACE FUNCTION` | 49 |
+| `DROP FUNCTION IF EXISTS` + `CREATE FUNCTION` | 16 |
+| `COMMENT ON FUNCTION` | 39 |
+| `DO` (yalnız `RAISE`, superuser reddi) | 1 |
+| `GRANT`/`REVOKE`/`ALTER`/`CREATE TABLE|INDEX|POLICY|TRIGGER`/DML | **0** |
+
+Gerçek PG16'da `pg_locks`: AccessExclusive **16** (= 16 `DROP FUNCTION`), ShareUpdateExclusive
+**39** (= 39 `COMMENT ON`), **kullanıcı tablosu kilidi 0**, toplam **273 ms**.
+
+`[[karar-yazilmis-ama-uygulanmamis]]` — ama bu kez varyantı daha sinsi: **gerekçe kopyalanınca
+ölçülmüş gibi görünüyor.**
+
+### 82. Ve bir üçüncüsü: belge P0'ı kapanmış gösteriyordu
+
+DB liderinin bloklayıcı şartı: `MaintenanceRunner.cs:225` şöyle yazıyordu —
+*"`20260918120000_RlsTemplateRefresh` … O migration olmadan bu satır her yükseltilmiş
+veritabanında açılışı KIRMIZI yapardı."*
+
+Ölçüm: aradığı fonksiyonu getiren **`20260918130000_GuardsTemplateRefresh`**tir. Yani cümle,
+düzeltilmemiş bir P0'ı **düzeltilmiş gösteriyordu**. Sonraki operatör *"#72 bunu çözdü"* diye
+okuyacaktı. İki ayrı ön koşul olarak yeniden yazıldı.
+
+### 83. Backend lideri, CTO'nun düzeltmesini fikstürle çürüttü
+
+CTO, Ş72-3 ölçütünün 02'de düştüğünü gösterdi (16 top-level `DROP FUNCTION` var) ve daraltma
+önerdi: *"yetim DROP = aynı dosyada aynı kimlikle bir `CREATE` tarafından izlenmeyen `DROP`."*
+
+Backend lideri fikstür kurdu:
+
+```
+FIKSTUR B: DROP TABLE public.audit_log;  +  CREATE TABLE public.audit_log (id bigint);
+  CTO cumlesinin BIREBIR okunusuyla -> YETIM TOPLAM: 0   <- GECIYOR
+```
+
+Yani ölçüt harfiyen uygulanırsa **`audit_log`'u boşaltmak onaydan geçerdi.** Nihai ölçüt sınıfa
+**ve imzaya** bağlandı. Maddi gerekçe de güçlendi: 16 `CREATE`'in hepsi `RETURNS TABLE(...)` ve
+PostgreSQL `CREATE OR REPLACE` ile dönüş tipi değiştirmeye izin vermiyor → **`DROP`+`CREATE` bir
+yıkım değil, zorunlu deyim.**
+
+### 84. Şeytan'ın bir önerisini ölçümle reddettim
+
+İtiraz 4 haklıydı: `DROP FUNCTION|POLICY|TRIGGER` **hiçbir kapının** desen kümesinde yok
+(`migration-compatibility-guard.py:24-30`), yani şablon o yüzeyden serbestçe değiştirilebilir.
+
+Ama önerdiği çözümü (deseni hemen genişlet) ölçtüm:
+
+| Yer | `DROP FUNCTION` | `DROP POLICY` | `DROP TRIGGER` |
+|---|---|---|---|
+| `01` | 30 | 18 | 19 |
+| `02` | 73 | 1 | — |
+| `Migrations/*.cs` | 75 | 49 | 24 |
+
+**148+ yeni bulgu** → onaylanmamış onlarca migration kırmızı → **toplu onay** gerekir. Yani
+defteri tam da itirazın korktuğu şeye, **kauçuk mühre** çevirirdi. `[[kapi-kurmadan-once-mevcut-veriyi-olc]]`.
+**Dar seçenek** karta yazıldı: genişletme kapının `DENIED` kümesinde değil, **şablon çıpasında**
+yapılır — çıpa şablon başına tek sha'dır, migration tarafı hiç etkilenmez.
+
+### 85. Linux uzmanı: çift KARŞILIKLI kilitleyici
+
+Ben *"01 geçip 02 geçmezse kilitler"* diyordum. Ölçüm daha kötü:
+
+| Hâl | Sonuç |
+|---|---|
+| 01 var, 02 yok | `pbxtr_assert_role_settings_guard` yok → 42883 → **açılmaz** |
+| **02 var, 01 yok** | fonksiyon var ama assert (4)+(5) **01'in gövdesini** okuyor → `RAISE EXCEPTION` → **açılmaz** |
+
+Ve bunu zorlayan **hiçbir şey yoktu**; EF'in "bekleyenlerin hepsini tek koşuda uygulaması" bir
+**tesadüf**, kapı değil. Somut kırılma yolu: `kapi_07` kırmızı görenin en kısa "düzeltmesi"
+migration dosyasını **silmektir** — o da tam olarak kilitleyici yarıyı üretir. `kapi_73` kuruldu
+(pozitif 0 / negatif-bölünmüş 1 / kontrol grubu 0).
+
+Aynı üye sayımımı da düzeltti: *"13 geride, 01/02 dört kez"* → **16 bekleyen, 01 × 5, 02 × 6**.
+
+### 86. Asterisk: BR-AST-107 (P0) kapandı, ve dünkü iki dallı test kendini kanıtladı
+
+`app_confbridge.so` artık santralde **`1 Running core`** (önce `Not Running`). Çözüm
+`module load` ile **değil** — o komut §3.1 kapalı listesinde yok ve liste genişletilmedi —
+santral **imajına** `confbridge.conf` girerek geldi (`deploy/asterisk-lab/conf/confbridge.conf`,
+`asterisk-conf-sinir.txt`'e `IMAJ` olarak kaydedildi).
+
+Davranış da ölçüldü: iki bacak aynı konferansa originate → `confbridge list pbxtr-ctl-ast107`
+**iki kanal**, log temiz.
+
+**Ve dünkü tasarım kararı tam olarak amaçlandığı gibi çalıştı:** `ConfBridgeRegisteredOnPbx`
+`true` yapıldı ve `ConfigRendererTakeoverTests` **değiştirilmeden** 4/4 geçti. Dün şunu yazmıştım:
+*"bayrağı açan kişi testi değiştirmek zorunda kalmayacak — yoksa o an 'test neyi koruyordu'
+bilgisi kaybolurdu."* Bugün o kişi geldi ve değiştirmek zorunda kalmadı.
+
+Ayrıca `BR-AST-101` (ARI `channelvars` kapalı kümesi, `kapi_72`, 4 mutasyon + kontrol grubu) ve
+`BR-AST-105` kapandı; `channelvars` artık `PBXTR_TENANT` + `CHANNEL(linkedid)` taşıyor
+(ölçüm: `cli_kanal=2 · linkedid_gecen=2 · channelvars_gecen=2`, sabah 8≠0 idi).
+
+**Ve iki kartın öncülü ölçümde çürüdü:** `BR-AST-86`'nın *"kod hâlâ `CoreShowChannels` çağırıyor"*
+iddiası yanlış — düzeltme `323fb5ea`'da var, ama sunucudaki imaj `ea567d11` (09-15), yani
+loglar gerçek ama gösterdiği şey **yayın gecikmesi**. `BR-AST-103` de aynı sınıf: `pbxtr-confd`
+çalışıyor, içerik eski çünkü üretici kod yayındaki ikilide yok. `[[kod-var-kosan-yok]]`.
+
+### 87. 20 saattir kırmızı duran bir frontend testi
+
+FE ajanı `alarmRuleSource.test.ts`'in kırmızı olduğunu bildirdi ve "benim değil" dedi. Öncülü
+doğruladım — `git diff --name-only 45e1fa6b HEAD -- screens/shared/` **boş**, yani gerçekten
+önceden kırmızıydı (`234a02db`'den beri).
+
+Sebep: `LongestWaitTileView`'a üçüncü alan (`missingFromPbx`) eklenmiş, testler `toEqual` ile
+eski şekli bekliyordu. **Davranış kusuru değil, test kayması.**
+
+Düzeltme `toMatchObject` **değil** — o, alanı ölçmekten tamamen vazgeçmek olurdu. Beş vakaya
+beklenen değer yazıldı **ve** alanı gerçekten ölçen iki vaka eklendi; ikincisi kontrol grubu:
+`presentOnPbx=false` (santralde yok → hesaptan çıkar, sayılır) ile `presentOnPbx=null`
+(ölçemedim → hesaba girer, sayılmaz). İkisi aynı sonucu verseydi kod *"ölçemedim"*i bir yokluk
+iddiasına katlıyor demektir. 8 → **10 test**.
+
+### 88. Ölçüm
+
+- Kurul **#72 ve #73**, ikisi de 10/10, ikisinde de onay **önerilen blob'a değil düzeltilmişe**
+- `kapi_07` rc=0 (mutasyon 1→0) · `kapi_71` rc=0 (K6 dâhil) · `kapi_73` poz 0/neg 1/kontrol 0
+- `sablon-refresh` öz-test **9/9** · `yayin-onkosul` öz-test **14/14**
+- Architecture **688/688** (684 → 685 → 688) · `dotnet build` 0 hata
+- ClickUp **`fark olan kart: 0, izde olmayan: 0`** (648 kart)
+- Kapalı **484** (turun başında 477) · açık **164**
+- Sunucu temiz: 0 aktif kanal, geçici bağlamlar silindi, t0007 verisine dokunulmadı
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
