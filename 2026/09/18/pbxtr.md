@@ -1158,6 +1158,169 @@ ve hiçbir test kırmızı olmaz.
 - **Commit:** `bed1a5b0`, merge ile main'e alındı.
 
 
+### 92. `BR-SEC-22` — santralin cevabı alındı, ve iki kez az kalsın yanlış yazıyordum
+
+- **Neden:** Karar #70 Ş70-21'in sorusu bir yıl boyunca **ölçülmemiş** duruyordu: ARI
+  `PUT/DELETE /asterisk/config/dynamic/res_pjsip/endpoint/...` mevcut kimlikle **2xx dönüyor mu?**
+  Dönüyorsa CLAUDE.md §3.1'in *"config yalnız pbxtr üretir"* cümlesi çürümüş demekti.
+- **CEVAP: 2xx DÖNMÜYOR.** `PUT` → **403** `Cannot create sorcery objects of type 'endpoint'`,
+  `DELETE` → 404. Kontrol grubu: aynı kimlikle `GET /endpoints` → **200**.
+- **Birinci tuzak — `HTTP=000` dört hücrede.** İlk koşuyu host'tan yaptım; `AriBaseUrl`
+  `http://asterisk:8088`, yani **docker ağı adı**, host'tan çözülmüyor. Dördü de 000 döndü.
+  Kontrol grubunu (A) koymasaydım bu "ARI yazmayı reddediyor" diye okunurdu. *"Araç yokluğu
+  sıfır gibi görünür"* dersinin birebir tekrarı — `pbxtr-app` konteynerinde `curl` de yok,
+  ölçüm `pbxtr-nginx` üzerinden koştu.
+- **İkinci tuzak — ve bu daha tehlikeliydi.** Beş PJSIP tipini denedim:
+  `endpoint` 403, `aor` 403, ama **`auth`/`identify`/`registration` → 400 "field value validation"**.
+  Bunu *"yazma yolu açık, yalnız gövdem geçersiz"* diye okudum ve neredeyse **delik** diye
+  yazacaktım. Geçerli bir gövdeyle (`identify`: `endpoint` + `match=192.0.2.7`) tekrar ettim →
+  **yine 403**. Asterisk **alan doğrulamasını wizard kontrolünden ÖNCE** koşuyor; 400 bir
+  yetenek değil, sıralama artefaktı.
+- **Ama sebep bir yetki değil, bir yapılandırma.** `/etc/asterisk/sorcery.conf` **boş** → tüm
+  tipler salt-okunur `res_sorcery_config` wizard'ında (use count 26). Oysa
+  `res_sorcery_memory.so` (use count **8**) ve `res_sorcery_realtime.so` **yüklü**.
+  `sorcery.conf`'a tek satır (`identify=memory`) yazmak ARI yazma yolunu **mevcut kimlikle**
+  sessizce açar; `identify` yazılabilirse saldırganın IP'si güvenilir trunk olur.
+  Bunu ölçen kapı yok → **`BR-SEC-27`** açıldı ve SYS ajanına devredildi (doğru evi yeni bir
+  `kapi_74` değil, `deploy/asterisk-sunucu-sapma.sh`'in **S8** iddiası).
+- **Kalıntı:** yok — PUT'lar hiç yaratmadı, GET/DELETE doğrulaması 404.
+- **Commit:** `7fabc917`
+
+### 93. `BR-SEC-26` — bypass ayrıştırıcı ölçümle kanıtlandı
+
+İlk denemem ayrıştırmadı: `pbxtr_app` rolüyle sahte tenant GUC'unda üç hücre de **0** döndü —
+ama kontrol grubu da 0 döndüğü için bu **"sızıntı yok"** demek değildi, **"fikstür ayırt
+etmiyor"** demekti. Aynı gövdeyi (`SELECT count(*) FROM tenants`) dört hücrede koşturdum:
+
+| Hücre | Sonuç |
+|---|---|
+| A — doğrudan okuma | **0** |
+| B — aynı gövde fonksiyon içinde, `SET` **yok** (kontrol) | **0** |
+| C — aynı gövde + `SET "app.cross_tenant"='on'` | **5** |
+| D — sahip rolü, gerçek toplam | **5** |
+
+B→C arasındaki **tek değişken** `SET` yan tümcesi. Yani sızıntı fonksiyon sarmalayıcısından
+değil **fonksiyon düzeyi `SET`**'ten geliyor ve RLS'i **tamamen** aşıyor — yetki kontrolü de
+denetim kaydı da yok. `01-rls-template.sql:177-180`'deki *"sadece `tenant.manage` + `[CrossTenant]`
++ her seferinde denetim"* cümlesi bu yoldan **yanlış**.
+
+Kartın sayısı da düzeldi: `app.cross_tenant` taşıyan fonksiyon **6 değil 8**; 6'sı `RETURNS trigger`
+(doğrudan çağrılamaz), **doğrudan çağrılabilen tam olarak iki**. `proacl`'in fiilî hâli sekizinde
+de aynı: boş grantee → **PUBLIC EXECUTE fiilen var**. Düzeltme `02-guards.sql`'e dokunacağı için
+**kurul gerekiyor** (tek başına değil, şablona dokunacak diğer kartlarla tek turda).
+
+### 94. HEAD'de iki kırmızı buldum — ikisi de "benim değil" diye bildirilmişti
+
+Bu depoda *"kırmızı benim değil"* iddiası HEAD'i kapsamıyor; ikisini de doğruladım, ikisi de
+gerçekti:
+
+1. **`AsteriskConsoleRoleCommandSetTests` (3 test).** `bdf503a1` kataloğa `AST-13`'ü ekledi,
+   çivi güncellenmedi. **Kapı tam tasarlandığı gibi çalıştı:** kendi yorumundaki mutasyon
+   ölçütü *(b) "yeni bir AST komutu ekle → KIRMIZI"* gerçek bir commit tarafından tetiklendi.
+   Çiviyi **varsayarak değil ölçerek** düzelttim: `AST-13` iki kümede de var, çünkü katalog
+   tanımı `NeedsUnmask: false` taşıyor (`AsteriskCommandCatalog.cs:186`) → `phone.unmask`
+   istemez, admin de görür. 12 → 13. 3/3 yeşil. Commit `c99c9eb6`.
+2. **`ConfigRenderGuardTests.Uretilen_metnin_degismezleri_saglanir`.** `b21cc3b1` `queues`
+   çıktısına `[general]` ekledi; **üretim kapısı doğruydu**, kapıyı ölçen test bayattı.
+   İki ajan (SEC ve AST) bunu bağımsız olarak buldu ve **aynı dar** düzeltmeyi yazdı →
+   merge çakışması. Anlamsal olarak özdeş oldukları için AST tarafını aldım (gerekçe yorumu
+   `isQueues` tanımının üstünde duruyor, HEAD'inki mükerrer olurdu).
+
+### 95. Dördüncü dalga — altı ajan paralel
+
+- **`BR-AST-93` (P1) kapandı, santralde A/B ile.** Kart *"köprülemede mükerrer `MixMonitor`"*
+  diyordu; doğru çıktı: damgasız kolda `MixMonitor` **2 kez**, damgalı kolda **1 kez** koştu.
+  **Kritik yan ölçüm — tek kapı yetmezdi:** `__PBXTR_REC` **kalıtımlı** ve eş bacağa geçiyor,
+  yalnız ilk satırı kapatmak `MixMonitor`'ı durdurmazdı → kayıt üçlüsünün **üçü de** kapatıldı.
+  Ayırt edici olarak `PBXTR_CTL` **kullanılmadı** (agent bacağı da `0` ile doğabilir); damga
+  `PBXTR_BRIDGE_LEG=1`, **tek alt çizgi** — yani bilerek kalıtılmaz.
+  **Ölçülemedi (yok değil):** iki yazıcının sesi bozup bozmadığı bayt düzeyinde karşılaştırılamadı
+  — santralde `sox`/`ffmpeg` yok.
+- **`BR-BE-136/131/134/143/168` kapandı**, `BR-BE-135` **kısmen**: kartın öncülü yanlış çıktı —
+  üründe occupancy/doluluk metriği **hiç yok**, dolayısıyla kartın vacuity kapısı karşılanamıyor.
+- **`BR-FE-107` ve `BR-FE-102` kapandı.** FE-102 için istenen ölçüm koşuldu: **12 ardışık tam
+  takım koşusu, filtresiz** — her koşuda 221 dosya / 1984 test yeşil, kırmızı oran **%0 (0/12)**;
+  kartta 1/4 yazıyordu (p=0,25 ile 12 temiz koşunun olasılığı ~0,03). Bir bölümü bilerek yük
+  altında koşturuldu.
+- **DB turu:** `BR-DB-75/64/77` kapandı; `BR-DB-50`'nin vacuity kapısı **koştu ve geçti**
+  (DETACH uzun tx içinde eşzamanlı INSERT'i **6.919 ms** bekletti, kısa tx'inde 25,6 ms).
+  Ama **on bir kart kurul kararı bekliyor** ve çoğu aynı yapısal bedeli paylaşıyor: şablon
+  tazeleme migration'ı + onay defteri satırı. Her birine ayrı tur açmak defteri lastik damgaya
+  çevirir → **tek turda** toplanacak.
+
+### 96. Yayın penceresi — saate değil trafiğe bakıldı
+
+Ş73-Y1 *"mesai dışı"* diyor. Saat 08:32 TR, yani mesai içi. Şartı saate bakarak atlamak da
+uygulamak da yanlış olurdu: şart **giden aramayı korumak** için yazıldı (`call-permission`
+FAIL-CLOSED), o yüzden ölçülen şey saat değil **trafik** oldu:
+
+- ARI `GET /channels` → **`[]`** (aktif kanal 0).
+- `call_events` son 24 saat = 2079 satır — **ama tohum ve gerçek aynı tabloda işaretsiz.**
+  Ayrıştırıldı: **1923'ü `cdr` önekli** (ETL geri doldurması, çağrı değil), `1789…` önekleri
+  **bizim kendi originate ölçümlerimiz** (2026-09-17 18:06–19:05), 9 satır `demo` tohumu.
+- Saatlik şekil 10:00–17:00 arası **dümdüz ~140/saat, 17-18 farklı `call_id`** — insan
+  trafiğinin şekli değil, **periyodik bir işin** şekli. Son 12 saatte toplam **10 olay**.
+
+Şart kaldırılmadı; **bu koşuda vacuous olduğu** yazılı hâle getirildi (`Ş73-Y1` altına).
+Yayın yine de yapılmadı, sebebi ayrı ve daha güçlü: **dört ajan aynı anda depoyu
+değiştiriyordu** — hareketli hedefe yayın, kırmızının sahibini okunamaz kılar.
+
+**Yayının açacağı kartlar ölçüldü:** `BR-DB-69/74/79/84/88` beşinin de tek tetiği yayın;
+buna `BR-BE-150`, `BR-BE-119`'un panel yarısı ve `BR-AST-103` ekleniyor. Ve yayın
+`BR-DB-88` yüzünden **kritik**: `GuardsTemplateRefresh` inmeden önceki bir sürüm inerse
+`MaintenanceRunner.GuardAsserts` var olmayan `pbxtr_assert_role_settings_guard()`'ı çağırır
+ve uygulama **hiç açılmaz**. Sunucuda ölçüldü: 183 migration uygulanmış, **16 bekliyor** —
+Karar #73 Ş73-Y1'in yazdığı sayıyla birebir.
+
+### 97. Bir sır transkripte düştü — dördüncü kez, ve bu sefer KENDİ kuralımla
+
+SYS ajanı `/etc/pbxtr/confd/*` dosyalarını okurken `sed 's/=.*/=<gizli>/'` maskesini kullandı —
+yani hafızamdaki *"güvenli biçim"in* ta kendisini. `anahtar` dosyası **çıplak bir sır** ve içinde
+`=` yok → sed hiçbir şeyle eşleşmedi, satır **olduğu gibi** basıldı ve `ak_6323b8555a05eebf`'in
+sırrı transkripte düştü. Ajanın kendi hatası değil: **benim brief'im** *"env okurken değer
+sütununu kes"* diyordu ve bu cümle `KEY=VALUE` varsayıyor.
+
+**Etki yarıçapını ölçtüm, panik etmeden:**
+- `api_keys.ip_allowlist` **anahtar başına CIDR** taşıyor ve eşleşmezse **403**
+  (`ProvisioningEndpoints.cs:1406`).
+- Sızan anahtarın allowlist'i **`172.16.0.0/12`** — RFC1918, docker iç ağı. Genel internetten
+  kullanılamaz; kullanabilmek için saldırganın **zaten o host'un docker ağında** olması gerekir,
+  o noktada config'e nasıl olsa erişir.
+- Sunucudaki **altı anahtardan aktif olan yalnız bu**; diğer beşi 2026-09-06'da iptal edilmiş.
+
+Yani rotasyon gerekli ama **acil değil** → `BR-SEC-28` açıldı ve `BR-SEC-16` sır rotasyonu
+paketine bağlandı (aynı pencerede dönülecek).
+
+**Kural nihai hâlini aldı — maskeye değil YOLA bak.** Sır taşıyan bir yolu hiçbir maskeyle
+stdout'a getirme: maske **biçim varsayar**, yol varsaymaz. Ölç (`ls -l`, `wc -c`,
+`sha256sum | cut -c1-8`), içeriği hiçbir kipte basma. *"Maskeledim"* bir savunma değildir;
+maskenin o dosyada **uygulandığını** kanıtlayamıyorsan maske yoktur. Hafıza güncellendi.
+
+### 98. SYS turu — bir kartın teşhisi yine yanlış çıktı, ve bir kural daraltıldı
+
+- **`BR-SYS-58` — kartın engel teşhisi YANLIŞTI.** Kart `audit_log` FK'sını suçluyordu; gerçek
+  engel **append-only tetiği + otomatik doğan `tenant_billing_info`/`tenant_company_info`**
+  çıktı. Gerçek N=50 koşuldu: 50 DISTINCT tenant, render **0,51 s** (~10 ms/tenant).
+- **`BR-SYS-87` — 38-tenant kuralı DARALTILDI.** Kararlı hâlde N=50'de toplam **19** `docker`
+  çağrısı / 2,5 s — tenant başına 45 değil. Tavan yalnız **tam teslim** turunda geçerli.
+- **`BR-SYS-101` — vacuity ölçütü ÜRETİLDİ.** t0012 pinlenince 4 tür rev=1 teslim edildi
+  (`dialplan show` 0→89), eski araç `cek.sh` çok tenantlı düğümde **fail-closed reddetti**
+  (exit 78). Sonra geri alındı (89→0).
+- **`BR-SEC-27` aynı turda kapandı.** S8 iddiası `asterisk-sunucu-sapma.sh`'e eklendi, öz-test
+  **27 → 33/33**, mutasyon **gerçek canlı anlık görüntüde**: kontrol 0 → `identify = memory` 1 →
+  geri alındı 0. Davranışsal ARI PUT hücresi **bilerek atlandı** — betiğin yazılı
+  *"SUNUCUYA YAZMAZ"* kuralı var ve PUT bir yazmadır; gerekçe karta yazıldı.
+  Küçük düzeltme: `sorcery.conf` canlıda **boş değil, hiç yok**; S8 iki hâli de yeşil sayıyor.
+- **Ajanın kaydettiği tuzak:** S8'in sapma mesajındaki apostrof `${VAR:+...}` genişlemesinin
+  **içindeydi**; bash onu tırnak başlangıcı saydı ve betik "unexpected EOF" ile **hiç koşmadı**.
+  *Koşmayan bekçi bekçi değildir* — gerekçe koda yorum olarak yazıldı.
+- **İki yeni gerçek kusur** (ikisi de canlıda uçtan uca üretildi): `BR-AST-108` — bir tenant
+  düğümden düşürülünce **üretilmiş config'i santralde kalıyor** (89 dialplan satırı yüklü kaldı,
+  ajan hiçbir şey söylemedi; belirti **sessiz**). `BR-AST-109` — üretilen bir park yeri kapalı
+  reload listesiyle **kaldırılamıyor**; kaldırma yolu `module unload`/`core restart` ve ikisi de
+  §3.1'de yasak → artık **yazılı borç**.
+
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
