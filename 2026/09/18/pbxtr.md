@@ -3756,3 +3756,27 @@ iş olanı yapmak, gerçekten bloke olanı **engeli adıyla** yazmak.
 - **Kurul gündemi biriktir:** A14 (`39`/`46`), ADR-015 A1/A2/A3 (`62`/`63`/`64`),
   Ş42-8 (`58` → `104`), Ş50-4 (`74`), Karar #40 (`54` kapandı ama karar yazılmadı),
   ürün: 9 dilin ses kaynağı (`92`).
+
+### BR-QA-111 — Karar #77 Ş77-7/Ş77-8: dört desen şablon çıpasına eklendi (db-dev)
+- **Neden:** `DO $`, `SECURITY DEFINER`, `DISABLE ROW LEVEL SECURITY`, `GRANT … TO PUBLIC`
+  hiçbir kapının desen kümesinde yoktu; dördü de `deploy/db/01-rls-template.sql` /
+  `02-guards.sql`'e sessizce eklenip ONAYLI bir tazeleme migration'ıyla üretime taşınabiliyordu.
+- **Ne yapıldı:** Kurulun seçtiği DAR kol: desenler **yalnız** `TEMPLATE_ONLY_DENIED`'a
+  eklendi, `SQL_DENIED` değişmedi (geniş hâl 148+ yeni bulgu = kauçuk mühür).
+  `migration-contract-onay.blobs`'taki iki `Şablon …` çıpası yeniden hesaplandı (Karar#73 → #77).
+- **Dokunulan dosyalar:** `deploy/migration-compatibility-guard.py`,
+  `deploy/migration-contract-onay.blobs`
+- **Komutlar:**
+  ```bash
+  docker run --rm -v X:/GitHub/Pbxtr/pbxtr:/repo -w /repo pbxtr-kapi:local \
+    bash -c 'python3 deploy/migration-compatibility-guard-selftest.py && \
+             python3 deploy/migration-compatibility-guard.py'
+  ```
+- **Sonuç / doğrulama:** ÖNCE ölçüldü → migration tarafı 398 bulgu / 168 dosya;
+  çıpa 01: 35, 02: 18. SONRA → migration tarafı **398 / 168 (DEĞİŞMEDİ** — kararın şartı);
+  çıpa 01: 56, 02: 37. Defterde değişen çıpa satırı **tam 2**.
+  Vacuity (Ş77-8): `02-guards.sql`'e `GRANT SELECT ON public.audit_log TO PUBLIC;` → kapı
+  **RC=1**, 11 migration için "SABLON CIPASI TUTMADI"; aynı mutasyon **eski** desen kümesiyle
+  `709368f0…` üretiyor = defterdeki Karar#73 sha'nın aynısı → kapı eskiden bu enjeksiyona
+  **kördü**. Yalnız yorum satırı → **RC=0**. İkisi de geri alındı (`git diff` boş).
+- **Commit:** `e3005229` — BR-QA-111 / Karar #77 S77-7
