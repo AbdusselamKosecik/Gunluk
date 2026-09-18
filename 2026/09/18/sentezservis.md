@@ -644,3 +644,67 @@ kurulumdan sonra `GET /api/surum` bunu dönmeli.
   konuşulacak.
 - Diğer üç istek (alıcılar, saat, manuel çalıştırma) zaten vardı; yalnızca rol hatası
   yüzünden görünmüyordu.
+
+---
+
+## Ek tur — parametre modalındaki iki sessiz hata
+
+Kullanıcı bildirdi: (1) parametrelerde arka plan beyaz gelmiyor, (2) "Çalıştır" dendiğinde
+parametredeki değerler (mail alıcıları) gelmiyor. İkisi de doğrulandı ve düzeltildi.
+
+### 19. Modal arka planı yok — CSS'te olmayan sınıf adı
+
+- **Neden:** `ZamanlamaParametreModal` `className="modal"` kullanıyordu. `theme.css`'te
+  böyle bir sınıf **yok**; doğrusu `modal-kutu` (`theme.css:839`,
+  `background: var(--renk-yuzey)`, `border-radius`, `box-shadow`, `padding`).
+- **Neden sessiz:** Yanlış sınıf adı hata üretmez — tarayıcı hiçbir kural uygulamaz.
+  Sonuç, sayfanın üstüne saydam düşen, dolgusuz bir kutu.
+- **Ne yapıldı:** `modal-kutu` + `modal-baslik` yapısına çevrildi (manuel çalıştırma
+  modalıyla aynı iskelet).
+
+### 20. Manuel çalıştırmada kayıtlı parametreler gelmiyor
+
+- **Neden:** `ManuelCalistirmaModal` formu **yalnızca** `baslangicDegerleriUret(is.parametreler)`
+  ile, yani işin varsayılanlarıyla dolduruyordu; `is.zamanlamaParametreleri`'ne hiç bakmıyordu.
+  `ZamanlamaParametreModal` ise bakıyordu — ikisi ayrışmıştı.
+- **Etkisi:** Zamanlamaya kaydedilen mail alıcıları elle çalıştırmada **boş** geliyordu.
+  Kullanıcı "Şimdi çalıştır" dediğinde gece koşanın aynısının koşmasını bekler; farklı
+  davranmak raporun kimseye gitmemesi demektir ve bu, çalıştırma başarılı göründüğü için
+  fark edilmez.
+- **Ne yapıldı:** Tohumlama tek yere alındı —
+  `acilisDegerleriUret(parametreler, kayitli)` (`DinamikForm.tsx`). İki modal da onu
+  kullanıyor, artık ayrışamazlar. Manuel modal ayrıca "buradaki değişiklik **yalnızca bu
+  çalıştırmayı** etkiler, kayıtlı değerler değişmez" notunu gösteriyor — aksi hâlde
+  yönetici tek seferlik sandığı bir düzenlemeyi kalıcı sanabilir (ya da tersi).
+- **Dokunulan dosyalar:** `web/src/components/{DinamikForm,ManuelCalistirmaModal,ZamanlamaParametreModal}.tsx`,
+  `web/tests/modal.test.ts`
+- **Commit:** `a5173a0`
+
+### 21. Koruma testleri — ve testin kendi körlüğü
+
+`tests/modal.test.ts` iki şeyi doğrular:
+1. Kaynakta kullanılan **her `modal-*` sınıfının CSS'te tanımlı olduğunu.**
+2. Her iki modalin da kayıtlı zamanlama parametrelerini okuduğunu (ham
+   `baslangicDegerleriUret(is.parametreler)` kullanımını yasaklar).
+
+**Testin ilk hâli kördü.** Sınıfı `css.includes('.' + sinif)` ile arıyordum; `.modal`
+araması `.modal-arkaplan` içinde geçtiği için **her zaman doğru** dönüyordu. Hatayı geri
+koyup ölçtüğümde tohumlama testi yakaladı, CSS testi yakalamadı — kör olduğu böyle çıktı.
+Tam sözcük aramasına çevrildi (`\.modal(?![\w-])`) ve tekrar ölçüldü: bu kez dosyayı adıyla
+bildirdi.
+
+Bugün ikinci kez: **koruma testi yazıldığında yakaladığı ölçülmeli.** Bu tur ölçülmeseydi
+CSS kuralı hiç korunmamış olacaktı ve testin varlığı yanlış güven verecekti.
+
+- **Sonuç / doğrulama:** 54 web testi geçti, `tsc -b` ve `npm run build` temiz.
+
+### 22. Yeni paket
+
+`SentezServis-2026-09-18-1044.zip` (73,7 MB). Arayüz tarihi **2026-09-18 10:44**.
+Paketin içindeki `app.js` açılıp iki düzeltmenin de içeride olduğu doğrulandı
+(`modal-kutu` ve `zamanlamaParametreleri` geçiyor).
+
+## Açık kalanlar (modal turu)
+
+- Paket canlıya kurulmadı; 10:18 paketi de kurulmamıştı.
+- Bağlantı cümlesini arayüzden girme özelliği hâlâ yok (tasarım kararı bekliyor).
