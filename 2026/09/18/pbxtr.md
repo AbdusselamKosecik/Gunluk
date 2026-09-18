@@ -2606,3 +2606,135 @@ iterdi.** Çözüm: indeks girdileri `git hash-object -w --path` + `git update-i
   ayrı kart ve bu sprinte alınmadı; sapmanın `doc/prototip-urun-farklari.md`'ye
   **BİLİNÇLİ** yazılması o kartın işi.
 - `yonetim/backlog.md`'ye bu turda **dokunulmadı** (talimat).
+
+---
+
+## Ş76-11 — `webhook_deliveries` retention'ı (sistem sabiti, 30/30 gün)
+
+### Bağlam
+
+Kurul Karar #76 / Ş76-11 ve teslim sırası kilidi Ş76-10/3. `BR-SEC-21`'in boyut
+eşiği bu iş inmeden kurulamaz: ölçüldü, `webhook_deliveries`'ten satır silen
+**hiçbir iş yoktu** (`WebhookDeliveryJob` yalnız YAZAR) → eşik kurulduğu gün
+**hep kırmızı** olur ve hep kırmızı kapı = fiilen kaldırılmış kapı. **Eşik bu
+turda YAZILMADI** (bilinçli).
+
+### Yapılanlar
+
+#### 1. Sürenin tenant parametresi OLMADIĞI ölçüldü
+
+- **Neden:** CLAUDE.md §10/4 saklama süresini tenant üzerinde tutmayı şart koşar —
+  ama o madde **ses kaydı** içindir.
+- **Ölçüm:** `src/Pbxtr.Domain/Modules/Integrations/WebhookDelivery.cs:54-88` —
+  tabloda payload/yanıt **gövdesi kolonu YOK** (`EventType, Attempt, Status,
+  HttpStatus, ErrorText, DurationMs, *At`). Gövde `webhook_outbox`'ta.
+- **Sonuç:** emsal `ReportDeliveryRetentionOptions`'tır, `RecordingRetention`
+  değil. Süre **sistem sabiti**.
+
+#### 2. `pbxtr_sys.purge_webhook_deliveries(integer, integer, integer)`
+
+- **Dosya:** `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918170000_WebhookDeliveryRetention.cs`
+- SECURITY DEFINER, `search_path = pg_catalog, public, pg_temp`,
+  `SET "app.cross_tenant" = 'on'` (PLATFORM-CROSS), `lock_timeout=5s`,
+  `statement_timeout=30s`. **Tablo adı parametre DEĞİL** — yalnız üç sayı.
+- `delivered` için kısa pencere serbest (taban 1 gün); `failed`/`dead` tabanı
+  **30 gün** (`c_failed_floor`) ve altındaki her değer **RAISE ile reddedilir**
+  (fail-closed). `pending`/`sending` **hiç** silinmez.
+- Aday → sil → özetle **tek ifade** (`FOR UPDATE SKIP LOCKED` + `DELETE … USING`
+  + `GROUP BY`): ayrı SELECT yazılsaydı "silinen küme" ile "günlüğe yazılan küme"
+  arasına başka bir işlem girerdi. Anahtar **PK**'dır (`tenant_id, created_at,
+  id`) — `ctid` kullanılmadı (bölümlü tabloda tekil değil).
+- Partition **düşürülmez**: aynı ay içinde kısa pencereli `delivered` ile ≥30
+  günlük `failed` birlikte durur; düşürmek kısa pencereyi en uzun pencereye
+  eşitlerdi. Fiziksel küçültme autovacuum'da, tarama partition pruning ile eski
+  çocuklarla sınırlı.
+- **Tablo yorumu düzeltildi:** eski metin "RETENTION BORCU: `purge_call_data()`
+  allowlist'ine eklenecek" diyordu; o yol **tenant başına** okur ve Ş76-11 onu
+  reddetti. `Down()` önceki yorumu **birebir** geri yazar.
+
+#### 3. `WebhookDeliveryRetentionJob` — aynı proseste, advisory lock
+
+- **Dosyalar:** `src/Pbxtr.Infrastructure/BackgroundJobs/WebhookDeliveryRetentionJob.cs`,
+  `…/WebhookDeliveryRetentionOptions.cs`
+- Kilit `webhook-delivery-retention` = **39** (`BackgroundJobLocks`), teslim
+  işinden AYRI: biri dış HTTP'ye çıkar ve sık koşar, bu günde bir siler; aynı
+  kilit birini açlığa düşürürdü. Ayrı worker/cron **yok**.
+- Günde bir tick (`Environment.TickCount64`, monoton).
+- **Denetim:** etkilenen tenant başına bir satır (`webhook.delivery.retention.purge`),
+  sayılar `DELETE … RETURNING`'den gelen gerçek değerler. Çapraz kapsam yalnız
+  yazım boyunca açılır ve `finally` ile kapanır; açılışın kendi izi
+  `CrossTenantReadAudit` ile aynı transaction'a düşer.
+- **Hata davranışı: fail-closed ve gürültülü** — geçersiz pencere fonksiyonda
+  reddedilir, istisna yutulmaz, tick `Failed` olarak `job_runs`'a düşer.
+- **Yeni `AuditTargets` sabiti eklenMEDİ** (bilinçli): eklemek #38 hedef türü
+  filtresini + dokuz dil dosyasını aynı turda büyütmeyi şart koşar (BR-QA-09) ve
+  o dosyalarda o sırada **başka ajanın açık işi** vardı. Hedef türü mevcut
+  kümeden (`WebhookSubscription`, kimlik `null` — SSRF reddinde zaten tanımlı),
+  ayrım `Action` ile.
+
+#### 4. Donmuş envanter + şablon tazeleme
+
+- `deploy/db/02-guards.sql`: `pbxtr_sys_function_expectations()`'a satır +
+  frozen hash `084db597…` → `8dc49b1d50385bd3375abd4334df746d`.
+- `deploy/db/sys-functions.expected`: yeni satır (29 kayıt).
+- `prosrc` md5 **çevrimdışı** hesaplandı ve yöntem önce `purge_job_runs` üzerinde
+  doğrulandı (C# ham dize girintisi 12 boşluk kırpılır → bilinen md5 birebir çıktı).
+- `20260918180000_GuardsTemplateRefreshWebhookRetention` + `sablon-refresh.expected`
+  (sha + migration adı) — aksi halde yükseltilen DB envanteri **hiç almaz** ve
+  açılış kapısı uygulamayı kilitler.
+
+#### 5. `ErrorText` ÖLÇÜMÜ (Ş76-11 madde 3) — "içerik yok" iddiası YANLIŞ
+
+- **Ölçüm dosyası:** `tests/Pbxtr.Architecture.Tests/WebhookErrorTextMeasurementTests.cs`
+- **Sonuç:** `error_text` **uzak sunucunun yanıt gövdesinin ilk parçasını TAŞIR**
+  (`WebhookSender.cs:126-134`, `ReadExcerptAsync`) — metin
+  `"HTTP {status}. {excerpt}"` biçiminde. Stub alıcı 200 KB gövde döndürdüğünde
+  bile satırdaki metin ≤ **512** karakter.
+- **Tavan üç yerde:** `WebhookSender.Trim` (512), okuma tamponu 512 karakter +
+  `BoundedStream` 64 KB, ve DB `ck_webhook_deliveries_error_text` — üçü de
+  `WebhookSubscriptionLimits.MaxErrorTextLength` **tek sabitinden** gelir.
+- **Kararı değiştirmez:** taşınan şey alıcının kendi hata çıktısıdır, pbxtr'ın
+  gönderdiği olay gövdesi değil (ve o gövdede numara zaten yok, Karar #28). Ama
+  iddia artık "içerik yok" değil, **"içerik 512 karakterle sınırlı ve ALICININ
+  metnidir"**.
+
+#### 6. Vacuity — pozitif + negatif + mutasyon
+
+- **Bekçi:** `tests/Pbxtr.Architecture.Tests/WebhookRetentionGuardTests.cs` (8 test).
+  SQL metni kaynak dosyadan regex'le değil, **`Migration.UpOperations`'tan** okunur
+  (ham dize girintisini yeniden üretmeye çalışan bekçi sessizce yanlış md5 hesaplardı).
+- **Mutasyonlar (üçü de KIRMIZI):**
+  1. `c_failed_floor := 30` → `7`: taban paritesi + md5 bekçisi düştü.
+  2. Yükleme `'pending'` eklendi: canlı-satır bekçisi + md5 bekçisi düştü.
+  3. `Down()` yorumunda tek kelime değiştirildi: "birebir geri yazar" bekçisi düştü.
+  Her mutasyondan sonra geri alındı ve **yeniden derlenip** yeşil doğrulandı.
+
+### Komutlar
+
+```bash
+dotnet build pbxtr.sln                      # src yeşil; 13 hata paralel ajanın Voicemail işi
+dotnet test tests/Pbxtr.Architecture.Tests  # 707 geçti, 2 kırmızı (ikisi de başka ajanın)
+sh deploy/env-esleme-kontrol.sh             # rc=0 (şablon 62, compose 72, muaf 27)
+sh deploy/sablon-refresh-kapisi.sh          # rc=0, K6 dahil
+python3 deploy/migration-compatibility-guard.py  # rc=0 (iki contract onayı Karar#76)
+```
+
+### Kararlar
+
+- Boyut eşiği **yazılmadı** (Ş76-10/3). Bir sonraki turda kurulabilir; alarm
+  süpervizör yüzeyine **düşmez**, Admin/Süper Admin + depolama sağlığına gider.
+- Silme `pbxtr_sys` penceresinden yapılır. Ölçüldü: `webhook_deliveries` üzerinde
+  append-only tetikleyici **yok** ve `pbxtr_app`'in `public` üzerinde DELETE'i
+  **var** — yani "varsa korunur" şartı boşta kaldı; dar pencere yine de seçildi,
+  çünkü tablo adının C# tarafında SQL metnine girmemesi yüzeyi daraltır.
+- `pending`/`sending` hiçbir pencerede silinmez (fail-closed yön: veriyi tutmak).
+
+### Açık kalanlar
+
+- `BR-SEC-21` boyut eşiği (bu iş indiği için artık kurulabilir).
+- `AuditTargets` için ayrı bir "teslim günlüğü" hedef türü + 9 dil paritesi —
+  istenirse ayrı kart; bugün mevcut tür kullanıldı.
+- `yonetim/backlog.md`'ye **dokunulmadı** (talimat).
+
+- **Commit:** `8fb533c9` — Karar #76 / Ş76-11: webhook_deliveries retention
+  SİSTEM SABİTİ (30/30 gün). Push edildi.
