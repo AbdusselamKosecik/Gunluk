@@ -563,6 +563,134 @@ kazma yerini doğru gösterdi.**
 **Ölçüm:** `dotnet build` 0 hata · `tsc -b --force` rc=0 · `kapi_07` rc=0 / ONAYLI 15 ·
 ClickUp `fark olan kart: 0, izde olmayan: 0` (635 kart) · kapalı **432**, açık **203**
 
+### 60. Turun en pahalı bulgusu: BUGÜN MERGE ETTİĞİMİZ KOD ÇAĞRIYI ÖLDÜRÜYORDU
+
+Sabah `BR-AST-95`'i merge ettim: `Bridge(${PBXTR_CTL_PEER})` → `ConfBridge(pbxtr-ctl-${CHANNEL(linkedid)})`.
+Gerekçe sağlamdı, testler yeşildi, kod incelemesi temizdi. **Gerçek santral reddetti:**
+
+```
+WARNING pbx.c:2957 pbx_extension_helper:
+    No application 'ConfBridge' for extension (pbxtr-mmtest, cb, 3)
+== Spawn extension (pbxtr-mmtest, cb, 3) exited non-zero
+module show like confbridge -> app_confbridge.so ... Not Running
+```
+
+Modül diskte var, `autoload = yes`, noload'da değil — ama **`/etc/asterisk/confbridge.conf` yok**,
+bu yüzden uygulama hiç kayıt olmuyor. Kartın *"yerleşik `default_bridge`/`default_user`
+kullanılır"* öncülü de **yanlıştı**: yerleşik profil de yok (`confbridge show profiles` →
+`No such command`).
+
+**Neden P0:** eski `Bridge()` yarışı kaybettiğinde çağrı **bazen** kurtuluyordu. Kayıtlı olmayan
+bir uygulama **her seferinde** öldürür. Yani bu, *"düzelttik"* etiketli bir **regresyon** olurdu.
+
+**Önlem bayrak, geri alma değil.** Kod doğru; eksik olan santral tarafı. Geri almak
+`BR-AST-95`'in ölçümle çürüttüğü `Bridge()` yolunu geri getirirdi.
+`ConfBridgeRegisteredOnPbx = false` → buluşma satırı **üretilmiyor**, yerine sebep yorumu
+basılıyor. Davranış bugün aynı (ikisi de çağrıyı düşürür) ama **nedeni yazılı** ve santral günlüğü
+her yarım kalmada WARNING ile dolmuyor.
+
+**Test iki dallı yazıldı ve ikisi de koşuldu** (bayrak `true` → 4/4, `false` → 4/4). Bugünkü hâli
+çivilemiyor: bayrağı açan kişi testi **değiştirmek zorunda kalmayacak** — yoksa o an "test neyi
+koruyordu" bilgisi kaybolurdu. `PBXTR_CTL_PEER` yasağı **iki dalda da** geçerli.
+
+`[[belge-santral-degildir]]` bugün üçüncü kez, ve en pahalı biçimde doğrulandı.
+
+### 61. Ölçüm tarifini yazan ajan ölçemeyen ajandı — ve tarif işe yaradı
+
+Santral turunu önce `asterisk-uzmani`'na verdim. Ajan 99k token harcayıp *"Bash bu oturumda devre
+dışı"* diyerek döndü. Sebep oturum değil **ajan tanımıydı**: o tipin araçları
+`Read, Grep, Glob, Write`. Rol'e göre seçmiştim, **araç kümesine bakmamıştım.**
+
+Ama tur tamamen kayıp değildi: ölçemediği yerde **ölçüm tarifini** üretti ve dördü de ölçümün
+tasarımını değiştiriyordu:
+
+1. `Record()` değil **`MixMonitor`**, ve **mutlak yolla** — labdaki D-14 ayrı bir kod yoluydu.
+2. **`b` seçeneği ölçümü sessizce sabote eder** — cevaplanmayan çağrıda dosya zaten oluşmaz.
+3. `ls -ln` ile **uid/gid** okunmalı, yoksa `docker cp root:root` sınıfı arıza tekrarlar.
+4. **İki ayrı soru**: `yyyy` yokken ve `yyyy` varken `MM` yokken.
+
+Bash'li ajan bu tarifle koştu ve **ikinci uyarı fiilen kurtardı**: ilk turda `Local ;1/;2` ile
+originate etti, `bridge show all` **boş** döndü, `b` hiç tetiklenmedi ve **kontrol dâhil** üç dosya
+da 44 bayt (salt WAV başlığı) kaldı. **Kontrol grubu olmasaydı bunu "dizin açılmadı" diye
+okuyacaktık** ve `BR-AST-103`'ü haksız yere kırmızı yazacaktık. Tur geçersiz sayıldı, `Dial()` ile
+gerçek köprü kuruldu.
+
+### 62. Ş2-4 YEŞİL — yayın önü açık
+
+`MixMonitor` var olmayan ara dizinleri **mutlak yolla açıyor**:
+
+| Durum | Sonuç |
+|---|---|
+| `yyyy` **ve** `MM` yok | ikisi de açıldı, 229420 bayt |
+| `yyyy` var, `MM` yok | açıldı, 229420 bayt |
+| kontrol (hepsi var) | 229420 bayt |
+| **kök dâhil hiçbiri yok** | dört seviyenin tamamı açıldı |
+
+Üçü **eşit** → ay sınırında "ayda bir gün sessiz kayıp" riski **yok**. Sahip/izin:
+`asterisk:asterisk` (1000:1000), mod 0755, dosya 0644.
+
+**Yan bulgu:** yapılandırılmış kök `/var/spool/asterisk/recording` sunucuda **hiç yoktu**, ve
+`/var/spool/asterisk` asterisk konteynerinde **anonim volume**dür, `pbxtr-app`'e bağlı değildir →
+dosya ETL'e yalnız ARI `recordings/stored/{ad}` ile ulaşır. Ayrıca provizyonlu
+`t0007-dialplan.conf` içinde `MixMonitor` satırı **hiç yok** — bugünkü kod henüz sahaya inmemiş.
+
+### 63. İki kırmızı daha: sesli mesaja giden yol yok, ARI `channelvars` yok
+
+- **`BR-AST-104`** — `[pbxtr-inbound]` context'i **yok** (`grep` → 0). `[pbxtr-t0007-vm]` **var** ve
+  `Record(...,5,180,k)` taşıyor; eksik olan ona **giden** dal. Kartın öngördüğü sessiz belirti
+  gerçek: müşteri mesaj bırakır, kutuda hiçbir şey oluşmaz, hiçbir hata satırı yazılmaz.
+- **`BR-AST-105`** — `GET /ari/channels` → 200, **kanal 8**, `linkedid` geçen **0**, `channelvars`
+  geçen **0**; aynı anda `core show channels concise` → **8** (aynı evren, boş liste değil).
+  `ari.conf`'ta **`channelvars` hiç yok** → Karar #70 Q3 yeniden açılır.
+- **`BR-AST-106`'nın "ölçülmedi" öncülü ölçüldü:** aynı `linkedid`, farklı `uniqueid`,
+  `PBXTR_VM_SENT` ikinci kanalda **boş** (`__` öneki yok → kalıtılmıyor). Karar #71'in aradığı
+  "çağrı başına tek kutu" garantisi **yoktur** — yani bugünkü düzeltme **gerekliydi**.
+
+### 64. QA'nın bulduğu iki güvenlik açığı (QA rolü kod yazamaz; koordinatör kapattı)
+
+**`BR-SEC-12` — yetki reddi satırı düşürülebiliyordu.** `CaptureEndpoints`'teki yedi denetim
+çağrısının ikisi `PermissionDenied` yazıyordu ve üçü de `TryEnqueue` ile gidiyordu; `TryEnqueue`
+kuyruk doluyken `false` döner ve **dönüş değeri atılıyordu**. Somut: `ChannelAuditSink` kapasitesi
+(10.000) doluyken yetkisiz `.pcap` indirme denemesinin **hiçbir izi kalmıyor** — ve tam kuyruğun
+dolu olduğu an, yani sistemin en yüklü olduğu an, bir saldırı denemesinin en görünmez olduğu
+andır. **İzleme açısından en kötü sıra.**
+
+Başarılı eylemler için aynı şey **yapılmadı ve sebebi yazıldı**: `started`/`deleted` eylemlerinin
+**kendi izi** vardır (dosya oluşur ya da kaybolur); bir yetki reddinin denetim satırından başka
+izi **yoktur**.
+
+**`BR-SEC-15` — RTCP snaplen ulaşılamaz bir hâle göre türetilmişti.** 128, IPv6'lı başlığa (66) +
+52 = 118'e göre seçilmişti. Ama RTCP ayracı `udp[8]`/`udp[9]` indeksi kullanıyor ve
+`pcap-filter(7)` BUGS'un yazdığı gibi o indeks **yalnızca IPv4**'e bakar — sablonun **kendi
+açıklaması** da *"medya IPv6 ise 0 paket getirir"* diyor. Yani türetimin dayandığı hâl **hiç
+yakalanmıyor** ve aradaki **30 baytın tamamı** RTCP yükünde rapor bloğundan sonra gelen alana,
+pratikte **SDES/CNAME**'e gidiyordu. CNAME `user@host` biçimindeyse `user` bir **dahili numara**
+olabilir ve `.pcap` çok-tenantlı bir dosyadır. Yeni sabit 46; snaplen 104; **teşhis kaybı sıfır.**
+
+**Testteki asıl eksik üst sınırdı:** önceki hâl yalnızca **alt** sınırı ölçüyordu, yani snaplen'i
+**büyütmek** testi hiç kırmıyordu. *"İlişki kilitli, sayı elle seçilmez"* ifadesi bu hâliyle
+**yalandı**. Üst sınır eklendi.
+
+### 65. Benim iki hatam
+
+1. **Commit mesajını `-m "..."` ile yazdım**, bash backtick'li adları komut ikamesi sanıp
+   **sildi** (`conflict: command not found` çıktıda duruyordu ama commit yine de atıldı). İçerik
+   `backlog.md`'de duruyordu; kaybolan **git kaydıydı**. Düzeltme commit'iyle geri kondu.
+   `[[heredoc-icinde-backtick-yutulur]]` birebir tekrar.
+2. **Kendi testimin çıpası fazla genişti:** `"Set(TIMEOUT(absolute)="` dinleme bağlamındaki
+   `${PBXTR_SPY_TIMEOUT}` satırını yakalayıp **yanlış sebeple** kırmızı yandı. Çıpa sabit saniyeye
+   daraltıldı. `[[backlog-durum-sutunu-cipayla-bulunur]]` ile aynı sınıf — ve aynı turda SEC ajanı
+   da o dersin birebir tekrarını yaşadı (`BR-SEC-09` satırının durum hücresi boru taşıyordu).
+
+### 66. Ölçüm
+
+- `dotnet build` 0 hata · migration kapısı rc=0 / ONAYLI 15 · ConfigRendererTakeover+Renderer 26/26 ·
+  CaptureTemplate 20/20 · AsteriskCommandCatalog 8/8
+- ClickUp **`fark olan kart: 0, izde olmayan: 0`** (637 kart)
+- Kapalı **450** (turun başında 432) · açık **188**
+- Sunucu temiz bırakıldı: `zz-*` dosyaları yok, `pbxtr-mmtest` context'i yok, `core show channels`
+  → 0 aktif; yalnız `dialplan reload` kullanıldı, demo tenant verisine dokunulmadı
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
