@@ -6038,3 +6038,133 @@ geçtikten sonra koşu alındı:
 ajanlar yüzünden **13 denemeden 2'sinde** yeşil oldu (yarım C# düzenlemeleri + `testhost`
 DLL kilitleri). "Build kırmızı" bulgularının çoğu benim değişikliğim değildi; hata
 satırındaki **dosya adına bakmadan** hiçbirini kendi işime yazmadım.
+
+---
+
+## Üç DB kartı — `BR-DB-91` / `BR-DB-88` / `BR-DB-99` (db-dev turu)
+
+### Bağlam
+Üç kart verildi. `BR-DB-99` ana dalda KIRMIZIYDI (`42883: function
+pbxtr_webhook_event_types() does not exist`); teşhis bir önceki ajan tarafından
+düzeltilmişti: sorun "şablon gövdesi kurulu DB'ye ulaşmıyor" değil, **migration
+gövdesi TEST FİKSTÜRÜNE hiç ulaşmıyor**. Seçim benden isteniyordu: (a) fonksiyonu
+`deploy/db/`'ye yaz (dar), (b) fikstür migration'ları da koşsun (yapısal).
+
+### 1. `BR-DB-99` — (a) kolu ÖLÇÜLEREK elendi, (b) uygulandı
+
+- **Neden:** (a) bu kırmızıların **hiçbirine dokunmazdı.** Kıran fikstür
+  `Faz2Database`'tir; o izole bir veritabanı yaratır ve `deploy/db/*.sql`'i **hiç
+  koşturmaz**. Üstelik `01-rls-template.sql:27` ve `02-guards.sql:26` superuser ile
+  koşulmayı **açıkça reddeder**, bu fikstür ise superuser ile bağlanır. Yani dar kol
+  yapısal olarak imkânsızdı — tercih değil, **ölçüm**.
+- **Ne yapıldı:** `Faz2Database.CreateAsync` artık şemayı EF modelinden
+  (`EnsureCreatedAsync`) değil **gerçek migration zincirinden** kurar. Zincir (bugün
+  **211 migration**) bir kez `pbxtr_owner` ile migrate edilip bir PostgreSQL
+  **`TEMPLATE`** veritabanında dondurulur; her test sınıfı
+  `CREATE DATABASE ... TEMPLATE` ile kopyasını alır. 15 tüketici sınıf var; sınıf başına
+  zincir koşmak kabul edilemezdi, `TEMPLATE` dosya kopyasıdır.
+  - Şablon DB'ye önce **`00-roles.sql` superuser ile** uygulanır: `pbxtr_sys` şeması
+    veritabanı seviyesindedir ve atlanınca zincir `20260907040000_SmsSysFunctions`'ta
+    `3F000` ile düşüyor (ölçüldü).
+  - Migrate bitince owner havuzu **açıkça boşaltılır**; yoksa ilk kopyalama `55006` verir.
+  - **Emsal depoda zaten vardı:** `RealSchemaDatabase` aynı yoldan geçiyor.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Support/Faz2Database.cs` (+ 11
+  test/destek dosyası), iki yeni test sınıfı.
+- **Sonuç:** 6 kırmızının 6'sı da yeşil; etkilenen 15 sınıf + 2 yeni sınıf = **55 + 2 test
+  YEŞİL**.
+
+#### Yan ürün: 17 sessiz sapma açığa çıktı (hepsi "test ikizi üretimden müsamahakâr")
+
+| Sapma | Ölçüm |
+|---|---|
+| 9 test `cdr_tenant_id_fkey`'i hiç görmemişti | `23503` — `cdr` bölümlü ve FK ham SQL ile kurulur; EF modelde yok, tek batch'te sıra garanti değil. Tenant satırı ayrı `SaveChanges`'e alındı. |
+| 4 test `tenant_settings`'i KENDİ yazıyordu | `23505` — üretimde o satırı `tenants_default_settings` **tetikleyicisi** doğurur. INSERT → UPDATE. |
+| `ProvisioningRerenderJobDbTests`'teki *"BR-DB-62 tetikleyicisi yalnız `pbxtr_app`'i reddeder"* yorumu | **Ölçülerek yanlış çıktı**: `tenants_column_immutable_guard` superuser'ı da reddediyor (`42501`, `rol: postgres`). Bakım taklidi artık tetikleyiciyi, **hatanın kendi metninde yazdığı gibi**, görünür biçimde devre dışı bırakıyor. |
+| `SampleSeedTests` maske seviyesi için `Last4` bekliyordu | `SampleDataSeeder` maske seviyesini **bilerek yazmaz** (kendi belgesinde yazılı: tetikleyicinin `'all'` değeri fail-closed karardır). Yani o satır **üretimde yanlış olan** bir şeyi doğruluyordu. |
+| `PermissionAndMaskSourceTests`'teki *"satır yokken Unresolved"* ön-durumu | Üretimde **hiç oluşmaz** (tetikleyici). |
+
+**Belge yalanı temizliği:** beş dosyada *"`Faz2Database` `EnsureCreated` kullanır / policy
+YOKTUR"* diyen gerekçe paragrafları düzeltildi (`RealSchemaDatabase`,
+`MaintenanceSampleSeedTests`, `UsersDealerScopeConstraintTests`,
+`ReportSchedulesCrossTenantRlsTests`, `Faz2Database`). O sınıfların varlık sebebi olan ayak
+artık yalnızca **ROLDÜR** (superuser ↔ `pbxtr_app`) ve bu açıkça yazıldı.
+
+### 2. `BR-DB-88` — yükseltilen DB artık bekçiyle ölçülüyor
+
+Yeni `tests/Pbxtr.Integration.Tests/Tests/TemplateRefreshReachesUpgradedDatabaseTests.cs`
+kartın asıl sorusunu ilk kez **yükseltilen** bir veritabanında ölçüyor: zincir önce
+canlıdaki sürüme (`20260915122000_UserRoleScopeConsistency`) kadar koşuluyor, sonra kalan
+zincir uygulanıyor.
+
+**Bu turda ölçülen ve önemli bir şey:** *zinciri canlıdaki sürümde durdurmak, canlıdaki
+veritabanını ÜRETMEZ.* Zincirin ortasındaki `20260823110000_FinalGuardAssertions` 02'yi
+**gömülü kaynaktan**, yani **bugünkü** metinden uygular. Ölçüm: replay'de
+`pbxtr_role_settings_guard` **VAR (1)**, canlıda **YOK (0)**. Bu, kartın tarif ettiği
+kusurun ta kendisidir. Test canlının ön-durumunu **açıkça taklit ediyor** (iki fonksiyonu
+`DROP` ederek) ve taklidin ölçüsü canlıdaki `pg_proc` sayımıdır.
+
+**Mutasyon:** canlı sürümden sonraki **dokuz** migration'ın
+`DeployDbScripts.Read(Guards)` çağrısı kaldırıldı → **yükseltme testi KIRMIZI**
+(`pbxtr_role_settings_guard` = 0), **taze zincir testi YEŞİL kaldı**. Yani bekçi tam da
+kartın tarif ettiği **asimetriyi** yakalıyor. Mutasyon geri alındı, **ikili yeniden
+derlendi**, yeşil doğrulandı.
+
+**Kalan iş yayın.** Canlıda fonksiyonlar hâlâ yok.
+
+### 3. `BR-DB-91` (P0) — yayın öncesi risk artık ölçülü
+
+Kartın bloke gerekçesi *"toplam pencere hâlâ ölçülmemiştir"* idi (aynı cümle
+`20260918120000_RlsTemplateRefresh.cs:108`'de yazılı). Yeni
+`tests/Pbxtr.Integration.Tests/Tests/BrDb91LockWindowMeasurement.cs` gerçek bir
+PostgreSQL'de tam zinciri koşuyor, sonra migration `Up()`'ının **birebir** yaptığı işi aynı
+transaction sınırında (`SET LOCAL lock_timeout='5s'` + 01 şablonu + `COMMIT`) tekrar
+uygularken (a) `public.tenants` üzerindeki ACCESS EXCLUSIVE penceresini `pg_locks`'tan
+örnekliyor, (b) `EfTenantSuspensionProbe`'un kilit yüzeyini (`pbxtr_app` ile tenants
+SELECT) 2 ms aralıklarla ölçüyor.
+
+| Ölçüm | Değer |
+|---|---|
+| 01 tazeleme transaction'ı | **40–57 ms** |
+| `tenants` ACCESS EXCLUSIVE penceresi | 1 ms örneklemede **tek örnekte** yakalandı (~ms mertebesi) |
+| Pencerede en yavaş okuma | **13,5 ms** |
+| >1000 ms okuma / hata | **0 / 0** |
+| Yoğun şema (518 partition çocuğu, `pbxtr_reassert_hardening()` = 122 nesne) | transaction 57 ms, en yavaş okuma 12,3 ms |
+| **KONTROL GRUBU** — 3 sn tutulan `LOCK TABLE ... ACCESS EXCLUSIVE` | **2990,6 ms** raporlandı |
+
+Kontrol grubu olmadan "0 bloklanma" sonucu **anlamsız** olurdu; araç körlüğü böyle elendi.
+
+**Yorum:** kalan risk pencereyi **tutmak** değil, kilidi **edinmektir** — uzun bir okuyucu
+varsa `lock_timeout=5s` `55P03` ile migration'ı düşürür ve yayın durur (bilinçli tasarım).
+Kartın (1)–(4) adımları yayın penceresinde koşulur; laboratuvar ölçümü onun yerine geçmez,
+yalnızca *"büyüklük bilinmiyor"* engelini kaldırır.
+
+### Komutlar
+
+```bash
+# Paralel ajanlar testhost DLL'lerini kilitlediği için izole worktree'de çalışıldı
+git worktree add <scratch>/wt -b db-kart-olcum-91-88-99
+git worktree add <scratch>/base --detach 4342c035        # A/B tabanı
+
+dotnet test tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj --no-build \
+  --filter "FullyQualifiedName~TemplateRefreshReachesUpgradedDatabaseTests"
+```
+
+### Kararlar
+
+- **Kol (b) seçildi ve gerekçesi ölçümdür**, tercih değil: (a) kıran fikstüre erişemiyordu.
+- Maliyet `TEMPLATE` ile kapatıldı; aksi hâlde 15 sınıf × 211 migration kabul edilemezdi.
+- **Kayıtlı dersle çelişmiyor:** *"şablon gövdesi kurulu DB'ye ulaşmaz"* dersi tam olarak
+  `BR-DB-88` bekçisiyle **mekanikleştirildi** — taze zincir ve yükseltilmiş DB ayrı ayrı
+  ölçülüyor ve mutasyon ikisinin arasındaki asimetriyi gösteriyor.
+
+### Açık kalanlar / sonraki adım
+
+- **Ana dal HEAD'i (`55db5ce2`) migrate eden HER testi kırıyordu** — `UserRoleScopeConsistencyTests`
+  bu turun değişikliği **olmadan** kırmızı; sebep `PendingModelChangesWarning`, yani başka
+  bir ajanın henüz commit etmediği `PbxtrDbContextModelSnapshot.cs`. `Faz2Database` artık
+  migrate ettiği için bu koşulun yarıçapı 15 sınıf büyüdü.
+- Tam entegrasyon takımındaki kalan **34 kırmızı bu işin değil**: aynı filtre değişiklikli
+  ve değişikliksiz ağaçta koşuldu, **ikisinde de 34/95/1** (A/B).
+- `BR-DB-88` ve `BR-DB-91` **yayın #18'in `MigrationRunner` aşamasını** bekliyor
+  (`BR-DB-69`/`74`/`79`/`84` ile aynı pencere).
+- **Commit:** `d8cec0bf` — *BR-DB-99 Bitti: Faz2Database semayi migration zincirinden kurar (TEMPLATE); BR-DB-88/91 olculdu*
