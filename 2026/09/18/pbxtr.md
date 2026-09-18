@@ -4342,3 +4342,120 @@ alım ucu, VETO şartı B-Ş3). Devralınan ölçüm: geri aramanın **ÇIKIŞ**
 - Kapı_07 iki **başka ajan** migration'ı için kırmızı (`20260918203500`, `20260918230000`);
   onay satırı **bilerek yazılmadı** (Karar #48).
 - **Commit:** `9c4aaf28` — push edildi.
+
+---
+
+## Kurul Karar #77 Ş77-9 / Ş77-10 / Ş77-11 — `provisioning_node_state` + `#37` üçüncü ekseni (`BR-DB-98`, `BR-BE-200`)
+
+### Bağlam
+Provisioning uygulama raporu (`POST /api/v1/provisioning/report`) **yalnızca `audit_log`'a**
+yazıyordu. `audit_log` aylık partition'lı ve retention `DETACH + DROP` ile partition düşürüyor
+(`deploy/db/01-rls-template.sql:2286,2613`; `02-guards.sql:3328`). Sonuç: 40 gün önce kanarya
+reddiyle N-1 revizyonuna dönmüş bir düğümün **hangi revizyonda koştuğunu söyleyen tek satır
+siliniyordu.** Bu bir denetim kaybı değil **DURUM kaybı**dır.
+
+### Yapılanlar
+
+### 1. `provisioning_node_state` tablosu (Ş77-9 / `BR-DB-98`)
+- **Ne yapıldı:** düğüm başına **TEK SATIR** durum tablosu. Bileşik PK `(tenant_id, node_id)` —
+  "tek satır" şartı uygulamada değil **veritabanında** durur; yapay `id` + "önce oku sonra yaz",
+  eş zamanlı iki raporda ikinci bir satır bırakır ve soru iki cevaplı olurdu.
+- Kolonlar: `tenant_id`, `node_id` (varchar 128), `reported_revision`, `applied_revision`
+  (**NULL = hiçbiri yayına girmedi**; `0` ya da `rev` yazmak bir iddia olurdu), `outcome`
+  (CHECK kapalı küme `applied|rolled_back|partial|rejected`), `failed_checks` **`text[]`**
+  (CHECK `cardinality <= 20` — metin olsaydı 20 sınırını hiçbir katman tutmazdı), `reported_at`,
+  `reported_ip`.
+- **Retention YOK ve bu bilinçli:** satır sayısı `tenant × düğüm` ile sınırlı; `purge_call_data()`
+  allowlist'ine **bilerek eklenmedi**.
+- **Dokunulan:** `src/Pbxtr.Domain/Modules/Telephony/ProvisioningNodeState.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/TelephonyConfigurations.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/PbxtrDbContext.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260918200000_ProvisioningNodeState.cs`.
+- **RLS:** `SELECT pbxtr_apply_tenant_rls('provisioning_node_state');` → şablon policy'si
+  `provisioning_node_state_tenant_isolation` (`dealer_scope` **açılmadı**).
+- **`pbxtr_global_tables()` kapısı:** liste **5 satır, değişmedi**
+  (`deploy/db/global-tables.expected` diffsiz). Tablo `tenant_id` taşıdığı için listeye girmez
+  (Şeytan itirazı I11).
+
+### 2. Damga yazımı — uç KAPI olmadı, KAYIT oldu (Ş77-10 / `BR-BE-200`)
+- Uç artık **iki şey** yazar ve **ikisi de kayıttır**: denetim satırı ("ne oldu", retention'lı) +
+  durum damgası ("şu an ne", kalıcı). **Denetim satırı kaldırılmadı.**
+- **Hata davranışı (yazılı):** damga yazılamazsa **503 `STATE_UNAVAILABLE`** — FAIL-CLOSED,
+  `AUDIT_UNAVAILABLE` ile birebir aynı gerekçe. Düğüm adı kapalı biçime uymazsa istek
+  **reddedilmez**, denetim satırı yazılır, damga atlanır, `LogWarning` düşer ve düğüm `#37`'de
+  **ÖLÇÜLEMEDİ** görünür — asla yeşil değil.
+- **Bekçi:** `tests/Pbxtr.Architecture.Tests/ProvisioningReportIsNotAGateTests.cs` — IL çağrı
+  ağacında (`WritePathScanner`) `RenderAndStoreAsync`, `RenderAndStoreInCurrentTransactionAsync`,
+  `ProvisioningRegenerator.RegenerateAsync`, `ProvisioningRerenderer.RerenderAsync/MarkBlockedAsync`,
+  `IAsteriskConsole.RunAsync` **yasak**. Tipin tamamı yasaklanmadı: uç `TryGetTenantCodeAsync`'i
+  meşru olarak çağırır ve geniş bir yasak ilk gün kırmızı yanıp **kapatılırdı**.
+
+### 3. `#37` üçüncü ekseni (Ş77-11)
+- **Yeni `HealthState` YOK** (Karar #35/3 aynen) ve **bileşen ikiye bölünmedi** (`BR-BE-52`
+  reddedildi). Sayılar mevcut `provisioning` satırının **metnine** ve **`down` koşuluna** girdi.
+- `SystemHealthProbe.CheckProvisioningAsync` ikiye ayrıldı: `CheckProvisioningQueuesAsync`
+  (kuyruk ekseni, davranışı değişmedi) + `ReadNodeStateLineAsync` (üçüncü eksen) + `Combine`.
+- **Gerçek çıktı (ölçüldü; geçici `Assert.Fail` ile bastırıldı, sonra geri alındı):**
+
+```
+1 tenant'in tamami bir dugume atanmis ve istenen kuyruklari santralde bulundu
+(olcum 18.09.2026 08:59 UTC). 1 dugum ISTENEN REVIZYONU KOSTURMUYOR
+(rolled_back/rejected) — config teslim edildi ama yayina GIRMEDI; mudahale: confd
+gunlugu ve kanarya raporu. 1 dugum yayimlanmis revizyonun GERISINDE (uyguladigi
+revizyon pbxtr'in urettigi en yuksek revizyondan farkli).
+```
+
+### Kararlar / açıkça yazılan varsayımlar
+- **"Yayımlanmış revizyon" = `max(provisioning_revisions.revision)`** (tür ayrımı olmadan).
+  `revision` tür başına artar; tek bir yayın numarası **kolonu yoktur.** Tür bazında kıyas,
+  bir türü değişmemiş tenant'ı daima "geride" gösterirdi. Bu eksen `severity=info`'dur,
+  **kırmızı yakmaz** — varsayımın bedeli bir uyarı satırı, alarm değil.
+- **`partial` kırmızı yakmaz**, yalnız `rolled_back`/`rejected` yakar; müdahale kapıları ayrı.
+- Sağlık okuyucusu **bilerek çapraz-tenant**tır (`BeginCrossTenantScope` + `IgnoreQueryFilters`,
+  `EfProvisioningNodeDirectory` deseni birebir); `pbxtr_sys` SECURITY DEFINER fonksiyonu
+  **açılmadı** (şablon tazeleme + md5 envanteri gerekmedi).
+
+### Ölçümler
+- **Sızıntı testi:** `tests/Pbxtr.Integration.Tests/Tests/ProvisioningNodeStateTenantLeakTests.cs`
+  (3 vaka, gerçek PG + gerçek RLS). **Mutasyon:** store lookup'ına `.IgnoreQueryFilters()` →
+  **KIRMIZI** (*"...Gozlenen: hicbir istisna atilmadi. Bu, EF global query filter'inin bu sorguda
+  DUSTUGU anlamina gelir"*), geri alınca **YEŞİL** (3/3).
+- **Bekçi mutasyonu:** uca `RenderAndStoreAsync` eklendi → **KIRMIZI**
+  (*"Ş77-10 IHLALI ... ProvisioningRevisionService.RenderAndStoreAsync"*), geri alınca
+  **YEŞİL** (4/4).
+- `dotnet build pbxtr.sln` → **0 Warning, 0 Error** (test koşularından **ayrı** koşuldu).
+- `Api.Tests --filter ~Provisioning` 259/259 · `Architecture.Tests` 712/713 (kalan kırmızı benim
+  değil) · `Integration.Tests --filter ~ProvisioningNodeStateTenantLeakTests` 3/3.
+- **Migration contract kapısı** (`deploy/migration-compatibility-guard.py`): bu migration için
+  **sıfır bulgu** → `migration-contract-onay.blobs`'a **onay satırı yazılmadı ve gerekmiyor**
+  (`SELECT pbxtr_apply_tenant_rls('...')` kapının yazılı istisna deseni, `:412`).
+
+### Ölçüm tuzakları (kayda değer)
+- **Çapraz-tenant YAZMA yapısal olarak imkânsızmış.** İlk kurgu *"B'nin raporu A'nın satırını
+  ezdi mi"* diye ölçüyordu; `TenantStampInterceptor` çapraz kipte **her yazmayı**
+  `CrossTenantWriteForbiddenException` ile reddediyor (ADR-002 §3.7). Olmayan bir yolu ölçmek
+  yerine fikstür **ayrıştırıcı** yapıldı: ikinci çağrının payload'ı A'nınkiyle **birebir aynı**
+  → filtre tutuyorsa `Added` kayıt doğar ve **istisna atılır**; filtre düştüyse komşunun satırı
+  bulunur, EF değişiklik görmez (`Unchanged`) ve **istisna atılmaz.** İddia *"veri bozulur"*
+  değil, **"ikinci savunma düştü"**dür; kodun XML dokümanı buna göre düzeltildi.
+- **Aynı dosyada duran iki sınıf, bekçiyi yanılttı.** `CrossTenantScopeGuardTests` çapraz kapsamı
+  **dosya düzeyinde** tarar; store + health reader aynı dosyadayken **yazma yolu da** "çapraz
+  kapsamda" sayıldı (`FilterIgnored = False`). İki ayrı dosyaya bölündü.
+- **`TenantLeakCoverageTests` alt-dize eşlemesi yine tetiklendi** (bugünkü ikinci vaka): bu kez
+  adaptör adını **eksik** yazmak `ProvisioningNodeStateHealthReader`'ı "testsiz" gösterdi; ad
+  test gövdesine **kasten** eklendi (test o adaptörü gerçekten ölçüyor).
+- **`git stash` ile baseline alınmaz.** `git stash -u -- <yol>` benim dosyamı değil **başka bir
+  ajanın stash'ini** listeledi ve `pop` gerekti. Paralel ajan ortamında stash **yasak sayılmalı**.
+
+### Açık kalanlar / sonraki adım
+- `#37` üçüncü ekseni **gerçek Asterisk/confd raporuyla doğrulanmadı** (§3.0); `POST
+  /provisioning/report` uçtan uca bir confd ile koşturulmadı — "yok" değil, **"ölçemedim"**.
+- Migration `Up`/`Down` **gerçek üretim veritabanında koşturulmadı**; ölçülen şey testcontainers
+  üzerindeki taze zincirdir.
+- **Benim olmayan kırmızılar (aynı anda çalışan ajanların dosyaları):**
+  `TenantLeakCoverageTests` → `ProvisioningNodeDirectory` (sebep:
+  `tests/.../ApiKeyForeignNodePinTests.cs` yorumundaki ad), `DeployPrivilegeTests`,
+  `ProvisioningTombstoneWriteDbTests` + `ProvisioningRerenderJobDbTests`
+  (`42883: function pbxtr_webhook_event_types() does not exist`), contract kapısında
+  `20260918203500` ve `20260918230000`.
+- **Commit:** `95bd29e0` — push edildi.
