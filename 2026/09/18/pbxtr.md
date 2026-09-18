@@ -5430,3 +5430,160 @@ python3 deploy/ci/capraz-kip-envanteri-kapisi.py                 # 31 / 36
   **D2'nin kalan tek gerçek ihlalidir**. Envanter JSON'unda `_devredilen` altında yazılı.
 - `SlaAggregationJob` ölçüldü (zaten dar) ama uçuşta olduğu için mutlak kümeye alınmadı.
 - Gerçek PG ile davranış ölçümü yapılmadı (kurulu şema yok): "yok" değil, **"ölçülmedi"**.
+
+
+---
+
+## Tur — kurul dağıtıldıktan sonra altı Asterisk kartının karara bağlanması (backend-dev-2)
+
+### Bağlam
+
+`BR-AST-51a`, `BR-AST-51b`, `BR-AST-55`, `BR-AST-92`, `BR-AST-104`, `BR-AST-108` kartlarının
+hepsi *"kurula gidecek"* diye BLOKE duruyordu. Kurul 2026-09-18'de kullanıcı tarafından
+dağıtıldı; karar yetkisi kart sahibine verildi. Kural: ölç, **dar** olanı seç, kartta
+gerekçelendir. `ConfigRenderer.cs` başka bir ajandaydı — o dosyayı gerektiren kalem
+"kalan iş" olarak bırakıldı.
+
+### Yapılanlar
+
+#### 1. BR-AST-108 — düşen tenant'ın artık config'i: sessiz arıza sesli arızaya çevrildi
+
+- **Neden:** bir tenant düğümden düşünce (abonelik bitti / başka düğüme taşındı) onun
+  dahilileri, kuyrukları ve park yerleri santralde **çalışmaya devam ediyor** ve bunu
+  gösteren hiçbir şey yok. Belirti sessiz.
+- **Kartın (1) teşhisi ölçümle çürüdü.** Kart *"node-bundle yanıtı düğümün tam tenant
+  kümesini taşımalı"* diyordu; sunucu bunu **zaten ölçüyor**. Canlı ölçüm
+  (`176.88.41.220`, `date -u` = Fri Sep 18 19:58:17 UTC 2026): ajanın gerçek
+  `X-Pbxtr-Have` başlığıyla (`t0007/...,t0012/...`) `GET /node-bundle` → `HTTP 200` +
+  `"removed":["t0012"]`. `ProvisioningNodeRemoval.Measure` çalışıyor.
+- **Asıl kusur ajanın sesiydi:** `deploy/pbxtr-confd-dugum.sh` `removed`i `${IS}/removed`
+  dosyasına yazıp **hiçbir yerde okumuyordu**; üstelik koddaki yorum *"bugün sunucu daima
+  `null` döner"* diyordu ve bu ölçümle yanlış çıktı. Sonuç: ajan **söyleyecek bir şey
+  OLMADIĞINDA sesli, bir tenant düştüğünde SESSİZ**di.
+- **Seçilen dar yol: RAPOR, silme değil.** Ajana `5.5) Düşen tenant / artık dosya` bölümü
+  eklendi; düşen her tenant için `pbxtr.d/*/t{kod}-*.conf` taranır, bulunanlar `kismi`
+  olarak (çıkış **75**) ad ad raporlanır ve elle temizlik adımları yazılır. Hiçbir şey
+  silinmez — silme geri alınamaz bir yüzeydir, ayrı kart (`BR-AST-118`).
+- **Yer seçimi bir ölçümdür.** Blok önce `10.5`e kondu ve **hiç koşmadı**: düşen tenant,
+  servis edilen tenantların sha256'sını değiştirmediği için betik `5`te *"SIFIR yazım,
+  SIFIR reload"* deyip **exit 0** ile çıkıyor. Yani raporun gerekli olduğu hâl, betiğin en
+  erken çıktığı hâl. Blok erken çıkıştan **önce**ye alındı (`PBXTR_D` üst sabitlere taşındı).
+- **Dokunulan dosyalar:** `deploy/pbxtr-confd-dugum.sh`
+- **Sunucuda ölçüldü (pozitif + negatif):**
+  ```bash
+  # negatif: disk temiz, t0012 düşmüş
+  #   -> "dusen tenant t0012: diskte artik dosya YOK -- temiz." + ExecMainStatus=0
+  # pozitif: geçici /etc/asterisk/pbxtr.d/dialplan/t0012-olcum.conf
+  #   -> dosya ADIYLA raporlandı + status=75/TEMPFAIL
+  # temizlik: dosya silindi, ajan yeniden yeşil (exit 0), find t0012-* -> 0
+  ```
+- **Yan bulgu — silme tasarımını etkiler:** elle temizlikten sonra bile
+  `dialplan show` hâlâ `[ Context 'pbxtr-t0012-park' created by 'res_parking/t0012-tut' ]`
+  gösteriyor. `module reload res_parking.so` (kapalı liste) bu bağlamı **kaldırmıyor**
+  (`parking show` → yalnız `default`), `module unload` / `core restart` ise yasak. Yani
+  *"sil + reload + doğrula"* yapan bir ajan **başarıyı yanlış raporlardı**.
+- **Sonuç:** `BR-AST-108` **Bölündü**; silme yetkisi `BR-AST-118`e taşındı.
+
+#### 2. BR-AST-55 (3) — haksız RNA satırları silinmeden ayrı etiketlendi
+
+- **Neden:** kayıtlı cihazı olmayan kuyruk üyesine kurulan bacak hiç çalmaz ama
+  `AgentRingNoAnswer` doğar; çizelgede *"Agent cevapsız"* yazıyordu. Süpervizör timeline'ı
+  açıp agent'ı haksız yere suçluyor ve ikisinin de aksini gösterecek verisi yok. Canlı
+  veride tek çağrıdan **42** böyle satır ölçülmüştü.
+- **Ne yapıldı:** `CallTimelineLabels.LabelOf`'a `ringTimeMs` eklendi;
+  `AgentRingNoAnswer` + `ring_time == 0` artık **"Cihaz kayıtlı değildi (zil çalmadı)"**
+  döner. Eşik **sıfırdır** (uydurma bir `< 500 ms` değil): `RINGNOANSWER|0`'ı Asterisk'in
+  kendisi yazar, gerçek denemede aynı alan `|2000`. `ring_time` **null** ise etiket
+  değişmez — "okuyamadım" ile "haksız" aynı şey değil.
+- **Okuma anında yapıldı:** migration yok, veri dokunuşu yok; canlıdaki 42 satır da artık
+  doğru okunur (kartın "silinmez" şartı korundu).
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/CallHistory/CallTimelineLabels.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfCallTimelineQuery.cs` (`RingTimeOf`),
+  `tests/Pbxtr.Api.Tests/Modules/CallHistory/CallTimelineLabelTests.cs`
+- **`RingNoAnswerMetricQuarantineTests.AyrimIsaretleri` bilerek boş bırakıldı:** ayrım bir
+  **etikettir**, bir metrik tipi değil; karantina tam gücüyle durur ve RNA hâlâ hiçbir
+  rapor/analiz/wallboard yüzeyine giremez.
+- **Kartın (2) kalemi ölçüldü ve kurul işi DEĞİLMİŞ:** "teslim sırası kilidi" kodda zaten
+  çözülmüş — `AsteriskAriProvider.cs:1532-1535` her `StateInterface`'li `QueueAdd`'den
+  sonra `HealInvalidStateInterfaceAsync` (`:1613`) çağırıyor; üye `Invalid` görünüyorsa
+  başlık düşürülüp üye yeniden ekleniyor ve olay `LogError` ile günlükleniyor. Yani hint
+  bağlamı inmeden `StateInterface` teslim edilse bile `joinempty=no` altında "arayan
+  kuyruğa giremez" hâli oluşmaz.
+- **Sonuç:** `BR-AST-55` **Bitti**.
+
+#### 3. BR-AST-51a — açık soru A-5 ölçüldü ve karara bağlandı
+
+- **Soru:** yalnızca WebRTC'si olan bir dahili için masa endpoint'i üretilmeli mi?
+- **Ölçüm (`ConfigRenderer.cs`, salt-okuma):** masa endpoint adı dialplan'de **koşulsuz
+  `Dial()` ediliyor** — `:1244` `Set(LDC=${PJSIP_DIAL_CONTACTS(<desk>)})`, `:1273`
+  `Dial(${LDC},30,t...)`, zil grubunda `:1531`, ayrıca `:2640`.
+- **Karar: (b) — bugünkü hâl korunur.** (a) tek satırlık bir bastırma değil; dialplan
+  yarısı da koşullu olmalı, yani `ProvisioningExtensionSource`'a yeni bir `HasDesk` ekseni
+  açılmalı. Üstelik renderer'ın kendi yorumu (`:1247-1249`) *"var olmayan AOR'u sormak her
+  çağrıya bir WARNING eklerdi"* diyor — (a)'nın dialplan yarısı yapılmazsa değişiklik
+  çağrı yolunu **aktif olarak bozar**. Dar olan (b).
+- **P1 teyit edildi.** A-1'in "sahada 0 masa telefonu" ölçümü önceliği düşürmüyor; sebep
+  bugün canlıda yeniden ölçüldü (`journalctl -u pbxtr-confd`, 19:57:36 UTC):
+  `tenant t0007: SERVIS EDILMEYEN tur(ler) -> pjsip=secret_not_stored`. t0007'nin
+  **saklanmış** 6 WebRTC kimliği dâhil tüm `pjsip` türü bugün teslim edilemiyor.
+- **Sonuç:** `BR-AST-51a` ve `BR-AST-51b` artık **bloke değil**; engel kurul değil,
+  sırasıyla uygulama ve `51a`.
+
+#### 4. BR-AST-92 — kod tarafı kapsam dışı; önceki durum kaydının teşhisi de yanlıştı
+
+- Önceki kayıt *"`pbxtr-confd` medya teslim yolu kurulu"* diyordu. **Bu kart için
+  geçersiz ve ölçüldü:** o yol yalnızca **tenant'a bağlı** medya taşır — hedefi
+  `sounds/pbxtr/{tNNNN}/{mediaId:N}.wav` biçimine zorlar ve GUID dışı mediaId'yi reddeder
+  (`deploy/pbxtr-confd-dugum.sh:1394-1440`). Bu kartın dosyası ise `pbxtr/sys/hizmet-disi-<dil>`,
+  yani **tenant'sız sistem medyası ve GUID'siz bir ad**.
+- Ürünün kendi sözleşmesi de aynısını söylüyor: `SuspendedTenantRouting.cs:71` —
+  *"Sistem medyasi on eki. Dosyalar kurulum isidir, bundle'da YOKTUR."*
+- **Sonuç:** `BR-AST-92` **Bölündü**; kalan iki kalem (9 dilin ses kaynağı + kurulum adımı)
+  `BR-AST-117`ye taşındı.
+
+#### 5. BR-AST-104 — kurul işi değil, `ConfigRenderer` işi
+
+- Ölçümün üç kanıtı birlikte isteniyor ve birincisi kırmızı olduğu için diğerleri
+  **ölçülemiyor** (yok değil — ölçülemiyor). Kalan iş bir karar değil, `pbxtr-inbound`
+  üreticisidir ve dosyası `ConfigRenderer.cs`. Bu turda o dosya başka ajandaydı, dokunulmadı.
+- **Sonuç:** **bloke değil**, tek önkoşul `BR-AST-61`/`BR-AST-58`.
+
+### Doğrulama
+
+```bash
+dotnet test tests/Pbxtr.Api.Tests --filter CallTimelineLabelTests   # 14/14
+dotnet test tests/Pbxtr.Api.Tests --filter CallHistory              # 34/34
+dotnet test tests/Pbxtr.Architecture.Tests --filter RingNoAnswer    # 24/24
+```
+
+**Mutasyon doğrulandı:** `ringTimeMs == 0` → `== -12345` yapıldı, `CallTimelineLabelTests`
+**1 KIRMIZI** (13/14) oldu; geri alınınca 14/14 yeşil. İkisi de ikilide ölçüldü — ilk
+denemede başka bir ajanın `testhost` süreçleri DLL'i kilitlediği için build sessizce
+atlanmış ve mutasyonlu koşu **yanlışlıkla yeşil** görünmüştü (defterdeki bilinen sınıf);
+derleme kilit açılana kadar 40 denemeye kadar tekrarlandı.
+
+### Kararlar
+
+- **Düşen tenant'ın config'i: ajan RAPOR eder, SİLMEZ.** Yanlış alarmın bedeli bir uyarı
+  satırı; eksik alarmın bedeli başka bir müşterinin santralde çalışmaya devam eden dahilisi.
+- **Haksız RNA: satır silinmez, okuma anında etiketlenir.** Eşik sıfırdır, uydurulmaz.
+- **A-5 = (b).** WebRTC-only dahili için masa endpoint'i üretilmeye devam eder.
+- **Kurul gündemi diye duran üç kalem aslında kurul işi değildi** (55/2 kodda çözülmüş,
+  104 bir üretici satırı, 108 bir ajan sesi). Kalıp tanıdık: *karar yazılmış ama
+  uygulanmamış* değil, bu sefer **uygulanmış ama karar diye bekletilmiş**.
+
+### Açık kalanlar / sonraki adım
+
+- `BR-AST-118` — silme yetkisi. **Ön koşul ölçüldü ve zor:** park bağlamı kapalı liste
+  reload'ıyla kaldırılamıyor; kabul ölçütü "dosya gitti" değil "santralde nesne yok"
+  olmalı ve park için bunun bugün bir cevabı yok.
+- `BR-AST-117` — 9 dilin ses kaynağı (depo dışı ürün varlığı) + kurulum adımı.
+- `BR-AST-51a` — sır deposu paketi (migration + `ISecretProtector` + uç + backfill).
+- `BR-AST-104` — `BR-AST-61`/`58` indikten sonra ölçüm **olduğu gibi** tekrarlanacak.
+- Ajanın yeni sürümü sunucuya kuruldu (`/usr/local/lib/pbxtr/pbxtr-confd-dugum.sh`,
+  sha `e68abcc8`) ve depodaki dosyayla **birebir aynı**; yedek temizlendi.
+- **Not:** `yonetim/backlog.md` kart güncellemelerim başka bir ajanın `c46e0336`
+  commit'iyle HEAD'e girdi (içerik korundu, commit mesajı yanlış sahibi gösteriyor).
+  Defterdeki bilinen sınıf.
+
+**Commit:** `a259e0f1` — BR-AST-108 + BR-AST-55: dusen tenant artik dosya raporu + haksiz RNA ayri etiket
