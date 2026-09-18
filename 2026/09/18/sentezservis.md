@@ -766,3 +766,65 @@ mail iki kez geldi" olur ve gönderim başarılı göründüğü için **haftala
   (`scratchpad/ayar/appsettings.json`) yeni anahtarlarla tazelendi.
 - `bt@` hem `Alicilar` hem `Kopya` olduğu için şu an pratikte bir değişiklik yok; fark,
   iş bazlı alıcı listesi girilen işlerde ortaya çıkacak (PDKS, mahsup).
+
+---
+
+## Ek tur — onay kutusu "false" metnini yanlış çözüyordu
+
+### 27. Belirti
+
+Kullanıcı: "Kuru çalıştırma" parametresini **kapatıp kaydettiğinde kaydetmiyor."
+
+### 28. Kök sebep — `Boolean("false") === true`
+
+Parametreler **iki yerde de metin** olarak durur: işin tanımındaki `DefaultValue` (`"false"`)
+ve `zamanlamalar.parametreler` JSON'u. Arayüzdeki onay kutusu `checked={Boolean(deger)}`
+kullanıyordu; `Boolean("false")` JavaScript'te **true**'dur.
+
+İki belirti doğdu:
+- Kapatılıp kaydedilen kutu **açık** dönüyordu → "kaydetmiyor" sanıldı. **Oysa kaydediyordu.**
+- Varsayılanı `"false"` olan "Kuru çalıştırma" kutusu **baştan işaretli** geliyordu.
+
+**Sunucu tarafı doğruydu:** `JobParameters.GetBool` (`JobParameters.cs:66`) metni doğru
+okuyor (`"true"/"True"/"1"/"evet"`). Yani kayıt ve çalıştırma doğru, yalnız ekran yalan
+söylüyordu. Tehlikeli olanı bu: kullanıcı kuru çalıştırmayı açık sanıp **gerçek fiş**
+yazdırabilir ya da tersini yapıp mahsubun koştuğunu zannedebilir.
+
+- **Çözüm:** `tipeCevir(parametre, ham)` — dönüşüm tek yerde, kabul edilen doğru değerler
+  sunucudaki `GetBool` ile aynı. Hem `baslangicDegerleriUret` (varsayılanlar) hem
+  `acilisDegerleriUret` (kayıtlı değerler) kullanıyor.
+- **Dokunulan dosyalar:** `web/src/components/DinamikForm.tsx`,
+  `web/src/components/DinamikForm.test.ts`
+- **Doğrulama:** 9 test eklendi; **yakaladıkları ölçüldü** — eski davranış geri konunca
+  4'ü düştü. 63 web + 497 .NET testi geçiyor.
+- **Commit:** `d7e000b`
+
+### 29. Mahsup bağlantı hatası — kod değil, yapılandırma
+
+Kullanıcı ayrıca şu hatayı aldı:
+
+```
+InvalidOperationException — Mahsup veritabanı yapılandırılmamış
+(SentezServis:MahsupBaglantiCumlesi).
+```
+
+Bu **kodun doğru davranışı**: mahsup, salt okunur ERP bağlantısına düşmek yerine açık bir
+hatayla duruyor (Şart B-10 gereği; sessizce yanlış bağlantıya düşmek çok daha kötü olurdu).
+
+Sebep, canlı sunucudaki `appsettings.json`'da bu anahtarın **hâlâ olmaması**. Mahsubun
+08–17 Eylül arası her gece sessizce ölmesinin sebebi de buydu (bkz. yukarıdaki 4. madde).
+Birleştirilmiş dosya `scratchpad/ayar/appsettings.json` içinde hazır; sunucuya konup
+**servis yeniden başlatılmadan** hata sürer.
+
+### 30. Paket
+
+`SentezServis-2026-09-18-1126.zip` (73,7 MB), arayüz tarihi **2026-09-18 11:25**.
+
+## Açık kalanlar
+
+- Canlı `appsettings.json` hâlâ güncellenmedi; mahsup bu yüzden çalışmıyor.
+- E-arşiv kontrol ekranı: keşif yapıldı, **tasarım onayı bekliyor**. İki engel tespit
+  edildi: (a) CRS'te UUID ile tek belge çeken operasyon kodda yok, yalnızca tarih aralıklı
+  liste var; (b) e-arşiv belgelerinin `GetOutboxInvoiceList` yanıtında dönüp dönmediği
+  bilinmiyor — ölçülmeden ekran yazılırsa "eşleşmedi" yanlış sonucu üretir. Kullanıcıdan
+  örnek UUID + şirket + yaklaşık tarih istendi.
