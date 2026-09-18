@@ -5788,3 +5788,61 @@ kolonu gereksiz değil **acilen gerekli** yapar.
   kırıyor (başka ajanın uçuşta işi); `PendingModelChangesWarning` entegrasyon fikstürünü
   düşürüyor ve çalışma ağacındaki snapshot farkı `callback_entries` / `'expired'` işine ait.
   Entegrasyon ve Api testleri bu turda koşturulamadı.
+
+---
+
+### BR-AST-58 / BR-AST-61 / BR-AST-115 — gelen ve giden çağrı yolu bağlandı (backend-dev-2)
+
+- **Neden:** `ConfigRenderer` her gelen çağrıyı `Goto(pbxtr-inbound,…)`, her giden çağrıyı
+  `Goto(pbxtr-outbound,…)`, anons modunu `pbxtr-dialer-announce`'a gönderiyordu; **üçünün de
+  tanımını hiçbir şey üretmiyordu** (canlıda ölçülmüştü: *There is no existence of … context*).
+  Yani ürünün ana yönü — müşteri arar / agent dışarı arar — santralde hiçbir yere ulaşmıyordu.
+- **Ne yapıldı:** Karar #66 M15+M16 kolları uygulandı; üç bağlam **tenant önekli** olarak ve
+  **mevcut** `pbxtr.d/dialplan/{tref}-context.conf` içine üretiliyor (Ş77-13: yeni dosya/dizin
+  yok; Ş77-12: `ConfigRenderGuard` gevşetilmedi — çıktı kapıdan geçiyor).
+  - Gelen: DID → hedef eşlemesi **render zamanında** `dids` tablosundan çözülür
+    (`ProvisioningRevisionService.ReadInboundDidsAsync`, yalnız `is_active`, E.164 sırasında →
+    deterministik SHA-256). `queue` → `Goto(pbxtr-dialer,…)`, `extension` →
+    `PJSIP_DIAL_CONTACTS` birikimi (tarayıcı telefonuna kör değil), `voicemail` → `Gosub`,
+    `reject` → `Congestion`. Eşleşmeyen DID `UserEvent(PbxtrInboundUnrouted,…,Did: ${EXTEN})`
+    basar — trunk'ın DID'i hangi biçimde teslim ettiğini ölçecek araç bu daldır.
+  - Giden: izin kapısı **fail-closed**. pbxtr'ın originate ettiği çağrı `__PBXTR_PERM=1`
+    damgasını taşır (damga değişken birleştirmeden SONRA yazılır → çağıran ezemez) ve trunk
+    zincirine çıkar; damgasız (elle çevrilen) çağrı `PbxtrOutboundBlocked` + `Congestion`.
+  - Anons: `PBXTR_DIALER_ANN` boşsa sessizlik değil `PbxtrDialerAnnounceUnavailable`.
+  - `BR-AST-115`: fail-back dalı ikinci `Queue()`'dan **önce** `PbxtrQueueCallbackFailback`
+    basar (sıra testle kilitli); tüketici (`SlaAggregationJob`) kasıtlı olarak elle sürülmedi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`,
+  `…/ProvisioningRevisionService.cs`, `src/Pbxtr.Infrastructure/Telephony/Asterisk/AsteriskAriProvider.cs`,
+  `src/Pbxtr.Domain/Modules/Telephony/Events/CallEventPayload.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/DialplanCallPathContextTests.cs` (yeni),
+  `…/LocalDialPlanTests.cs`, `doc/prototip-urun-farklari.md`, `yonetim/backlog.md`.
+- **Komutlar:**
+  ```bash
+  dotnet build pbxtr.sln
+  dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~Modules.Telephony"
+  ```
+- **Sonuç / doğrulama:** `DialplanCallPathContextTests` **10/10**; `Modules.Telephony`
+  **1333 geçti / 2 Skip / 0 hata**; `src` derlemesi yeşil. Architecture takımındaki 5 kırmızı
+  ve Integration derleme hataları **başka ajanların uçuşta işidir** (RawSql allowlist,
+  cross-tenant GUC, ReportProduction sağlık bileşeni, CallbackLedger) — dialplan üretimiyle
+  ilgisi yok, ölçüldü.
+- **Commit:** `433b6de8`
+
+#### Kararlar
+- Kapalı saat dalı **yazılmadı**: `GotoIfTime` ile kısmi çevrim (yıllık tekrarlı istisnalar
+  olmadan) tatil günü gelen çağrıyı "açık" sayardı. Gerçek tüketici `route-decision` +
+  `pbxtr-edge`'dir, edge uygulanmamıştır → BORÇ olarak yazıldı; **#07 Çalışma Saatleri ekranı
+  bugün telefonu etkilemez.**
+- Elle çevrilen dış arama bilerek **reddediliyor** (fail-closed): açık bırakmak kara listedeki
+  numaranın masa telefonundan aranabilmesi demekti.
+- D-13 numara biçimi dönüşümü **uydurulmadı**: `trunks.outbound_number_format` var, tüketicisi
+  yok; yanlış tahmin çalışan trunk'ı da bozardı.
+
+#### Açık kalanlar
+- Gerçek santralde **ölçülmedi** (CLAUDE.md §3.0). Ş77-14 ölçek (`BR-AST-112`) ve Ş77-15
+  rollback (`BR-AST-113`) önkoşulları açık.
+- `BR-AST-115` tüketicisi (`SlaAggregationJob`), `PBXTR_DIALER_ANN` damgası
+  (`DialerCallDispatcher`), `pbxtr-edge`, `__PBXTR_PERM` için mimari bekçi.
+- `SlaAggregationJob.cs:322-323` yorumu ölçülmemiş bir santral iddiası taşıyor
+  (*"Asterisk ikisini de `QueueCallerAbandon` olarak bildirir"*) — devredildi.
