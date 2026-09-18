@@ -366,6 +366,65 @@ ve `BR-FE-103` açıldı.
 - ClickUp: 5 yeni kart, 19 durum güncellemesi → **`fark olan kart: 0, izde olmayan: 0`**.
 - **Commit:** `661e343d`, `4eb48550`, `d76887ae`, `8d7168ef`, `3f5b8985`, `27570109`, `d7f77451`
 
+### 50. Karar #70 backend dalı indi — onay satırı körü körüne değil, diff'lenerek güncellendi
+
+`BR-BE-184/185/167/166/168/165/112` tek commit'te indi (kart bunu **şart koşuyordu**: ayrı
+inerlerse migration sözleşme defterindeki blob iki kez değişir ve satır arada kırmızı kalır).
+
+**Onay satırını güncellerken durdum ve ölçtüm.** `01fc9ebb → 6adb189d` değişmişti. İki blob'u
+diff'ledim: değişikliğin **tamamı** `Down` gövdesinde (satır 146-158, bir `RAISE NOTICE` bloğu) ve
+XML yorumlarda. `Up` **birebir aynı** — yani kapının okuduğu sözleşme değişmedi, `Karar#70`
+geçerliliğini koruyor.
+
+**Yazılı sınır:** kapı `Down`'ı **hiç okumuyor** (`up_body()` yalnız `Up`'ı tarar), yani bu `Down`
+değişikliği onayın kapsamında **değil**. Karar #71'de kayıtlı; burada tekrar edildi çünkü
+"blob değişti, demek ki onay tazelenmeli" refleksi tam olarak bu körlüğü **onay** sanır.
+
+**Ajanın kendi testi ilk yazımını kırdı** ve bu iyi bir şeydi: denetim satırı `IAuditSink.TryEnqueue`
+ile gidiyor, çünkü `Rejected` satırı istek transaction'ında **geri alınmamalı**. Rol/IP bu dikişte
+okunamıyordu (Infrastructure'da `HttpContext` yok) → **uydurma boş rol yazılmadı**, satır
+`correlation_id` ile aynı isteğin `agent.call.controlled` satırına bağlandı.
+
+### 51. Asterisk dalı indi — ve iki dalın birleşimi kod okumasıyla görünmeyen bir boşluk açtı
+
+| Kart | Sonuç |
+|---|---|
+| `BR-AST-103` | Kayıt yolu `tenant/yyyy/MM/linkedid`; ayrıştırıcı tenant **kodu** kabul ediyor, CDR değeri ile MixMonitor yolu **aynı** göreli adı taşıyor, boş `__PBXTR_TENANT`'ta hiçbir kayıt satırı koşmuyor |
+| `BR-AST-95` | `Bridge(${PBXTR_CTL_PEER})` ve onu yazan iki `Setvar` **kaldırıldı** → `ConfBridge(pbxtr-ctl-${CHANNEL(linkedid)})` + yalnız bacak için `TIMEOUT(absolute)` |
+| `BR-AST-98` | `ControlIntent.Recording` — kayıt niyetinde devralma **denenmez** |
+| `BR-AST-106` | Dosya adı + asset anahtarı kutu ayırt edicisi taşıyor; üretici ve tüketici **birlikte** değişti |
+| `BR-AST-96 / 99 / 104` | **Dokunulmadı** — üçü de saf santral ölçümü |
+
+**Üç çatışma elle çözüldü.** İkisi mekanikti; biri değildi:
+
+- `ConfigRenderer` — iki dal **aynı** devralma satırına dokunmuştu. Çözüm "birini seç" değildi:
+  **buluşma mekanizması** `BR-AST-95`'in (`ConfBridge`), **iz** `BR-BE-167`'nin (`Half` +
+  `Aborted` `UserEvent`). Çelişmiyorlardı; `BR-BE-167`'nin **iki satırı** kaldırılan değişkene
+  dayanıyordu, o kadar.
+- `AsteriskAriProvider` — `JournalAsync` kaldı, `SetPeerAsync` gitti (çağıranı kalmamıştı).
+- `backlog.md` — her kart **`Bitti` diyen taraftan** alındı: `BR-AST-106` daldan, `BR-SEC-24`
+  HEAD'den. "Bizimkini al" deseydim biri sessizce geri açılırdı — `[[js-replace-dolar-tirnak-yutar]]`
+  değil ama aynı sınıf: çözücü **konum** değil **içerik** seçmeli.
+
+**Merge'in açtığı gerçek boşluk (`BR-BE-190`):** `Requeued` işaretinin dialplan **üreticisi düştü**.
+`Half` ve `Aborted` basılıyor, ama devralmadan sonra çağrının **yaşadığı** artık hiçbir yerde
+yazılmıyor. Belirti sessiz **ve yönlü**: `PlatformEnded` `Aborted`i içeriyor, yani geri bağlanıp
+yaşayan bir çağrı yalnızca `Half` bırakıyor ve süpervizör olumlu cevabı göremiyor. Sabit
+**silinmedi** — `CallTimelineLabels` onu hâlâ çözüyor ve `call_events`'te geçmiş satırlar var.
+Yeni üretici `ConfbridgeJoin` AMI olayı; **santralde ölçülmeden bağlanmayacak.**
+
+### 52. Merge sonrası derleme: yalnız BİRLEŞİMDE kırmızı olan sınıf yine çıktı
+
+`VoicemailStoredName.AssetKey` imzası iki dalda ayrıştı (HEAD 1 argüman, dal 2). **İki dal da kendi
+içinde yeşildi**; kırmızı yalnız birleşimde doğdu. Kayıtlı ders
+(`[[merge-sonrasi-tum-projeler-derlenmeli]]`) birebir tekrarladı — bu yüzden merge'den sonra
+**çözülen dosyalar değil, çözüm `dotnet build`** ile ölçüldü: 0 hata, devralma testleri 38/38.
+
+**Ölçüm:** `dotnet build` rc=0 / 0 hata, `dotnet test` 38/38 Skipped 0, ClickUp
+`fark olan kart: 0, izde olmayan: 0` (631 kart).
+
+**Commit:** `92cc65ea` (Karar #70 backend), `8bb6bd2c` (Asterisk merge)
+
 ## Kararlar
 
 - **Karar #71 — ŞARTLI ONAY, onay satırı YAZILMADI.** Sesli mesaj migration'ının
