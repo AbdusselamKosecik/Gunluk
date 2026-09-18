@@ -1592,3 +1592,67 @@ Her kartın Durum hücresi yeniden ölçülerek güncellendi; önceki metinler
   sunucusunda **kayit olan bir WebRTC/SIP istemcisi** gerekiyor. Bugun `pjsip show contacts`
   bos, 6 endpoint'in tamami ARI'de `offline`.
 - BR-AST-89: `pbxtr-app` restart isteyen tek ajanli bir bakim penceresi gerekiyor.
+
+---
+
+## BR-7 yetenek yonlendirme — ON YUZ (BR-FE-18/19/20/21)
+
+### Baglam
+
+Sunucu ayagi hazirdi ve olculmustu: migration `20260917210658_SkillBasedRouting`
+(`skills`, `agent_skills`, `queues.required_skill_id`, `queues.min_skill_level`) ve
+`src/Pbxtr.Api/Modules/Queues/SkillAdminEndpoints.cs`. Buna karsilik
+`src/Pbxtr.Web/src` altinda `/skills` icin **sifir eslesme** vardi — yani sunucu
+tarafi tamamen olu koddu, hicbir ekran o uclari cagirmiyordu.
+
+### Yapilanlar
+
+- **Neden:** yazilmis ama hicbir yerden cagrilmayan uc, yazilmamis uctan farksizdir;
+  ustelik "bitti" gorunur.
+- **Ne yapildi:** dort ayak tek turda yazildi.
+  - `BR-FE-19` — #03 Kuyruk Yonetimi'ne **"Yetenekler" sekmesi** (katalog CRUD).
+  - `BR-FE-18` — #02 kullanici kaydinda **yetenek atamasi** (yetenek + seviye, tam ikame `PUT`).
+  - `BR-FE-21` — kuyruk formunda `requiredSkillId` + `minSkillLevel`.
+  - `BR-FE-20` — uye listesinde onceligin **kaynagi** (yetenege bagli kuyrukta rozet +
+    ekle/cikar kontrollerinin cizilmemesi).
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/shared/skillsApi.ts` (yeni),
+  `screens/queues/SkillsPanel.tsx|.module.css` (yeni), `screens/queues/QueuesScreen.tsx`,
+  `screens/queues/QueueDialog.tsx`, `screens/queues/QueueMembersDialog.tsx`,
+  `screens/queues/queuesApi.ts`, `screens/queues/QueuesScreen.module.css`,
+  `screens/users/UserSkillsSection.tsx|.module.css` (yeni),
+  `screens/users/UserDetailPanel.tsx`, `screens/users/UsersScreen.tsx`,
+  `app/i18n/messages/{tr,en,de,fr,az,bg,ar,hy,ka}.json`.
+- **Komutlar:**
+  ```bash
+  cd src/Pbxtr.Web && npx tsc -b --force   # EXIT=0
+  npx vitest run                            # 1984/1985
+  ```
+- **Sonuc / dogrulama:** tip kapisi temiz; vitest'teki tek kirmizi
+  (`auditActionParity` -> `leave.exported`) **bu turdan degil** — `aud.a.leaveExported`
+  HEAD'de de yok ve `AuditActions.cs` baska bir ajanin acik isinde.
+- **Commit:** `57b98820` — BR-FE-18/19/20/21: BR-7 yetenek yonlendirme on yuzu
+
+### Kararlar
+
+- **Ekran kayit defterine SATIR EKLENMEDI.** "Yetenekler" ayri bir ekran degil, #03'un
+  sekmesidir; gerekce sunucu kodunda yazili (`SkillAdminEndpoints.cs:25-28`, Karar #29).
+  Kendi rotasi olsaydi menude tek basina anlamsiz bir madde acilirdi — yetenek ancak bir
+  kuyruga ya da bir agent'a baglandiginda is yapar.
+- **Yetki adlari koddan alindi, uydurulmadi:** katalog `queue.read`/`queue.write`,
+  agent yetkinligi `user.read`/`user.write`. Yeni yetki yok (Karar #29 sart 7).
+- **Gorev metnindeki ekran numaralari yanlisti** (#48 = Kurulum Sihirbazi, #03 = Kuyruk
+  Yonetimi, #02 = Kullanici Yonetimi). Yerlesim ekran numarasina degil, ucun **yetkisine**
+  gore yapildi: `queue.*` -> #03, `user.*` -> #02.
+- **Seviye araligi ve penalty sunucudan okunur.** `maxLevel - level` cikarmasi istemcide
+  TEKRARLANMADI; formul degisirse panel ile santral sessizce ayrisirdi.
+- **i18n anahtarlari metin olarak araya sokuldu**, `json.dump` ile yeniden uretilmedi:
+  dosyalar tam alfabetik degil (olculdu) ve yeniden uretim ilgisiz ~30 satiri farka
+  sokuyordu.
+
+### Acik kalanlar / sonraki adim
+
+- **#12/#13 penalty kolonu YAZILMADI** — `LiveQueueDto` (`LiveEndpoints.cs:1026`) ve
+  `LiveAgentDto` (`:1171`) **penalty alani tasimiyor** ve o ekranlarda kuyruk uye
+  listesi de yok. Uydurma veri cizilmedi. Kolon isteniyorsa once uc genisletilmeli.
+- `auditActionParity` kirmizisi: `aud.a.leaveExported` dokuz katalogda eksik
+  (`AuditActions.cs:750`). Leave export isini yuruten ajanin isi.
