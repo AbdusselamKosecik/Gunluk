@@ -4630,3 +4630,75 @@ docker run --rm -v //x/GitHub/Pbxtr/pbxtr://repo -w //repo ubuntu:24.04 sh -c \
 - Kapı **gevşetilmedi**; borç kapıyı susturarak değil, tazeleme migration'ı yazarak ödendi.
 - `yonetim/` altına dokunulmadı; `git add -A` / `git stash` kullanılmadı
   (paralel ajanlar çalışıyordu) — `git commit --only -- <yollar>` ile tek adım.
+
+---
+
+### kapi_74 + kapi_75 — iki kapının gerçek ağaçtaki 6 bulgusu (backend-dev-2, commit `8d828592`)
+
+- **Neden:** Yayın bloke. `kapi_74` (RLS yüklemi aynası) kontrol ayağı `N1` **3 bulgu**
+  veriyordu (zararsız yorum değişikliğinde bile) ve `kapi_75` (BR-DOC-22 AstDB fallback
+  iddiası) `P0-degismemis-agac` ayağı **3 bulgu** veriyordu. İkisi de "gerçek ağaçta sapma
+  var" demekti.
+
+- **kapi_74'ün 3 bulgusu tek kökten geldi — ve kök bir ZAMAN SIRASIYDI:**
+  ayna bekçisi `fd74e677` ile **12:54**'te yazıldı; Kurul Karar #76 / Ş76-6 (kart
+  `BR-DB-90`, commit `23c69eed`) **14:41**'de `CdrSqlBuilder.ActiveTenant` operand sırasını
+  bilerek takas etti. Bekçi şablonu tek doğruluk kaynağı sayıyordu, takas ise şablona
+  **bilerek dokunmuyordu**.
+  - Bulgular: `src/Pbxtr.Infrastructure/Search/CdrSqlBuilder.cs:113-114` (sabit),
+    `CdrSqlBuilder.cs:26` ve `src/Pbxtr.Infrastructure/Search/PostgresCdrSearch.cs:22`
+    (aynı yüklemi anlatan iki yorum).
+  - **Kod şablona geri döndürülmedi**, çünkü üç ölçüm bunu yasaklıyor:
+    (1) Ş76-5 policy metnini kilitledi — takas tazeleme migration'ı + 81 tabloda ACCESS
+    EXCLUSIVE ister ve `call-permission` FAIL-CLOSED olduğu için o pencerede giden arama
+    durur; (2) ölçülmüş kazanç geri alınırdı (PG 16.15, 1.000.000 satır, `Seq Scan`
+    4.746 → 2.434 ms, duvar saati 5.306 → 3.120 ms, **-%41**; normal kipte
+    `Buffers: shared hit=1126` birebir aynı, gerileme yok); (3)
+    `tests/Pbxtr.Architecture.Tests/CdrSqlBuilderGuardTests.cs:47-48` eski sırayı **sabit
+    olarak yasaklıyor** — yani "kod şablona uysun" bir seçenek değil, iki bekçi arasında
+    bir çelişkiydi.
+  - **Yapılan:** ayna beklentiyi hâlâ **şablondan türetir**, türetme bir adım daha taşır
+    (`s76_normal`: eşitlik içermeyen ucuz kol başa alınır). Kol kümesi yine şablondan
+    gelir → şablona kol eklenirse ham SQL ve iki yorum yine KIRMIZI yanar. Kapı **daha
+    sıkı** oldu: Ş76-6 sırasından sapmak da yanıyor (yeni `M11`, `M12` ayakları).
+  - **Yan bulgu (7.):** `M4` mutasyonunun dize çıpası eski sırayı arıyordu → "0 eşleşme",
+    vaka **hiç ölçmüyordu**. Çıpa tazelendi.
+
+- **kapi_75'in 3 bulgusu YANLIŞ POZİTİFTİ:** `ConfigRenderer.cs:1162`,
+  `AriDndDeviceStateAnnouncer.cs:21`, `AriStasisApp.cs:247`. Üçünün de cümlesi
+  BR-AST-81/Ş76-12'nin DND cihaz durumu ölçümüdür ve fallback'ten *var gibi* değil, tam
+  tersine **yok diye** söz eder: *"BUSY iken AstDB girdisi yok"*. Onlara `BR-DOC-22`
+  işareti koymak **yanlış atıf** olurdu.
+  - **Yapılan:** kaynak tarafı deseni kapının **kendi tarifine** daraltıldı — çıplak
+    `"AstDB"` tokeni yerine `fallback` / `LKG` / `snapshot` / `son bilinen iyi` karinesi
+    **aynı satırda** aranıyor. **Sayım düşmedi:** işaretli dosya sayısı daraltmadan önce
+    de sonra da **9** (her birinde ≥2 iddia satırı). Yeni `M5` ayağı deliği ölçer:
+    işaretsiz bir dosyaya yeni fallback cümlesi yazılırsa kapı hâlâ KIRMIZI.
+
+- **Dokunulan dosyalar:** `deploy/ci/rls-predicate-mirror-guard.py`,
+  `deploy/ci/rls-predicate-mirror-guard-selftest.py`,
+  `deploy/ci/astdb-fallback-iddiasi-kapisi.py`,
+  `deploy/ci/astdb-fallback-iddiasi-kapisi-selftest.py`, `deploy/yerel-kapilar.sh`.
+
+- **Ölçüm / doğrulama:**
+  - `kapi_74` öz-test: 1 pozitif + **12** mutasyon + 1 negatif = OK; kapı rc=0.
+  - `kapi_75` öz-test: 1 pozitif + **5** mutasyon + 1 negatif = OK; kapı rc=0.
+  - İkisi de **ubuntu konteynerinde** (`bash deploy/yerel-yayin.sh --sadece-kapilar`)
+    `[gecti]`.
+  - `dotnet build pbxtr.sln` → 0 Warning, 0 Error. `CdrSqlBuilderGuardTests` +
+    `RawSqlAllowlistTests` + `UsersTenantIsolationPolicyTests` → 34/34 geçti.
+
+- **ORTAM TUZAĞI (kayda geçti):** çalışma kopyasındaki `deploy/**` dosyaları **CRLF**;
+  `.gitattributes` `deploy/** text eol=lf` dese de checkout eski. Konteyner **bind mount
+  ile çalışma kopyasını** okuduğu için kapılar `$'\r': command not found` ile **hiç
+  koşmuyor**. Ölçüm bu yüzden HEAD'in **temiz bir klonundan** yapıldı. Ayrıca
+  `grep -c $'\r'` Git Bash'te **her satırı sayıyor** (boş desen) — CR ölçümü `od -c` ile
+  yapılmalı.
+
+- **Benim olmayan iki KIRMIZI kapı (aynı koşuda):** *"normal deploy migration'ları
+  expand-only"* ve *"şablon tazeleme çifti bütün mü"* — ikisi de `be44d534`
+  (`BR-DB-93`, `02-guards.sql` tazeleme migration'ı) sahibine ait; o dosyaya dokunmam
+  yasaklıydı.
+
+- **Commit:** `8d828592` — kapi_74 + kapi_75: iki kapinin GERCEK AGACTAKI 6 bulgusu
+  olculerek kapatildi
