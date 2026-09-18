@@ -4040,3 +4040,97 @@ npx vitest run                            # 2037/2038
   (#09 · #12 · #13 · #31) — prototipte YOK, üründe VAR ama bugün İNERT"* (BİLİNÇLİ + BORÇ);
   `#49/13` satırı **BORÇ → KAPANDI**.
 - **Commit:** `ff377820` — BR-FE-114 + BR-FE-115 (27 dosya, push edildi)
+
+
+---
+
+## BR-BE-201 — Kurul Karar #77 Ş77-19 / Ş77-16 / Ş77-19b (backend-dev-1)
+
+### Bağlam
+Süpervizör müdahalesiyle verilen geçici kuyruk üyeliğinin üç kusuru vardı ve üçü de
+karara bağlanmıştı ama koda geçmemişti: (1) `penalty: 0`, (2) üyeliği kaldıran hiçbir
+mekanizma yok, (3) agent kendisine verilen üyeliği göremiyor.
+
+### 1. Ş77-19 — müdahale cezası `max(penalty) + 1`
+- **Neden:** `AgentInterventionService.cs:196-197` `penalty: 0` gönderiyordu. Asterisk
+  düşük penalty'yi ÖNCE dener → süpervizörün geçici takviyesi kuyruğun **en yetkin
+  kalıcı üyesinin önüne** geçiyordu. İstenen davranış değil, varsayılanın yan etkisi.
+- **Ne yapıldı:** `AgentInterventionMembership.PenaltyBehind()` (Domain, saf) +
+  `ResolvePenaltyAsync()` (AMI `QueueStatus` okur).
+- **ÖLÇÜM (boş liste kararı):** `AmiCommandChannel.QueueStatusAsync` **soket
+  açılamadığında** (`TryOpenAsync` false, `AmiCommandChannel.cs:171-174`) ve eylem
+  reddedildiğinde (`IsRefusal` → `break`) de **boş liste** döner. Yani "üye yok" ile
+  "okuyamadım" aynı değeri üretir ve ayırt edilemez. Bu yüzden boş listede **0
+  SEÇİLMEDİ** — 0, tam da düzeltilen kusuru (görmediğimiz kalıcı üyelerin önüne
+  geçmeyi) geri getirirdi. Seçilen: `NoMeasurementPenalty = 1`, yani varsayılan cezalı
+  (0) hiçbir üyenin önüne geçmeyen en küçük değer. Okuma hatası müdahaleyi
+  **reddetmez**: ceza bir sıralama inceliğidir, güvenlik kapısı değil.
+
+### 2. Ş77-16 — TTL 30 dk, `InterventionMembershipExpiryJob`
+- **Neden:** üyelik `QueueRemove` ile **hiç** kaldırılmıyordu. `core restart` CLAUDE.md
+  §3.1 ile yasak olduğu için `persistent_members=no` temizliği elimizde bir kaldıraç
+  DEĞİL → süresiz kalan üyelik bir sızıntı.
+- **Ne yapıldı:** `IBackgroundJob` (aynı proses, advisory lock, kilit **41**).
+  **Kalıcı depo ayrı bir tablo değil `audit_log`'un kendisi** (`queue_members` yazımı
+  Karar #67 N8 ile 10 oyla reddedildi; `QueuePushReconciliationJob` ile aynı desen).
+  Tarama ölçütü gövdedeki `after.temporary = 'true'` — **eylem adı değil**: ikinci bir
+  yüzey aynı üyeliği kurarsa ad bazlı tarama onları sessizce atlardı.
+- **Veri kaybı önleyen ayrım:** AMI `QueueAdd` zaten üye olan arayüze `Already there`
+  döner → üyelik müdahaleden ÖNCE de vardı (muhtemelen `queue_members`'tan gelen
+  KALICI üyelik). Uç bunu `temporary: false` / `membershipCreated: false` yazar ve iş o
+  satırları **hiç taramaz**. Taransaydı 30 dk sonra agent'in gerçek üyeliği düşer ve
+  çağrı akışı sessizce dururdu.
+
+### 3. Ş77-19b — agent üyeliği görür
+- `/agent/state` → `supervisorQueues` (üç değerli: liste / boş liste / `null` =
+  ÖLÇÜLEMEDİ). Kaynak `ITenantCache` projeksiyonu, TTL'i **aynı sabitten**. Salt-okunur:
+  bırakma/iptal düğmesi yok. Frontend ayağı **AÇIK** (ayrı kart).
+
+### Dokunulan dosyalar
+`src/Pbxtr.Domain/Modules/Live/AgentInterventionMembership.cs` (yeni),
+`.../Live/IAgentIntervention.cs`, `.../Platform/Audit/AuditActions.cs`,
+`src/Pbxtr.Infrastructure/Telephony/Live/AgentInterventionService.cs`,
+`.../Live/InterventionMembershipExpiryJob.cs` (yeni),
+`.../TelephonyServiceCollectionExtensions.cs`, `.../Platform/Jobs/BackgroundJobLocks.cs`,
+`src/Pbxtr.Api/Modules/Realtime/LiveEndpoints.cs`,
+`src/Pbxtr.Api/Modules/AgentDesk/AgentEndpoints.cs`, + 6 test dosyası.
+
+### Doğrulama — mutasyon (altı mutasyonun altısı da KIRMIZI)
+
+| Mutasyon | Sonuç |
+|---|---|
+| `penalty!.Value` → `penalty: 0` | 3 KIRMIZI |
+| `Already there` "kuruldu" sayıldı | 1 KIRMIZI (`Already_a_member_creates_no_temporary_membership`) |
+| rozet hiç yazılmadı | 1 KIRMIZI (`..._grant_that_expires_with_the_ttl`) |
+| TTL 30 dk → 1 dk | 1 KIRMIZI (`Ttl_dolmadan_uyelik_dusurulmez`) |
+| `NOT EXISTS` silindi | 2 KIRMIZI |
+| `after.temporary` süzgeci silindi | 1 KIRMIZI (`Zaten_var_olan_uyelik_taranmaz`) |
+
+```bash
+dotnet build pbxtr.sln                     # 0 hata
+dotnet test Pbxtr.Api.Tests --filter Modules.Realtime      # 122/122
+dotnet test Pbxtr.Api.Tests --filter Modules.AgentDesk     # 147/147
+dotnet test Pbxtr.Integration.Tests --filter InterventionMembershipExpiryJobTests  # 4/4
+```
+
+**İki eşzamanlı aktör:** iki ayrı `NpgsqlDataSource` (iki "node"), üretim
+`LeaderElectedJobRunner`'ı, gerçek transaction sınırı → **tek** `QueueRemove`, **tek**
+kapanış kaydı.
+
+### Kararlar
+- Boş `QueueStatus` listesi **ölçüm değildir**; 0 yerine 1 seçildi (yukarıdaki gerekçe).
+- TTL **sabit**, tenant parametresi değil (Ş77-16 birebir).
+- `QueueRemove` reddedilir/belirsiz kalırsa kayıt **açık bırakılır**, sonraki tikte
+  yeniden denenir; "düşüremedim"i "düşürdüm" diye yazmıyoruz.
+- Ufuk 30 gün (partition budaması) — yazılı sınır, sınıfın `<remarks>`'ında.
+
+### Açık kalanlar
+- **Frontend (ayrı kart):** (a) `/agent/state.supervisorQueues` rozeti çizilmiyor,
+  (b) `auditActionParity.test.ts` KIRMIZI —
+  `aud.a.live.agent.intervention_membership_expired` 9 dilde + `ACTION_VIEW`/
+  `ACTION_GROUPS` istiyor.
+- **Bulgu (ayrı kart adayı):** `LiveEndpoints` belirsiz dalda `after["member"]`'a
+  **kullanıcı GUID'i** yazıyor; `QueuePushResolver` onu `QueueStatus`'taki
+  `Local/…` adresiyle karşılaştırıyor → süpervizör müdahalesinin mutabakatı **her zaman
+  `not_applied`** okur. Bu turda DOKUNULMADI.
+- **Commit:** `2c13c24a` — push edildi.
