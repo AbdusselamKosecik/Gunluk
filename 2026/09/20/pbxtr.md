@@ -544,3 +544,135 @@ tekrarlayan bir kusuru dorduncu kez elle aramak kabul edilemez -- `BR-FE-127` fr
 - Kosan: `BR-SEC-26` (db-dev), `BR-SYS-60` (linux, santral sahiplik penceresi),
   `BR-FE-127` + GUID sinif bekcisi (frontend-dev-2), `BR-AST-114`/`115` (backend-dev-2).
 - **Yayin hala kosulmadi** -- uc P0 ve acik kartlarin buyuk kismi ona bagli.
+
+---
+
+## Ek tur — `BR-SEC-26` KAPANDI (db-dev)
+
+### Baglam
+
+Kart dort kalemliydi; (1) ve (2) 2026-09-18'de, (3) aynı gün koordinatör tarafından
+inmisti. Bu turda kalan **(4)** ve — asıl iş — **(2)'nin ADIYLA YAZILI kör noktası**
+bitirildi. Kör nokta `CLAUDE.md` §4'te birebir yazılıydı:
+
+> test **taze zincir** ölçer. **Canlı kurulumda ELLE verilmiş bir `GRANT` bu testten
+> geçmez**; o hâl `02-guards.sql` içine bir `pbxtr_public_function_acl_guard()` +
+> `MaintenanceRunner.GuardAsserts` satırı ister ve o iş **açıktır** (`BR-SEC-26`).
+
+### Yapilanlar
+
+#### 1. KURULU DB BEKÇİSİ — `pbxtr_public_function_acl_guard()`
+
+- **Neden:** `20260919010000_PublicCrossTenantFunctionAclRevoke` iki `public.*`
+  fonksiyondan `PUBLIC EXECUTE`'u kaldırdı. Bekçisiz bir `REVOKE` iki yoldan sessizce
+  geri alınır: (a) imza değişiminde `DROP`+`CREATE` ACL'i sıfırlar, (b) operatör
+  **kurulu veritabanında elle `GRANT EXECUTE ... TO PUBLIC`** verir. (b) yolunu
+  taze-zincir testi **hiçbir zaman göremez**.
+- **Ne yapıldı:** `deploy/db/02-guards.sql` içine iki fonksiyon yazıldı
+  (`pbxtr_public_function_acl_guard()` + `pbxtr_assert_public_function_acl_guard()`),
+  `MaintenanceRunner.GuardAsserts`'e kaydedildi → **her açılışta** koşuyor.
+  Beş ayak: `PUBLIC_EXECUTE_RESTORED`, `LEDGER_UNKNOWN_MEMBER`,
+  `LEDGER_MISSING_MEMBER`, **vacuity** `SCAN_EMPTY` (tarama < 3 satır) ve
+  **vacuity** `SCAN_TOO_BROAD` (kontrol grubu `pbxtr_index_guard()` taramaya girerse).
+  Filtre bilerek dar: *"her public fonksiyon"* değil, **fonksiyon düzeyi `app.*` SET
+  taşıyan ve `RETURNS trigger` OLMAYAN** fonksiyonlar. Defter CLAUDE.md §4 ile birebir:
+  tam olarak iki ad.
+- **Dokunulan dosyalar:** `deploy/db/02-guards.sql`,
+  `src/Pbxtr.Infrastructure/Persistence/Seeding/MaintenanceRunner.cs`
+
+#### 2. (4) — `01-rls-template.sql`'deki YANLIŞ cümle düzeltildi
+
+- **Neden:** `app_is_cross_tenant()`'ın `COMMENT`'i *"SADECE `tenant.manage` + açık
+  `[CrossTenant]` işareti ile SET LOCAL edilir ve HER SEFERİNDE audit_log'a yazılır"*
+  diyordu. Sunucuda ölçülerek yanlışlandı (ayrıştırıcı ölçüm, tek işlem + ROLLBACK):
+  A=0 doğrudan okuma, **B=0 aynı gövde SET'siz sarmalayıcı (kontrol grubu)**, C=5 aynı
+  gövde + `SET "app.cross_tenant"='on'`, D=5 sahip rolü gerçek toplam. B→C arasındaki
+  **tek değişken fonksiyon düzeyi `SET`**tir ve o hem yetki kontrolünü hem denetim
+  yazımını atlar.
+- **Ne yapıldı:** Eski metin **silinmedi**; üstüne ölçümü taşıyan bir blok yazıldı ve
+  `COMMENT` gövdesi düzeltildi.
+- **Dokunulan dosya:** `deploy/db/01-rls-template.sql`
+
+#### 3. TAZELEME MIGRATION'I — şarttı, yazıldı
+
+- **Neden:** EF uygulanmış bir migration'ı bir daha koşmaz. `02`'yi en son uygulayan
+  `20260919050000_TenantsSysUpdateWriteMark`'tı. Yeni tazeleme yazılmazsa bekçi taze
+  kurulumda gelir, **yükseltilen veritabanında gelmez** — ve fark sessiz değil
+  **FAIL-CLOSED**: açılış kapısı `pbxtr_assert_public_function_acl_guard()` çağırır,
+  fonksiyon yoksa 42883 → **uygulama hiç açılmaz**. `01` de uygulanır çünkü
+  **`COMMENT` KATALOGDA yaşar**: kaynak dosyayı düzeltmek kurulu DB'deki metni
+  değiştirmez.
+- **Bedel yazılı:** `01`'in koşumu `tenants` + `call_attempts` üzerinde ACCESS EXCLUSIVE
+  alır ve `call-permission` FAIL-CLOSED olduğu için o pencerede **giden arama durur**;
+  bu yüzden `SET LOCAL lock_timeout = '5s'` tavanı kondu ve 55P03 hâli bilinçli
+  (yayın durur, retry döngüsü yok).
+- **Yeni dosya:**
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260920010000_GuardsTemplateRefreshPublicFunctionAcl.cs`
+
+#### 4. Ölçüm
+
+```bash
+dotnet test tests/Pbxtr.Integration.Tests/... --filter "FullyQualifiedName~PublicFunctionAclRuntimeGuardTests"
+dotnet test tests/Pbxtr.Integration.Tests/... --filter "FullyQualifiedName~PublicCrossTenantFunctionAclGuardTests"
+dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj
+python3 deploy/migration-compatibility-guard.py            # kapi_07
+bash deploy/sablon-refresh-kapisi.sh                       # kapi_71 (K5+K6)
+```
+
+| Ölçüm | Sonuç |
+|---|---|
+| `PublicFunctionAclRuntimeGuardTests` (YENİ) | **7/7** |
+| `PublicCrossTenantFunctionAclGuardTests` | **4/4** |
+| `MigrationStartupGateTests` | 2/2 |
+| `TemplateRefreshReachesUpgradedDatabaseTests` | 2/2 |
+| `InitialSchemaMigrationTests` / `MigrationLoginFlowTests` | 1/1 + 1/1 |
+| `Pbxtr.Architecture.Tests` | **755/755** |
+| `kapi_07` | rc=0 (onay satırı eklendikten sonra) |
+| `kapi_71` | TEMİZ — `[K6: gövde …, d8b19ce6 eklendiğinde de aynıydı]` |
+
+**MUTASYON — ürün tarafında, `--no-incremental` ile yeniden derlenerek:**
+
+- **M1** sızıntı ayağı `AND false` ile etkisizleştirildi → kurulu DB'de elle `GRANT`
+  verilince bekçi **sustu** → ilgili test **KIRMIZI** (`Collection: []`).
+- **M2** vacuity eşiği `< 3` → `< 0` → `SCAN_EMPTY` testi **KIRMIZI**
+  (ilginç yan bulgu: `LEDGER_MISSING_MEMBER` yine de ateşledi — ayaklar birbirini
+  örtüyor, yani bekçi tek ayaklı değil).
+- İkisi de geri alındı, yeniden derlendi, **11/11 yeşil** ve `02-guards.sql` sha256'sı
+  defterdeki değerle **birebir** aynı (`44597d9c…`) — geri alma **bayt düzeyinde**
+  doğrulandı, DLL damgasına güvenilmedi.
+
+**Ölçemedim (açıkça):**
+
+- `deploy/db/ci-check.sh` yerelde koşmadı — `psql` yok (rc=127). Aynı SQL gerçek
+  PostgreSQL'e karşı entegrasyon testlerinden geçti.
+- `deploy/ci/rls-predicate-mirror-guard.py` **KIRMIZI ama benim değil**: `git stash`
+  ile ölçüldü, değişiklikten **önce de** aynı tek bulguyla kırmızıydı
+  (`01:1070` → bugün `01:1106`, satır kayması eklediğim bloktan). Kayıtlı `BR-QA-99`.
+
+- **Commit:** `d8b19ce6` — BR-SEC-26 KAPANDI (bekçi + migration + defterler)
+- **Commit:** `262f162d` — durum hücresi kelime düzeltmesi (aşağıdaki karar)
+
+### Kararlar
+
+- **`02-guards.sql` gövdesine dokunan her iş bir tazeleme migration'ı borçludur** ve
+  `01` de dokunuluyorsa bedeli (`call-permission` penceresi) migration belgesinde
+  **adıyla** yazılır. "Küçük bir COMMENT düzeltmesi" diye geçilemez: `COMMENT`
+  katalogda yaşar ve kurulu DB'ye ancak tazeleme ile ulaşır.
+- **Bir bekçinin "gördüğü" kadar "görmediği" de yazılır.** Taze-zincir testi ile
+  açılış-kapısı bekçisi **aynı sorunun iki ayrı ayağıdır**; biri diğerinin yerine
+  geçmez. Kartın kalan işi tam olarak bu ayrımdı.
+- **Durum hücresinde "bitti" kelimesi tuzaktır.** `durumEsle` bilerek muhafazakârdır:
+  metin `bitti` içerip `Bitti` ile **başlamıyorsa** kart kısmi sayılır → `in progress`.
+  Güncel parçadaki *"bu turda bitti"* yüzünden **kapanmış bir P1 kart panoda AÇIK**
+  görünüyordu. Kapanış hücresi yazarken `Kapandı`/`Bitti` ile **başla** ve gövdede
+  o kelimeleri **kullanma**.
+
+### Açık kalanlar / sonraki adım
+
+- `BR-SEC-26` listede **kapalı**; ClickUp doğrulandı (`fark olan kart: 0`).
+- **`BR-QA-99`** (`rls-predicate-mirror-guard` `01:1106` bayat yorum) hâlâ kırmızı —
+  bu turda dokunulmadı, sahibi ayrı kart.
+- `02-guards.sql` içine **üçüncü** bir `app.cross_tenant` SET'li doğrudan çağrılabilir
+  fonksiyon eklemek artık **iki yerden birden** kırmızı yakar (SQL bekçisi +
+  entegrasyon testi) — bu bilinçlidir, CLAUDE.md §4: *listeye üçüncü bir fonksiyon
+  eklemek bir GÜVENLİK KARARIDIR*.
