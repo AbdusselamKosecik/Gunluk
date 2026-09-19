@@ -676,3 +676,61 @@ bash deploy/sablon-refresh-kapisi.sh                       # kapi_71 (K5+K6)
   fonksiyon eklemek artık **iki yerden birden** kırmızı yakar (SQL bekçisi +
   entegrasyon testi) — bu bilinçlidir, CLAUDE.md §4: *listeye üçüncü bir fonksiyon
   eklemek bir GÜVENLİK KARARIDIR*.
+
+
+---
+
+## KAPANIS — 2026-09-20 (kota siniri, koordinator)
+
+### Nerede kaldik
+
+- **Acik kart: 79** (P0 3 / P1 36 / P2 34 / P3 6). Oturum **94** ile basladi.
+- Toplam kart **764**. **ClickUp senkron:** `fark olan kart: 0, izde olmayan: 0`.
+- 19-20 Eylul'de **36 commit** basliginda "KAPANDI" tasiyor.
+- Depo **push edilmis** durumda; koordinatorun hicbir isi yerelde kalmadi.
+
+### YARIM KALAN — DORT AJAN KOSARKEN KESILDI
+
+Kesildigi anda dort ajan **commit edilmemis** isle calisma agacindaydi. **Onlarin
+dosyalarini commit ETMEDIM** -- yarim isi ana dala itmek tam olarak yasakli desendir
+([[ajan-calisirken-git-add-a-yapma]]).
+
+| Kart | Ajan | Agactaki izi |
+|---|---|---|
+| `BR-SYS-60` (kanarya + frozen kip) | linux-uzmani | `deploy/pbxtr-confd-dugum.sh` |
+| `BR-DB-44` (provisioning boslugu defteri) | db-dev | `deploy/db/02-guards.sql`, `partial-unique-indexes.expected`, `sys-functions.expected` |
+| `BR-AST-114` / `BR-AST-115` (fail-back) | backend-dev-2 | `ConfigRenderer.cs`, `SlaAggregationJob.cs`, `TelephonyEventPipeline.cs`, `AgentEndpoints.cs`, `RedisLiveOperationsView.cs` |
+| `BR-FE-127` + GUID sinif bekcisi | frontend-dev-2 | `src/Pbxtr.Web/.../i18n/messages/*.json` (9 dil) |
+
+**SONRAKI TURUN ILK ISI:** `git status --porcelain` oku, bu dort kumeyi **sahibine gore
+ayir** ve her birini **kendi kartiyla** commit et. Ayirmadan toplu commit **yapma** --
+kime ait oldugu bir daha okunamaz.
+
+### Bu iki gunun tekrarlayan uc dersi
+
+1. **Bir kart "X YOK" diyorsa once EVRENINI sor.** `BR-SYS-122` ikinci kopyayi uc yerde
+   aradi, `audit_log`'a bakmadi; kopya oradaydi ve **25 gun** tasiyordu. `BR-QA-51`,
+   `BR-DB-105` ve `BR-AST-119`(a) ayni sekilde eksik evrende olculmustu. Eksik evrende
+   yapilan olcum **dogru olcum gibi gorunur**.
+2. **Bir olcumun kontrol grubu dustuyse SONUC KABUL EDILMEZ.** `AriClient` yonlendirme
+   olcumunde kontrol grubu da bos geldi; araci ayrica sinadim (yonlendirmesiz istek) ve
+   ancak ondan sonra sonucu gecerli saydim. Ayni sekilde `BR-QA-99`'da M13 `bulgu=0`
+   dondu ve bu **benim capamin yanlis oldugunu** soyledi.
+3. **Devredilen is bitince KAYNAK KART DA kapatilir.** `BR-QA-86` ve `BR-7` bosuna acikti;
+   bitmis is acik gorununce her sayimda yeniden incelenir -- "kapali kartin icindeki is
+   gorunmez olur"un tersi ve ayni derece maliyetli.
+
+### Acik kalan tek buyuk tikac: YAYIN
+
+Acik 79 kartin buyuk kismi ve **uc P0'in tamami** (`BR-DB-91`, `BR-SYS-117`, `BR-BE-150`)
+yayin penceresinde olculmeyi bekliyor. Sunucudaki imaj hala `demo-ea567d11bb2e`
+(commit `ea567d11`, 2026-09-15). Yayin hatti 3. kosuda **bellek yetersizliginden**
+oldurulmustu ve kendiligimden yeniden baslatmadim.
+
+**Yayin oncesi bugun kapatilan iki gercek engel:**
+- `BR-SYS-125` — SPA asamasi `RingGroup.cs`'i kopyalamiyordu; `docker build`
+  **ENOENT** ile duserdi, yani **yayin imaji derlenemezdi**.
+- `BR-QA-99` — ayna bekcisi ana dalda **KIRMIZIYDI** (tarihce muafiyeti ile kapatildi,
+  mutasyonla kilitli).
+
+Yani yayin **artik bu iki hatayla dusmeyecek**.
