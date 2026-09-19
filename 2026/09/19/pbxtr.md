@@ -2096,3 +2096,105 @@ iki sınıfa ayırmaktı.
 
 ### Commit
 `65cd7da5` — BR-QA-117: 13 kalem olculdu, 7'si KAPANDI -- kanit yorumdan koda tasindi
+
+
+### 20. DND geri okuma yolu + yedek sapma kapisi + BR-QA-51 bolunmesi (koordinator)
+
+- **Neden:** Backlog'da karar bekleyen kartlar birikmisti. Kurul dagitildi (2026-09-18),
+  yani bu kararlari koordinator veriyor. Uc kart karar bekliyordu, biri de olculmemis
+  bir kapsam boslugu tasiyordu.
+
+#### 20.1 `BR-AST-74` — DND'nin santraldeki gercek hali NASIL okunur (KAPANDI)
+
+- **Ne yapildi:** Cevap **`ARI GET /deviceStates`**. Gercek santralde A/B kosuldu,
+  urunun KENDI urettigi adla (`AriDndDeviceStateAnnouncer.cs:294` ->
+  `AsteriskObjectName.cs:651` `DndDeviceStatePrefix = "Stasis:"`).
+- **Komutlar (sunucu saati `2026-09-19 03:43Z`, `176.88.41.220` / `pbxtr-asterisk`):**
+  ```bash
+  curl -u pbxtr:*** http://127.0.0.1:8088/ari/deviceStates                 # -> []
+  curl -u pbxtr:*** -X PUT ".../deviceStates/Stasis:pbxtr-t0007-dnd-1042?deviceState=BUSY"   # -> 204
+  curl -u pbxtr:*** http://127.0.0.1:8088/ari/deviceStates                 # -> [{name,state:BUSY}]
+  asterisk -rx "devstate list"                                             # -> Custom Device States BOS
+  curl -u pbxtr:*** -X DELETE ".../deviceStates/Stasis:pbxtr-t0007-dnd-1042"  # -> 204, liste yine []
+  ```
+- **CURUTULEN ADAY:** `devstate list` **dogrulama yolu DEGILDIR** — durum ARI'da BUSY
+  iken CLI'nin `Custom Device States` bolumu BOSTU (yalniz `Custom:` ailesini gosteriyor).
+  Olcmeseydim el dogrulama yolu olarak onu yazacaktim ve operator "DND yazilmamis"
+  sonucuna varacakti. `core show hints` de kaynak degil (dnd hint 0; 9 hint'in hepsi park).
+- **Sonuc:** Yol Karar #46'nin `GET /endpoints` kalibidir: **sifir yetki degisikligi**.
+  Acik kalan (baska kartlarin): `dndDelivered` 0, `deliveredRevision` 0 -> S50-1..S50-4.
+- **Commit:** `a5e3662f`
+
+#### 20.2 `BR-AST-79` — "DB'de var, santralde yok" uyarisi NEREDE cizilir (karar)
+
+- **Karar:** uyari **ikiye bolunur**. `#37`'de yalniz **toplam sayi farki**
+  (`DB: 9 / santral: 6 / fark: 3`), hicbir tenant kodu/nesne adi/dahili numarasi YOK —
+  boylece `RegistrationSnapshot.cs:87-91` KAPALI KISITI delinmez. Tenant kirilimi
+  **tenant kapsamli** dahili ekraninda.
+- **Ucuncu hal ZORUNLU:** envanter okunamazsa `fark: 0` degil **`Unmeasurable`**.
+- **Esik UYDURULMADI:** ornekklem 2 tenant / 9 dahili; esik koymak `BR-QA-112` hatasi olurdu.
+- **Commit:** `1e8b7076`
+
+#### 20.3 `BR-QA-51` — kartin KENDI dedigi bolunme yapildi (KAPANDI)
+
+- **Neden:** kart *"KALAN IS (yeni kartlara ayrilmali)"* diyordu. Kartsiz kalan is
+  **gorunmez borctur** (CLAUDE.md 14).
+- **`BR-QA-120`** (a+b): `source` damgasinin **gorus alani disi** — `CallDataRetentionJob`,
+  `PartitionMaintenanceJob`, `TenantCallDataRetention`, `SlaAggregationJob` ham SQL ile
+  gidiyor, bekci `DbSet` tariyor -> o dort yol icin bugunku yesil **vacuous**.
+- **`BR-QA-121`** (c+d+e): tohum yonetisimi — `seed-sample` ortam kapisi + denetim satiri
+  yok, tenant tohum bayragi yazilmadi, tarih tazeleme yapilmadi, `source` dis aktarmada yok.
+- **Commit:** `e85e1e1a`
+
+#### 20.4 `BR-SYS-119` — yedek sapma kapisi 7'de 2'den 7'de 7'ye (KAPANDI)
+
+- **Neden:** kapi zamanlanmis yedegin **yedi** dosyasindan yalniz **ikisine** bakiyordu
+  ve YESIL yanarken gercek bir sapma kacirmisti (tatbikat drop-in'i: depo `7e68a913` /
+  sunucu `7261c18f`).
+- **Ne yapildi:** `deploy/yedek-sunucu-sapma.sh` kapsami **tek kaynaktan turetiliyor** —
+  `deploy/pbxtr-yedek-kur.sh`'in `ESLEME` tablosundan (`ciftleri_uret()`). Liste ELLE
+  KOPYALANMADI; kartin yakaladigi hata "iki elle yazilmis liste sessizce ayrisir"in ta
+  kendisiydi. Kaynak okunamazsa kapi iki dosyaya geri dusmez, **`exit 2` ile DURUR**.
+- **Oz-teste KAPSAM SAYACI eklendi, iki yonlu:** (c) cift sayisi `< 7` -> KIRMIZI;
+  (d) diskteki her `deploy/pbxtr-yedek*` dosyasi kapsamda degilse -> KIRMIZI.
+- **Mutasyon 2/2 KIRMIZI:** `ESLEME`'den tatbikat satiri silindi -> `kapsam 6 < 7` + (d);
+  diskte sekizinci dosya yaratildi -> (d). Ikisi de geri alindi, `rc=0`.
+- **Gercek sunucu kosusu (`rc=0`):** 7/7 birebir; drop-in'in 4 adi yuklenmis unit'te;
+  timer **fiilen atesledi** (`LastTrigger=2026-09-19 02:33:12Z`), `Result=success`.
+- **Duzeltme recetesi degisti:** kirmizi cikti artik elle `scp` onermiyor,
+  `sh deploy/pbxtr-yedek-kur.sh` diyor — **elle scp tam olarak bu sapmayi uretmisti**.
+- **Commit:** `30905b3b`
+
+#### 20.5 `BR-AST-119` — kalan is (a)+(b) olculdu
+
+- **(a) kismen YANLISMIS:** *"TTL'siz kaynak yok"* dogru degil — `PlatformRollupJob`
+  toplami 15 dk'da bir **denetim satirina** yaziyor (`:491`), denetimin TTL'i yok.
+  Geriye kalan gercek eksik daha DAR: o satir **kirilimi** tasimiyor, yani
+  *"kaci cozulemedi, kaci celiskiydi"* sorusu 48 saat sonra cevapsiz — kartin **tum
+  teshisi** o ayrimin yokluguydu. Desen zaten depoda: `skippedTenants` ayni sozlukte
+  uc alt sebebiyle yaziliyor (`BR-BE-173`).
+- **(b) BILDIRIM BACAGI YOK:** bu sayaca bagli alarm/bildirim kurali **0 eslesme**.
+  CLAUDE.md 3.4 *"dusurulur, loglanir, ALARM URETIR"* diyor; ucuncu fiil uygulanmamis.
+  Bedeli kartin kendi vakasi: bir gunun olaylarinin %98,8'i dustu, kimse uyarilmadi.
+- **Ad benzerligi tuzagi:** `ChannelAlarmNotificationQueue`/`ChannelReportScheduleNotificationQueue`
+  icindeki `dropped` alanlari **kendi kuyruklarinin tasma sayacidir**, bu sayacla ilgisiz.
+- **Commit:** `8ddebb57`
+
+### Kararlar
+
+- **`devstate list` DND icin dogrulama yolu degildir** — `Stasis:` ailesini gormez.
+  Bir sonraki turda canli dogrulama onunla yapilirsa **yanlis KIRMIZI** uretir.
+- **Sapma kapilarinin dosya listesi elle kopyalanmaz**, kurulum betiginin tablosundan
+  turetilir; turetilemezse kapi **durur**, dar kapsama geri dusmez.
+- **Kartin kendi metnindeki "yeni kartlara ayrilmali" cumlesi bir BORCTUR** — kart
+  acilmadan kapanis yapilmaz.
+
+### Acik kalanlar / sonraki adim
+
+- **Yayin hala kosulmadi** (3. kosu bellek yetersizliginden oldurulmustu). Acik kartlarin
+  39'u yayina bagli; aralarinda P0 `BR-DB-91` ve `BR-SYS-117`, ayrica sahada gorunmeyen
+  `BR-AST-58/61` (sunucudaki imaj `demo-ea567d11bb2e`, commit `ea567d11`, 2026-09-15).
+- `BR-AST-119` (a) icin: `IUnresolvedTenantEventCounter.GetTodayAsync` **sebepsiz**;
+  kirilim okuyan bir uye + `After["droppedUnresolved"/"droppedConflict"]` gerekiyor.
+- `BR-AST-119` (b): alarm bacagi sozlesme acigi olarak duruyor.
+- Acik kart: **90**. ClickUp senkron (`fark olan kart: 0, izde olmayan: 0`, 755 kart).
