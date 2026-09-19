@@ -169,3 +169,86 @@ Başlangıç HEAD: `59d31085` (BR-SEC-29 turu). Ağaç temizdi (yalnız ilgisiz 
 - `20260918233000_GuardsTemplateRefreshCallDataAllowlist.Down()`, zincir **230000'in altına**
   sarılırsa hâlâ 130000/180000 emsalinin taşıdığı ters yönlü deliği taşır (gövde ESKİ,
   envanter YENİ). Bugünkü test bu noktaya inmiyor; ölçülmedi, kart açılmadı.
+
+
+### Koordinator turu — son iki kirmizi kapandi + COMMIT EDILMEMIS bir test kurtarildi
+
+#### `BR-SEC-29` (ajan: db-dev, 19 Eylul gec saat) — KAPANDI
+
+- `tenants_sys_update` owner yazma yuzeyi **N-1 -> 0 satir**. Tasarim A indi: iki
+  `pbxtr_sys` yazicisi fonksiyon duzeyi `SET "app.sys_write"` tasiyor, policy onu **on kosul**
+  sayiyor. Iki mutasyon da yakalandi.
+- **Olculmemis bir varsayim DOGRU cikti ve engeldi:** `app.sys_write` icin ayri bir
+  `GRANT SET ON PARAMETER` gerekiyormus. Temiz PG 16.15'te olculdu (grant yokken
+  `CREATE FUNCTION ... SET` **42501** ile duser), `00-roles.sql`'e eklendi ve sunum
+  sunucusuna uygulandi. **Yapilmasaydi migration canlida 42501 ile duserdi.**
+- **Kalinti zayiflik durustce korundu:** `app.sys_write` duz bir GUC; `pbxtr_owner` onu elle
+  de yazabilir. Kapanis metninde "sinir" degil **"daraltma"** yaziyor.
+
+#### Ajanin iki "kartsiz kirmizi" iddiasi DOGRULANDI ve IKISI DE GECERSIZ
+
+- `SpaBuildContextTests` **yesil** — ajanin tabani benim `8ab15a65` duzeltmemden onceki
+  **bayat bir worktree**'ydi. Kontrol etmeseydim zaten kapali bir sorun icin ikinci kart
+  acilacakti. (*Yesil takim hangi commit'i kapsiyor* dersi, ters yonden.)
+- Ikinci kirmizi (`voicemail_sla_daily.box_id`, `42703`) zaten `BR-DB-106`'ydi.
+
+#### `BR-DB-105` (ajan) — UC OLASILIKTAN **(3)**: capa yanlisti, sapan bir GOVDE YOKTU
+
+- Brifingte uc olasilik sayilmisti (govde bilerek degisti / kurulu DB sapmis / capa hic dogru
+  olmamis) ve **korlemesine hash tazelemek yasaklanmisti**. Olcum (3)'u gosterdi.
+- Kanit zinciri: kirmizi **tam zincirde degildi** (yigin izi geri sarilmis **ara duruma**
+  isaret ediyordu); tam zincirde `sys-functions.expected` <-> canli `pg_proc` **gecti`;
+  `02-guards.sql` ve `expected` zaten **YENI** degerleri tasiyor, eski degerler yalnizca bir
+  `Down()` icinde yasiyor.
+- **Kok sebep:** envanterin iki yarisi iki ayri migration'a dusmus (`230000` govdeler,
+  `233000` beklenti listesi) ve arada **bilerek tutarsiz bir pencere** var. Testin hedef
+  turetimi tek marker ariyordu ve tam o pencerenin **icine** dusuyordu.
+- **Duzeltme:** iki markerli `LastSysInventoryMigration()` + **vacuity ayagi**.
+  **Hicbir hash guncellenmedi**, refresh migration gerekmedi.
+
+#### `BR-DB-106` (ajan) — `Down()` duzeltildi; **kartin teshisi yanlisti**
+
+- Hata `Up()`'ta degil, **geri alma adiminin kendisinde**ydi. `Down()` icinde **eksik degil
+  FAZLA** bir ifade vardi: `DROP COLUMN box_id`'nin hemen ardindan
+  `COMMENT ON COLUMN … box_id IS NULL` -> `42703`. `DROP COLUMN` zaten `pg_description`
+  satirini dusuruyor. Ifade kaldirildi.
+- `BR-SEC-29`'un bos-govde emsali **bilerek uygulanmadi** (o sablon tazelemesiydi, bu kolon
+  isi ve geri alinabilirdi).
+- **Mutasyon:** ikisinde de **birebir eski hata** geri geldi (105'te ayni uc md5 cifti,
+  106'da ayni `42703`); dosyalar sha256 ile **bayt-tam** geri alindi.
+- **Olcum:** uc sinif birlikte 9/9, `UserRoleScopeConsistencyTests` 7/7,
+  `~Migration|~Voicemail` 18/18, `Architecture.Tests` **755/755**.
+- Ajan *"entegrasyon takimi tamamen yesil"* iddiasini **yapmadi** (dilimler kosuldu).
+
+#### KOORDINATOR BULGUSU — 11 testlik yeni dosya COMMIT EDILMEMISTI
+
+- `BR-FE-125` kapali, ama `src/Pbxtr.Web/src/app/screens/telephony/RingGroupMemberDelay.test.tsx`
+  (**307 satir, 11 test**) `git status`'ta **`??`** duruyordu. Ajanin *"vitest 2127 gecti"*
+  olcumu **dogruydu** -- dosya diskte vardi; eksik olan **teslimdi**. Taze bir klonda o 11
+  test **hic yoktu**.
+- **Nasil kacti:** *"`git add -A` yasak, yollari acikca say"* kurali dogrudur ama **yeni**
+  dosyada ters yonde bir bosluk birakiyor: degisen dosya goze carpar, yeni dosya sayim
+  listesine yazilmazsa **sessizce** disarida kalir ve **hicbir sey kirmizi olmaz**.
+  Ertesi turdaki ajan onu *"ilgisiz untracked"* diye **dogru sekilde** atladi -- yani kural
+  herkesi dogru yonde calistirdi ve dosya yine de kayboluyordu.
+- **Silmeden once kosuldu:** `11 tests / 11 passed`. Sonra commit edildi (`cf0705a7`).
+- Depoda baska `??` satiri **kalmadi** (tarandi).
+
+### Kararlar
+
+- **Bir ajan "bitti" dediginde `git status --porcelain` OKU.** `??` satiri varsa sahibini
+  sor; ozellikle `tests/`, `src/`, `deploy/` altinda. Bu, *kod var kosan yok* deseninin bir
+  adim oncesidir: **kod var, depoda yok**.
+- **Ajan brifingine ekle:** *"YENI dosya olusturduysan commit yol listesinde onu ADIYLA say;
+  `git status --porcelain` ciktinda `??` birakma."*
+- **Bir ajanin "HEAD'de de kirmizi" iddiasi bir TARIH iddiasidir** -- tabanini guncel `main`
+  uzerinde dogrula.
+
+### Acik kalanlar / sonraki adim
+
+- Acik kart **82** (P0 3 / P1 38 / P2 36 / P3 5). ClickUp senkron.
+- Entegrasyon takiminda **bilinen kirmizi kalmadi**; ama "takim tamamen yesil" iddiasi
+  **yapilmiyor** (dilimler kosuldu, tam kosu yok).
+- `20260918233000.Down()` ters yonlu deligi (govde ESKI + envanter YENI) **olculmedi**,
+  bugunku test oraya inmiyor.
+- **Yayin hala kosulmadi** -- uc P0 ve acik kartlarin buyuk kismi ona bagli.
