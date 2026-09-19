@@ -252,3 +252,93 @@ Başlangıç HEAD: `59d31085` (BR-SEC-29 turu). Ağaç temizdi (yalnız ilgisiz 
 - `20260918233000.Down()` ters yonlu deligi (govde ESKI + envanter YENI) **olculmedi**,
   bugunku test oraya inmiyor.
 - **Yayin hala kosulmadi** -- uc P0 ve acik kartlarin buyuk kismi ona bagli.
+
+---
+
+## Ek tur - BR-SEC-21 (backend-dev-2, SSRF)
+
+### 1. `OutboundHostGuard` evreni iki uctan olculdu
+
+- **Neden:** kartin (c) ayagi *"negatif test yok"* diyordu; kartin KENDI olcumu ise
+  (a)'yi *"kapali, mutasyonla dogrulanmis"* sayiyordu. Iki iddia celisiyordu, once
+  hangisinin dogru oldugu olculdu.
+- **Ne yapildi:** evren **iki uctan** tanimlandi -- taranan: `src/` altinda giden
+  baglanti acan her yol; **cagiran sayilan**: `OutboundHostGuard.Validate` ya da
+  `OutboundConnectGuard.Create` cagiran `.cs` dosyasi (belge cagiran **sayilmadi**).
+  Gecen **7 yol**, gecmeyen **3 yol** (`AriClient`, `AriStasisApp`,
+  `UnixSocketSystemAgent`) -- ucu de **bilincli** disarida: hedefleri yapilandirmadan
+  gelir ve ic agdadir, kapidan gecirilseydi **santral baglantisi reddedilirdi**.
+- **Sonuc:** kartin (a) iddiasi dogruydu (12 test vardi), ama evren eksikti.
+
+### 2. BULGU - dorduncu bir yol kapidan gecmiyordu: Netgsm
+
+- **Neden:** evren sayimi `NetgsmOptions`'i "gecen" tarafa koyuyordu; cagiranin
+  **ne zaman** cagirdigi sorulunca delik cikti.
+- **Ne yapildi:** `EnsureUsable` `BaseUrl`'i kapidan geciriyor ama **yalnizca
+  acilista, bir kez**. Gonderim anindaki istemci ham `new HttpClient()` idi
+  (`SmsServiceCollectionExtensions.cs:193` handler vermiyor) -> (i) her gonderimdeki
+  DNS cozumlemesi **hic siniflandirilmiyordu**, (ii) ham `HttpClient`'ta
+  `AllowAutoRedirect` **varsayilan olarak ACIK** -- tek bir `302` istegi kapidan
+  gecmemis hedefe tasirdi. **Netgsm arayuzunde kullanici adi ile parola sorgu
+  dizesindedir**: yonlendirilen sey kimlik bilgisinin kendisi olurdu.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Modules/Messaging/NetgsmSmsClient.cs`
+- **Sonuc:** `CreateDefaultHandler()` artik `OutboundConnectGuard.Create` dondurur.
+
+### 3. Negatif testler (6 yeni vektor) + Netgsm bekcisi (6 test)
+
+- **Ne yapildi:** V9 belirsiz adres (`connect(0.0.0.0)` Linux'ta **127.0.0.1**'e
+  baglanir ve `IsLoopback` buna **false** doner -- onceki 12 vektorun hicbiri bu
+  adresi olcmuyordu), V10 baglanti-yerel araligin TAMAMI (eski V3 yalniz
+  `169.254.169.254`'tu; `169.254.170.2` = ECS meta verisi aciktaydi), V11
+  ayrilmis/coklu gonderim, V12 IPv6 ULA'nin **iki yarimi** (eski V4 yalniz `fd`),
+  V13 gomulu yazim, V14 cozumleme yolu (literal yoldan **ayri bir daldir**).
+  **Hepsi sinir ikiziyle** ve **pozitif ayak her iki dosyada da var**.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Api.Tests/Platform/Mail/OutboundHostGuardTests.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Messaging/NetgsmOutboundHardeningTests.cs` (YENI)
+- **Sonuc / dogrulama:** taban **30** -> **36** -> **42 gecti / 0 dustu**;
+  `OutboundHostGuardSurfaceTests` **3/3**; `Netgsm|Sms` regresyonu **164/164**.
+  Gercek aga cikilmadi (cozumleyici enjekte edilebilir).
+
+### 4. Mutasyon - bes mutasyon, besi de kirmizi
+
+```bash
+# hepsi --no-incremental ile YENIDEN DERLENDI
+M1 unspecified kolu       -> 5 KIRMIZI
+M2 link-local v4 kolu     -> 5 KIRMIZI
+M3 reserved (>=224) kolu  -> 3 KIRMIZI
+M4 AllowAutoRedirect=true -> 2 KIRMIZI
+M5 Netgsm duzeltmesi geri -> 5 KIRMIZI, 1 gecti (gecen tek test POZITIF olandir)
+```
+
+- **Sonuc:** besi de geri alindi, guard dosyalarinda `git diff` bos, tekrar **42/42**.
+- **Commit:** `08d285a2`
+
+## Kararlar (ek tur)
+
+- **Asterisk yollari kapidan GECIRILMEZ ve bu bilinclidir.** `AriClient`/`AriStasisApp`
+  hedefleri `172.28.x` ve tailscale `100.106.82.119`'dur; kapidan gecirilseydi
+  `private`/`cgnat` ile reddedilirdi -- ag katmaninda CGNAT'in bilerek drop
+  EDILMEME gerekcesinin birebir ikizi.
+- **(c) ayagi yapilmadi, DEVREDILDI** (`BR-SYS-127`): is `src/Pbxtr.Web` altina
+  (FE etiket cifti + 9 dil metni) yazmayi gerektiriyor, o yol bu turda **baska bir
+  ajanin calisma agacindaydi**. Kart **yazildi** -- yoksa gorunmez borc olurdu.
+
+## Ogrenilen (ek tur)
+
+- **MSBuild `MSB4166` bir TEST SONUCU DEGIL, KAYIP OLCUMDUR.** M3 ilk kosusunda
+  cocuk dugum coktu; `-m:1` ile tekrarlandi. Tekrarlanmasaydi "olctum" denen sey
+  hic kosmamis bir mutasyon olacakti.
+- **"Kapidan geciyor" bir ZAMAN iddiasidir.** Netgsm cagirani listede **gecen**
+  tarafta duruyordu; delik, cagiranin *ne zaman* cagirdigi sorulunca cikti.
+  Acilista bir kez cagirmak, gonderim anini olcmez.
+- **Mutasyonda gecen testi de oku.** M5'te gecen tek test **pozitif** olandir --
+  bu, mutasyonun dogru testleri oldurdugunun kaniti; hepsi kirmizi olsaydi
+  fikstur ayrismiyor demekti.
+
+## Acik kalanlar (ek tur)
+
+- `SmtpMailSender` kendi soketini acar (`SmtpMailSender.cs:268`) ve
+  `OutboundConnectGuard`'i **kullanmaz**; kapidan gecen adrese baglanip
+  baglanmadigi **olculmedi** (ADR-019 §4'te yazili borc).
+- Duzeltilen Netgsm yolu **gercek saglayiciya karsi kosmadi**; kanit yalnizca testtir.
+- `BR-SYS-127` (`webhook_deliveries` boyut esigi) acildi, hic baslanmadi.
