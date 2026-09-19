@@ -1784,3 +1784,227 @@ gerekçe karta yazılıyor. Dört kart verildi. Ortak eksen: **ölçülmemiş c�
 - **Ölçemediğim:** tam çözüm derlemesi bu turda paralel ajanın `ConfigRenderer.cs`'i
   yüzünden bir ara kırmızıydı; **kendi dosya kümem** son başarılı derlemede (0 hata)
   yeşildi ve `dotnet format --verify-no-changes` o kümede temiz döndü.
+
+---
+
+# pbxtr — 2026-09-19 (backend-dev-2 turu: BR-OPS-02 / BR-OPS-01 / BR-AST-63 / BR-AST-64)
+
+## Bağlam
+
+Kurul dağıtılmış durumda: karar kurula da kullanıcıya da sorulmuyor, dar olanı seçip
+uyguluyorum ve gerekçeyi karta yazıyorum. Dört kart verildi. İki `BR-OPS` kartının durum
+hücresi *"iş backend'de ve sahibi bu ajan değil (`backend-dev-2`)"* diyordu — o ajan benim,
+yani sahiplik engeli yoktu. İki `BR-AST` kartı ise "sahiplik kararsızlığı" bekliyor
+görünüyordu ama **karar zaten verilmişti** (Kurul Karar #66 M17 ve M19, ikisi de 10 oy);
+kartlar bunu kendi durum hücrelerinde yazıyordu (`Karar #77 Ş77-A1 — KARARA BAĞLI, kalan iş
+UYGULAMA`). Yani bu turda dört kartın da engeli gerçek değildi.
+
+## Yapılanlar
+
+### 1. BR-OPS-02 (P1) — ölü zil grubunda yanan süre artık SLA beklemesine giriyor
+
+- **Neden:** kartın teşhisi *"metrik arızayı ÖDÜLLENDİRİYOR"*. Ölçülmüş mekanizma: taşma
+  dalı çağrıyı kuyruğa çevirdiğinde (`fallback_decision='queue'`) `join_at` **kuyruğa giriş
+  anıdır**; `wait_sec`'in ilk iki kaynağı (`hold_time`, `outcome_at - join_at`) kuyruk
+  içidir, dolayısıyla 20 sn ölü zil grubunda yanan süre **yapısal olarak** dışarıda kalır ve
+  çağrı `answered_within_count`'a yazılır. Arızanın bedeli aynı kovanın **başarı** tarafına
+  kaydediliyordu.
+- **Ne yapıldı:** `SlaAggregationJob.RecomputeSql`'e
+  - `joins` CTE'sine `lag(at)` = `prev_join_at` (aynı zil olayı iki girişe atfedilemez),
+  - `attributed`'a LATERAL `rg`: bu girişin **öncesindeki**, önceki girişten **sonraki**
+    `PbxtrRingGroupEnter` (olay adı `RingGroupSignals.EnterEvent`'ten gelir, ikinci kopya yok),
+  - yeni ufuk `PreQueueRingHorizon = 10 minutes` — `OutcomeHorizon` (4 saat) **değil**:
+    ileriye arama "sonuç", geriye arama "**sebep**" arar ve sebep zil grubu zaman aşımıyla
+    sınırlıdır,
+  - `pre_queue_wait_sec` yalnız **kuyruk içi** iki kaynağa eklenir; CDR yedeğine
+    **eklenmez** (o `duration - billable` ile tüm çağrıyı zaten ölçer, çift sayım olurdu),
+  - `greatest(0, NULL)` yerine açık `CASE`: PostgreSQL'de `GREATEST` NULL'ları **atlar** ve
+    `greatest(0, NULL)` **0** döner — yani "zil grubu yok" ile "0 sn çaldı" aynı ifadeden
+    çıkardı.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Telephony/Sla/SlaAggregationJob.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/SlaHoldTimePipelineTests.cs`
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj --no-build \
+    --filter "FullyQualifiedName~SlaHoldTimePipelineTests"
+  ```
+- **Sonuç / doğrulama:** 3/3 gerçek PostgreSQL. Yeni vaka **üç giriş** taşır: (A) taşma,
+  (B) AYRIŞTIRICI = zil grubundan gelmeyen doğrudan çağrı, (C) ufuk dışı (15 dk önceki) eski
+  zil olayı. Komşu takım (SlaEventOrdering + SlaDeadlineRestatement + CallbackSlaSqlParity)
+  22/22. **Mutasyon 2/2 kırmızı:** ekleme kaldırıldı 1/3; ufuk 4 saate genişletildi 1/3.
+- **Ölçemediğim:** `prev_join_at` alt sınırı bu fikstürde **ayrıştırılmıyor** (aynı çağrının
+  iki kez kuyruğa girdiği vaka yok).
+- **Commit:** `54f62e4c`
+
+### 2. BR-AST-64 (P3) — kademeli çalma (`delay_sec`) ÜRETİLİYOR
+
+- **Neden:** Karar #66 M19 kolu (a) = `Local` + `Wait(n)` sarmalayıcı, 10 oy. Kolon
+  2026-08-24'ten beri şemadaydı ve hiçbir üretim satırı okumuyordu.
+- **Ne yapıldı:** `ConfigRenderer.AppendDelayWaves` + `AppendDelayContext`. Yalnız
+  **eşzamanlı** stratejide; dalga başına **tek** `Local/rg{numara}d{n}@pbxtr-{tref}-rgdelay/n`.
+  **Hedef listesi ebeveynde çözülür** (`__PBXTR_RGD_{n}` kalıtımlı) ve dalga boşsa `Local`
+  hiç eklenmez — bu zarafet değil **doğruluk şartı**: aksi hâlde tamamı gecikmeli bir grupta
+  `RGD` daima dolu olur ve `GotoIf(...overflow)` kapısı, yani "kimse KAYITLI değil" ile
+  "kimse CEVAP VERMEDİ" ayrımı sessizce kaybolurdu.
+- **Kararlarım (kurul yok, gerekçesiyle):**
+  1. **Sıralı stratejide gecikme uygulanmaz.** Sıralı zaten kademelidir; üstüne gecikme
+     koymak *"önceki üye cevap vermedi, şimdi n saniye HİÇ KİMSE çalmasın"* demekti. Aynı
+     alanın iki stratejide iki anlam taşıması = ekranda tek alan, santralde farklı davranış.
+     Sessiz değil: üretilen dosyaya yorum satırı düşer.
+  2. **`/n` (optimizasyon kapalı).** Varsayılan `Local` köprülendikten sonra kendini yoldan
+     çıkarır ve `CHANNEL(name)` topolojisini çağrı ortasında değiştirir; `call_events`
+     korelasyonu ve ARI `GET /channels` resync'i üretilen metinle aynı topolojiyi varsayar,
+     `Local` üzerinden `linkedid` davranışı ise **ölçülmemiştir** (Karar #66 İ6). Bedel
+     yazılı: gecikmeli dalga başına çağrı boyunca **iki ek kanal**.
+  3. **Ş66-18'in "M15 edge, M18, M19" sırası uygulanmadı.** M18 kendi kararıyla "bugün
+     ÜRETİLMEZ" (edge yok, İ6); M19'u ona bağlamak kartı süresiz bloke ederdi ve M19 edge'e
+     teknik olarak bağımlı değil.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.cs`,
+  `src/Pbxtr.Infrastructure/Provisioning/ProvisioningRevisionService.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/RingGroupRenderTests.cs`,
+  `doc/prototip-urun-farklari.md`
+- **Sonuç / doğrulama:** `Modules.Telephony` 1350/1352 (2 skip = canlı santral testleri),
+  `RingGroupRenderTests` 17/17 (6 yeni). **Mutasyon 3/3 kırmızı:** `Local` koşulsuz eklenir
+  2/17; gecikme grup süresine eşit kabul 1/17; uzantı adına tire 2/17.
+- **Yan bulgu:** `SlaAggregationJob.cs` UTF-8 **BOM** taşıyordu ve `dotnet format --include`
+  onu `CHARSET` ile kırmızı yakıyordu. Ölçüldü: ihlal **benim değişikliğimden önce de vardı**
+  (HEAD~1 sürümü de kırmızı); `.editorconfig` `charset = utf-8` diyor ve komşu dosyalarda BOM
+  yok. BOM kaldırıldı.
+- **Commit:** `3a268a22`
+
+### 3. BR-OPS-01 (P2) — agent kendi kuyruklarının sessizlik alarmını görebiliyor
+
+- **Neden:** kartın `İş` maddesindeki *"ve agent ekranında da (agent ilk fark eden
+  olabilmeli)"* kalemi hiçbir katmanda inmemişti: alarmı taşıyan tek uç `/alarms/active`,
+  yetkisi `alarm.read`, o da `bundle.live` içinde; `agent` rolü yalnız `bundle.call` +
+  `bundle.console` taşıyor, yani agent 403 alıyordu.
+- **Ne yapıldı (koordinatör kararı = DAR YETKİ):** agent'a `alarm.read` **verilmedi**,
+  `bundle.live` **genişletilmedi**. Yeni yetki `alarm.silence.read.self`
+  (`permissions.seed.json` + `agent` rolü `extraPermissions`). Yeni uç
+  `GET /api/v1/alarms/silence/mine`.
+  - **Neden ayrı uç:** aynı ucun role göre farklı kapsam döndürmesi, daraltmayı unutan tek
+    bir değişiklikte bütün tenant'ın alarmlarını agent'a verir. Ayrı rota + ayrı yetki +
+    ayrı sorgu = daraltma **yapısal**.
+  - **Fail-closed ve yazılı:** PG okunamazsa boş liste **dönülmez** (boş liste "alarm yok"
+    diye çizilirdi, kartın şikâyet ettiği körlüğün ta kendisi), `503`. Kullanıcı bağlamı
+    çözülemezse de `503`.
+  - Daraltma **sorguda** (`EfSilenceAlarmView`, `queue_members` üzerinde `EXISTS`).
+    **Mola/izin üyeliği düşürmez** — molayı eleseydik alarm en çok ihtiyaç duyulduğu anda
+    kaybolurdu. Zil grubu/DID kapsam dışı: üyelik kavramı yok, "kendi" uydurulmaz.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/Realtime/LiveEndpoints.cs`,
+  `src/Pbxtr.Api/Platform/Authorization/permissions.seed.json`,
+  `src/Pbxtr.Domain/Modules/Live/Silence/ISilenceAlarmView.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfSilenceAlarmView.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/SilenceAlarmSelfScopeTests.cs` (yeni)
+- **Sonuç / doğrulama:** Platform.Authorization 208/208, Modules.Realtime+Live 335/335,
+  Architecture 753/753, yeni entegrasyon testi 1/1 (gerçek PG + RLS).
+- **FİKSTÜR SORGULANDI (günün en öğretici anı):** M1 mutasyonu (`member.UserId == userId`
+  düşürüldü) **ilk koşuda YEŞİL kaldı**. Sebep: tenant'ta başka hiçbir kuyruk üyeliği yoktu,
+  yani *"üyesi olunan kuyruk"* ile *"üyesi olan herhangi bir kuyruk"* **aynı kümeye
+  düşüyordu**. Fikstüre öteki kuyruğun **kendi agent'ı** eklendi; M1 ancak o zaman kırmızı
+  oldu. M2 (`TargetKind == queue` düşürüldü) yeşil kaldı ve bu **ölçülmüş** bir sonuçtur:
+  DB pairing CHECK'i `queue_id` dolu + hedef türü kuyruk-dışı bir satırı imkânsız kılıyor,
+  yani koşul savunma amaçlıdır ve fikstür onu ayrıştıramaz.
+- **Commit:** `4e83ec15`
+
+### 4. BR-AST-63 (P3) — `rotating` zil grubu üretiliyor, sayaç AstDB'de
+
+- **Neden:** Karar #66 M17 kolu (a) = AstDB, 10 oy; Ş66-16 anahtarı da yazmış:
+  `pbxtr/{tref}/rg/{id}`. Kart "sahiplik kararsızlığı" diyordu ama kararsızlık yoktu.
+- **Maddi sapma, açıkça kabul edildi:** bu, CLAUDE.md §3.3/2'nin ("bilgi pbxtr'da durur")
+  **karara bağlanmış** bir istisnasıdır. pbxtr sayacı görmez ve sıfırlayamaz; çok düğümde
+  her düğümün kendi turu olur (yaklaşık adil). Eski gerekçe metinleri **silinmedi**, üzeri
+  çizildi — hâlâ doğrular.
+- **Üretilen biçim** (`ConfigRenderer.AppendRotating`):
+
+      same => n,Set(RGI=${DB(pbxtr/t0007/rg/<id>)})
+      same => n,ExecIf($["${RGI}" = ""]?Set(RGI=0))     ; bos anahtar
+      same => n,Set(RGI=${MATH(${RGI}%N,int)})          ; uye sayisi kuculduyse
+      same => n,ExecIf($["${RGI}" = ""]?Set(RGI=0))     ; MATH bos donduyse (rakam degil)
+      same => n,Set(DB(...)=${MATH((${RGI}+1)%N,int)})  ; SIRADAKI tur, Dial'DAN ONCE
+      same => n,UserEvent(PbxtrRingGroupEnter,...,Offset: ${RGI})
+      same => n,Goto(rg{numara}r${RGI},1)
+
+  ve ardından N adet sıralı başlangıç zinciri.
+- **Kararlarım:** (a) **iki kapı**, biri değil — ilk kontrol yalnız BOŞ değeri yakalar,
+  `MATH` hatasını yakalamaz; üçüncü bozulma hâli (`% N`) `Goto`nun var olmayan bir uzantıya
+  gitmesini (çağrının **çalmadan** düşmesini) önler. (b) **Sıradaki tur `Dial`dan önce
+  yazılır** — sonra yazılsaydı cevaplanmadan kapanan her çağrı turu ilerletmez ve aynı üye
+  üst üste çalardı; "turlu" tam da yoğun anda turlu olmaktan çıkardı. (c) **N kopya sıralı
+  zincir**, hesaplanan tek döngü değil — dialplan'de "listeyi k'dan döndür" ilkeli yok ve
+  döngüde çıkış koşulu iki ayrı yerde doğru olmak zorundaydı. (d) Uzantı adında **tire yok**
+  (Asterisk çevrilen uzantıdan `-` atar). (e) Tüm üyeler DND ise **tur yoktur** (sayaç ne
+  okunur ne yazılır) ama **giriş olayı yine yazılır**.
+- **İ12'nin denetlenebilirlik şartı KISMEN:** kullanılan tur indeksi `Offset` başlığıyla
+  `PbxtrRingGroupEnter`'e binip `call_events`'e iniyor (`ringGroupOffset`; mapper +
+  `TelephonyEventPipeline` allowlist). **Üye bazlı çalma olayı üretilmiyor** — İ12'nin *"her
+  çalma UserEvent ile call_events'e düşer"* şartı bu yüzden kısmen karşılandı.
+- **Şema:** `20260919040000_RingGroupRotatingStrategy`. CHECK metni artık
+  `RingGroupStrategies.Supported` **sabitinden** üretiliyor (BR-BE-169 emsali) — iki liste
+  bir gün sessizce ayrışamaz. `20260824230000_RingGroupsFinalGuard` **değiştirilmedi**:
+  kendi `Up`'ının koştuğu andaki şemayı doğrular ve o an kısıt hâlâ dardır.
+  `Down` yönü `rotating` satırı varsa **reddeder**; sessizce veri silen bir `Down` yazılmadı.
+- **Komutlar:**
+  ```bash
+  dotnet ef migrations add RingGroupRotatingStrategy --project src/Pbxtr.Infrastructure \
+    --startup-project src/Pbxtr.Infrastructure --context PbxtrDbContext \
+    --output-dir Persistence/Migrations
+  # blob sha + yol + Karar#66 satiri deploy/migration-contract-onay.blobs dosyasina
+  python deploy/migration-compatibility-guard.py   # OK
+  ```
+- **FE:** `ext.strategyRotating` etiketi **9 dilde** eklendi. Eklenmeseydi geçerli bir sunucu
+  değeri ekranda "tanımsız" görünürdü — sunucu sözleşmesiyle ekran sözleşmesi sessizce
+  ayrışırdı. Strateji **seçimi** yapan form bugün de yok (#27/1: panel salt-okur).
+- **Sonuç / doğrulama:** Modules.Telephony 1353/1355, RingGroupRender 20/20,
+  AmiEventMapping 48/48, Architecture 753/753, vitest 2108/2108, `tsc -b` temiz.
+  **Mutasyon 4/4 kırmızı:** sayaç ilerletilmiyor / her zincir 0'dan başlıyor (tur DÖNMÜYOR) /
+  ikinci `ExecIf` kapısı düşürüldü / `ringGroupOffset` allowlist'ten çıkarıldı (`Sanitize`
+  sessizce atıyor).
+- **Commit:** `255de74a`
+
+### 5. Defter
+
+`yonetim/backlog.md` dört kartta güncellendi — dördü de **`Kısmen`**, `Bitti` **değil**.
+`yonetim/kalan-isler.md` yeniden üretildi, ClickUp senkronu koşuldu
+(fark 4, yazıldı, doğrulama `fark olan kart: 0, izde olmayan: 0`).
+**Commit:** `133a4acb`
+
+## Kararlar
+
+- **Kart "sahiplik bekliyor" diyorsa önce karar defterinde kart kodunu ara.** İki kart da
+  karara bağlıydı (Karar #66 M17/M19, ikisi de 10 oy) ve kartların kendi durum hücreleri
+  bunu yazıyordu; "kararsız" olan yalnızca kartın **başlık cümlesiydi**.
+- **Geriye doğru arama ile ileriye doğru arama aynı ufku paylaşmaz.** İleride "sonuç",
+  geride "**sebep**" aranır; sebep her zaman daha dar bir pencereye sığar.
+- **`greatest(0, NULL)` = 0.** PostgreSQL `GREATEST` NULL'ları atlar; "veri yok" ile "ölçtüm,
+  sıfır" aynı ifadeden çıkamaz.
+- **Daraltma sorguda olmalı, projeksiyondan sonra değil.** Geniş kümeyi okuyup bellekte
+  elemek, elemeyi atlayan tek bir değişiklikte sızıntıdır.
+- **Mutasyon yeşilse önce fikstüre bak** (bugün fiilen oldu): tenant'ta başka üyelik
+  olmayınca "kendi kuyruğu" ile "herhangi bir kuyruk" aynı kümeye düşüyordu.
+- **Bir kapı yetmeyebilir.** AstDB sayacında boş değer ile `MATH` hatası **farklı** hâllerdir
+  ve tek bir `ExecIf` ikisini birden yakalamaz.
+- **`Bitti` ile `Kısmen` arasındaki fark defterdedir.** Dört kartın dördünde de kapanan
+  parça ve açık kalan parça **ayrı ayrı** yazıldı.
+
+## Açık kalanlar / sonraki adım
+
+- `BR-OPS-01`: **agent ekranı (FE).** Uç ve yetki indi, `/api/v1/alarms/silence/mine`
+  tüketicisi yok. **TUZAK:** `useRealtimeSilence` / `RealtimeSilenceStrip` bu **değildir** —
+  o bir WS **tazelik** şerididir; ad benzerliği grep ile bakanı yanlış yeşile götürür.
+- `BR-OPS-02`: #17 wallboard `extension.read` (role yetki eklemek = güvenlik sınırı) ve
+  `BR-AST-60` (gerçek santralde `done` bölümünün `PbxtrRingGroupAnswer` ürettiğinin telde
+  doğrulanması; canlıda `ring_groups` 0 olduğu için üretilecek çağrı yok).
+- `BR-AST-63`: **üye bazlı çalma olayı** üretilmiyor (İ12 kısmen); strateji **seçimi** formu
+  yok. Ayrıca üretilen `rotating` dialplan'i **gerçek santralde koşturulmadı**.
+- `BR-AST-64`: **yazma yüzeyi** yok — `delay_sec` bugün yalnız ham SQL ile girilebilir
+  (`RingGroupDelaySecWritePathTests` hâlâ geçerli ve yeşil). Ş66-18'in form uyarısı ve ekran
+  alanı inmedi.
+- **Ölçemediğim / bana ait olmayan kırmızı:** `Pbxtr.Integration.Tests`'te 4 test kırmızı —
+  `voicemail_sla_daily.box_id` (`599e41d4`), `WebhookOutboxWriter` DI kaydı (`03009615`) ve
+  `EnumMirror`'ın 12 `source` CHECK'i (`dcdcbf9e`). Üçü de benim turumdan **önceki**
+  commit'lerden geliyor (git log ile doğrulandı) ve dokunduğum dosyalarla ilgileri yok.
+- **Ölçemediğim:** bu turda **sunucuya (176.88.41.220) hiç bağlanılmadı**; üretilen
+  `rotating` ve `rgdelay` dialplan'lerinin gerçek Asterisk'te davranışı (özellikle `MATH()`
+  modulus davranışı, `Local/.../n` üzerinden `linkedid` ve `Wait()` sırasında çağıranın
+  duyduğu ses) **ölçülmemiştir**.
