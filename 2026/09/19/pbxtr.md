@@ -2008,3 +2008,91 @@ UYGULAMA`). Yani bu turda dört kartın da engeli gerçek değildi.
   `rotating` ve `rgdelay` dialplan'lerinin gerçek Asterisk'te davranışı (özellikle `MATH()`
   modulus davranışı, `Local/.../n` üzerinden `linkedid` ve `Wait()` sırasında çağıranın
   duyduğu ses) **ölçülmemiştir**.
+
+---
+
+## BR-QA-117 — `BR-QA-113`'ün geri açtığı 13 kalem (pbxtr-qa turu)
+
+### Bağlam
+`BR-QA-113` kapanış tespitini anlamsal yaptı: ham alt dize taraması 98 EF adaptöründen
+33'ünü kapalı görüyordu, yorum/dize ayıklanmış kod üzerindeki tarama 20. Aradaki **13
+kalemin tek kapanış kanıtı bir YORUM satırıydı** — bekçi bir yorumla susturulmuştu.
+`BorcTavani` 65 → 78'e çıkarıldı. Bu turun görevi o 13 kalemi **ölçmek** ve karıştırmadan
+iki sınıfa ayırmaktı.
+
+### Yapılanlar
+
+#### 1. Ölçüm — 13 kalemin sınıflandırması
+- **Neden:** *"testi zaten var"* ile *"hiç ölçülmemiş"* aynı satırda duruyordu; ikisini
+  birden kapatmak bekçiyi **ikinci kez** yorumla susturmak olurdu.
+- **Ne yapıldı:** `Pbxtr.Architecture.Tests` içine **geçici** bir tanılama Fact'i yazıldı
+  (`GeciciTanilama.cs`), `CSharpKodMetni.YalnizKod` + `SembolGeciyor` ile tüm
+  `tests/Pbxtr.Integration.Tests/Tests` korpusu tarandı; her kalem için `adKol`,
+  `kodAnma`, `hamAnma`, `ikinciKod`, `ikinciHam` basıldı. Ölçümden sonra dosya **silindi**.
+- **Sonuç:** 13 kalemin **hepsinde** `Ef<Ad>` tam tanımlayıcısı korpusun **hiçbir kod
+  satırında geçmiyor** → `BR-QA-113`'ün teşhisi doğrulandı. Üç sınıf çıktı:
+  - **(A)** port DI'dan çözülüyor, iki tenant kodda → tek satırla kapanır: 7 kalem.
+  - **(A′)** gerçek çapraz-tenant ölçümü var ama **HTTP yüzeyinden** koşuyor, port dosyada
+    hiç çözülmüyor: 4 kalem.
+  - **(B)** gerçek borç: `SmsMessageJournal` (adını anan tek dosya ikinci tenant'ı **kodda**
+    kullanmıyor → `Assert.IsType` onu **kapatmaz**), `TenantAdministration`
+    (`TenantWriteGateFunctionTests` **saf SQL**, `EfTenantAdministration`'a hiç dokunmuyor).
+
+#### 2. (A) sınıfının kapatılması — 7 kalem
+- **Neden:** kapanış kanıtı **kodda** olmalı, yorumda değil; ve aynı satır *"ölçülen şey
+  gerçekten O adaptör mü?"* sorusunu da kilitlemeli.
+- **Ne yapıldı:** her testin DI'dan çözdüğü port'a `Assert.IsType<EfXxx>(port)` eklendi.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Tests/BlacklistTenantLeakTests.cs`,
+  `ReportTenantLeakTests.cs`, `IvrTenantLeakTests.cs`, `TrunkAdminPersistenceTests.cs`,
+  `ProvisioningNodeStateTenantLeakTests.cs` (iki yer: store + health reader),
+  `DealerTenantMoveGucHttpTests.cs`; bekçi `tests/Pbxtr.Architecture.Tests/TenantLeakCoverageTests.cs`
+  (`BorcTavani` 78 → **71**, yedi satır listeden çıktı, kalan altısına sınıf notu yazıldı).
+- **Sonuç:** Architecture.Tests **753/753** yeşil; dokunulan altı entegrasyon sınıfı gerçek
+  PostgreSQL + RLS altında **27/27** yeşil; `dotnet format --verify-no-changes` rc=0.
+- **Mutasyon — üç ayrı DI kabinde:** `RealSchemaDatabase` → **Failed 3**,
+  `TelephonyTestHost` → **Failed 4**, `PanelHttpApplication` → **Failed 1**; üçü de geri
+  alınıp yeşil. Üç kabin ayrı ayrı ölçüldü çünkü **hangi testin hangi konteyneri kullandığı
+  varsayılmaz** (bugünün kayıtlı dersi).
+
+#### 3. Vacuity çıpası taşındı — ve bu bir bulgudur
+- **Neden:** `CSharpKodMetniTests.Gercek_test_dosyasinda_yorum_dusuyor_kod_kaliyor`,
+  `ProvisioningNodeStateTenantLeakTests.cs` + `EfProvisioningNodeStateStore` çiftine
+  çıpalıydı: *"ad yalnızca yorumda, ikinci tenant kodda"*. O kalemi kapatınca çıpa **aynı
+  anda öldü** ve test **kırmızı yandı**.
+- **Ne yapıldı:** çıpa hâlâ açık bir (B)/(A′) kalemine taşındı
+  (`ApiKeyForeignNodePinTests.cs` + `EfProvisioningNodeDirectory`) ve hata mesajı
+  *"çıpa TAŞINMALIDIR — kaldırılmamalıdır"* diyecek şekilde yazıldı.
+- **Sonuç:** çıpanın gerçekten ölçtüğü kanıtlandı (kapanışta anında kırmızı), ama aynı
+  zamanda **her kapanışta bakım isteyen** bir bağ olduğu görünür yapıldı.
+
+#### 4. Yan bulgu → yeni kart `BR-QA-119`
+- **Ne ölçüldü:** `ReportTenantLeakTests` üç testi **benim değişikliğimden ÖNCE de**
+  kırmızıydı: `23502: null value in column "source" of relation "cdr_2026_09"`.
+  `20260919020000_CallDataSourceColumn` (`dcdcbf9e`) `cdr`/`call_events` üzerinde `source`'u
+  **NOT NULL** yaptı, **DEFAULT vermedi**; `tests/` altında ham SQL ile yazan **15 dosyada
+  24 INSERT bloğu** kolon listesinde `source` taşımıyor. Ölçülen kırmızı:
+  `CdrMultiRowCallTests|SlaEventOrderingTests|PostCallSmsPlanTests` → **Failed 8 / Passed 3**.
+- **Kritik ayrıntı:** tohuma **önce `'synthetic'` yazıldı ve test YİNE kırmızı kaldı** —
+  `EfCallReportQuery.cs:101` `.RealOnly()` ile süzüyor; doğru değer **`'live'`**. Yani bu
+  kolon için **kör toplu düzeltme YANLIŞTIR**: satır yazılır, sorgu onu hiç görmez ve iddia
+  "boş küme" üzerinde sessizce yeşil yanabilir.
+- **Ne yapıldı:** yalnızca `ReportTenantLeakTests` tohumu düzeltildi; kalan 14 dosyaya
+  **dokunulmadı** (paralel ajanların ağacıyla çakışmamak için) ve `BR-QA-119` açıldı.
+
+### Kararlar
+- **(A) ile (B) karıştırılmadı.** 13'ü birden kapatmak ölçü değil, ikinci bir susturmaydı.
+- **(A′) dört kalem bilerek açık bırakıldı:** kapanışları HTTP kabında ayrı bir
+  `Assert.IsType` + **sınıf başına ~1 dk 15 sn'lik ayrı koşum** ister; bu turda koşulmadı.
+  Kayda geçen ifade **"ölçemedim"**, "yok" değil.
+- `ProvisioningNodeDirectory` kapatılmadan önce **vacuity çıpası taşınmalıdır**; kart ve
+  test mesajı ikisi de bunu yazıyor.
+
+### Açık kalanlar / sonraki adım
+- `BR-QA-117` **Kısmen**: (A′) 4 kalem + (B) 2 kalem açık.
+- `BR-QA-119` **AÇIK**: 14 dosya × `source` kolonu; her dosyada değer testin ne ölçtüğüne
+  göre (`'live'` / `'synthetic'`) seçilmeli.
+- **Ölçemediğim:** tam `Pbxtr.Integration.Tests` takımı koşulmadı (bellek + süre); yalnızca
+  dokunulan sınıflar ve `BR-QA-119` kanıtı için üç sınıf koşuldu.
+
+### Commit
+`65cd7da5` — BR-QA-117: 13 kalem olculdu, 7'si KAPANDI -- kanit yorumdan koda tasindi
