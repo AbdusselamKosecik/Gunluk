@@ -1375,3 +1375,81 @@ tuketicisi yoktu. ClickUp senkronu koşuldu: `BR-QA-114 → complete`,
 - Gerçek santralde `queue_optin` çıkışının hangi AMI olayını ürettiği (Abandon mı
   Leave mi) hâlâ ölçülmedi (`BR-AST-116` sınıfı). Parite testinin sınıflandırması
   o olaydan **bağımsızdır**; değişen yalnızca `wait_source`'tur.
+
+
+---
+
+## Koordinatör — ikinci tur: yayın denemesi ve sayacın çıpası
+
+## Bağlam
+Kullanıcı *"tam yayını başlat"* dedi. Üç ajan bitmişti, paralel yük yoktu — kayıtlı
+*"testhost CLR çökmesi eşzamanlı yük"* riski için en iyi an.
+
+## Yapılanlar
+
+### 1. Yayın #1 — `confd` sunucu sapmasında durdu (kapı haklıydı)
+- **Ne oldu:** `rc=1`, 53 satır. `confd-sapma` kapısı: sunucudaki
+  `pbxtr-confd-dugum.sh` depodan SAPMIS (depo `60e46d3d` / sunucu `e68abcc8`).
+- **Yapısal sebep (kapının kendi yazdığı):** `deploy/staging-yayin.sh` bu dosyaları
+  sunucuya **göndermez** — *"confd" kelimesi o betikte hiç geçmez.*
+- **Üzerine yazmadan ÖNCE yön ölçüldü:** depo 2250 satır / 22:28Z, sunucu 2184 satır /
+  20:01Z → depo **ileride**. Eklenen 67 satırın tamamı **yorum** (`e23c0f0d` ölçüm kaydı).
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 'systemctl stop pbxtr-confd.timer'
+  PBXTR_CONFD_TASI_ONAY=EVET bash deploy/confd-sunucu-sapma.sh --tasi
+  ssh root@176.88.41.220 'systemctl start pbxtr-confd.service'   # exit=0, Result=success
+  ssh root@176.88.41.220 'systemctl start pbxtr-confd.timer'
+  bash deploy/confd-sunucu-sapma.sh --olc                        # dort dosya da 'ayni'
+  ```
+
+### 2. Yayın #2 — 138 kapı yeşil, **1 kırmızı** (`BR-QA-58`), o da haklıydı
+- **Neden:** `BR-BE-190` turunda eklenen
+  `tests/…/Fixtures/ami-confbridge-takeover-capture.txt` bir **dondurulmuş artefakt**
+  ama `deploy/dondurulmus-artefaktlar.json` defterine kaydedilmemişti.
+- **`sha256` biçimi TAHMİN EDİLMEDİ, ÖLÇÜLDÜ:** aynı dizindeki `ami-lab-capture.txt`
+  için defterdeki değer **CRLF→LF normalize** sha ile birebir eşit, ham sha ile **değil**.
+- **`ureten` alanı DÜRÜSTÇE yazıldı:** fikstür **saf kayıt değildir** — kendi başlığı
+  blok blok hangisinin harfiyen, hangisinin **türev** olduğunu sayar ve kaydedilemeyen
+  hali *"yok"* değil **"ÖLÇÜLEMEDİ"** diye yazar. Deftere *"gerçek santral kaydı"*
+  yazmak, kapının tam da önlemek için var olduğu şey olurdu.
+- **Sonuç:** kapı tek başına `ALGILANAN 51 dosya → GECTI`. Diff **10 ekleme / 0 silme**
+  (mevcut biçim birebir korundu).
+- **Commit:** `50740164`
+
+### 3. Sayacın çıpası — bir **P0** ile bir **P1** panoda KAPALI görünüyordu
+- **Neden:** `clickup-durum.js`'teki `/Kapandı|KAPANDI/` kuralı **çıpasız alt dize**
+  testiydi; metnin **ortasındaki** kapanış kelimesini kapanış saydı. Bu, 2026-09-13'te
+  `Bitti` için düzeltilen kusurun **birebir kardeşi**; hemen üstündeki yorum o düzeltmeyi
+  anlatıyor ama kardeş kuralda kalmış.
+- **Ölçüm (önce mevcut veri):** `complete` görünen 659 karttan **7'si** yalnız bu kurala
+  düşüyordu; **altısı gerçekten açıktı** — `BR-QA-113` (P1) metni **"AÇIK."** ile
+  BAŞLIYOR, `BR-BE-150` (**P0**) *"kalan iş hâlâ kod değil"* diyor.
+- **YÖN ÖNEMLİ:** bu kez hata **ters** yöndeydi — **açık iş kapalı** görünüyordu.
+  Backlog'un bilerek dar tutulan kuralı (*"açık işi kapalı göstermek daha kötüdür"*)
+  tam da bunu yasaklar.
+- **`Kurul: RED`** da aynı turda **önleyici** olarak çıpalandı: ölçüldü, bugün **0** kart
+  etkileniyordu.
+- **Regresyon bekçisi:** `yonetim/arac/clickup-durum.test.js`'e 8 vaka (kapı
+  `yerel-kapilar.sh:1380`'de zaten koşuyor). **Mutasyon:** çıpa geri alınınca `rc=1`,
+  geri konunca `rc=0`.
+- **Sayacın aracı benden doğru çıktı:** ben 6 kart demiştim, `clickup-senkron --kuru`
+  **8** buldu (`BR-SYS-56` ve `BR-QA-57` de listede). Pano yazıldı → `fark: 0`.
+
+### 4. Yayın #3 — **bellek yüzünden durduruldu**, kapıya gelmeden
+113 satırda, henüz frontend testlerindeyken sistem belleği kritik seviyeye düştü ve
+süreç sonlandırıldı. **Komutun hatası değil.** Kural gereği kendiliğinden yeniden
+başlatılmadı. Hiçbir kapı koşmadı, hiçbir kırmızı yok, sunucuya **hiçbir şey teslim
+edilmedi** — sunucu hâlâ `ea567d11` (15 Eylül) ikilisini koşuyor.
+
+## Kararlar
+- Yayının kesilmesi **ilerlemeyi geri almadı**: iki kırmızı da kalıcı olarak kapandı ve
+  commit'lendi; bir sonraki koşu o iki kapıyı geçmiş başlar.
+- `BR-FE-117`'ye **kod yazılmadı** ve bu bir erteleme değil ölçüm: ayırt edici alan
+  (`callSource`) sunucuda yok (`CallSource` → `src/**/*.cs` altında **0** eşleşme);
+  alansız her gizleme kampanya çağrılarında da sayacı kaldırır.
+
+## Açık kalanlar / sonraki adım
+- **Yayın — kullanıcı isteğiyle başlatılacak.** 94 açık kartın **37'si** ona bağlı
+  (iki P0 dahil; `BR-AST-58/61` kodda kapalı ama sahada görünmüyor).
+- Açık kart: **94** — yayından **bağımsız 57**'si üzerinde çalışılabilir.
