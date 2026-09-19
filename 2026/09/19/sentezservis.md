@@ -254,3 +254,63 @@ gelmez.
 - Diğer `type` değerleri (gönderim vb.) ele alınmadı.
 - Mikro ihracat kuralı ve ülke verisi; belge tipi kararının nereye yazılacağı.
 - Mahsup bağlantısı doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
+
+---
+
+## Ek tur — e-arşiv/e-fatura gönderim işi
+
+### 15. Uçlar ölçüldü (yalnızca okuma)
+
+| Uç | Sonuç |
+| --- | --- |
+| `GET GetList?type=2` | **1.942 kayıt** — gönderilecekler. Hepsi `eInvoiceStatus=0` ("Yok"). Dağılım 04:1843, 03:92, 01:7 |
+| `GET GetList?type=3` | **1 kayıt** — hatalılar. `eInvoiceStatus=11` ("Hata") |
+
+**`POST Run/?type=3` HİÇ DENENMEDİ.** Bu uç gerçek e-fatura/e-arşiv gönderir ve gönderim
+geri alınamaz; yasal belge üretir. Durum sorgulamada (type=1) 2–3 kayıtlık deneme yapmak
+makuldü, burada değil.
+
+**Ölçülen ayrıntı:** type=3 listesinde `createError` **boş**; hata sinyali durumun kendisi
+(`eInvoiceStatus=11` / "Hata"). Mail bu yüzden hem durum adını hem `createError`'ı gösteriyor
+— yalnızca `createError`'a bakılsaydı hata listesi boş görünürdü.
+
+### 16. Akış
+
+1. `GET GetList?type=2`
+2. `POST Run/?type=3` — **20'şerli** (kullanıcı kararı; durum sorgulamanın 100'ünden ayrı,
+   gönderim ağır iş)
+3. Gönderim bittikten **sonra** `GET GetList?type=3`
+4. Hatalı liste maille bildirilir
+
+**Liste tipi 2, gönderim tipi 3** — kasıtlı olarak farklı. Sınır testi ikisinin eşitlenmesini
+engelliyor: eşitlenirse ya yanlış liste gönderilir ya hiçbir şey.
+
+### 17. Güvenlik ayarları ve gerekçeleri
+
+| Ayar | Gerekçe |
+| --- | --- |
+| `DefaultCron = null` | Belge göndermek operasyon kararıdır; açılışta kendiliğinden başlamaz |
+| `MaxAttempts = 1` | Yarım kalan tur baştan başlarsa aynı belgeler ikinci kez gönderilmeye çalışılır |
+| `RetrySafety.Unsafe` | Mükerrer belge riski açıkça beyan edilir |
+| `SingleInstance = true` | İki tur aynı listeyi paylaşırsa aynı belge iki kez gider |
+| `azami` parametresi | İlk koşuda küçük bir sayı verilebilsin diye; ipucunda yazılı |
+
+Sınır testi bu dördünün kaynakta durduğunu doğruluyor.
+
+- **Bir öbek patlarsa tur durmaz** (kalanlar gönderilebilir), **liste alınamazsa iş başarısız
+  olur** (yapacak bir şey yok).
+- **Hata yoksa mail gitmez.** Her tur "0 hata" maili, gerçek hata mailini gürültüye boğar.
+- Mail alıcıları işin `alicilar` parametresinden; boşsa `Eposta:Alicilar`.
+- Mailde en fazla 200 satır; tamamı çalıştırma kaydında.
+
+- **Commit:** `9ca8cb2` — 538 test geçiyor
+- **Paket:** `SentezServis-2026-09-19-0537.zip`, arayüz tarihi **2026-09-19 05:37**
+
+## Açık kalanlar (güncel)
+
+- **Gönderim işi hiç çalıştırılmadı.** İlk koşunun `azami` ile küçük başlaması ve kullanıcının
+  başlatması gerekiyor.
+- Canlı `appsettings.json`'a `SentezServis:EArsiv` bloğu eklenmeli.
+- Diğer `type` değerleri ele alınmadı.
+- Mikro ihracat kuralı; belge tipi kararının nereye yazılacağı.
+- Mahsup bağlantısı doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
