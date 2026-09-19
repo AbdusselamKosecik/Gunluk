@@ -314,3 +314,21 @@ Sınır testi bu dördünün kaynakta durduğunu doğruluyor.
 - Diğer `type` değerleri ele alınmadı.
 - Mikro ihracat kuralı; belge tipi kararının nereye yazılacağı.
 - Mahsup bağlantısı doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
+
+### 18. Kullanıcı servisleri kendi tarafında doğruladı
+
+Kullanıcı: *"duzgun calisiyor serivisleri, ben yaptim sorun yok ... simdilik elle caliscak
+sekilde yapalim."* Gönderim ucu (`Run/?type=3`) benim tarafımdan değil, kullanıcı tarafından
+çalıştırıldı ve sorunsuz.
+
+**Elle çalışma zaten sağlanmıştı** — kod değişikliği gerekmedi:
+`EArsivGonderJob` ve `EArsivKontrolJob` ikisinde de `DefaultCron = null`; işler yalnızca
+arayüzden "Çalıştır" ile başlar, açılışta veya zamanlamayla kendiliğinden koşmaz. Doğrulandı,
+HEAD `9ca8cb2` üzerinde bir şey değiştirilmedi.
+
+- **Paket:** `SentezServis-2026-09-19-0544.zip` (73,7 MB), arayüz tarihi **2026-09-19 05:44**.
+  İçerik 0537 paketiyle aynı sürüm; yalnızca tazelendi.
+- Kurulumdan sonra `http://<sunucu>:81/api/surum` → `arayuzTarihi` **2026-09-19 05:44**
+  görünmeli; görünmüyorsa eski kopyaya bakılıyordur.
+- Canlı `appsettings.json`'a `SentezServis:EArsiv` bloğu hâlâ elle eklenmeli (paket o dosyayı
+  taşımıyor, kasıtlı).
