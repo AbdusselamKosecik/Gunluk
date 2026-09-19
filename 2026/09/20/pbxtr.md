@@ -734,3 +734,108 @@ oldurulmustu ve kendiligimden yeniden baslatmadim.
   mutasyonla kilitli).
 
 Yani yayin **artik bu iki hatayla dusmeyecek**.
+
+---
+
+## BR-FE-127 — #13 uyelik satiri ham GUID yaziyordu + SINIF BEKCISI (frontend-dev-2)
+
+### Baglam
+
+`BR-FE-124` (#12 agent seridi) ve `BR-FE-126` (#28 MonitorScreen) gorsel taban ilk
+kosusunda bulunmustu; ucuncusu (`#13 LiveAgentsScreen.tsx:536`) ELLE fark edilmisti.
+Ucu de ayni sebeple gizliydi: fiksturler `'satis'` / `'destek'` gibi **okunur sahte
+kimlikler** kullaniyordu, oysa uretimde `LiveAgent.queueIds` **GUID**'dir
+(`RedisLiveOperationsView.cs:479`). Yani kusur kodda degil, **fiksturun yalaninda**
+sakliydi ve hicbir yesil test onu gormedi.
+
+### 1. Duzeltme
+
+- **Neden:** `agent.queueIds.join(', ')` gercek veriyle satira 36 karakterlik kimlikler
+  basardi; `BR-FE-126`'da olculmustu ki uc uyelikli agent'ta hucre **110 karakter** olup
+  eylem cubugunu saga itiyor.
+- **Ne yapildi:** satir `t('liveAgents.membershipCount.one', { count: agent.queueIds.length })`
+  oldu. **Ad UYDURULMADI ve bu bir olcumun sonucudur:** #12 adi kendi `/live/queues`
+  yanitindan cozer; `screens.generated.ts:61` #13'u `permission: 'live.agent.read'`,
+  `permissionsAll: []` ile tanimlar ve `live.queue.read` **ISTEMEZ** -> adi cozecek kaynak
+  yok -> #28 kalibi (SAYI). Yeni anahtar **9 dilde** (Arapca alti cogul sinifi). Eski
+  `liveAgents.queueMembership` anahtari **dokuz dilden de silindi** -- kalsaydi "kimlikleri
+  bas" bicimindeki sablon bir sonraki ekranda geri kullanilirdi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/live/LiveAgentsScreen.tsx`,
+  `.../LiveAgentsScreen.test.tsx`, `src/Pbxtr.Web/src/app/i18n/messages/*.json` (9),
+  `doc/prototip-urun-farklari.md` (FID-SCR-13 / 13.1 satir 5, **BILINCLI**).
+
+### 2. ASIL IS — sinif bir bekciye baglandi
+
+- **Neden:** uc kez tekrarlayan bir kusuru dorduncu kez elle aramak kabul edilemez.
+- **Ne yapildi:** `src/Pbxtr.Web/src/app/screens/rawIdentityRender.test.ts` (YENI, 6 iddia).
+  Kaynak metnini tarar; GUID'i degil **GUID'i YAZAN IFADEYI** arar. Iki dal: JSX ifadesi
+  (`{...chain.field...}`, `=` ile baslamayan sus parantezi) ve `t()` enterpolasyon
+  parametresi. Sablon enterpolasyonu (`${row.actorUserId}`) da kapsamda.
+- **ONCE MEVCUT VERI OLCULDU** (kapi kurmadan once):
+  - kimlik alani evreni **uydurulmadi**: .NET `Guid` property adlari (**169**) kesisim
+    FE `api/**` `string` alan adlari (**195**) = **25**; `id` + `idempotencyKey`
+    gerekceyle cikti -> **23 alan**.
+  - **296 ekran `.tsx`** tarandi -> ham kimlik cizen **7 ifade**: 2 IZINLI (`AuditScreen`
+    -- denetim satirinin URUNU ham kimliktir), 5 **BORC** -> `BR-FE-128` (#09 QueuesTab),
+    `BR-FE-129` (#14 LiveAlarmsScreen), `BR-FE-130` (SilenceThresholdPanel),
+    `BR-FE-131` (CommandPaletteScreen x2).
+  - Defter **ciplak sayi tavani DEGIL, KIMLIKLI**: defterde olmayan yeni cizim KIRMIZI,
+    defterde olup kodda kalmayan satir da KIRMIZI (defter sapmasi).
+- **FIKSTUR AYAGI OLCULDU VE KURULMADI (gerekce yazili):** 241 test/fikstur dosyasinda
+  **19 GUID bicimli / 571 okunur sahte** literal (`id=226 userId=101 activeTenantId=66
+  homeTenantId=46 tenantId=25 dealerId=19 queueId=19 ...`). 571'lik tavan **VACUOUS**
+  olurdu -- `BR-FE-127`'nin kendi fiksturu o 571'in **icindedir**, yani tavan kapatmak
+  icin yazildigi kusuru gecirirdi. Ayrica evrenin yarisi (`id`) mesru bicimde GUID
+  degildir. Sinif bunun yerine **CIKTI tarafindan** kapatildi (GERCEK GUID fikstur +
+  "ciktida hicbir GUID deseni yok"). Dar fikstur ayagi = `BR-FE-132` (bugun 29 literal).
+- **BEKCI KENDINI DE OLCTU:** ilk genis taslak `MonitorScreen:360`'i ve
+  `ReportSchedulesPane:163`'u -- yani sinifin **EN OZENLI** cozumlerini
+  (`queueIds.length`) -- kusur sayiyordu. Bir bekci dogru cozumu kusur sayiyorsa
+  **deseni yanlistir**; `` siniri (`queueId` deseni `queueIds` icinde esliyordu) +
+  `.length`/`===`/`:`/`;` elemesi eklendi. `t('silence.targetId')` ve
+  `errors['filter.queueIds']` yanlis pozitifleri icin **dize govdeleri bosaltildi**.
+- **VACUITY AYAGI:** evren > 200 dosya, alan sayisi, defter dolulugu + dedektorun
+  **pozitif VE negatif** oz-testi (`join()` -> 1 bulgu; `.length` / `key={}` / `===` -> 0).
+
+### 3. Mutasyon
+
+| Mutasyon | Bekci | Birim testi |
+|---|---|---|
+| izole (anahtar AYNI, yalniz ifade `join()`) | **2 failed / 4 passed** | **1 failed / 30 passed** |
+| geri alindi | 6 passed | 31 passed (birlikte **37 passed**) |
+| tam (anahtar da geri) | — | **29 failed / 8 passed** |
+
+Ikisi **bagimsiz** yakaladi: bekci KAYNAGI, birim testi CIKTIYI olcer.
+
+### 4. Olcum
+
+```bash
+npx tsc -b                                  # rc=0
+npx tsc -p tsconfig.visual-tests.json       # rc=0
+npx vitest run                              # 239 dosya / 2136 test passed, rc=0  (once 238/2128)
+node scripts/verify-visual-baselines.mjs    # 6 taban, rc=0
+node scripts/verify-visual-baselines.test.mjs  # 27 iddia
+node yonetim/arac/homoglif-tara.js          # KARISIK YAZILI KELIME: 0
+node yonetim/arac/regex-turkce-sinir-tara.js # RISKLI: 0
+```
+
+### Kararlar
+
+- **Bekci `.cs` OKUMAZ.** Alan listesi olculup **sabit** yazildi. `.cs` okuyan bir uretec
+  Dockerfile'in SPA asamasina `COPY` ister; unutulursa **yayin imaji ENOENT ile duser**
+  (`BR-SYS-125` sinifi) ve yerel `tsc`/`vitest` bunu **gormez**.
+- **Ekran ayagi kuruldu, fikstur ayagi kurulmadi** -- ikisi farkli sey yakalar ve biri
+  digerini kapsamaz; kurulmayanin gerekcesi **olculmus sayiyla** karta ve test dosyasina
+  yazildi (`BR-FE-132`).
+- **Ad uydurulmaz.** Kaynak yoksa SAYI yazilir; bu #28'de verilen kararin aynisidir.
+
+### Commit'ler
+
+- `09b60111` — BR-FE-127 KAPANDI: #13 uyelik satiri ham GUID yaziyordu + SINIF BEKCISI kuruldu
+- `ab8fd800` — ClickUp: BR-FE-128..BR-FE-132 kart id kaydi
+- (backlog satirlari koordinatorun `4615632b` commit'iyle gitti -- paylasilan dosya)
+
+### Acik kalanlar
+
+`BR-FE-128` · `BR-FE-129` · `BR-FE-130` · `BR-FE-131` (ayni sinifin dorduncu-yedinci
+kopyalari, bekciyle bulundu) ve `BR-FE-132` (dar fikstur ayagi).
