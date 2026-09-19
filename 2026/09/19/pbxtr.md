@@ -2819,3 +2819,68 @@ yeniden derleyince mutasyon yakalandi. Mutasyon olcumleri `--no-incremental` ist
 - Entegrasyon takiminda kalan kirmizi: `BR-DB-105` ve `BR-DB-106` (toplam ~4 vaka);
   `BR-DB-107`'nin 35'i ve `SpaBuildContextTests` kapandi.
 - **Yayin hala kosulmadi.**
+
+---
+
+## 23. `BR-FE-125` KAPANDI — `#27` uye gecikmesi alani (frontend-dev-1)
+
+### Neden
+
+Uc tarafi ayni gun inmisti (`bb08b23d`) ama ekran hala **"bu ekrandan yazilamaz"** diyen bir
+kural satiri ciziyordu. Yanlis kalan bir yardim metni, olmayan bir yardim metninden kotudur:
+kullanici alani gorur, ekran "yazamazsin" der.
+
+### Ne yapildi
+
+1. **`#27` uye rozetinin icinde yazilabilir `delaySec` sayi alani** (`ringgroup.write`).
+   Yetkisi olmayana alan cizilmez ama **sifirdan buyuk deger gizlenmez** (salt okunur rozet).
+   Yazma `blur`/`Enter`da: her tusta yazmak ara bir degeri **provisioning revizyonuna**
+   cevirirdi.
+2. **`delay >= grup suresi` icin uyenin ADIYLA uyari.** Yalniz deneyim; guvenlik siniri
+   sunucudadir (CLAUDE.md 5).
+3. **`ext.ruleDelay`** *"yazilamaz"* -> *"yazilir (0-{max} sn)"*; **`ext.strategyNoDelay`
+   KORUNDU** (sirali stratejide alan gonderilirse sunucu 422 doner). Yeni etiketler **9 dilde**.
+4. **Esik sabiti elle yazilmadi:** `RING_GROUP_MAX_DELAY_SEC` ayni ureteçten
+   (`scripts/generate-ring-group-strategies.mjs`) `RingGroupRules.MaxDelaySec`ten turer.
+   Ikinci kaynak icin **`Dockerfile` SPA asamasina COPY satiri** eklendi -- `BR-SYS-125`'in
+   birebir sinifi.
+
+### Yol ustunde olculen blokaj (bu kart kod yazarak kapanamazdi)
+
+`RingGroupEndpoints.Problem` ProblemDetails'e **`code` uzantisini yazmiyordu**; deponun diger
+**294** cagri yeri `ProblemResponse` ile yazar, burasi o desenin disindaydi. Istemcideki
+`ApiError.code` = `body.code ?? internal_error` oldugu icin **her reddi `internal_error`
+goruyordu** -- yani sunucunun BILEREK ayirdigi iki 422 istemciye hic ulasmiyordu. Uzanti
+eklendi; `type`/`title`/durum kodu **degismedi**. Ayrica eslenemeyen kodda baslik **kodun
+kendisiyse** ekrana basilmaz (kullanici `ring_group_teleport_failed` okumaz).
+
+### Dokunulan dosyalar
+
+`src/Pbxtr.Web/src/app/screens/telephony/{ExtensionsScreen.tsx, extensionsApi.ts,
+ExtensionsScreen.module.css, RingGroupMemberDelay.test.tsx, RingGroupStrategyWrite.test.tsx,
+ringGroupStrategies.generated.ts}`, `src/Pbxtr.Web/scripts/generate-ring-group-strategies.mjs`,
+9 dil dosyasi, `Dockerfile`, `src/Pbxtr.Api/Modules/Telephony/RingGroupEndpoints.cs`.
+
+### Olcum
+
+| Ne | Sonuc |
+|---|---|
+| `npx tsc -b` (yayin kapisi) | temiz |
+| `npm run build` | RC=0 |
+| `vitest` (tam) | **2127 gecti / 0 kirmizi**, 238 dosya |
+| Yeni `RingGroupMemberDelay.test.tsx` | 11 test |
+| Mutasyon (a) iki 422 tek cumleye | **KIRMIZI** (1 test), geri konunca 11/11 yesil |
+| Mutasyon (b) `delaySec` govdeden cikarildi | **KIRMIZI** (2 test) |
+| SPA build baglami | bekcinin regex'i betikle taklit edildi: yeni kaynak goruldu, COPY silinince **eksik** raporlandi |
+
+**Olcemedim:** `dotnet test` kosulmadi (paralel ajan talimati) -- `SpaBuildContextTests` ve
+`RingGroupProvisioningTriggerTests` bu turda **kosmadi**; `dotnet build src/Pbxtr.Api` RC=0.
+Gercek santralde cagri denenmedi.
+
+**Commit:** `2f9eeadb`
+
+### Karar
+
+- **Istemci ayrimi ancak sunucu kodu istemciye ULASIYORSA yapilabilir.** "Iki 422 ayirt
+  edilsin" sarti, `code` uzantisi olmadan FE'de hicbir kodla karsilanamazdi; sart once
+  **tasinan bilgiyi** olcmeyi zorunlu kildi.
