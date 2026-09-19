@@ -332,3 +332,66 @@ HEAD `9ca8cb2` üzerinde bir şey değiştirilmedi.
   görünmeli; görünmüyorsa eski kopyaya bakılıyordur.
 - Canlı `appsettings.json`'a `SentezServis:EArsiv` bloğu hâlâ elle eklenmeli (paket o dosyayı
   taşımıyor, kasıtlı).
+
+### 19. Servis canlıda açılmadı — mükerrerlik anahtarı eksikti
+
+**Belirti:** Sunucuda `SentezServis.exe` başlar başlamaz düştü:
+
+```
+System.InvalidOperationException: Görev tanımları geçersiz, servis başlatılmadı:
+  • 'pazaryeri-aktarim' işi RetrySafety.Unsafe olarak işaretlenmiş ama
+    BuildIdempotencyKey uygulamamış.
+  • 'earsiv-gonder' ...
+  • 'earsiv-kontrol' ...
+   at SentezServis.Core.Calistirma.IsKayitDefteri.YukleAsync(...)
+```
+
+**Sebep (benim hatam):** Karar #03 — `JobRetrySafety.Unsafe` işaretli her iş
+`IJob.BuildIdempotencyKey` uygulamak **zorunda**. Bu üç işi Unsafe yaptım ama anahtarı
+yazmadım. `IsKayitDefteri.YukleAsync` bunu açılışta yakalayıp `InvalidOperationException`
+fırlatıyor ve **servis hiç açılmıyor**.
+
+**Neden testlerde görünmedi:** kural yalnızca açılış yolunda denetleniyordu; 538 test geçti,
+paket çıktı, hata ancak canlı sunucuda görüldü.
+
+#### Anahtarların tasarımı
+
+```csharp
+// EArsivGonderJob / EArsivKontrolJob
+public string? BuildIdempotencyKey(JobParameters parameters) => "earsiv-gonder";
+
+// PazaryeriAktarimJob — kapsam düzeyinde
+$"pazaryeri-aktarim:{sirket}:{pazaryeri}:{baslangic:yyyyMMdd}:{bitis:yyyyMMdd}"
+```
+
+- **E-arşiv işlerinde anahtar SABİT.** `azami`/`obek` işin *neye dokunduğunu* bölmez: iki
+  tur farklı `azami` ile başlasa da ikisi de aynı bekleyen listenin başından alır ve **aynı
+  belgeleri** gönderir. Parametreleri anahtara katmak, mükerrer gönderime izin veren **sahte
+  bir ayrım** yaratırdı.
+- **Pazaryerinde parametreler kapsamı GERÇEKTEN bölüyor** — farklı şirket/pazaryeri/tarih
+  aralığı farklı kayıtlara dokunur, birbirini engellememeli. Adım aç/kapa parametreleri yine
+  **katılmadı**: yalnız "sipariş aktar" açık bir tur, dört adımı da açık bir turla aynı
+  siparişleri yazar.
+- **Zorunlu parametreler bile `...OrDefault` ile okunuyor.** `IsKayitDefteri` anahtarı
+  açılışta `JobParameters.Empty` ile sınıyor; `GetDate("baslangic")` fırlatsaydı açılış
+  yine kırılırdı (fırlatma "anahtar var" sayılıyor ama bu tesadüfi bir kurtarış olurdu).
+
+#### Yan bulgu: asılı kalan kilit işi kalıcı olarak kilitliyordu
+
+`MukerrerlikKilidiAlAsync` yalnız **bitmemiş** durumdaki kilitte engelliyor ve kilit işin
+normal bitişinde bırakılıyor. Servis koşarken çökerse/öldürülürse kilit `calisiyor`da kalıyor
+ve **sabit anahtarlı bir iş bir daha hiç başlatılamıyor**. Depoda temizlik yoktu.
+
+`IsKayitDefteri.EsitleAsync`'e açılış temizliği eklendi: `sirada`/`calisiyor` kilitler
+`basarisiz`e çekilir ve sayısı uyarı olarak loglanır. Açılışta bunu yapmak güvenli — servis
+tek sunucuda tek kopya koşar ve `uzaktan-yayimla.ps1` kurulumdan önce servisi durdurur.
+
+#### Tekrarı önlemek
+
+`tests/SentezServis.Core.Tests/MukerrerlikSinirTestleri.cs`: `src` altında
+`RetrySafety = JobRetrySafety.Unsafe` geçen her dosya `BuildIdempotencyKey` de içermeli.
+Testin **boşa geçmediği** doğrulandı — kural bugün 3 dosyayı tarıyor.
+
+- **Doğrulama:** 540 test geçiyor (2 yeni).
+- **Commit:** `d30cfab` — Mukerrerlik anahtarlari: servis acilista cokuyordu
+- **Paket:** `SentezServis-2026-09-19-0553.zip`, arayüz tarihi **2026-09-19 05:53**
