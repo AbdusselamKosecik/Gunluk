@@ -2198,3 +2198,114 @@ iki sınıfa ayırmaktı.
   kirilim okuyan bir uye + `After["droppedUnresolved"/"droppedConflict"]` gerekiyor.
 - `BR-AST-119` (b): alarm bacagi sozlesme acigi olarak duruyor.
 - Acik kart: **90**. ClickUp senkron (`fark olan kart: 0, izde olmayan: 0`, 755 kart).
+
+
+---
+
+## Ek tur — #27 zil grubu YAZMA yuzeyi (frontend-dev-1)
+
+### Baglam
+
+`BR-AST-63` ve `BR-AST-64`'un **kalan tek isi ayni yerdeydi**: #27 (`/telephony/extensions`)
+zil grubu paneli **salt-okurdu**. Ayni gun backend-dev-2 `rotating` stratejisini uretime,
+`delay_sec` okumasini `ConfigRenderer`'a indirmisti; ekran tarafi kalmisti.
+
+### Yapilanlar
+
+#### 1. Strateji secimi — secenek kumesi C# sabitinden TURETILIYOR
+
+- **Neden:** kartin olculmus hatasi iki listenin sessizce ayrismasiydi. `rotating`
+  sunucuda `Supported` kumesine girdiginde TS tarafindaki **elle yazilmis switch** onu
+  bilmedi ve ekran gecerli bir degeri `ext.undefined` ("tanimsiz") diye cizdi.
+- **Ne yapildi:** `generate-alarm-metrics.mjs` deseninin ikizi olarak yeni bir uretec.
+  `RingGroup.cs` icindeki `RingGroupStrategies` sinif govdesi suslu parantez dengesiyle
+  cikarilir, `public const string` haritasi ve **`Supported`** ilklendiricisi ayristirilir.
+  Kaynak `All` DEGIL `Supported`: yazmanin kabul edildigi kume odur.
+  Ayristirmanin her adimi hata firlatir — **bos/kismi liste asla yazilmaz**.
+- **Bekci:** etiket haritasi `Record<RingGroupStrategy, MessageKey>`. C#'a dorduncu bir
+  strateji eklenip uretim kosarsa tsc **TS2741** ile kirilir; 9 dilde etiket yazmayi
+  unutmak sessiz kalmaz.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/scripts/generate-ring-group-strategies.mjs` (yeni),
+  `src/Pbxtr.Web/src/app/screens/telephony/ringGroupStrategies.generated.ts` (uretilmis),
+  `package.json` (`ring-group-strategies:gen`, `dev`/`build` icine baglandi).
+
+#### 2. Yazma yolu ve fail-closed davranis
+
+- **Uc:** `PUT /api/v1/ring-groups/{id}`, yetki **`ringgroup.write`** (`extension.write` DEGIL).
+- **Govde TAM gider** (uye listesi + tasma + sure): uc kismi govde kabul etmez; uyeler
+  eksik giderse `ring_group_member_required` doner — yani "degistirdim" diyen bir ekran
+  hicbir sey kaydetmemis olurdu.
+- **Fail-closed:** sunucudan kapali kume disi bir deger gelirse secici **hic cizilmez**.
+  Bir `<select>` tanimadigi degeri gosteremez: ilk secenege duser ve kullanici hicbir sey
+  yapmadan strateji **degismis gibi gorunur**; sonraki kaydetmede o yanlis deger gercekten
+  yazilirdi.
+- **Yetki yoksa deger GIZLENMEZ**, salt okunur kalir — gizleseydik stratejiyi
+  degistiremeyen bir supervizor grubun neden sirayla caldigini ekrandan ogrenemezdi.
+- **Teslim defteri:** `delivery-manifest.json` + `extensions.ring-group-update`
+  (`write_readback`, `restore_previous`, `auditExpectation: required`).
+
+#### 3. `BR-AST-64` — KAPANMADI, sebebi OLCULDU
+
+- **Blokaj FE'de degil, uc sozlesmesinde:** `RingGroupMemberRequest` **uc** alan tasiyor
+  (`ExtensionId`, `Position`, `RingTimeSec`) ve `delaySec`i **kabul etmiyor**;
+  `RingGroupMemberDto` de **dondurmuyor** (`RingGroupEndpoints.cs:355` bunu zaten yaziyor).
+  `src/Pbxtr.Api` altinda (bin/wwwroot disi) `delaySec` gecen TEK satir o yorumdur.
+- **Alan UYDURULMADI.** Ekrana alan cizmek, sunucunun **sessizce yok sayacagi** bir deger
+  gondermek olurdu — kartin adini koydugu "ayarladim ama calismiyor" sinifinin aynadaki hali.
+- **Bunun yerine davranis EKRANDA YAZILDI:**
+  - `ext.ruleDelay` (9 dil): gecikme bu ekrandan yazilamaz **ve** tanimli bir gecikme
+    grubun calma suresine esit/buyukse o uye **hic calmaz**;
+  - `ext.strategyNoDelay`: **sirali** strateji seciliyken "bu stratejide uygulanmaz" notu.
+    Eszamanli stratejide o not **cizilmez** (bekci vacuous degil, iki yonlu test var).
+- **Kalan is (backend):** dort DTO/record `delaySec` tasimali, `RingGroupRules` onu
+  dogrulamali (`0 <= delay < ringTimeSec`) ve `RingGroupDelaySecWritePathTests` o commit'te
+  **bilincli** olarak guncellenmeli.
+
+#### 4. Yan bulgu — uretilmis dosya bayatti
+
+`system-roles.generated.ts`, `permissions.seed.json`'daki `agent` rolune eklenen
+`alarm.silence.read.self` yetkisini tasimiyordu: birileri tohumu degistirmis, ureteci
+kosmamis. Bu turda uretec kosunca fark **git status**'ta gorundu ve duzeltildi.
+(Ureticinin ciktisinin depoya islenmesinin sebebi tam olarak budur.)
+
+### Komutlar
+
+```bash
+cd src/Pbxtr.Web
+node scripts/generate-ring-group-strategies.mjs
+node scripts/generate-screens.mjs
+npx tsc -b            # rc=0
+npx vitest run        # 237 dosya / 2116 test
+```
+
+### Sonuc / dogrulama
+
+- `npx tsc -b` **rc=0** (`--noEmit` degil — o yayin kapisi degildir).
+- vitest **TAM takim: 237 dosya / 2116 test gecti**; yeni
+  `RingGroupStrategyWrite.test.tsx` **8 test**.
+- **Mutasyon:** secenek listesi uretilmis sabit yerine elle iki degere sabitlendi →
+  8 testin **2'si KIRMIZI**, geri alindi ve yeniden yesil.
+- `dotnet build`/`dotnet test` **kosulmadi** (paralel dotnet ajani; eszamanli yuk
+  testhost'u cokertiyor). C# **kodu degismedi**; yalniz `delivery-manifest.json` **verisi**
+  buyudu. Manifest'in C# kapilari (`DeliveryManifestTests`) bu turda **olculemedi**.
+- **Commit:** `737b4472`
+- ClickUp senkron: `BR-AST-63 in progress -> complete`, dogrulama `fark olan kart: 0`.
+
+### Kararlar
+
+- **Uretilmis kume > elle liste.** Iki tarafin ayni kapali kumeyi ayri ayri tasidigi her
+  yerde ayrisma **sessizdir**; bekci derleme zamaninda kirmalidir.
+- **Olmayan uc icin form cizilmez** (CLAUDE.md §5). Ama "cizmedik" yetmez: davranis
+  **ekranda yazilir**, yoksa ham SQL ile girilmis bir `delay_sec` yalniz uretilen
+  config'in yorum satirinda gorunur.
+- **Kapali kume disi deger = yazma yolu kapali.** Bir `select` icin bu bir zarafet degil
+  dogruluk sartidir.
+
+### Acik kalanlar / sonraki adim
+
+- `BR-AST-64`: `delaySec`i uc sozlesmesine ekleme isi **backend'de** duruyor; indigi gun
+  FE uye satirina sayi alani + `delay >= ringTimeSec` uyarisi ekler.
+- `#27`de hala **form yok:** grup olusturma/silme ve numara/ad/sure/tasma/uye duzenleme
+  (uclar hazir). `prototip-urun-farklari.md` #27/1'de adi konmus durumda.
+- `delivery-manifest.json`'a eklenen action'in **C# kapilari kosulmadi** — bir sonraki
+  dotnet turunda `DeliveryManifestTests` + `Pbxtr.Api.Tests` kosulmali.
