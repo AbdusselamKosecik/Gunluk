@@ -2884,3 +2884,113 @@ Gercek santralde cagri denenmedi.
 - **Istemci ayrimi ancak sunucu kodu istemciye ULASIYORSA yapilabilir.** "Iki 422 ayirt
   edilsin" sarti, `code` uzantisi olmadan FE'de hicbir kodla karsilanamazdi; sart once
   **tasinan bilgiyi** olcmeyi zorunlu kildi.
+
+---
+
+## BR-AST-120 — `pbxtr-confd` defteri diski doğrulamıyor + ERTELENEN reload kalıcı kilit
+
+### Bağlam
+
+Kart `BR-AST-17` turunda **canlıda üretilerek** açılmıştı ama gövdesi tek cümleydi.
+İki kusur okunmuştu: (1) `5) Degisen kume` "sha aynı" dalı dosyanın diskte durup
+durmadığına hiç bakmıyor; (2) `12) Durum defteri` bloğu `SAPAN`/`ATLANAN_TENANT`'ı
+atlıyor ama **`ERTELENEN`'i atlamıyor** → ertelenen reload bir daha hiç denenmiyor.
+
+### 1. Önce ölçüm, sonra düzeltme (üçüncü kusur burada çıktı)
+
+- **Neden:** kart "düzeltmeyi §5'e koy" diyordu. Sunucuda A ölçümü yapılınca §5'e
+  **hiç ulaşılmadığı** görüldü.
+- **Ne yapıldı:** `ssh root@176.88.41.220` (ilk komut `date -u`), timer durduruldu,
+  `queues/t0012-queues.conf` konteynerden silindi, **kurulu (eski)** betik koşturuldu.
+- **Sonuç:** `HTTP 304` → `304 -- degisiklik yok. Diske dokunulmadi, reload kosmadi.`
+  → `CIKIS=0`. Yani ETag tazeyken betik `case 304` dalında **diske dokunmadan çıkıyor**;
+  §5'e konacak bir düzeltme **sonsuza kadar koşmazdı.** Üçüncü kusur budur.
+
+### 2. Düzeltme — `deploy/pbxtr-confd-dugum.sh`
+
+- **`2a) Disk envanteri` (yeni, §2'den sonra):** istekten ÖNCE tek bir
+  `docker exec pbxtr-asterisk sh -c 'cd /etc/asterisk/pbxtr.d && ls -1 */*.conf'`.
+  Defterdeki bir satırın dosyası yoksa **`ETAG` boşaltılır** → `If-None-Match`
+  gönderilmez → sunucu 200 + tam gövde döner. Yol GÖRELİ listelenir; mutlak yol
+  selftest shim'inde sahte köke çevrildiği için karşılaştırmayı sessizce kaçırırdı.
+- **§5:** "sha aynı" dalı aynı envanteri okur; dosya yoksa tür **DEĞİŞMİŞ** sayılır.
+  Ek `docker exec` **yok** (envanter zaten alınmış).
+- **Yol `printf` ile kurulur, dize sabiti değil:** `HEDEF_ADI=$(printf '%s/%s-%s.conf' ...)`.
+  Sebep ölçüm: selftest M1 mutasyonu `s.replace` ile **ilk** eşleşmeyi değiştirir; aynı
+  dizeyi §5'e yazmak mutasyonu §8'deki yazım satırı yerine buraya uyguluyor ve
+  **M1 sessizce vacuous** oluyordu (ilk koşuda `mutasyon YAKALANMADI` olarak görüldü).
+- **§12 — ertelenen tür:** sha sütunu `reload-bekliyor:` önekiyle **işaretlenir**.
+  Üç seçenek tartıldı:
+  - (a) satırı silmek → `X-Pbxtr-Have` körleşir (manifest `node_declared` →
+    `previous_revision`; BR-AST-25 meşru eksilmeyi "beyansız kayıp" sayabilir),
+  - (b) eski satırı bırakmak → **diskten silinmiş dosya** hâlinde içerik değişmediği
+    için `${SHA}` defterdeki sha ile AYNIdır (canlıda `fd15ef1f…` iki turda da aynı);
+    reload ertelenirse sonraki tick "sha aynı" der, dosya artık diskte durduğu için
+    disk kapısı da geçer → **kalıcı kilit geri gelir**,
+  - (c) **seçilen:** önekli değer hiçbir sha256 ile eşit olamaz; revizyon sütunu
+    dokunulmadan kalır; `state.json`'da operatöre görünür.
+  - Kuyruk defteri ertelenen türde **tazelenmez** (santralde hâlâ eski küme var).
+
+### 3. Canlı A/B/C/D/E ölçümü (test ortamı, timer durdurulup geri açıldı)
+
+| Adım | Sonuç |
+|---|---|
+| A) eski betik + silinmiş `t0012-queues.conf` | `HTTP 304`, `CIKIS=0`, dosya hâlâ YOK |
+| B) yeni betik, aynı hâl | `DEFTER … AMA DOSYA DISKTE YOK` → `HTTP 200` → `degisen tur sayisi: 1` → `reload: queues` → `CIKIS=0`; diğer 7 tür `degismedi (sha ayni, dosya diskte DOGRULANDI)` deyip atlandı |
+| C) `PBXTR_CONFD_CHANNEL_LIMIT=-1` | `SONRAKI TICK'E ERTELENDI`; defter `t0012⇥queues⇥reload-bekliyor:fd15ef1f…⇥1`; `CIKIS=75` |
+| D) normal eşikle sonraki tick | "degismedi" DENMEDİ, yeniden yazıldı, `reload: queues`, defter ham sha'ya döndü, `CIKIS=0` |
+| E) son sürüm + `moh/t0007-moh.conf` | aynı zincir, `reload: moh`, `CIKIS=0` |
+
+Reload komutları CLAUDE.md §3.1 kapalı listesinden; **liste genişletilmedi.**
+
+### 4. Öz-test — `deploy/pbxtr-confd-selftest.sh`
+
+- **F40:** defter "değişmedi" der, 4 dosya elle silinmiştir → hepsi geri yazıldı,
+  reload 3→6, eksiklik adıyla raporlandı, **silinmeyen tür hâlâ atlandı** (yön ölçümü),
+  `If-None-Match` gönderilmedi.
+- **F41:** erteleme → sha `reload-bekliyor:` ile işaretli **ve** revizyon sütunu duruyor
+  → sonraki tick `queue reload all` koştu.
+- **İkisi de gerçek tur dönüşüdür (`kos_tekrar`)** — ajanın KENDİ yazdığı defteri okur.
+  Kartın vacuity uyarısının istediği tam olarak budur.
+- **M27/M28/M29** eklendi (tek koşuluk `mutasyon` yardımcısı yetmiyordu; iki koşuluk
+  `mutasyon_iki_kosu` yazıldı).
+- **Sonuç:** `213 iddia gecti`, 0 kaldı, çıkış 0; **41 fikstür / 30 mutasyon, 30/30 yakalandı.**
+
+**Mutasyon iki gerçek kusur buldu:**
+1. M1 vacuous olmuştu (yukarıda, `printf` ile düzeltildi).
+2. M29 ilk hâlde yakalanmadı: iddia HTTP başlığındaki `ETag: "yeni-etag"` değerini
+   arıyordu; ajan ETag'i **gövdedeki `bundle.etag`** alanından okuyor
+   (`ayristir.js`: `yaz("etag", bundle.etag)`), fikstür üreticisi orayı `e1` yazıyor.
+   Yanlış değeri arayan iddia **her zaman yeşildi.**
+
+**Fikstür kusuru da ölçüldü:** F8/F25/M2/M9 sha defterini yazıyor ama **diske hiçbir şey
+koymuyordu** — yani üretimde ARIZA olan hâli NORMAL sayıyorlardı. Düzeltme konunca F8 ve
+F25 kırmızı döndü ve kırmızı **ajanda değil fikstürdeydi**; `defter_diski_kur` eklendi.
+
+### Dokunulan dosyalar
+
+`deploy/pbxtr-confd-dugum.sh`, `deploy/pbxtr-confd-selftest.sh`,
+`deploy/yerel-kapilar.sh` (yalnız kapı etiketi 39/26 → 41/30), `yonetim/backlog.md`.
+
+**Commit:** `fa79e51e`
+
+### Sunucuda bırakılanlar
+
+`/usr/local/lib/pbxtr/pbxtr-confd-dugum.sh` **düzeltilmiş sürümdür** (md5 depo ile birebir:
+`869d0585…`), `pbxtr-confd.timer` **active**. Kendi geçici yedeklerim silindi;
+`BR-AST-17`'nin bıraktığı üç yedek ve t0012'nin `deliver` niyeti **dokunulmadan duruyor.**
+
+### Kararlar
+
+- **Bir kapının hiç koşmadığı yol, kapının kendisinden önce ölçülür.** Kart düzeltmeyi
+  §5'e koymamızı istiyordu; §5'e 304 yüzünden hiç ulaşılmıyordu.
+- **`reload-bekliyor:` işareti "sil" ile "olduğu gibi bırak" arasındaki üçüncü yoldur**
+  ve ikisinin de ölçülmüş bir bedeli olduğu için seçildi.
+
+### Ölçemediklerim
+
+- Gerçek Asterisk'in reload davranışı öz-testte ölçülmez (sahte CLI).
+- Diskteki dosyanın **içerik** sapması bilinçli olarak kapsam dışı (sunucu sha'sına
+  yaslanan bir karşılaştırma 2026-09-07'nin "her beş dakikada reload" arızasını geri getirirdi).
+- İkinci bir gerçek düğümde ölçüm yapılmadı.
+- `dotnet` koşulmadı (paralel ajan kuralı); bu kart .NET kodu değiştirmiyor.
