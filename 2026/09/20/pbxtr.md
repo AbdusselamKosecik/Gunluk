@@ -424,3 +424,123 @@ npx vitest run                            # 238 dosya / 2128 test passed
   duruyor. `BR-QA-57`'nin kalemleri arasinda degildi; gorunmez borc olmasin diye
   kart acildi, **duzeltilmedi**.
 - `S10` — piksel kapisi hala 3 aylik deneme suresinde (son tarih 2026-12-11).
+
+
+### Koordinator turu — bosuna acik duran kartlar + RAISE NOTICE olcumu + SSRF sinif taramasi
+
+#### 1. BOSUNA ACIK DURAN IKI KART — yeni bir hata sinifi
+
+- **`BR-QA-86` ve `BR-7` kapandi**, ikisinde de **uzerinde kalan is YOKTU**. Isleri baska
+  kartlara **devredilmisti** ve o kartlar **bitmisti**; devralan kapaninca kaynak kart
+  **kendiliginden kapanmiyor**.
+- **`BR-7`** kapanisini kendi metninde bir **sarta** baglamisti (*"`BR-QA-109` kapanmadan
+  kapali sayilamaz"*). Sart **olculdu**, yaziyla degil kosan bekciyle:
+  `dotnet test --filter "FullyQualifiedName~TenantLeakCoverage"` -> **Failed 0 / Passed 6**.
+  (Kart yazildiginda o bekci ana dalda KIRMIZIYDI: `Failed 1, Passed 3`.)
+- **`BR-QA-86`**'nin devrettigi madde `BR-QA-111`'deydi ve o kart 18 Eylul'de kapanmis:
+  dort desen yalniz `TEMPLATE_ONLY_DENIED`'a eklenmis, `SQL_DENIED` dokunulmamis,
+  `deploy/db/*.sql` govdeleri degismemis (bulgu 398 -> 398, dosya 168 -> 168).
+- **SINIF TARANDI:** 81 acik karttan **5**'i devir dili tasiyor, 2'si baska karta atif
+  yapiyor, ikisinin atiflari **karisik** (bir kismi acik). Yani **baska bosuna acik kart
+  yok**. Tarama bir **aday listesi** uretir, karar uretmez -- her aday elle okundu.
+- **KURAL (buradan cikan):** bir kart isini baska bir karta devrediyorsa devralanin kart
+  kodu yazilir ve **kaynak kart AYNI TURDA kapatilir**.
+- **Commit:** `b2b81a96`, `eaf0f7f6`
+
+#### 2. `BR-DB-104` — `RAISE NOTICE` uretim yolunda GORUNMUYOR (KAPANDI)
+
+Kart *"`Database.Migrate()` yolu olculmedi"* diyordu. **Iki katman ayri olculdu.**
+
+- **(1) Npgsql katmani — gercek kosu** (tek kullanimlik `postgres:16-alpine`, Npgsql 10.0.0):
+
+  ```
+  MinimumLevel=Information (uretimin appsettings degeri) -> ReceivedNotice satiri YOK
+  MinimumLevel=Debug -> [Debug] Npgsql.Connection (1301/ReceivedNotice): Received notice: ...
+  KONTROL GRUBU (Notice olayina abone) -> her iki seviyede de 1 olay
+  ```
+
+  Yani bildirim **istemciye geliyor**; mesele gunluge yazilmasi ve seviyesi **Debug**.
+
+- **TUZAK — kartin ilk yarisiyla BIREBIR AYNI SEKIL:** `Information`'da damga yine
+  gorunuyor, ama `ReceivedNotice` olarak degil, `CommandExecutionCompleted` satirinin
+  **SQL metnini yankilamasi** yuzunden. *"Ciktida `RAISE NOTICE` geciyor"* demek
+  *"uyari goruldu"* demek **degildir**.
+
+- **(2) Urun yolu — DAHA SERT:** `MaintenanceRunner.MigrateDatabase` (`:469-481`,
+  cagiran `:330`) **taze bir `DbContextOptionsBuilder`** kurar ve yalniz `.UseNpgsql(...)`
+  der; **`UseLoggerFactory` YOKTUR** ve depo genelinde o cagri **0 eslesme**
+  (`src/` + `tests/`). Yani seviye Debug'a cekilse bile o satir **hicbir yere yazilmaz**.
+  Sorun bir ayar degil, **baglanmamis bir boru**.
+
+- **Sonuc:** `Karar #70 S70-4` (`BR-BE-185`) ve `BR-DB-101`'in `Down`'u operatorun uyariyi
+  **okuyacagini** varsayiyor. O varsayim `psql`'de dogru, `dotnet ef`te yanlis,
+  **uretimde imkansiz**.
+- **Olcmedigim -> `BR-DB-108` acildi:** (a) `RAISE NOTICE`'a yaslanan kararlarin **sayimi**;
+  (b) migrate baglamina gunlukcu baglanmali mi **karari** -- o baglam **bilerek ciplaktir**
+  (interceptor'lar da yok, gerekce `:474-476`'da yazili), yani otomatik "evet" degil.
+- **Commit:** `38a0c00e`
+
+#### 3. `BR-SEC-21` (ajan) — gercek bir guvenlik kusuru cikti, ben SINIFINI taradim
+
+- **Ajanin bulgusu:** Netgsm SMS istemcisi **ham `new HttpClient()`** kullaniyordu ->
+  `AllowAutoRedirect` **varsayilan acik**, ve Netgsm arayuzunde **kullanici adi ile parola
+  SORGU DIZESINDE**. Tek bir `302`, kimligin kendisini kapidan gecmemis bir hedefe tasirdi.
+  Ayrica gonderim anindaki DNS cozumlemesi hic siniflandirilmiyordu (rebinding penceresi).
+- Ajan guard'in evrenini **iki uctan** yazdi: kapidan gecen **7** yol, gecmeyen **3** yol
+  (`AriClient`, `AriStasisApp`, `UnixSocketSystemAgent`) ve ucu de **bilincli** -- hedefleri
+  yapilandirmadan gelir ve ic agdadir; kapidan gecirilseydi santral baglantisi
+  `private`/`cgnat` ile **reddedilirdi**.
+- **Ben sinifi taradim (koordinator):** `src/` altinda ham `new HttpClient(` **TAM OLARAK
+  IKI** yerde -- duzeltilen Netgsm ve `AriClient.cs:46`. `new HttpClientHandler` /
+  `new SocketsHttpHandler` yalniz `OutboundConnectGuard.cs:76`; `AddHttpClient` **0**.
+- **`AriClient` OLCULDU, SIZDIRMIYOR:** kalibi birebir kurup gercek bir `302` kosuldu ->
+  farkli kokene yonlendirmede `Authorization` **DUSUYOR**, ayni kokene de dusuyor.
+- **ARAC SINAMASI:** ilk kosuda **kontrol grubu da bos geldi** ve sonucu **kabul etmedim**.
+  Yonlendirmesiz dogrudan bir istek ekledim, baslik orada **gorundu**; ancak ondan sonra
+  olcumu gecerli saydim.
+- **AYIRT EDICI (asil ders):** Netgsm'de kimlik **sorgu dizesinde**ydi ve sorgu dizesi
+  yonlendirme hedefine **TASINIR**; `AriClient`'ta **basliktadir** ve baslik **DUSER**.
+  *"Ham `HttpClient`"* tek basina kusur **degildir**; **kimligin nerede tasindigiyla**
+  birlesince kusurdur.
+- **Kural:** kimligi sorgu dizesinde tasiyan her giden cagri, handler'i sertlestirilmis
+  olmasa bile **`AllowAutoRedirect = false`** istemek zorundadir.
+- **Olcmedigim:** `AriClient` `3xx` alinca yonlendirmeyi **izliyor** (kimliksiz de olsa) --
+  bozuk bir santral pbxtr'a baska adrese **istek attirabilir**; tehdit degeri olculmedi.
+- **Commit:** `6196c917`
+
+#### 4. `BR-QA-57` (ajan) — gorsel kapi 6 tabana cikti, UCUNCU GUID kopyasi bulundu
+
+- Kalem (3): **#28 agent eylem cubugu** (Dinle / Sufle / **Araya gir**) -- dugme kaymasi
+  burada **yetki hatasina** donusur. Yetkiler **tam** verildi; yalniz `monitor.listen`
+  verilseydi taban **en dar** cubugu dondururdu ve olculmek istenen sinif hic olculmezdi.
+- **Ilk kosu kusur gosterdi (`BR-FE-126`):** uyelik satiri `queueIds.join(', ')` yaziyordu
+  ve `queueIds` uretimde **GUID**; uc uyelikli agent'ta hucre **110 karakter** olup sayaci
+  ve eylem cubugunu saga itiyordu -- yani kartin tarif ettigi kayma arizasini **besliyordu**.
+- **Taban kusurlu haliyle DONDURULMADI:** Playwright eksik snapshot'i sessizce
+  *"writing actual"* diye yazmisti; o dosya silindi ve duzeltmeden sonra yeniden uretildi.
+- **Ad uydurulmadi:** #28'in yetki kumesinde kuyruk adini cozecek kaynak yok, o yuzden
+  **sayi** yazildi ("Uyelik: 3 kuyruk"), 9 dilde (Arapca alti cogul sinifiyla).
+
+#### 5. GUID KUSURU UCUNCU KEZ CIKTI — sinif bekciye baglaniyor
+
+`BR-FE-124` (agent seridi) -> `BR-FE-126` (#28) -> `BR-FE-127` (#13). **Ucu de ayni sebeple
+gizliydi:** fikstlerler `"satis"`/`"destek"` gibi **okunur sahte kimlikler** kullaniyordu;
+uretimde o alan **GUID**. Kusur kodda degil, **fiksturun yalaninda** sakliydi. Uc kez
+tekrarlayan bir kusuru dorduncu kez elle aramak kabul edilemez -- `BR-FE-127` frontend'e
+**bekci sartiyla** verildi (fikstur ayagi + ekran ayagi, borc tavani kalibi, vacuity + mutasyon).
+
+### Kararlar (bu tur)
+
+- **Devredilen is bitince kaynak kart da kapatilir.** Aksi halde **bitmis is acik gorunur**
+  ve her sayimda yeniden incelenir -- "kapali kartin icindeki is gorunmez olur"un tersi ve
+  ayni derece maliyetli.
+- **Bir olcumun kontrol grubu dustuyse SONUC KABUL EDILMEZ**, once arac sinanir.
+- **"Ham istemci" tek basina kusur degildir**; kimligin nerede tasindigiyla birlesince
+  kusurdur. Sinif taramasi bu ayrimi yapmadan "hepsi ayni" derdi.
+
+### Acik kalanlar / sonraki adim
+
+- Acik kart **80** (P0 3 / P1 37 / P2 34 / P3 6). ClickUp senkron.
+- Kosan: `BR-SEC-26` (db-dev), `BR-SYS-60` (linux, santral sahiplik penceresi),
+  `BR-FE-127` + GUID sinif bekcisi (frontend-dev-2), `BR-AST-114`/`115` (backend-dev-2).
+- **Yayin hala kosulmadi** -- uc P0 ve acik kartlarin buyuk kismi ona bagli.
