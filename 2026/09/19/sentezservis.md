@@ -189,3 +189,68 @@ kestirir.
 - **Belge tipi kararının nereye yazılacağı** (kolon gerekiyor).
 - `earsiv-gonder` gövdesi → önce kurul kararı (CRS'e ilk yazma).
 - Mahsup bağlantısı hâlâ doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
+
+---
+
+## Ek tur — e-arşiv durum sorgulama servisi (type=1)
+
+### 11. Sözleşme ölçüldü, tahmin edilmedi
+
+Kullanıcı uçları ve akışı tarif etti. Kod yazmadan önce ikisi de canlıda ölçüldü:
+
+| Uç | Sonuç |
+| --- | --- |
+| `GET /EArsiv/GetList?type=1` | `{success, count, data[], at}` — **86.864 kayıt / 19,4 MB / 20 sn** |
+| `POST /EArsiv/Run/?type=1` | Aynı zarf; `createStatus` 0→1, `eInvoiceStatus` **değişmez** |
+
+Kayıt modeli (GET ve POST'ta aynı): `companyId, companyCode, recId, receiptNo,
+receiptType, receiptDate, eInvoiceStatus, eInvoiceStatusName, createStatus, createError`.
+
+Liste dağılımı: 04 → 66.205, 03 → 20.336, 01 → 323. Tamamı `receiptType=121`, biri hariç
+hepsi `eInvoiceStatus=3` ("Dosya Gönderildi"). Tarih aralığı 01.07 → 18.09.
+
+**Kullanıcının tarifi doğrulandı:** dönüşte yeni durum gelmiyor. Bu yüzden iş "durumları
+güncelledim" demiyor; "şu kadar kaydı işlettim, şunlar hata verdi" diyor ve özete
+"yeni durumlar bir sonraki listede görünür" notunu koyuyor.
+
+**POST denemesi bilerek küçük tutuldu:** önce 2, sonra 3 kayıt. Tam tur (869 öbek)
+çalıştırılmadı — dışarıdaki servise iş tetikleyen, geri alınamaz bir çağrı.
+
+### 12. Ölçüm sırasında görülen: işlenen kayıt listeden düşüyor
+
+İkinci `GetList` **86.862** döndü (önce 86.864). Denemede işlenen 2 kayıt kuyruktan
+çıkmış. Bu, işi tekrar koşmayı güvenli kılıyor: kalanlar işlenir, işlenmişler tekrar
+gelmez.
+
+### 13. Yazılanlar
+
+- `EArsivModelleri.cs` — `EArsivAyarlari`, `EArsivKaydi`, `EArsivYaniti`. Alan adları
+  `JsonPropertyName` ile **sabitlendi**: ad değişirse JSON sessizce boş nesnelere çözülür
+  ve iş "0 kayıt" deyip başarılı görünür.
+- `EArsivIstemcisi.cs` — `ListeAsync`, `CalistirAsync`. Ağ hataları anlaşılır mesaja çevrilir.
+- `EArsivKontrolJob.cs` — iskelet gerçek gövdeyle değiştirildi. `type=1` sabit.
+- `Ayarlar.cs` + `appsettings.json` — `SentezServis:EArsiv` bloğu (adres, öbek boyutu,
+  zaman aşımları).
+- `EArsivTestleri.cs` — 6 test; canlıdan alınmış **gerçek yanıt** üzerinden çözümleme,
+  hata alanının okunduğu ve POST'ta aynı alan adlarının yazıldığı doğrulanıyor.
+
+### 14. Kararlar
+
+- **Bir öbek patlarsa tur durmaz.** 869 öbeklik bir turda tek ağ hatası yüzünden yapılan
+  işin tamamını çöpe atmak, hiç çalışmamaktan kötüdür. Kalanlar işlenir, hata uyarı olur.
+  **Listeyi hiç alamamak farklıdır** — o durumda iş başarısız olur.
+- `MaxAttempts = 1`: iş dışarıdaki servise yazma tetikler.
+- Zamanlanmaz (`DefaultCron = null`): sıklık operasyon kararı.
+- `type` **1'de sabit**; diğer tipler ele alınmadı, uydurulmuş bir tip yanlış işi tetikler.
+- Hata örnekleri özette **20 ile sınırlı**; binlerce satır özeti okunamaz kılar.
+
+- **Commit:** `e046149` — 535 test geçiyor
+- **Paket:** `SentezServis-2026-09-19-0523.zip`, arayüz tarihi **2026-09-19 05:23**
+
+## Açık kalanlar (güncel)
+
+- **Canlı `appsettings.json`'a `SentezServis:EArsiv` bloğu eklenmeli** (paket taşımıyor).
+- `earsiv-gonder` gövdesi hâlâ boş; yazıldığında CRS'e ilk yazma olacak → kurul kararı.
+- Diğer `type` değerleri (gönderim vb.) ele alınmadı.
+- Mikro ihracat kuralı ve ülke verisi; belge tipi kararının nereye yazılacağı.
+- Mahsup bağlantısı doğrulanmadı; `efatura-tetikle` 6 saatlik zaman aşımına takılıyor.
