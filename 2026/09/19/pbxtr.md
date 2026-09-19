@@ -2677,3 +2677,74 @@ o olcumu yapti.
 - **Yayin hala kosulmadi** ve acik kartlarin buyuk kismi ona bagli (uc P0 dahil).
 - Kosan ajanlar: `BR-SEC-29` (tasarim A), `BR-AST-64` (uc sozlesmesi), `BR-AST-120`
   (confd defter kilidi).
+
+---
+
+## BR-AST-64 — `delay_sec` uc sozlesmesi (backend-dev-1)
+
+### Baglam
+Karta bugun iki taraf inmisti: uretim (`ConfigRenderer` artik `delay_sec` okuyor, Karar
+#66 M19(a)) ve FE (alan cizilemedi, sebebi olculdu). Kalan tek is **uc sozlesmesiydi**:
+`RingGroupMemberRequest` `delaySec` kabul etmiyor, `RingGroupMemberDto` dondurmuyordu.
+
+### Yapilanlar
+
+- **Neden:** kolon DB'de var, uretim okuyor, ekran cizemiyor -> "sessiz olu alan".
+  Ayrica olculen ikinci bir ariza: guncelleme uyeleri **silip yeniden ekliyor**, yani ham
+  SQL ile girilmis bir gecikme panelden yapilan ILK kayitta sessizce `0`'a dusuyordu.
+- **Ne yapildi:** dort kayit da `delaySec` tasir oldu (`RingGroupMemberRequest`,
+  `RingGroupMemberDto`, `RingGroupMemberInput`, `RingGroupMemberRow`); EF yazma yolu
+  alani yaziyor, okuma yolu donduruyor; `RingGroupRules` uretimin **bugunku**
+  davranisina birebir dogrulama yapiyor.
+- **Karar — sessiz kabul degil RED:** gecikme >= grup zaman asimi -> `422
+  ring_group_member_delay_not_ringing`; es zamanli disi stratejide gecikme -> `422
+  ring_group_member_delay_strategy_unsupported`; aralik disi (`0..60`, DB CHECK'i ile
+  ayni sayi) -> `Invalid`. **Uyari alani secilmedi**, cunku uyari alani istemcinin onu
+  cizmesine baglidir; cizmeyen istemci icin davranis yine sessiz kabuldur.
+- **Bekci ters cevrildi:** `RingGroupDelaySecWritePathTests` artik "hicbir uretim satiri
+  yazmaz" degil, **"yazan TAM OLARAK BIR yol var"** olcuyor.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Telephony/IRingGroupAdministration.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfRingGroupAdministration.cs`,
+  `src/Pbxtr.Api/Modules/Telephony/RingGroupEndpoints.cs`,
+  `tests/Pbxtr.Api.Tests/Modules/Telephony/RingGroupProvisioningTriggerTests.cs`,
+  yeni `tests/Pbxtr.Api.Tests/Modules/Telephony/RingGroupDelaySecContractTests.cs`,
+  `tests/Pbxtr.Architecture.Tests/RingGroupDelaySecWritePathTests.cs`,
+  `doc/prototip-urun-farklari.md` (#27/1), `yonetim/backlog.md`
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj --no-build     --filter "FullyQualifiedName~Pbxtr.Api.Tests.Modules.Telephony"
+  dotnet build src/Pbxtr.Infrastructure/Pbxtr.Infrastructure.csproj --no-incremental
+  dotnet test tests/Pbxtr.Architecture.Tests/Pbxtr.Architecture.Tests.csproj --no-build
+  ```
+- **Sonuc / dogrulama:** `Modules.Telephony` **1371 gecti / 0 kirmizi / 2 atlandi**
+  (onceki tur 1350; +21 vaka, 4'u uctan uca: POST `delaySec=5` -> uretilen dialplan'de
+  `Wait(5)` + GET yanitinda `"delaySec":5`). `Architecture.Tests` TAM takim **752/753**;
+  tek kirmizi `SpaBuildContextTests` ve **bu turun isi degil** (FE'nin
+  `generate-ring-group-strategies.mjs`'i `RingGroup.cs` okuyor, Dockerfile SPA asamasi
+  onu KOPYALAMIYOR -> yayin imaji ENOENT ile duser; ayri sahip/kart gerekir).
+  **Mutasyon 2/2 kirmizi.**
+- **Commit:** `bb08b23d`
+
+### Kararlar (bu tur)
+
+- **Uyari alani, kurali cizmeyen istemciye emanet etmektir.** Sunucu tarafinda red,
+  "kaydettim ama calmiyor" sinifini gercekten kapatan tek sey.
+- **Ayni alan iki stratejide iki anlam tasiyamaz.** Sirali/turlu stratejide gecikme
+  reddedilir; uretim onu uygulamiyor, uc de kabul etmez.
+
+### Olcum dersi (kayda deger)
+
+**Damga tazeligi derleme kaniti degildir.** EF yazimini silen mutasyon ilk kosuda YESIL
+gorundu: `dotnet build` rc=0 dondu ve `Pbxtr.Infrastructure.dll` **damgasi guncellendi**,
+ama IL eski haldeydi — bekci mutasyonsuz ikiliyi olcuyordu. `--no-incremental` ile
+yeniden derleyince mutasyon yakalandi. Mutasyon olcumleri `--no-incremental` ister.
+
+### Acik kalanlar
+
+- **FE kalan isi (ayri sahip):** #27 uye satirina sayi alani + `delay >= ringTimeSec`
+  uyarisi; bugun cizili `ext.ruleDelay` notu ("bu ekrandan yazilamaz") artik YANLIS ve
+  gercek alana baglanmali. `ext.strategyNoDelay` notu DOGRU kalir.
+- **Dockerfile SPA asamasi `RingGroup.cs`'i kopyalamiyor** -> `SpaBuildContextTests`
+  kirmizi; yayin imajini bloke eder, kart acilmali.
+- **Olcemedigim:** gercek santralde cagri denenmedi (uretilen METIN olculdu);
+  `Integration.Tests` kosulmadi (paralel db-dev ajani) — yalniz derlendi, rc=0.
