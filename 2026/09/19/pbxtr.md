@@ -1648,3 +1648,139 @@ ayağı tek başına yazılamaz; karar değişmedi, karta bugünün ölçümü e
   kapasite: canlı çağrı durumu + dinleme oturumu fikstürü ve ayrı bir Ş6 incelemesi ister.
   **Boş ya da sahte taban üretilmedi.**
 - `BR-FE-111` — sunucu tarafında `LiveAgentDto`'ya sebep alanı eklenmeden açılamaz.
+
+---
+
+# pbxtr — 2026-09-19 (db-dev turu: BR-BE-185 / BR-DB-76 / BR-DB-77 / BR-DB-101)
+
+## Bağlam
+Kurul dağıtılmış durumda: açık kararlar ajan tarafından veriliyor, dar olan seçiliyor,
+gerekçe karta yazılıyor. Dört kart verildi. Ortak eksen: **ölçülmemiş cümleleri ölçmek**.
+
+## Yapılanlar
+
+### 1. Ölçüm ortamı: gerçek PostgreSQL 16 + TAM migration zinciri
+- **Neden:** dört kartın üçü "gerçek PG'de ölçülmedi" diye açık duruyordu. Taze zincir
+  olmadan `convalidated`, RLS sessiz sıfırı ve FK davranışı ölçülemez.
+- **Ne yapıldı:** `deploy/db-kapilari-docker.sh`in şema kurulum adımları kopyalanıp
+  ayrı bir konteynere alındı (ci-check adımı yok — bu tur şema ölçüyor, kapı koşturmuyor).
+- **Komutlar:**
+  ```bash
+  docker run -d --name pbxtr-br185-srv postgres:16-alpine   # hazirlik: docker inspect saglik
+  psql -f deploy/db/00-roles.sql
+  dotnet ef database update --project src/Pbxtr.Infrastructure
+  ```
+- **Sonuç:** 216 migration uygulandı; sonra 217. olarak BR-DB-101 migration'ı eklendi.
+
+### 2. `BR-BE-185` — kabul ölçütünün açık yarısı kapandı (P1, **Bitti**)
+- **Neden:** kart dört turdur "Down gerçek PostgreSQL'de koşulup NOTICE gözlenmedi"
+  diye bloke duruyordu; Docker her turda kapsam dışı kalmıştı.
+- **Ne yapıldı:** `Down()` gövdesi migration **dosyasından programla çıkarıldı**
+  (elle kopya "belge santral değildir" sınıfı bir hata olurdu) ve EF gibi tek
+  transaction içinde `pbxtr_owner` ile koşuldu.
+- **Ölçümler:**
+  - İki `RAISE NOTICE` çıktıda **görüldü**; `RAISE EXCEPTION` yok, `COMMIT` geçti.
+  - Yapısal (`pg_constraint`, metin eşleme değil): önce `convalidated = t`, Down sonrası
+    `convalidated = f` → kısıt **gerçekten NOT VALID bırakılıyor**.
+  - NOTICE'in ikinci cümlesi de ölçüldü: gerçek bir `EndpointDelivery` satırı yazılınca
+    `VALIDATE` **23514**, aynı satırın `DELETE`'i **P0001 append-only** ile düştü.
+  - Bloğun satır saymama gerekçesi ölçüldü: aynı turda tenant filtresiz `count(*)` **0**
+    dedi, kısıt doğrulaması aynı satırı **buldu**. FORCE RLS altında tanı sayısı yalan söyler.
+  - **Bugünkü NOT VALID envanteri:** 6 satır, hepsi tek kısıt adı
+    (`ck_sla_buckets_callback_requested_count`, ebeveyn + 5 partition), gerekçeli ve
+    zararsız (kolon aynı deyimde `NOT NULL DEFAULT 0` doğuyor). Toplam kısıt 792.
+
+### 3. `BR-DB-101` — kuyruk çıkış anonsu medyası (P1, **DB yarısı Bitti**)
+- **Neden:** `BR-AST-111` tuşu ve dialplan bağlamını indirmişti ama arayan **tuşun
+  varlığını hiç duymuyordu**; anons medyasının tutunacağı kolon yoktu. Onay/fail-back
+  anonsları stok İngilizce (`auth-thankyou` / `vm-sorry`) idi.
+- **Ne yapıldı:** `20260919030000_QueueCallbackAnnouncementMedia` —
+  `callback_invite_media_id` / `callback_confirm_media_id` / `callback_failback_media_id`,
+  her biri **bileşik FK** → `media_files(tenant_id, id)` `ON DELETE RESTRICT`; üç kısmi
+  indeks (hepsi `tenant_id` ile başlıyor); `EfMediaUsageProbe` genişletildi.
+- **KARAR:** KURUL #78 / cm-agent ŞARTI 1 **UI'da değil DB'de** durur →
+  `ck_queues_callback_media_required`: `callback_digit` doluysa üç anons da zorunlu.
+  Gerekçe: ekran dışı her yazma yolu UI doğrulamasını atlar.
+- **Ölçümler (pozitif + negatif + mutasyon):** kısıt ve üç FK `convalidated = true`;
+  anonssuz tuş → 23514; üçten ikisi dolu → 23514; üçü dolu → `UPDATE 1`; kısıt DROP
+  edilince aynı negatif vaka `UPDATE 1` (kırmızının sahibi gerçekten bu kısıt);
+  çapraz tenant medya → 23503; kullanımdaki medya silme → 23503.
+  `Up → Down → Up` tam tur; Down sonrası kolon/kısıt/indeks **0**.
+- **Beklenmedik ama doğru bulgu:** Down `callback_digit`'e dokunmaz → sonra `Up`'ı
+  yeniden koşmak **23514** verdi. Yani remarks'taki "canlıda tuş doluysa migration düşer"
+  cümlesi neşir değil ölçüm. Down'daki NOTICE'in verdiği kurtarma adımı da ölçüldü:
+  aynı UPDATE `pbxtr_owner` ile **`UPDATE 0`**, `pbxtr_app` + tenant GUC ile **`UPDATE 1`**.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Queues/Queue.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Configurations/QueueConfigurations.cs`,
+  `src/Pbxtr.Infrastructure/Modules/EfMediaUsageProbe.cs`,
+  `src/Pbxtr.Infrastructure/Persistence/Migrations/20260919030000_QueueCallbackAnnouncementMedia.cs`
+- **Commit:** `85d47c9b`
+
+### 4. `BR-DB-77` — KARAR: CHECK kalır, referans tablo + FK **reddedildi** (**Kapandı**)
+- **Neden:** kart "ölçüm tarafı kapandı, geriye seçim kaldı" diyordu; kurul dağıtıldığı
+  için seçim burada verildi.
+- **Dört ölçülmüş gerekçe:**
+  1. Referans tablonun meşru yeri **yok**: `public`'te `tenant_id` taşımayan tablo üç
+     bağımsız katmanla yasak (`pbxtr_global_tables()` beş ad, donduruldu). `pbxtr_sys`'e
+     koymak çözüm değil **kaçamak**: guard kapsamı `nspname = 'public'` (ölçüldü).
+  2. Kazanç bir sayıdır: `migration-contract-onay.blobs` 27 onay satırı taşıyor, enum
+     genişlemesinden doğan **2** (%7,4). FK ömür boyu 2 satır kazandırırdı.
+  3. FK'nin tek özgün koruması (enum **daraltma**) `DO $widen$` bloğunda **zaten var**.
+  4. Append-only defterin sıcak yoluna ikinci bir tablo bağımlılığı eklerdi.
+
+### 5. `BR-DB-76` — tasarım karara bağlandı, yazım bilerek yapılmadı
+- **Neden:** kalan iş "retention işinin yazımı"ydı; yazımdan önce cevapsız tek tasarım
+  sorusu **imzaydı**: çapraz-tenant mı, tenant başına mı?
+- **Ölçüm (PG 16, 1M satır, 192 MB, %99,4 okuma işlemi; üç vaka da `rows=5000` getirdi):**
+
+  | Vaka | Plan | Süre |
+  |---|---|---|
+  | A — indekssiz çapraz-tenant | `Parallel Seq Scan` + top-N sort | **103,0 ms** |
+  | B — kural-uyumlu `(tenant_id, at)` kısmi indeks, **aynı sorgu** | indeks **HİÇ kullanılmadı**, yine seq scan | **112,7 ms** |
+  | C — aynı indeks, **tenant başına** | `Index Scan` | **2,4 ms** |
+
+  Kontrol grubunun paydası yazılı: o tenant'ın **14.201** adayı var (parti gerçekten
+  doldu), toplam aday **564.595**. Tam tur: çapraz ≈ **11,6 sn**, tenant başına ≈ **0,29 sn**.
+- **KARAR:** fonksiyon `pbxtr_sys.purge_telephony_provider_effects(p_tenant_id uuid,
+  p_keep_days integer, p_batch integer)` — **tenant başına**. Böylece "her indeks
+  `tenant_id` ile başlar" kuralı **istisna istemez**; (B) gösteriyor ki çapraz imza
+  seçilseydi kural-uyumlu indeks **vacuous** olurdu — kuralın değil **imzanın** değişmesi
+  gerekiyordu. Silme yalnız beş periyodik OKUMA işleminde; gerçek YAZMA etkileri hiç
+  silinmez (24 saatte 109 satır). Append-only tetikleyici kalır; geçiş yalnız DELETE için
+  ve yalnız `pbxtr.retention_purge='on'` iken — UPDATE mutlak yasak. İki kilit: bayrak
+  **ve** DELETE yetkisi (ölçüldü: `pbxtr_app` yalnız INSERT + SELECT).
+- **Neden yazılmadı:** emsal `WebhookDeliveryRetentionJob` + `Options` **405 satır**, ayrıca
+  DI + `BackgroundJobLocks` kaydı ister. Bu turda `src/Pbxtr.Infrastructure` **paralel bir
+  ajan tarafından yazılıyordu** (`ConfigRenderer.cs` bir ara derlenmiyordu); yalnız DB
+  fonksiyonunu indirmek **"kod var, koşan yok"** borcu üretirdi.
+
+### 6. `BR-DB-104` açıldı — migration NOTICE'ı üretim yolunda görünüyor mu?
+- **Neden:** BR-BE-185'i kapatırken ölçüldü — `dotnet ef database update -v` çıktısında
+  (210 satır) SQL gövdesi 4 kez yankılanıyor ama **sunucu NOTICE satırı SIFIR**.
+- Üretimdeki yol üçüncüdür: `MaintenanceRunner` → `Database.Migrate()`
+  (`MaintenanceRunner.cs:454`). Orada NOTICE'ın `ILogger`'a düşüp düşmediği **ÖLÇÜLMEDİ**
+  ("yok" değil, "ölçemedim"). Görünmüyorsa iki kararın "operatör bilgilendirilir" ayağı
+  **vacuous**'tur.
+
+## Kararlar
+- **Güvenlik şartı UI'da değil kısıtta durur.** Ekran dışı her yazma yolu UI doğrulamasını
+  atlar (`ck_queues_callback_media_required`).
+- **Kuralı bükmeden önce imzayı değiştir.** BR-DB-76'da "her indeks tenant_id ile başlar"
+  kuralına istisna istemek yerine fonksiyon imzası tenant başına yapıldı; ölçüm kuralın
+  değil imzanın yanlış olduğunu gösterdi.
+- **Bir kazanç sayılmadan tartılmaz.** BR-DB-77'de "defter her enum değerinde büyüyor"
+  doğruydu ama ağırlığı 2/27 idi — ve bedeli dondurulmuş bir çok-kiracılık değişmeziydi.
+- **`pbxtr_sys`'e koymak guard'dan kaçmaktır**, çözüm değildir (guard kapsamı ölçüldü).
+- **Down sessiz olmaz.** BR-DB-101'in Down'u `callback_digit`'i olduğu gibi bırakır ve
+  bunu iki NOTICE ile söyler; `RAISE EXCEPTION` kullanılmaz — geri alma bloklanmaz.
+
+## Açık kalanlar / sonraki adım
+- `BR-DB-101`'in diğer yarısı: medya yükleme/seçme UI'ı, `ConfigRenderer`'ın stok sesleri
+  bu kolonlarla değiştirmesi + `periodic-announce`, `pbxtr.d/` dosya teslimi ve
+  "dosya yoksa anons YAZILMAZ" kuralı, stok seslerin gerçek santralde ölçülmesi.
+- `BR-DB-76`: yukarıdaki imzayla migration + iş + DI + kilit + kapanış ölçümü.
+- `BR-DB-104`: `Database.Migrate()` yolunda NOTICE ölçümü ve gerekirse `ILogger` bağlaması
+  + koşan bekçi.
+- **Ölçemediğim:** tam çözüm derlemesi bu turda paralel ajanın `ConfigRenderer.cs`'i
+  yüzünden bir ara kırmızıydı; **kendi dosya kümem** son başarılı derlemede (0 hata)
+  yeşildi ve `dotnet format --verify-no-changes` o kümede temiz döndü.
