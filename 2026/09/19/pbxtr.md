@@ -3088,3 +3088,144 @@ F25 kırmızı döndü ve kırmızı **ajanda değil fikstürdeydi**; `defter_di
 - Entegrasyon takiminda kalan kirmizi: `BR-DB-105`, `BR-DB-106`.
 - Kosan: `BR-SEC-29` (db-dev).
 - **Yayin hala kosulmadi.**
+
+---
+
+## BR-SEC-29 — `tenants_sys_update` daraltmasi (db-dev, 2026-09-19)
+
+### Baglam
+
+Kart durumu *"KARAR VERILDI, UYGULAMA BLOKE (dosya catismasi)"* idi. `deploy/db/01-rls-template.sql`
+ve `02-guards.sql` bu turda serbestti; koordinator `BR-DB-91` yayin bagimliligini da cozdu
+(laboratuvar olcumu indi, canli pencere olcumu `BR-DB-91`'in kendi kapanis sartinda kalir).
+
+### 1. Dar olan ne, neden dar degildi
+
+- **Neden:** `tenants_sys_update` policy'si `((id = app_current_tenant() OR app_is_cross_tenant())
+  AND id <> platform)` idi. Capraz kipteki HER `pbxtr_owner` oturumu (bakim SQL'i, restore betigi,
+  yarin eklenecek bir definer fonksiyon) platform DISINDAKI her tenant satirini, her kolonuyla
+  guncelleyebiliyordu -> **N-1 satir**. `BR-DB-69`'un `tenants_seed_update` kaldirmasi bu sinifi
+  KAPATMAMISTI (alt kume idi).
+- **Ne yapildi (tasarim A, kartta secilmisti):** iki `pbxtr_sys` yazicisina **fonksiyon duzeyi**
+  `SET "app.sys_write"` eklendi (`move_tenants_to_dealer` -> `tenant_move`,
+  `set_tenant_status` -> `tenant_status`); policy o isareti ON KOSUL sayar ve her dali kendi
+  yazicisinin kapsamina baglar.
+
+### 2. ON KOSUL: `GRANT SET ON PARAMETER` (kaynaktaki (A') notu dogrulandi)
+
+`01-rls-template.sql`'deki (A') notu *"ayri GUC olculdu, EKLENMEDI"* diyordu. **Once olctum,
+sonra astim** -- temiz PG 16.15 konteynerinde:
+
+```
+# grant YOKken:
+CREATE FUNCTION f1() ... SET "app.sys_write" = 'tenant_move' ...
+#   -> ERROR: permission denied to set parameter "app.sys_write"
+# calisma zamani SET LOCAL: SERBEST (placeholder) -> current_setting = 'x'
+GRANT SET ON PARAMETER "app.sys_write" TO probe_owner;
+CREATE FUNCTION ... -> CREATE FUNCTION
+```
+
+Ayrica **fonksiyon kapsamli SET'in donuste VE ISTISNADA geri alindigi** olculdu (cagri oncesi bos
+-> icerde `tenant_move` -> donuste bos; `RAISE` ile dusen kardes fonksiyondan sonra da bos).
+Tasarim B (`set_config(..., true)`) bu ozelligi TASIMAZ -- islem omurludur.
+
+Grant `deploy/db/00-roles.sql` BOLUM 6b'ye eklendi (superuser adimi), `pbxtr-demo/db/00-roles.sql`
+kopyasi senkronlandi **ve sunum sunucusuna da uygulandi**:
+
+```
+scp deploy/db/00-roles.sql root@176.88.41.220:/home/vuo/pbxtr-demo/db/00-roles.sql
+scp deploy/db/00-roles.sql root@176.88.41.220:/root/pbxtr-build/deploy/db/00-roles.sql
+# konteynerde: GRANT SET ON PARAMETER "app.sys_write" TO pbxtr_owner;
+# dogrulama: pg_parameter_acl -> app.sys_write satiri pbxtr_owner=s/postgres
+bash deploy/db-roles-sunucu-sapma.sh   # -> "iki sunucu kopyasi da depo ile AYNI"
+```
+
+**Neden bu adim atlanamazdi:** grant olmadan tazeleme migration'i 01'i uygularken 42501 ile
+duserdi. Eksiklik SESSIZ degil, yayin DURUR -- ama yine de yapilmis olmasi gerekiyordu.
+
+### 3. Dokunulan dosyalar
+
+- `deploy/db/00-roles.sql` + `pbxtr-demo/db/00-roles.sql` (parametre grant'i)
+- `deploy/db/01-rls-template.sql` (policy + iki fonksiyon basligi; **govdeler DEGISMEDI** ->
+  `prosrc` md5 ayni -> `sys-functions.expected` ve frozen hash DOKUNULMADI)
+- `deploy/db/02-guards.sql` (`SYS_UPDATE_WRONG_QUAL`/`_CHECK` birebir dizeleri + yeni bulgu
+  `SYS_FUNCTION_TENANT_WRITER_NO_SYS_WRITE_MARK`)
+- `deploy/db/03-smoke-tenant-isolation.sql` (33c, yeni 33c-2, 33d, 33d-2, yeni 33d-2b, TEST 35)
+- `src/.../Migrations/20260919050000_TenantsSysUpdateWriteMark.cs` (01 + 02 tazeleme)
+- `deploy/db/sablon-refresh.expected`, `deploy/migration-contract-onay.blobs`
+- `deploy/yerel-kapilar.sh` (kapi_10 istisnasi)
+- 5 entegrasyon test sinifi (fikstur)
+
+### 4. Smoke hangi dala dustu (kartin (1) sorusu -- CEVAP)
+
+| Yer | Eski | Yeni |
+|---|---|---|
+| `:2223` TEST 33c | owner+cross bayili tenant UPDATE = **1 satir** | **0 satir** (iddia guncellendi, eskisi Onceki kayit altinda) |
+| yeni 33c-2 | -- | isaret ELLE konunca **1 satir** (33c vacuous degil + kalinti zayifligin KOSAN kaydi) |
+| `:2242-2285` TEST 33d | policy dusunce 0/0/0 | AYNI, ama isaret bilerek konuyor (aksi halde vacuous olurdu) |
+| 33d-2 | kok tenant **1 satir** (Karar #64 genislemesi) | **0 satir** -- genisleme KAPANDI |
+| yeni 33d-2b | -- | ISARETLI platform olcumu 0; CTO literali aksi halde VACUOUS kalirdi |
+| `:2525-2560` TEST 35 | kota TETIKLEYICISINI olcer | blok basinda isaret konur -- isaretsiz UPDATE 0 satir eder, tetikleyici HIC ateslenmez (fail-open sinifi) |
+
+### 5. Mutasyon (ikisi de yakalandi)
+
+```
+# M1: policy'den on kosul kaldirildi VE 02-guards beklentisi de ona uyduruldu
+bash deploy/db-kapilari-docker.sh   # rc=3
+#  ERROR: TEST 33c BASARISIZ: ... UPDATE'i 1 satir etti (0 bekleniyordu)
+# M2: move_tenants_to_dealer'dan SET yan tumcesi silindi
+bash deploy/db-kapilari-docker.sh   # rc=1
+#  PBXTR_SYS FUNCTION GUARD: 1 ihlal -- SYS_FUNCTION_TENANT_WRITER_NO_SYS_WRITE_MARK
+```
+Ikisinde de dosyalar bayt-tam geri alindi (sha256 karsilastirildi).
+
+### 6. Sayilar (ve neyin BENIM OLMADIGI)
+
+Her kirmizi `git worktree add ... HEAD` ile **ayni filtreyle** taban olctu:
+
+| Olcum | Sonuc | Taban (HEAD) |
+|---|---|---|
+| `deploy/db-kapilari-docker.sh` | **rc=0**, tum kapilar yesil | -- |
+| `Pbxtr.Architecture.Tests` | **752 gecti / 1 kirmizi** | `SpaBuildContextTests` HEAD'de de KIRMIZI |
+| entegrasyon dilimi (18 sinif) | **139 gecti / 2 kirmizi** | ayni filtre HEAD'de de **139/2** |
+| `UserRoleScopeConsistencyTests` | **15 / 16** | `Up_Down_Up` HEAD'de de KIRMIZI (42703 `voicemail_sla_daily.box_id`) |
+
+`kapi_71` yesil, `kapi_07` (+ oz-test) yesil, `kapi_10` yesil.
+
+### 7. Kirilan 5 test sinifi -- hepsi TEK SINIF
+
+`UserRoleScopeConsistencyTests`, `DealerTenantMoveDealerStaffHttpTests`,
+`TenantImmutableColumnGuardTests`, `RoleScreenAccessHttpTests`,
+`CallDataRetentionRowFairnessTests`. Hepsi **"kapi DISI owner yazicisi"**: FORCE RLS altinda
+sessizce 0 satir. Duzeltme, isareti fikstur icinde ELLE koymak -- **ve bu tam olarak kartta
+yazili kalinti zayifliktir**, yorumlarda oyle yazildi.
+
+### 8. Sablon cipasi -- delta tam olculdu, korukoru tasinmadi
+
+`migration-contract-onay.blobs` icindeki `Sablon deploy/db/01-rls-template.sql sha256:...`
+satiri degisti. Guardin kendi `sql_occurrences` fonksiyonu cagrilip **eski ve yeni ifade kumeleri
+diff'lendi**: ifade sayisi **56 -> 56**, yeni `DROP`/`ALTER`/`DO $`/`GRANT ... TO PUBLIC` **YOK**;
+degisen tek sey iki `SECURITY DEFINER` basliginin `SET "app.sys_write"` kazanmasi.
+`02-guards.sql` cipasi **degismedi**.
+
+### Kararlar
+
+- **`Down()` gurultulu degil, BOS.** Ilk yazimda `RAISE EXCEPTION` koydum ve
+  `UserRoleScopeConsistencyTests.Up_Down_Up_ve_mutasyonlar` kirmizi oldu -- o test zinciri
+  `20260915120000`'e geri sariyor. Emsal (`RlsTemplateRefresh`) de bos govde: tazeleme
+  migration'larinin geri alma yolu YORUMDA yasar. **Gurultulu Down, geri almayi olcen TEK testi
+  kosulamaz yapardi.**
+- **kapi_10 istisnasi genisletildi ama bedeli yazildi.** `app.cross_tenant` ile ayni sinif;
+  UCUNCU bir ada genisletilmez (Karar #70 kapali liste dersi).
+- **`app.sys_write` bir SINIR DEGIL, bir DARALTMADIR.** Kapattigi sey kotu niyetli owner degil,
+  KAZARA genis owner yazimi. Kapanis metninde "sinir" kelimesi bilerek kullanilmadi.
+
+### Acik kalanlar / sonraki adim
+
+- **Canli pencere olcumu `BR-DB-91`'in isi:** `tenants` policy penceresinde `call-permission`
+  RED sayisi, **yayin sirasinda**. Bu migration `RlsTemplateRefresh` ile ayni pencerede kosarsa
+  `tenants` uzerinde tek policy penceresi olur (daraltmanin lehine).
+- Benim olmayan iki kalici kirmizi: `SpaBuildContextTests`,
+  `UserRoleScopeConsistencyTests.Up_Down_Up` (42703 `voicemail_sla_daily.box_id`,
+  `20260918190000_VoicemailBoxIdentity` Down yolu) -- kart yok, acilmali.
+- **Commit:** `59d31085` — BR-SEC-29 KAPANDI (push edildi). ClickUp: `fark: 0, izde olmayan: 0`.
