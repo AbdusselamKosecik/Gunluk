@@ -2394,3 +2394,116 @@ birlikte teslim edilsin, santralde t0012 nesneleri gorunsun, `NO_SUCH_QUEUE` sus
 - Ikinci bir **gercek** dugumde (iki ayri santral) teslim **olculmedi**.
 - Sunucuda birakilanlar: `/var/lib/pbxtr-confd/*.yedek-br-ast-17*`,
   `/etc/pbxtr/confd/t0012-dugum-anahtari.json`; gecici betikler silindi.
+
+---
+
+## Tur — `BR-QA-118` + entegrasyon takiminin TAM olcumu (backend-dev-2)
+
+### Baglam
+Ana dalda `TelephonyEventPipelineTests.Canli_gorunum_redis_durumu_ile_db_sayacini_birlestirir:459`
+kirmiziydi: bir `PbxtrCallAnswered` yutuldugu halde `after.AnsweredToday - before.AnsweredToday`
+**1 yerine 0**. Kirmizi yeni degildi, **maskeliydi** — ayni sinifin 11 testi `WebhookOutboxWriter`
+DI kaydi eksik oldugu icin daha erken dusuyordu (`37e77e01` ile kayit konunca 11 -> 1 oldu).
+Ikinci is: entegrasyon takiminin tam olcumu; koordinatorun turu 570 sn'de `rc=124` ile yarida
+kalmisti, yani gorunen kirmizi listesi eksikti.
+
+### Yapilanlar
+
+#### 1. `BR-QA-118` — sayac neden artmiyor (ONCE OLC, SONRA KOD)
+- **Neden:** kartta uc supheden hicbiri olculmemisti, ikisi de "elendi" diye yazilmisti.
+- **Ne yapildi:** teste gecici bir probe konuldu ve gercek PostgreSQL uzerinde kosuldu:
+
+  ```
+  PROBE source=synthetic|1|2026-09-19 02:59:15+00  before=0  after=0
+  ```
+
+  Boru hattinin yazdigi `cdr` satiri `source='synthetic'`; gunluk toplam sorgusu
+  `.RealOnly()` tasiyor (`RedisLiveOperationsView.cs:282,361` -> `CallDataSourceQuery.cs:58`).
+  **Kartta "elendi" yazan (a) sikki aslinda DOGRUYMUS** — eleme, sorgu metninde ciplak
+  `source` kelimesi arayarak yapilmis; filtre uzantinin icindeydi. Diger iki suphe ayni
+  olcumde elendi (`started_at` bugun, `before=0`; `linkedid` cakismasi yok).
+- **TEST mi URUN mu:** **TEST IKIZI**. Uretimde bu boru hattini kosturan tek bilesim
+  `Telephony:Provider=asterisk`tir ve damga orada zaten `live`dir
+  (`TelephonyServiceCollectionExtensions.cs:285`) -> `#01`/`#12` sayaci uretimde dogru
+  calisir. Sentetigin canli gorunumden dislanmasi BR-QA-51 / S66-19'un ACIKCA istedigi sey.
+- **Duzeltme:** `TelephonyTestHost` damgayi acikca `CallDataSourceStamp.Live` kaydediyor.
+  Secim yeni bir istisna DEGIL: `CallDataSourceStampInterceptor`in kendi belgesi "DAMGA YOKSA
+  Live" derken gerekcesini birebir yaziyor (*"orada satir koyan tek sey, gercek bir cagrinin
+  yerine gecen bir fiksturdur ve onu synthetic saymak testin kurdugu senaryoyu SESSIZCE yok
+  ederdi"*). Ayrica konak `CallDataSourceStampInterceptor`i hic kaydetmiyordu; uretim kaydinin
+  birebir sekli kondu.
+- **Yeni vaka:** `Sentetik_damgali_cagri_canli_sayaci_kimildatmaz` — `.RealOnly()`yi bugune
+  kadar olcen tek sey bir METIN taramasiydi.
+- **Mutasyon (ikilide dogrulandi):** `:361`'deki `.RealOnly()` silindi -> yeni vaka KIRMIZI
+  (`Expected: 0, Actual: 1`); geri alindi -> 15/15 yesil. Ilk denemede build 2 hatayla
+  atlanmisti ve olcum eski ikiliye gitmisti; tekrarlandi.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Integration.Tests/Support/TelephonyTestHost.cs`,
+  `tests/Pbxtr.Integration.Tests/Tests/TelephonyEventPipelineTests.cs`
+- **Commit:** `1be5de84`
+
+#### 2. `BR-QA-119` — ayni arizanin DORT biçimi
+- **Neden:** `20260919020000_CallDataSourceColumn` `source`'u VARSAYILANSIZ NOT NULL yapti.
+- **(i) EF yazicilari:** interceptor yalnizca `AddPbxtrPersistence`e kaydedilmisti; kendi
+  `DbContext`ini kuran **yedi** test konagi onsuz kaldi (`TelephonyTestHost`, `Faz2Database`,
+  `JobApplication`, `RealSchemaDatabase`, `TestApplication`, `ScripterPersistenceTests`,
+  `ScripterHttpTests`).
+- **(ii) Ham SQL tohumlari:** 10 dosya + paylasilan fikstur. Deger her yerde `'live'` —
+  `'synthetic'` yazmak `23502`yi susturur ama iddiayi **bos kume** uzerinde yesil yakardi.
+- **(iii) HTTP urun yolu:** `PanelHttpApplication` `simulated` oldugu icin
+  `BlockedCallResultWriter`in yazdigi satirlar `synthetic` oluyordu ve rapor uclari onlari
+  hic gormuyordu (olcum: `cdr`'dan 3, rapordan 1).
+- **(iv) Elle yazilmis ikiz tablo:** `PbxtrDatabaseFixture.CreateCdrSchemaAsync` `public.cdr`'i
+  elle yaratiyor; `source` kolonu uretimdeki sekliyle eklendi.
+- **KOR TOPLU YAMA YANLISTI ve OLCULDU:** dort dosya (`CallbackSlaSqlParityTests`,
+  `SlaDeadlineRestatementTests`, `SlaEventOrderingTests`, `SlaHoldTimePipelineTests`) KENDI
+  minimal `call_events` tablosunu yaratir ve kendi belgesinde *"gercek semanin 15 kolonunun
+  tamamini TASIMAZ ve tasimamalidir"* yazar. Onlara kolon eklemek 13 kirmiziyi kapatirken
+  **15 yenisini acti** (`42703`); geri alindi.
+- **Yan bulgu:** `PersistenceRegistrationTests.AddPbxtrPersistence_uc_interceptoru_da_baglar`
+  KENDI YAZDIGI KEHANETTE kirmiziydi — belgesi birebir *"uretime dorduncu bir interceptor
+  eklenip teste eklenmezse ..."* diyor. Sayi 4'e cekildi + `Assert.Contains` eklendi.
+- **Commit:** `e24ebf2d`, `219eb75d`, `5d51dd35`
+
+#### 3. Entegrasyon takiminin TAM olcumu — 1177 vaka / 66 parca
+- **Neden:** tek koşuda bitmiyor; "takim yesil" diye raporlanamaz.
+- **Ne yapildi:** `--list-tests` ile 1177 vakanin tam envanteri cikarildi, sinif adi onekine
+  gore 66 parcaya bolundu, her parcada **beklenen** vaka sayisi **kosan** sayiyla
+  karsilastirildi (sapma yok).
+- **Komutlar:**
+
+  ```bash
+  dotnet test tests/Pbxtr.Integration.Tests/... --no-build --list-tests
+  dotnet test tests/Pbxtr.Integration.Tests/... --no-build --filter "FullyQualifiedName~Pbxtr.Integration.Tests.Tests.<onek>"
+  ```
+
+- **Sonuc:** kapanmayan kirmizi **39** (3 + 1 + 35), geri kalanin 2'si ortam nedeniyle
+  atlaniyor, 1134'u yesil.
+- **Acilan kartlar:** `BR-DB-105` (sys fonksiyon bekcisi md5 sapmasi),
+  `BR-DB-106` (`voicemail_sla_daily.box_id`, down->up), `BR-DB-107` (35 vaka, arka plan
+  islerinin ST-41 denetim satiri `42501` ile RLS'ten donuyor).
+
+### Kararlar (bu tur)
+- **Test ikizi ile urun arasinda fark varsa once "hangisi dogru" sorulur.** `AnsweredToday`
+  urunde calisiyordu; duzeltilen sey ikizin bilesimiydi. Urune tek satir dokunulmadi.
+- **Fikstur satirinin kaynak damgasi `live`dir**, cunku gercek bir cagrinin yerine gecer ve
+  okundugu urun yollari `.RealOnly()` ile suzer. Tek istisna, konusu KAYNAK EKSENI olan vaka.
+- **"Ham SQL ile yazan 15 dosya" yanlis evrendi;** dogru evren "ham SQL ile GERCEK SEMAYA
+  yazan"dir. Evren yanlis tanimlanmis bir toplu yama, kapattigindan cogunu acti.
+- **Olcum yonteminin kendi tuzagi kayda gecti:** art arda kosuda testcontainers
+  "Test host process crashed" ile 0 test kosup `rc=1` donuyordu ve AYNI filtre tek basina
+  yesildi; ayrica cok uzun OR filtresi de cokme uretiyordu. Kosular arasina sogutma kondu,
+  sogutmasiz olculen her parca GECERSIZ sayildi.
+- **Kirmizinin sahibi once olculur:** `BR-DB-107` icin kendi degisikligim CIKARILIP ikili
+  yeniden derlendi ve ayni 17 vaka ayni hatayla dustu -> "benim degil" bir iddia degil olcum.
+
+### Acik kalanlar / sonraki adim
+- `BR-DB-105` / `BR-DB-106` / `BR-DB-107` — ucu de db kulvari, ucu de olculu, hicbiri
+  kapatilmadi.
+- `BR-DB-107`in "test ikizi kusuru mu urun kusuru mu" ayrimi **OLCULMEDI** ("yok" demiyorum,
+  olcemedim): kosu aninda `app.tenant_id` / `app.cross_tenant` okunmali. Aday sebep
+  `3065b181` (capraz kipin tenant basina daraltilmasi) ama **tahmindir**.
+- `tests/` altinda `AddDbContext<PbxtrDbContext>` kuran **22 yer daha** damga
+  interceptor'unu tasimiyor; bugun yesiller cunku EF ile `cdr`/`call_events` yazmiyorlar.
+  Mimari bekciye baglanmadi.
+- Son uc duzeltmeden sonra 66 parcanin TAMAMI bastan kosulMADI; etkilenen parcalar
+  (A/Ca/Sc/Tel + FinalDeliveryReport) fiilen yeniden kosuldu, otekiler devralindi.
