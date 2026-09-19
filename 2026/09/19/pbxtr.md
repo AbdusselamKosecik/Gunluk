@@ -1453,3 +1453,86 @@ edilmedi** — sunucu hâlâ `ea567d11` (15 Eylül) ikilisini koşuyor.
 - **Yayın — kullanıcı isteğiyle başlatılacak.** 94 açık kartın **37'si** ona bağlı
   (iki P0 dahil; `BR-AST-58/61` kodda kapalı ama sahada görünmüyor).
 - Açık kart: **94** — yayından **bağımsız 57**'si üzerinde çalışılabilir.
+
+---
+
+## Tur — pbxtr-qa: BR-QA-113, BR-BE-183, BR-QA-95 (2026-09-19)
+
+### Bağlam
+Üç kart verildi. `BR-QA-113` (P1) bugüne kadar **panoda KAPALI görünüyordu** çünkü
+`clickup-durum.js`'in `Kapandı` kuralı çıpasız bir alt dize testiydi; çıpalanınca kart
+açıldı. Kartın konusu da tam aynı sınıf: bir bekçinin alt dize eşlemesi.
+
+### 1. BR-QA-113 — tenant sızıntı kapsam bekçisi artık bir yorumla susturulamaz
+
+- **Neden:** `TenantLeakCoverageTests` "bu EF adaptörünün sızıntı testi var mı?" sorusunu
+  ham metinde alt dize arayarak cevaplıyordu. 2026-09-18'de **iki bağımsız ajan, iki farklı
+  kalemde** kazara aynı susturmayı üretti: bir test dosyasının **yorumunda** adaptörün adının
+  geçmesi kalemi sessizce "kapandı" gösteriyordu.
+- **Ne yapıldı:** Yeni `CSharpKodMetni` sözcüksel ayıklayıcısı yorum + dize sabiti + karakter
+  sabitini **aynı uzunlukta boşluğa** çevirir (satır numaraları korunur; uzunluk eşitliği test
+  ediliyor). `Kapali()` artık ayıklanmış kod üzerinde ve `Ef<Ad>` **tam tanımlayıcı** eşlemesiyle
+  çalışır.
+- **Ölçüm (98 adaptör):** ham tarama **33** kapalı, anlamsal tarama **20**. Aradaki **13 kalemin
+  tek kapanış kanıtı bir YORUM satırıydı**; 13'ü de `dosya:satır` kaynağıyla borca geri yazıldı,
+  `BorcTavani` 65 → 78. Borç büyümesi değil, **yanlış kaydedilmiş bir küçültmenin geri alınması**.
+- **Kartın iki adı ayrı ölçüldü:** `ProvisioningNodeDirectory` yeniden **AÇILDI**
+  (`ApiKeyForeignNodePinTests.cs:27,29`, yorum). `CallbackLedger` **kapalı kaldı ama sebebi
+  değişti** — bugünkü kanıt yorumda değil, gerçek DI kaydında
+  (`CallbackFairnessAndStalenessJobTests.cs:267`).
+- **Bekçi ilk koşusunda kendi en iyi örneğini yanlış işaretledi** (kayıtlı ders birebir tekrar
+  etti): `SilenceAlarmViewTests` gerçek bir sızıntı testi ama dosyadaki tek `capraz` kelimesi
+  yorumdaydı. Düzeltme daraltma değil **ölçülmüş bir genişletme**: `TenantMain` **ve**
+  `TenantCounter`'ın kodda birlikte geçmesi de ikinci tenant sayılır (çift şart bilinçli).
+  17 → 20.
+- **Dokunulan dosyalar:** `tests/Pbxtr.Architecture.Tests/CSharpKodMetni.cs` (yeni),
+  `CSharpKodMetniTests.cs` (yeni), `TenantLeakCoverageTests.cs`, `yonetim/backlog.md`
+- **Mutasyon:** M1 ham metne dön → Failed 1; M2 karakter sabiti dalını kaldır → Failed 1;
+  M3 `SembolGeciyor` → `Contains` **ilk denemede YEŞİL kaldı**. Fikstür sorgulandı (kayıtlı ders):
+  mutasyon `Kapali`nin kullanımını bozuyordu, mevcut vaka ise `SembolGeciyor`u doğrudan ölçüyordu —
+  hiçbir vaka o dalı kapsamıyordu. 4. ayak eklendi, M3 Failed 1 oldu.
+- **Sonuç:** `Pbxtr.Architecture.Tests` 749/749 yeşil, `dotnet format` rc=0.
+- **Commit:** `13cc5ede`
+
+### 2. BR-BE-183 — BR-9 kapsam çitleri koşan bekçiye bağlandı
+
+- **Neden:** Karar #71 Ş-71-CEO-6'nın dört çiti yalnızca kart metnindeydi (yani belgeydi).
+- **Ne yapıldı:** `tests/Pbxtr.Architecture.Tests/Br9ScopeFenceTests.cs` — dört çit, beş mutasyon:
+  CIT 1 (BR-9 önceliği P2) · CIT 2 (ayrı lisans bayrağı) · CIT 3a (tenants süre kümesi donduruldu) ·
+  CIT 3b (sesli-mesaja-özel süre alanı yasak, `Tenant` dışındaki tiplerde de) · CIT 4 (indirme ucu).
+  Beşinin beşi de kırmızı, geri alınca yeşil.
+- **KARTIN KENDİ ÖLÇÜMÜ YANLIŞ ÇIKTI:** kart ve önceki üç tur kaydı *"`tenants` tablosunda İKİNCİ
+  BİR SÜRE ALANI YOKTUR"* diyordu. `Tenant.CallDataRetentionDays`
+  (`tenants.call_data_retention_days`) ikinci bir saklama süresidir ve onu yazan bir uç da var.
+  Çitin **lafzı** geçersiz, **maksadı** geçerli: *BR-9 kendine ait bir saklama süresi açmaz*.
+  Lafzı donduran bir bekçi **ilk koşuda kırmızı** yanar ve kapatılırdı.
+- **Bilerek yakalanmayan:** `tenant_settings.voicemail_sla_minutes` SLA sayacıdır; yakalansaydı
+  `BR-FE-112`'nin inmiş işi kırmızı olurdu.
+- **Sonuç:** 753/753 yeşil, `dotnet format` rc=0, mutasyon turundan sonra `git status` temiz.
+- **Commit:** `f8b9fdb2`
+
+### 3. BR-QA-95 — açık bırakıldı, engel bugün SAYIYLA ölçüldü
+
+- Kod tarafı (a/b/c) diskte yeniden doğrulandı; yeni iş yok.
+- **Engel ölçümü:** aynı makinede son 6 saatte **89 commit**, tur sırasında **30 canlı
+  `dotnet`/`node`/`testhost` süreci**. Böyle bir koşumun kırmızısı da yeşili de kanıt olmaz.
+- **KARAR (tek taraflı, dar taraf):** `N = 3` **ve** koşum sessiz makinede; süreç sayımı koşudan
+  önce ve sonra yazılır. Kart bugüne kadar N'i **hiç tanımlamıyordu** — tanımsız bir kabul ölçütü
+  hem sonsuz açıklığa hem tek yeşille kapanmaya izin verir.
+- **Commit:** `55a44f8c`
+
+## Kararlar
+- Kapanış tespiti **anlamsal** olur: yorum/dize bir çağırıcı değildir. Roslyn paketi **bilerek
+  eklenmedi** — kapılar Linux konteynerinde koşar, orada olmayan bir NuGet önbelleğine yaslanmak
+  kapıyı fiilen kaldırırdı.
+- Enterpolasyon delikleri dize sayılır: hata yönü borcu **büyütür**, küçültmez (ölçüldü: bugün
+  98 adaptörde 0 fark).
+- Kapsam çiti yazılırken **lafız değil maksat** dondurulur; lafzı donduran çit ilk koşuda kırmızı
+  yanıp kaldırılır.
+
+## Açık kalanlar / sonraki adım
+- `BR-QA-95`: sessiz makinede `Pbxtr.Integration.Tests` tam takımında **ardışık 3** yeşil koşu.
+- `BR-QA-52` serisi: geri açılan 13 kalemin **en az 6'sı için gerçek sızıntı testi zaten var**;
+  kapanış yaması tek satırdır ve testi de güçlendirir —
+  `Assert.IsType<EfXxx>(services.GetRequiredService<IXxx>())`. Integration.Tests'e bu turda
+  **dokunulmadı** (Docker+PG gerekiyordu; *ölçemedim*, **yok değil**).
