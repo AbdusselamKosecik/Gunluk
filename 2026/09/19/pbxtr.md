@@ -2589,3 +2589,91 @@ o olcumu yapti.
   (`CallbackRunJob`, `LeaveEnforcementJob`) daraltildiginda ayni sekilde kirmiziya doner —
   **acik is `BR-DB-95`te durur**, yeni kart acilmadi.
 - `BR-DB-105` / `BR-DB-106` hala acik.
+
+
+### 21. Iki kartin MERKEZ IDDIASI olcumle curudu (koordinator)
+
+- **Neden:** Bugunku turun tekrarlayan deseni: kart bir eksigi dogru teshis ediyor ama
+  **eksigi yanlis evrende ariyor** ve "yok" diye yaziyor. Iki kartta da ayni sey cikti.
+
+#### 21.1 `BR-SYS-122` — "ikinci kopya YOK" iddiasi curudu (KAPANDI)
+
+- **Kartin iddiasi:** `pbxtr:sys:dropped:*` = ariza kaniti, **tek kopya**, TTL 48 saat ->
+  yanlis. Kart ikinci kopyayi **uc yerde** aramis: konteyner gunlugu
+  (`grep -ci unresolved` -> 0), log surucusu penceresi (boyut tabanli), ve
+  *"DB'ye zaten yazilmiyor"*.
+- **DORDUNCU YERE BAKILMAMIS: `audit_log`.** `PlatformRollupJob` sayaci 15 dakikada bir
+  okuyup denetim satirina yaziyor (`PlatformRollupJob.cs:327,334` -> `GetTodayAsync`;
+  `:491` -> `After["unresolvedTenantEvents"]`) ve denetim satirinin **TTL'i YOKTUR**.
+- **Olcum (`176.88.41.220`, sunucu saati `2026-09-19 19:36Z`, salt-okuma):**
+  ```sql
+  select count(*) from audit_log where after ? 'unresolvedTenantEvents';   -- 7614
+  select min(at)::date, max(at)::date from audit_log where after ? '...';  -- 2026-08-26 .. 2026-09-19
+  -- gunluk tepe: 09-15=0  09-16=0  09-17=33224  09-18=0  09-19=0
+  ```
+- **Sonuc:** kartin *"48 saat sonra kanit yok olur"* senaryosunun **tam ornegi**
+  (`BR-AST-119`'un 33.224'u) bugun **hala okunabiliyor**; Redis kovasi coktan silindi.
+  Kartin ayirt edici sorusu (*"silinirse olgu geri getirilebilir mi"*) **aynen dogru kaliyor**;
+  yanlis olan cevabi.
+- **Kayitli ders birebir:** *sinifi kapat, kalem toplama* — evren "Redis + konteyner gunlugu"
+  diye tanimlaninca `audit_log` taramanin disinda kaldi ve **eksik evrende yapilan olcum
+  dogru olcum gibi gorundu**.
+- **Devredildi (`BR-AST-119`):** denetim satiri **kirilimi** tasimiyor; *"kaci cozulemedi,
+  kaci celiskiydi"* hala 48 saatlik. Desen depoda hazir: `skippedTenants` ayni sozlukte
+  uc alt sebebiyle yaziliyor (`:481-484`, `BR-BE-173`).
+- **Olcmedigim:** `payload-rejected` ve `*:broken:<gun>` kovalarinin denetimdeki karsiligi
+  ayri ayri olculmedi.
+- **Commit:** `2d86a1d9`
+
+#### 21.2 `BR-DB-107` (ajan: db-dev) — 35 kirmizi URUN kusuru DEGILDI
+
+- **Belirti:** 35 entegrasyon vakasi `42501 new row violates row-level security policy`;
+  yigin izi **urun dosyasini** gosteriyordu ve teshis *"uretimde tick geri alinir -> kuyruk
+  uyeligi santrale hic gitmez"* idi, yani **P0 gibi** okunuyordu.
+- **Olcum (kosu aninda, hatanin atildigi transaction icinde):**
+
+  | | `app.tenant_id` | `app.cross_tenant` |
+  |---|---|---|
+  | IKIZ (test konagi) | **bos** | `off` |
+  | URETIM (`LeaderElectedJobRunner:231-238`) | `<SystemTenantId>` | `off` |
+
+- **Sonuc: TEST IKIZI.** Ikiz ciplak `NpgsqlConnection` ile `JobExecution` kuruyordu;
+  `DbContext` yok -> `TenantSessionInterceptor` `SET LOCAL app.tenant_id` hic yazmiyordu.
+  **P0'a CIKARILMADI**; uretimde kuyruk uyeligi santrale gidiyor.
+- **35 kirmizi -> 0** (47/47 yesil). Kartin kendi listesi **eksikti**: 22 sayiyordu,
+  kalan 13'u `QueueMembershipSyncAlarmTests`'te ayni yigin iziyle duruyordu.
+- **Mutasyon:** harness'teki `set_config` kapatildi, ikili yeniden derlendi (DLL damgasi
+  dogrulandi) -> 22/28 yeniden KIRMIZI, ayni `42501`; geri alininca 29/29 yesil.
+- **Kalici bekci birakildi:** `tests/.../BackgroundJobTenantGucTests.cs` — uretim
+  kosucusunun GUC'u gercekten yazdigini gercek PostgreSQL'de olcer.
+- **Commit:** `53c5ace8`
+
+#### 21.3 `BR-AST-109` (2) — park yeri adi YENIDEN KULLANILMAZ (karar)
+
+- Kart (2)'yi *"plan kurul isidir"* diye birakmisti; kurul dagitildi.
+- **Karar:** park yeri adi dugumun omru boyunca yeniden kullanilmaz; dusurulup geri eklenen
+  tenant **yeni ad** alir (kusak eki `t0012-tut-g2`). Kusak sayaci **yalniz dusurmede** artar
+  — her revizyonda artsaydi hastaligin kendisini tedavi diye uretirdik.
+- **Gerekce:** kartin olctugu sey tam olarak ayni adin geri verilemedigidir; silinen turun
+  baglami santralde **kaliyor** (`res_parking`e ozgu; kontrol grubu 89 -> 0 temizlendi).
+  Tenant oneki bunu **gormez** — cakisma tenant'in kendi gecmisiyledir.
+- **(3) sizinti etkisi BILEREK olculmedi:** sunucuda `pbxtr-confd` uzerinde paralel bir is
+  kosuyor; park dosyalarina dokunmak onun olcumunu bozardi. *"Yok"* degil, **sirlama** karari.
+- **Commit:** `db05d9c5`
+
+### Kararlar (bu tur)
+
+- **Bir kart "X YOK" diyorsa once EVRENINI sor.** Iki kartta da eksik gercekti ama
+  **arandigi yer eksikti**; ikisi de dogru olcum gibi gorunuyordu.
+- **Kirmizi bir testin yigin izi sahiplik kaniti degildir.** Cevre/oturum durumuna bagli
+  hata kodlarinda (`42501`, `23502`, `55P03`) kosu anindaki durum OKUNUR ve uretimdeki
+  kurucusuyla yan yana konur; ayrim bir probe kosusu kadar ucuzdur.
+- **Paralel is, olcumun sirasini belirler.** Ayni sunucuda baska bir ajan varken onun
+  olcum yuzeyine dokunulmaz; bu bir eksik degil, yazili bir sira karari olur.
+
+### Acik kalanlar / sonraki adim
+
+- Acik kart **87**. ClickUp senkron (`fark: 0, izde olmayan: 0`).
+- **Yayin hala kosulmadi** ve acik kartlarin buyuk kismi ona bagli (uc P0 dahil).
+- Kosan ajanlar: `BR-SEC-29` (tasarim A), `BR-AST-64` (uc sozlesmesi), `BR-AST-120`
+  (confd defter kilidi).
