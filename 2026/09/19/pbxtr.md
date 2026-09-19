@@ -1536,3 +1536,115 @@ açıldı. Kartın konusu da tam aynı sınıf: bir bekçinin alt dize eşlemesi
   kapanış yaması tek satırdır ve testi de güçlendirir —
   `Assert.IsType<EfXxx>(services.GetRequiredService<IXxx>())`. Integration.Tests'e bu turda
   **dokunulmadı** (Docker+PG gerekiyordu; *ölçemedim*, **yok değil**).
+
+---
+
+# Ekran turu — wallboard kirpilmasi + #12 gorsel kapsami (frontend-dev-1, aksam)
+
+## Bağlam
+Dört kart verildi: `BR-FE-122` (wallboard değeri 1920x1080'de kırpılıyor),
+`BR-QA-57` (görsel kapı kapsamı ters kurulmuş), `BR-FE-111` (sebep rozeti) ve
+`BR-FE-117` (yanlış deneme sayacı — "ölçümü doğrula, değişmediyse geç" talimatıyla).
+Kural: teşhisi önce ölç, sonra yaz.
+
+## Yapılanlar
+
+### 1. `BR-FE-122` — teşhis DOĞRULANDI, sonra düzeltildi
+- **Neden:** kart "değer kırpılıyor" diyordu; bu depoda teşhis birkaç kez yanlış çıktı,
+  bu yüzden önce **yeniden ölçüldü**.
+- **Ne yapıldı:** `wallboard.visual.spec.ts`'e yaprak her görünür metin için
+  `scrollWidth <= clientWidth` yapısal iddiası eklendi ve pinli konteynerde koşuldu.
+  İlk koşu kartı birebir doğruladı:
+  `div._value_* · "03:47" · scrollWidth 302 · clientWidth 271 · font 104px` — ve
+  tahtada kırpılan **tek** görünür öge oydu.
+- **Düzeltme (karar):** 104px **tavan olarak kaldı**, yalnızca kutuya sığmayan
+  uzunlukta aşağı ölçekleniyor:
+  ```css
+  .root  { container-type: inline-size; }
+  .value { font-size: min(var(--wb-value-max), calc(100cqi / (var(--wb-value-chars,1) * 0.62))); }
+  ```
+  `--wb-value-chars` bileşenden **yalnızca ölçülebilir** değerde (string/number) gelir;
+  `ReactNode` değerde yazılmaz (uydurma sayı karoyu sebepsiz küçültürdü).
+  **104'ü düşürmedim, gerekçesi prototip:** `dc.html` `s.wallboard` bloğunda 104px'lik
+  dev rakam **bekleyen sayısıdır** (1-2 hane); `mm:ss` orada 26px'lik ikincil satırda.
+  Ölçüldü: 1-4 karakterli değerler **piksel piksel aynı** kaldı; fark tek karoda 6647 px.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/ui/WallboardTile/WallboardTile.module.css`,
+  `…/WallboardTile.tsx`, `…/WallboardTile.test.tsx` (yeni),
+  `src/Pbxtr.Web/visual-tests/wallboard.visual.spec.ts`,
+  `src/Pbxtr.Web/scripts/verify-visual-baselines.mjs`,
+  `…/visual-tests/__screenshots__/linux/wallboard-1920x1080.png`.
+- **Komutlar:**
+  ```bash
+  bash deploy/fidelity/fidelity-kos.sh uret      # taban yeniden uretildi
+  bash deploy/fidelity/fidelity-kos.sh dogrula   # 5 passed
+  node src/Pbxtr.Web/scripts/verify-visual-baselines.mjs
+  ```
+- **Mutasyon (iki bekçi, ikisi de):** bölen `0.62 -> 0.40` => spec KIRMIZI (öğeyi adı,
+  ölçüsü ve font boyutuyla yazıyor); geri alındı => yeşil. Bileşende `: null -> : 2`
+  (ReactNode'a uydurma sayı) => `1 failed / 2 passed`; geri alındı => `3 passed`.
+- **Commit:** `cb86d4d0` (düzeltme + bekçiler) · `a9d76c2c` (taban + manifesto).
+
+### 2. `BR-QA-57` kalem 2 — #12 tabanı, ve **içinden çıkan iki gerçek kusur**
+- **Neden:** kartın açık iki kaleminden biri süpervizörün canlı izleme ekranıydı.
+- **Ne yapıldı:** `visual-tests/live-queues.visual.spec.ts` (1440x900, koyu tema) yazıldı;
+  üç uç birden fikstürlü (`/alarms/active`, `/live/agents`, `/live/queues`), yetki
+  **iki alandan** verildi (`live.queue.read` + `live.agent.read`).
+- **İlk koşuda iki kusur ölçüldü ve ikisi de aynı turda düzeltildi:**
+  - **`BR-FE-123`** — `div._queueFoot` **scrollWidth 377 / clientWidth 339** (+38 px),
+    `section._panel` **395 / 375** (+20 px). Hiçbir ata kırpmıyordu, yani yedinci metrik
+    kartın **sağ kenarının 20 px dışına** taşıyordu. Çözüm: `.queueFoot` artık **sarıyor**
+    (`flex-wrap` + `row-gap`) — emsal aynı dosyada (`.statusCell`).
+  - **`BR-FE-124`** — "Kuyruk" kolonu `row.queueIds.join(', ')` çiziyordu ve
+    `LiveAgent.queueIds` **üretimde GUID**'dir (`RedisLiveOperationsView.cs:479`).
+    Süpervizör "Satış, Destek" değil GUID görüyordu. Çözüm: ad zaten elde
+    (`/live/queues` yanıtı `id`+`name` taşıyor), **yeni uç açılmadı**; eşleşmeyen kimlik
+    **gizlenmez**, olduğu gibi yazılır.
+- **Ölçümden çıkan ders (kayda değer):** yaprak `scrollWidth<=clientWidth` iddiası
+  `BR-FE-123`'e **kördü** — taşan şey yaprak değil **satırın kendisiydi**. Spec'e ikinci
+  bir **kap** iddiası eklendi (eşik **8 px**: gerçek kusurlar 38/20 px, ölçülen gürültü
+  2 px — avatar dairesinde ortalanmış "NŞ" metni).
+- **Ayrıca ölçüm tuzağı:** ilk "kap dışına taşan" ölçümüm **boş döndü** ve bu bir bulgu
+  değil **vacuous ölçümdü** — `overflow != visible` olan ata ararken zincir `html`'e
+  kadar gidip `null` oluyor ve öge sessizce atlanıyordu. Doğru ölçüm `scrollWidth` ile
+  yapıldı.
+- **Fikstür kararı:** kuyruk kimlikleri **gerçek GUID**; okunur sahte kimlikler
+  (`q-sales`) `BR-FE-124`'ü tam olarak gizleyen şeydi.
+- **Yan etki (bilerek):** `LiveQueuesFidelity.test.tsx`'teki dört "ekran yüklendi" kapısı
+  `getAllByText`e çevrildi — kuyruk adı artık hem kartta hem agent satırında geçiyor.
+- **Mutasyon:** `.map(id => id)` (eski hâl) => 2 failed; eşleşmeyeni sessizce düşüren
+  varyant => 1 failed / 1 passed; geri alındı => 2 passed.
+- **Commit:** `58b09944` (düzeltmeler + spec) · `1e390cd7` (taban + manifesto).
+- **Kapsam sayıldı:** 2 → 4 → **5 taban**. Kalan tek kalem: (3) agent eylem çubuğu
+  (`MonitorScreen`).
+
+### 3. `BR-FE-117` — kod yazılmadı, **kartın durumu ölçülüp düzeltildi**
+- **Neden:** talimat "ölçümü doğrula, hâlâ geçerliyse geç" idi.
+- **Ölçüm:** `CallSource` deseni `src/**/*.cs` altında **hâlâ 0** — yani önceki turun
+  ölçümü doğruydu. **Ama sonucu yanlıştı:** iş `fffd61bf` ile çoktan inmiş, ayırt edici
+  alan `callSource` değil canlı çağrı kaydındaki **`Origin`** damgası olmuş
+  (`CallAttemptOrigins.Dialer`). `ActiveCallInfo.Attempt` artık `int?`;
+  `AttemptForCall` dialer kökenli olmayan çağrıda `null` dönüyor, modal da çizmiyor.
+  Vacuity şartı iki yönde de karşılanmış (`ActiveCallAttemptSourceTests` +
+  `IncomingCallModal.test.tsx`). Bu turda koşuldu: **27 passed**.
+- **Sonuç:** kart `Bitti` yazıldı.
+
+### 4. `BR-FE-111` — engel yeniden ölçüldü, duruyor
+`LiveAgentDto` üye listesi bugün tekrar okundu (`LiveEndpoints.cs:1275+`): sebep alanı
+(etkin penalty / gerekli yetenek / birincil kademe kalan timeout) **telde yok**. Ekran
+ayağı tek başına yazılamaz; karar değişmedi, karta bugünün ölçümü eklendi.
+
+## Kararlar
+- **Kırpılma çözümü "yazıyı küçültmek" değil "kutuya göre ölçeklemek"tir.** Sabiti
+  düşürmek TV mesafesinde iki haneli sayaçları kaybettirirdi; ölçüm bunu gösterdi.
+- **Ellipsis silinmedi, ulaşılmaz kılındı.** Beklenmedik bir taşmada "03:…" en azından
+  eksik olduğunu söyler; düz kırpma "03:4" üretir ve o sessizce yanlış okunur.
+- **Yaprak iddiası ile kap iddiası iki ayrı arıza sınıfıdır**; biri diğerinin yerine
+  geçmez (ölçüldü — `BR-FE-123` yaprak iddiasının altından geçti).
+- **Fikstürler üretimin biçimini taşımalı.** Okunur sahte kimlikler bir kusuru aylarca
+  gizledi; görsel fikstür artık gerçek GUID kullanıyor.
+
+## Açık kalanlar / sonraki adım
+- `BR-QA-57` kalem **3** (agent eylem çubuğu / `MonitorScreen` tabanı) — gerekçe
+  kapasite: canlı çağrı durumu + dinleme oturumu fikstürü ve ayrı bir Ş6 incelemesi ister.
+  **Boş ya da sahte taban üretilmedi.**
+- `BR-FE-111` — sunucu tarafında `LiveAgentDto`'ya sebep alanı eklenmeden açılamaz.
