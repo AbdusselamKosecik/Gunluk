@@ -2748,3 +2748,74 @@ yeniden derleyince mutasyon yakalandi. Mutasyon olcumleri `--no-incremental` ist
   kirmizi; yayin imajini bloke eder, kart acilmali.
 - **Olcemedigim:** gercek santralde cagri denenmedi (uretilen METIN olculdu);
   `Integration.Tests` kosulmadi (paralel db-dev ajani) — yalniz derlendi, rc=0.
+
+
+### 22. Ana daldaki YAYIN KIRICI kapatildi + kapali kartta kalan is kartlandi
+
+#### 22.1 `BR-SYS-125` — yayin imaji ANA DALDA derlenmiyordu (KAPANDI)
+
+- **Nasil bulundu:** `BR-AST-64` ajani kendi isini bitirirken `Architecture.Tests` TAM
+  takimini kostu (752/753) ve **kendi isi olmayan** tek kirmiziyi raporladi:
+  `SpaBuildContextTests`. Kayitli ders tersten dogrulandi — *kirmizinin sahibi once
+  olculur* kurali burada **raporlamayi** sagladi, susmayi degil.
+- **Kusur:** bugunku FE turu `src/Pbxtr.Web/scripts/generate-ring-group-strategies.mjs`
+  uretecini ekledi; uretec **depo kokunden** `src/Pbxtr.Domain/Modules/Telephony/RingGroup.cs`
+  okuyor ve `npm run build` onu **her seferinde** kosturuyor (`package.json:8`).
+  Dockerfile'in SPA asamasi ise **bilerek** yalniz `src/Pbxtr.Web`'i tasir ->
+  `docker build`, `npm run build` adiminda **ENOENT** ile duserdi: **yayin imaji
+  DERLENEMEZDI.**
+- **Neden yerel kapilar gormez:** hepsi depo kokunde kosar ve orada dosya yerindedir.
+  `npx tsc -b` de yesil kalir, cunku uretilen `ringGroupStrategies.generated.ts` depoda
+  **islenmistir** ve `tsc` onu **kaynagina karsi** dogrulamaz. Tek koruma o mimari bekcidir.
+- **Duzeltme:** SPA asamasina **tek dosyalik** `COPY` (klasorun tamami degil -- npm
+  katmaninin onbellegi Telephony'deki ilgisiz degisikliklerde bosalmasin;
+  `AlarmEvaluator.cs` deseninin aynisi).
+- **Olcum:** `SpaBuildContextTests` **2/2 gecti**, `rc=0`.
+  **Mutasyon KIRMIZI:** `COPY` satiri kaldirilinca **Failed 1 / Passed 1**, `rc=1` ve hata
+  metni eksik dosyayi **adiyla** basti; geri konunca yine 2/2, `rc=0`.
+- **BU SINIFIN DORDUNCU TEKRARI:** `screens.json`, `delivery-manifest.json`,
+  `permissions.seed.json` ve `AlarmEvaluator.cs` icin ayni gerekceyle yazilmis yorumlar
+  Dockerfile'da **zaten** duruyor.
+- **Olcmedigim:** `docker build` **fiilen kosturulmadi**; olculen sey bekcinin iddiasidir,
+  ENOENT'in kendisi degil.
+- **Commit:** `8ab15a65`
+
+#### 22.2 `BR-AST-64` (ajan: backend-dev-1) — KAPANDI
+
+- `delaySec` artik ucta: `RingGroupMemberRequest` `int?`, `RingGroupMemberDto` `int`;
+  **dort kayit olcuulerek** bulundu (tahmin degil).
+- **Uyari alani degil RED secildi.** Gerekce: uyari alani istemcinin onu cizmesine baglidir;
+  cizmeyen istemci icin davranis **yine sessiz kabuldur** -- ariza kapanmaz, YER DEGISTIRIR.
+  Kodlar: `422 ring_group_member_delay_not_ringing`,
+  `422 ring_group_member_delay_strategy_unsupported`, aralik `0..60`.
+- **Bonus bulgu:** guncelleme uyeleri silip yeniden ekliyor; EF yazimi eklenmeseydi ham SQL
+  ile girilmis `delay_sec` **panelden yapilan ilk kayitta sessizce 0'a duserdi**.
+- **Olcum tuzagi kayda gecti:** EF yazimi mutasyonu ILK KOSUDA YESIL gorundu --
+  `dotnet build` `rc=0` dondu ve DLL **damgasi bile guncellendi**, ama IL eski haldeydi.
+  `--no-incremental` ile yakalandi. **Damga tazeligi derleme kaniti degildir.**
+- **Olcum:** `Modules.Telephony` **1371 gecti / 0 kirmizi / 2 atlandi** (+21 vaka).
+
+#### 22.3 `BR-FE-125` acildi — kapali kartta kalan is
+
+- `BR-AST-64`'un kapanis metninde *"FE KALAN ISI (frontend sahibi, ayri)"* duruyordu
+  **ama o kart KAPALI**. Kapali bir kartin icindeki is backlog'da **acik satir uretmez** ve
+  CLAUDE.md 14'e gore ClickUp'a da **hic gitmez** -> gorunmez borc olurdu.
+- Kart acildi ve **hemen** frontend'e verildi. Kabul olcutu bilerek dar: **iki 422 kodu
+  ekranda AYRI mesaja dusmeli** -- tek genel hata seridi karti kapatmaz, cunku
+  *"aralik disi"* ile *"bu uye hic calmaz"* farkli islerdir.
+- **Commit:** `a831f374`
+
+### Kararlar (bu tur)
+
+- **Bir kart kapanirken icinde baska bir sahibin isi kaliyorsa, o is AYNI TURDA
+  kartlanir.** "Kapanis metninde yazili" olmak backlog'da satir uretmez.
+- **Sessiz kabul yerine RED**: bir kural yalnizca istemci cizerse gorunuyorsa, o kural
+  cizmeyen istemci icin YOKTUR.
+- **DLL damgasi derleme kaniti degildir** -- mutasyon olcumunde `--no-incremental` sart.
+
+### Acik kalanlar / sonraki adim
+
+- Acik kart **87**. ClickUp senkron (`fark: 0, izde olmayan: 0`, 759 kart).
+- Entegrasyon takiminda kalan kirmizi: `BR-DB-105` ve `BR-DB-106` (toplam ~4 vaka);
+  `BR-DB-107`'nin 35'i ve `SpaBuildContextTests` kapandi.
+- **Yayin hala kosulmadi.**
