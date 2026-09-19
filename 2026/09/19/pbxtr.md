@@ -2309,3 +2309,88 @@ npx vitest run        # 237 dosya / 2116 test
   (uclar hazir). `prototip-urun-farklari.md` #27/1'de adi konmus durumda.
 - `delivery-manifest.json`'a eklenen action'in **C# kapilari kosulmadi** — bir sonraki
   dotnet turunda `DeliveryManifestTests` + `Pbxtr.Api.Tests` kosulmali.
+
+
+---
+
+## BR-AST-17 — cok tenant'li dugume teslim (KAPANDI, linux-uzmani turu)
+
+### Baglam
+Kart 2026-09-18'e kadar **BLOKE** idi (`BR-AST-108` inmeden kabul kriteri olculemez).
+108 kapandi, sira bagimliligi bitti. Hedef: `asterisk-01` dugumune t0007 **ve** t0012
+birlikte teslim edilsin, santralde t0012 nesneleri gorunsun, `NO_SUCH_QUEUE` sussun.
+
+### Yapilanlar
+
+#### 1. Neyin eksik oldugu once olculdu (kod degil, KAYIT)
+- **Neden:** kart "kod tarafi bitti, kalan is veri" diyordu; once bu dogrulandi.
+- **Olcum (`176.88.41.220`, `date -u` = 2026-09-19 03:50Z):**
+  - `api_keys` -> `asterisk-01` dugumunde **yalniz t0007** (1 aktif, 5 revoked).
+  - `tenants.provisioning_delivery_intent` -> **t0012 = `not_delivered`**
+    (BR-AST-108 olcumunun biraktigi hal; `QueueMembershipSyncJob` bu halde kuyruk
+    senkronunu **susturuyor**, yani NO_SUCH_QUEUE'nun susmasi da sahte olurdu).
+  - `journalctl -u pbxtr-confd` -> her tick `dusen tenant t0012: diskte artik dosya YOK`.
+
+#### 2. URUN YOLU ile baglandi (elle SQL INSERT YOK)
+- **Neden:** anahtarin hash bicimi (`Pbkdf2ApiKeySecretHasher`) ve `node` alani urun
+  ucundan uretilmeli; elle INSERT ikinci bir dogruluk kaynagi yaratirdi.
+- **Kapi okumasi:** `ApiKeyEndpoints.CreateAsync` **dolu bir duguma** ikinci tenant'i
+  yalniz `scope=global` (platform) ekler (Kurul #77); teslim niyeti `not_delivered`
+  iken pin de yalniz platforma acik (Karar #58). Ikisi de `demo.superadmin` ile gecildi.
+- **Capraz-yazma tuzagi:** `X-Cross-Tenant: on` baslugi KULLANILMADI —
+  `TenantResolutionMiddleware.cs:406-425` yalniz o bayraga bakar; `X-Tenant-Id`
+  drill-in'i yazmaya aciktir. Baslik konsaydi `403 CROSS_TENANT_WRITE_FORBIDDEN`.
+- **Komutlar (sunucuda, sir hicbir ciktiya basilmadan):**
+  ```bash
+  # parola sunucunun kendi .env'inden okundu, ekrana yazilmadi
+  PUT  /api/v1/tenant    {"name":"Kuzey Pazarlama","agentLimit":3,"channelLimit":10,
+                          "provisioningDeliveryIntent":"deliver",
+                          "provisioningDeliveryReason":"..."}        -> 200
+  POST /api/v1/api-keys  {"label":"confd-dugum-t0012","node":"asterisk-01",
+                          "ipAllowlist":["172.16.0.0/12"]}           -> 201
+  ```
+- **Sonuc:** `ak_a1427b201a807e90|t0012|asterisk-01`; plaintext **sha256[0:8]=7e5c6875**,
+  dosya `/etc/pbxtr/confd/t0012-dugum-anahtari.json` (0600). confd'ye yeni anahtar
+  **kurulmadi ve gerekmedi** — dugum paketi tek pinli anahtarla cekilir, uyelik
+  `api_keys.node` kesfinden gelir (Karar #31/B).
+
+#### 3. Asil engel cikti: DUGUMUN YEREL DEFTERI (yeni kart `BR-AST-120`)
+- t0012 pakete girdi ama ajan **hicbir sey yazmadi**: `sha-defteri` hala
+  "t0012 rev=1 teslim edildi" diyordu (108 olcumunde dosyalar **elle** silinmisti) ve
+  ajan **defteri diskle karsilastirmiyor** (`deploy/pbxtr-confd-dugum.sh:1020-1048`).
+- Defter temizlendikten sonra dort tur yazildi, ama `queues` reload'u BR-AST-25 kapisiyla
+  **ertelendi**; `12) Durum defteri` blogu (`:2177-2194`) **ertelenen turun sha'sini yine de
+  yazdi** -> sonraki tick "degismedi" dedi ve reload **hic kosmadi**. Kalici kilit.
+- Elle asildi: `kuyruk-defteri/t0012` + `t0012 queues` sha satiri + `state.json` ETag
+  temizlendi (hepsinin `*.yedek-br-ast-17*` yedegi sunucuda duruyor). Kalici duzeltme
+  **yazilmadi** -> `BR-AST-120` acildi.
+
+#### 4. Kabul kriteri olcumu
+| Kriter | Sonuc |
+|---|---|
+| Dugum paketi t0012'yi tasiyor | **EVET** — `tenant t0012`, `HTTP 200`, `SONUC: dugum paketi teslim edildi` |
+| `queue show` t0012 **uyeli** | **EVET** — `t0012-musteri-hizmetleri` + 3 uye (`Local/2011..2013`), `QueueAdd` fiilen kostu |
+| `dialplan show` t0012 | **89 satir** |
+| `pjsip show endpoints` t0012 | **0** — sebep `secret_not_stored`; t0007 icin de ayni satir basiliyor (`BR-AST-51` zinciri, bu kartin isi degil) |
+| 3 ardisik tick sifir `NO_SUCH_QUEUE` | **EVET** — 04:01:11 / 04:06:12 / 04:11:21, `grep -c NO_SUCH_QUEUE` = **0** |
+
+- **Commit:** `760e92a0` — BR-AST-17 KAPANDI; `57d161b0` — ClickUp kart id kaydi.
+- **ClickUp:** `BR-AST-17 backlog -> complete`, `BR-AST-120` acildi; dogrulama
+  `fark olan kart: 0, izde olmayan: 0`.
+
+### Kararlar (bu tur)
+- **"Sifir hata" once bos olup olmadigi ile sinanir.** t0012 teslim niyeti
+  `not_delivered` iken kuyruk senkronu susturuluyordu; o halde olculen "sifir
+  NO_SUCH_QUEUE" **hicbir sey kanitlamazdi**. Once niyet `deliver` yapildi, sonra
+  uyelerin fiilen itildigi (`queue show`'da gorundugu) dogrulandi.
+- **Defter gercegin yerine gecemez.** Ajan "teslim ettim" defterine bakip diske hic
+  bakmiyor; disk elle degisince ajan **sessizce hicbir sey yapmiyor**.
+- **Ertelenen is, yapilmis is gibi defterlenmez.** Aksi halde erteleme kalici kilite
+  donusuyor (`BR-AST-120`).
+
+### Acik kalanlar
+- `BR-AST-120`: ertelenen reload'un sha satiri + defter/disk sapma olcumu **kodda yok**.
+- t0012 icin `pjsip` hala `withheld` — `BR-AST-51a/52/51b` zinciri.
+- Ikinci bir **gercek** dugumde (iki ayri santral) teslim **olculmedi**.
+- Sunucuda birakilanlar: `/var/lib/pbxtr-confd/*.yedek-br-ast-17*`,
+  `/etc/pbxtr/confd/t0012-dugum-anahtari.json`; gecici betikler silindi.
