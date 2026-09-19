@@ -2994,3 +2994,97 @@ F25 kırmızı döndü ve kırmızı **ajanda değil fikstürdeydi**; `defter_di
   yaslanan bir karşılaştırma 2026-09-07'nin "her beş dakikada reload" arızasını geri getirirdi).
 - İkinci bir gerçek düğümde ölçüm yapılmadı.
 - `dotnet` koşulmadı (paralel ajan kuralı); bu kart .NET kodu değiştirmiyor.
+
+
+### 23. Sessiz hata kodu sinifi kapatildi (koordinator)
+
+#### `BR-SYS-126` — `Results.Problem` govdeye `code` yazmiyordu (KAPANDI)
+
+- **Nasil bulundu:** `BR-FE-125` ajani kabul olcutunu (*"iki 422 ekranda AYRI mesaja
+  dusmeli"*) **FE'de kod yazarak karsilayamadi** ve sebebini olctu. Yani kabul olcutunun
+  dar yazilmasi, FE isi gibi gorunen seyin aslinda bir **uc kusuru** oldugunu ortaya
+  cikardi; genel bir "hata mesaji gosterilsin" olcutu bunu asla gostermezdi.
+- **Kusur:** `RingGroupEndpoints` iki farkli 422'yi **bilerek** ayiriyordu
+  (`ring_group_member_delay_not_ringing`, `..._delay_strategy_unsupported`) ama yardimcisi
+  `Results.Problem(statusCode, title: code, type: code)` yazip **govdeye `code` koymuyordu**.
+  Istemci `body.code ?? ProblemCode.InternalError` okur -> iki hata da kullaniciya
+  **tek bir `internal_error`** olarak ulasiyordu.
+- **Belirti tam anlamiyla sessizdi:** durum kodu 422, baslik dogru, `type` dogru; yalniz
+  govde eksik. Hicbir test kirmizi degildi.
+- **SINIF TARANDI (tahmin degil):**
+
+  | Yol | Sayi |
+  |---|---|
+  | `Results.Problem(` | **13** cagri yeri / 6 dosya |
+  | `ProblemResponse.WriteAsync` | **295** |
+  | `Results.Problem` + `code` tasiyan | 11 |
+  | `Results.Problem` + `code` TASIMAYAN | 2 -- `TenantProfileEndpoints.cs:67,151`, **ikisi de 500** |
+
+  500'de istemcinin yedegi (`internal_error`) ile gercek **ayni seyi soyler**, yani kusur
+  degil. **Duzeltilecek baska cagri yeri YOK;** is tekrari onlemekti.
+- **Bekci:** `tests/Pbxtr.Architecture.Tests/ProblemCodeExtensionGuardTests.cs`.
+  - Cagri metni **dengeli parantez** ile okunur. Sabit satir sayisi yanlis olurdu: cagrilar
+    4-12 satir arasi ve `extensions` cogunlukla **en sonda** -- kisa kesen bir okuyucu
+    tam da aradigi seyi kaciririrdi.
+  - **Muafiyet dosya beyaz listesi DEGIL, DURUM KODUDUR.** Beyaz liste bayatlar, durum kodu
+    bayatlamaz.
+  - **Kendi kapsamini da olcer:** tarama 10'dan az cagri gorurse KIRMIZI. Aksi halde
+    `Results.Problem` bir gun yeniden adlandirilsa bekci "0 ihlal" diye yesil yanardi
+    (*arac yoklugu sifir gibi gorunur*).
+- **Olcum:** bekci **2/2**, `rc=0`. **Mutasyon urun tarafinda yapildi** (gercek kusur geri
+  kondu: `extensions` blogu silindi) -> **Failed 1 / Passed 1**, hata metni ihlali
+  `dosya:satir` ile basti; geri alininca yine 2/2, `rc=0`.
+- **Olcmedigim:** `WriteAsync` kullanan **295** cagri yerinin govdesinde `code`'un gercekten
+  gorundugu **ayrica olculmedi**; istemci yedeginin baska uclarda kac kez devreye girdigi de
+  olculmedi.
+- **Commit:** `b4995445`
+
+#### `BR-FE-125` (ajan) — KAPANDI
+
+- `#27` uye satirinda `delaySec` yazilabilir; yazma **`blur`/`Enter`'da**, her tusta degil
+  (ara bir deger provisioning revizyonu uretirdi). `ringgroup.write` yoksa alan cizilmez ama
+  sifirdan buyuk deger **gizlenmez** (salt okunur `+N sn` rozeti).
+- Govdede `delaySec` **her uye icin** gonderilir: gondermemek "dokunmadim" demek degil --
+  uc 0 yazar ve uyeler silinip yeniden eklendigi icin **tek bir kaydetme tum gecikmeleri
+  sifirlardi**.
+- `ext.ruleDelay` notu *"yazilamaz"* -> *"yazilir (0-{max} sn)"* duzeltildi;
+  `ext.strategyNoDelay` **korundu**. `RING_GROUP_MAX_DELAY_SEC` artik
+  `RingGroupRules.MaxDelaySec`ten **uretiliyor** ve ikinci kaynak icin Dockerfile SPA
+  asamasina `COPY` eklendi (`BR-SYS-125` sinifi, ajan uyariyi uyguladi).
+- **Olcum:** `vitest` **2127 gecti / 0 kirmizi** (238 dosya), yeni `RingGroupMemberDelay.test.tsx`
+  **11 test**; iki mutasyon da KIRMIZI. `npx tsc -b` ve `npm run build` `rc=0`.
+
+#### `BR-AST-120` (ajan: linux-uzmani) — KAPANDI ve **UCUNCU bir kusur** buldu
+
+- Kart iki kusur yaziyordu; ajan once arizayi **sunucuda yeniden uretti** ve ucuncusunu
+  buldu: ETag tazeyken betik `case 304` dalinda **diske hic dokunmadan** cikiyor --
+  yani yalnizca "degisen kume"ye konan bir duzeltme **hic kosmayacakti**.
+- **Erteleme davranisi secimi olculerek verildi:** satir ne silinir ne oldugu gibi birakilir;
+  sha sutunu `reload-bekliyor:` onekiyle **isaretlenir**. Silmek `X-Pbxtr-Have`i korlestirirdi;
+  oldugu gibi birakmak **kalici kilidi geri getirirdi** (silinen dosya yeniden teslim
+  edilirken icerik degismez, yani sha AYNIdir -- canlida `fd15ef1f…` iki turda da ayni cikti).
+- **Oz-test: 213 iddia, 0 kaldi, 41 fikstur / 30 mutasyon, 30/30 yakalandi.** Yeni F40/F41
+  **gercek tur donusu** ile kosar, yani ajanin **kendi yazdigi defteri** okur.
+- **Mutasyon iki gercek kusur buldu:** M1 vacuous olmustu; M29 ilk halde yakalanmadi --
+  iddia HTTP basligindaki ETag'i ariyordu, oysa ajan ETag'i **govdedeki `bundle.etag`**'ten
+  okuyor; **yanlis degeri arayan iddia her zaman yesildi.**
+- **Fikstur kusuru:** F8/F25/M2/M9 sha defterini yazip **diske hicbir sey koymuyordu** --
+  uretimde ARIZA olan hali normal sayiyorlardi.
+- **Paylasilan dosya dogru ele alindi:** `deploy/yerel-kapilar.sh`'de yalniz kapi etiketi
+  `git apply --cached` ile tek hunk olarak alindi; ayni dosyadaki **baska ajanin BR-SEC-29
+  hunk'lari commit'e girmedi**.
+
+### Kararlar (bu tur)
+
+- **Kabul olcutunu dar yaz.** *"Iki 422 AYRI mesaja dusmeli"* olcutu, FE isi sanilan seyin
+  bir uc kusuru oldugunu ortaya cikardi; *"hata gosterilsin"* olcutu bunu gostermezdi.
+- **Bir bekcinin muafiyeti veriye baglanir, dosya adina degil.** Beyaz liste bayatlar.
+- **Mutasyon urun tarafinda yapilir.** Bekciyi kendi metnine karsi mutasyonlamak, bekcinin
+  gercek kusuru yakalayip yakalamadigini soylemez.
+
+### Acik kalanlar / sonraki adim
+
+- Acik kart **85** (P0 3 / P1 41 / P2 36 / P3 5). ClickUp senkron.
+- Entegrasyon takiminda kalan kirmizi: `BR-DB-105`, `BR-DB-106`.
+- Kosan: `BR-SEC-29` (db-dev).
+- **Yayin hala kosulmadi.**
