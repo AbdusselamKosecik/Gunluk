@@ -342,3 +342,85 @@ M5 Netgsm duzeltmesi geri -> 5 KIRMIZI, 1 gecti (gecen tek test POZITIF olandir)
   baglanmadigi **olculmedi** (ADR-019 §4'te yazili borc).
 - Duzeltilen Netgsm yolu **gercek saglayiciya karsi kosmadi**; kanit yalnizca testtir.
 - `BR-SYS-127` (`webhook_deliveries` boyut esigi) acildi, hic baslanmadi.
+
+---
+
+## BR-QA-57 KAPANDI — gorsel kapi kapsami 5 -> 6 taban (frontend-dev-1)
+
+### Baglam
+Kartin son acik kalemi (3) vardi: **agent eylem cubugu** (dinleme/sufle/araya
+girme). Kalem 1 (wallboard 1920x1080), 2 (#12 canli kuyruk) ve 4 (gunduz temasi)
+onceki turlarda inmisti.
+
+### 1. #28 `MonitorScreen` piksel tabani
+- **Neden:** kartin cumlesi — *"dugme kaymasi BURADA yetki hatasina donusur:
+  supervizor musterinin duydugu hatta konusur"*. Uc eylem dugmesi (Dinle · Sufle ·
+  **Araya gir**) yan yana ve ayni kutuda (`.actions`).
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/visual-tests/monitor.visual.spec.ts` (YENI),
+  `src/Pbxtr.Web/visual-tests/__screenshots__/linux/monitor-1440x900.png` (YENI),
+  `src/Pbxtr.Web/scripts/verify-visual-baselines.mjs` (manifesto satiri).
+- **Fikstur bilerek cok sey soyluyor:** iki uc (`/live/agents`, `/monitor/sessions`),
+  yetki IKI ALANDAN (`monitor.listen` + `live.agent.read`) + `monitor.whisper` +
+  `monitor.barge` (yalniz `listen` verilseydi taban EN DAR cubugu dondururdu),
+  saatlik sure `1:11:11`, `currentCallQueue: null` -> `—`, baska supervizorun
+  oturumu (rozet + ad), ortada kalan (stranded) oturum, **gercek GUID kuyruk
+  kimlikleri**.
+
+### 2. ILK KOSU GERCEK KUSUR OLCTU -> `BR-FE-126` (ayni turda kapandi)
+- **Olcum:** uyelik satiri `agent.queueIds.join(", ")` yaziyordu; `LiveAgent.queueIds`
+  uretimde **GUID**'dir (`RedisLiveOperationsView.cs:479`). Sayfada ham GUID
+  **3 satirda birden**; uc uyelikli agent'ta hucre **110 karakter**, satirin ortasini
+  kapliyor ve sayac + eylem cubugunu saga itiyordu.
+- **Neden bugune kadar gorunmedi:** fiksturler `"satis"`/`"destek"` gibi **okunur**
+  sahte kimlikler kullaniyordu — `BR-FE-124`'u (#12) gizleyen sebebin aynisi.
+- **Cozum #12'ninkinden FARKLI olmak zorundaydi:** #12 adi kendi `/live/queues`
+  yanitindan cozer; #28 o ucu **cagiramaz** (kayit defteri satiri `live.queue.read`
+  istemez). Ad **uydurulmadi**, olculmus olan yazildi: **SAYI** ("Uyelik: 3 kuyruk").
+  Yeni anahtar **9 dilde** (`monitor.membershipCount.one/.other`; Arapca alti cogul
+  sinifiyla), eski `monitor.membership` kaldirildi.
+- **Taban kusurlu haliyle DONDURULMADI** — once duzeltildi, sonra uretildi.
+
+### 3. Mutasyon (iki bekci, iki yon)
+Mutasyon: satiri `` `Uyelik: ${queueIds.join(", ")}` `` ile geri al.
+- `MonitorScreen.test.tsx` (GERCEK GUID fiksturuyle): **3 failed / 19 passed**
+  -> geri alindi **22 passed**.
+- `monitor.visual.spec.ts` (pinli konteyner): GUID 3 esleme -> **KIRMIZI**
+  -> geri alindi **yesil**.
+Ikisi ayri sey olcer: piksel kapisi SABIT fiksturu, birim testi "hangi veriyle
+olursa olsun kimlik yazilmaz"i.
+
+### 4. Olcumler
+```bash
+deploy/fidelity/fidelity-kos.sh dogrula   # S4 parmak izi TUTTU, 6 passed, rc=0
+node scripts/verify-visual-baselines.mjs  # "verified 6 visual baseline(s)" rc=0
+node scripts/verify-visual-baselines.test.mjs  # 27 iddia, rc=0
+npx tsc -b && npx tsc -p tsconfig.visual-tests.json  # rc=0 / rc=0
+npx vitest run                            # 238 dosya / 2128 test passed
+```
+
+### 5. Commit'ler
+- `1fd86841` — spec + PNG + `BR-FE-126` duzeltmesi + 9 dil + birim bekcisi
+- `2076bc0c` — manifesto satiri (S6 gerekce + `producedFromSha`)
+- `9686b587` — ClickUp kart id kaydi (`BR-QA-57` panoda `backlog` -> `complete`)
+
+## Kararlar (BR-QA-57 turu)
+- **Kaynagi olmayan ad uydurulmaz, olculmus sayi yazilir.** #28'de kuyruk ADI
+  cozulemez; secenekler (a) yeni uc, (b) ekranin yetkisini genisletmek,
+  (c) sayi. (a) yetkisiz supervizore kesin 403 attirirdi, (b) bir **yetki**
+  kararidir — bir yerlestirme ayrintisi degil. (c) secildi.
+- **Yetkiler TAM verildi ki taban EN DAR cubugu dondurmesin.** `monitor.whisper` +
+  `monitor.barge` olmadan uc dugmeli cubuk hic cizilmezdi.
+
+## Ogrenilen (BR-QA-57 turu)
+- **Okunur sahte kimlik bir kusuru ortadan kaldirmaz, GIZLER.** Ayni kusur ucuncu
+  kez ayni sebeple bulundu (#12 -> `BR-FE-124`, #28 -> `BR-FE-126`, #13 ->
+  `BR-FE-127`). Fikstur kimligi **uretimdeki bicimde** tasimali.
+- **Ilk kosuda otomatik yazilan taban TUZAKTIR.** Playwright eksik snapshot'i
+  "writing actual" diyip yazdi; o dosya **kusurlu** hali tasiyordu. Silinip
+  duzeltmeden sonra yeniden uretilmeseydi kapi kusuru "dogru" diye kilitlerdi.
+
+## Acik kalanlar (BR-QA-57 turu)
+- `BR-FE-127` — ayni kusurun **ucuncu kopyasi** #13 `LiveAgentsScreen.tsx:536`'da
+  duruyor. `BR-QA-57`'nin kalemleri arasinda degildi; gorunmez borc olmasin diye
+  kart acildi, **duzeltilmedi**.
+- `S10` — piksel kapisi hala 3 aylik deneme suresinde (son tarih 2026-12-11).
