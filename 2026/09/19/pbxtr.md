@@ -2507,3 +2507,85 @@ kalmisti, yani gorunen kirmizi listesi eksikti.
   Mimari bekciye baglanmadi.
 - Son uc duzeltmeden sonra 66 parcanin TAMAMI bastan kosulMADI; etkilenen parcalar
   (A/Ca/Sc/Tel + FinalDeliveryReport) fiilen yeniden kosuldu, otekiler devralindi.
+
+---
+
+## Ek tur — `BR-DB-107` OLCULDU ve KAPANDI (db-dev)
+
+### Baglam
+Yukaridaki "acik kalanlar" listesinde `BR-DB-107`in tek eksigi yaziliydi: **42501'in iki
+kosulundan hangisi duesuyor** ve bu bir **urun kusuru mu, test ikizi kusuru mu**. Bu tur
+o olcumu yapti.
+
+### 1. Kosu aninda PROBE (tahmin degil)
+- **Neden:** kartin aday sebebi (`3065b181`, capraz kipin tenant basina daraltilmasi)
+  acikca TAHMIN olarak isaretliydi; `audit_log` policy'si iki kollu
+  (`tenant_id = app_current_tenant() OR app_is_cross_tenant()`) ve hangisinin duestugu
+  olculmemisti.
+- **Ne yapildi:** `QueueMembershipSyncJob.cs`'e, denetim yaziminin **hemen oncesine**,
+  ayni transaction'da iki GUC'u okuyup firlatan gecici bir probe kondu; tek test kosuldu;
+  probe **silindi** (urun dosyasi commit'te YOK, `git diff` bos).
+- **Olcum:**
+
+  | | `app.tenant_id` | `app.cross_tenant` |
+  |---|---|---|
+  | IKIZ (test konagi) | `''` (BOS) | `off` |
+  | URETIM (`LeaderElectedJobRunner`) | `<SystemTenantId>` | `off` |
+
+  Yani ikizde **iki kol da** duesuyordu; uretimde **birinci kol saglaniyor**.
+- **Sonuc:** BR-DB-95 / S76-7 (D2) daraltmasi urun yolunu **kirmamistir**; tick geri
+  alinmaz, kuyruk uyeligi santrale gider. Kart bu yuzden **P0'a cikarilmadi** ve gerekcesi
+  bir olcumdur.
+
+### 2. Kok sebep — ikiz uretimden DAR
+- **Uretim:** `LeaderElectedJobRunner.cs:231-232` `accessor.Push(SystemState())`,
+  `:236-238` `dbContext.Database.BeginTransactionAsync` -> `TenantSessionInterceptor`
+  `SET LOCAL app.tenant_id` yazar; ise gecen `JobExecution.Connection` **ayni oturumdur**.
+- **Ikiz:** `new JobExecution(null, connection, transaction, node, tenant)` — ciplak
+  `NpgsqlConnection`, `DbContext` yok, GUC hic yazilmiyor.
+- Kayitli ders *"test ikizi uretimden musamahakar"*in **ters yonu**: burada ikiz DAR'di.
+
+### 3. Duzeltme
+- **Dokunulan dosyalar:**
+  - `tests/Pbxtr.Integration.Tests/Support/JobExecutionHarness.cs` (YENI) — uretimin GUC
+    kurulumunu birebir yapar. Iki tenant sinifi AYRI: `ContextTenant` (t0012, denetimi
+    `execution.ContextTenantId` ile yazan isler) ve `OptionsSystemTenant`
+    (`BackgroundJobOptions.SystemTenantId` ile yazan `PlatformRollupJob`, `Program.cs:357`).
+    Karistirilsaydi **yine 42501** gelirdi.
+  - `tests/Pbxtr.Integration.Tests/Tests/BackgroundJobTenantGucTests.cs` (YENI, KALICI
+    BEKCI) — gercek PostgreSQL + gercek kosucu ile "uretim isin baglantisina
+    `app.tenant_id` KURAR" iddiasini olcer.
+  - Yedi cagri yeri harness'e cevrildi: `QueueMembershipSyncJobTests`,
+    `QueueMembershipSyncAlarmTests` x2, `PlatformRollupJobDbTests` x2,
+    `PlatformUnresolvedTenantCounterTests`, `ProvisioningPullHealthDbTests`.
+- **Bekci kaybolmadi:** is baglami bilerek fikstur tohumunun (t0007) DISINDAKI bir
+  tenant'tir; is capraz kapsami acmayi unutursa kesif yine 0 satir gorur ve test kirmizi olur.
+- **SEMA DEGISMEDI** — `01-rls-template.sql` / `02-guards.sql` govdelerine dokunulmadi,
+  migration/refresh gerekmez.
+
+### 4. Sonuc / dogrulama
+- **Kirmizi 35 -> 0.** 47/47 yesil (18+18+3+6+1+1). Kartin listesi 22 vaka sayiyordu;
+  kalan 13'u `QueueMembershipSyncAlarmTests`'te ayni imzayla duruyordu (22+13=35) —
+  **kartin kendi listesi eksikti**.
+- **MUTASYON:** harness'teki `set_config` kapatildi, ikili yeniden derlendi (DLL damgasi
+  dogrulandi) -> **22/28 vaka yeniden KIRMIZI, ayni 42501**; geri alininca 29/29 yesil.
+- **SUPURME:** kalan 22 ciplak `new JobExecution(...)` cagri yeri de kosuldu
+  (32+24+29 entegrasyon + 3 `Api.Tests`) — hepsi yesil.
+- `dotnet format --verify-no-changes`: temiz (python yamasinin biraktigi BOM duzeltildi —
+  **kayda deger tuzak**: `utf-8-sig` ile yazmak 5 dosyaya BOM ekledi ve format kapisi
+  `CHARSET` hatasi verdi).
+- **Commit:** `53c5ace8` — BR-DB-107 KAPANDI. ClickUp: `BR-DB-107 backlog -> complete`
+  (fark: 0, izde olmayan: 0).
+
+### Kararlar
+- **"Ikiz mi urun mu" sorusu tek bir probe kosusuyla cevaplanir** ve cevaplanmadan kart
+  kapatilmaz; bu turda cevap **ikiz** cikti ve urune TEK SATIR dokunulmadi.
+- **Kartin vaka listesi bir olcum degildir.** 35 yaziyordu, 22 listeliyordu; eksik 13 ayni
+  imzayla baska bir sinifta duruyordu. Sinifi imzadan (yigin izi) tara, listeden degil.
+
+### Acik kalanlar / sonraki adim
+- Kalan 22 ciplak `new JobExecution(...)` cagri yeri **bugun yesildir** cunku o islerin
+  capraz kipi denetim yazimina kadar ACIK kalir. `BR-DB-95`in kalan D2 kalemleri
+  (`CallbackRunJob`, `LeaveEnforcementJob`) daraltildiginda ayni sekilde kirmiziya doner —
+  **acik is `BR-DB-95`te durur**, yeni kart acilmadi.
+- `BR-DB-105` / `BR-DB-106` hala acik.
