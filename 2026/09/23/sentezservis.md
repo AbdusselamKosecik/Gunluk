@@ -96,3 +96,15 @@ GÜNCELLEME.xlsx'ten, gram bazlı ortalama (30 gr = 20 ile 40'ın ortası). Men�
 - **Commit:** `4626c5c` — Rayic: kar orani, KDV'siz ve KDV'li satis fiyati birbirine bagli
 - **Paket:** `SentezServis-2026-09-23-rayic-kar.zip` (çalışma kopyasından; önceki paketten sonra başka
   değişiklik yok). Arayüz tarihi 2026-09-23 12:10.
+
+### 7. Detay Excel satırlarıyla birebir
+- **İstek:** Detay, Excel YENİ RAYİÇ'teki 32 satır listesi gibi, ayrıntılı çıksın.
+- **Ne yapıldı:** Tek `SATIRLAR` listesi (Excel sırası ve adları: Dolar Kuru … dolar fiyat … Tav. SF …
+  güncel kura göre Satış Fiyatı (KDV'li), Satış Fiyatı (KDV'siz), Brüt Karlılık) hem karşılaştırma
+  tablosunda hem sağdaki canlı önizlemede ("Detay (Excel sırası)") kullanılıyor. İki "Toplam Maliyet
+  (KDV'siz)" birim rozetiyle (USD/TL) ayrışıyor. Ekranın eklediği Kâr hedefi / KDV oranı / Fiyatın
+  kaynağı altta ayrı blok. Tabloda "Proje Kodu" sütun başlığında olduğu için satır olarak tekrarlanmıyor.
+- **Doğrulama:** tsc + oxlint temiz; LocalDB + tarayıcı: önizlemede 32 + 3 satır, tabloda 6230/6234
+  (453,89 / 401,98 toplam, %40 karlılık).
+- **Commit:** `3b526b7` — Rayic detayi Excel YENI RAYIC satirlariyla birebir
+- **Paket:** `SentezServis-2026-09-23-rayic-detay.zip` (çalışma kopyasından; başka değişiklik yok).
