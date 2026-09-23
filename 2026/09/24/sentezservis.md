@@ -74,6 +74,16 @@ yapan gerekecek".
 - **Öneri (uygulanmadı, canlıya yazılmaz):** `Arsiv` koşulu `Erp_CurrentAccount.IsEInvoice = 2` olsun ve
   listeye Pazarama eklensin; işlerin başlangıç dakikaları kaydırılsın (:00/:10/:20/:30).
 
+### 4. Kullanıcı kuralı: canlıda e-ticaret düzenlemesi yok
+- **Kullanıcı:** SQL Agent işlerinin metinlerini yapıştırdı ve "SentezCore2026 DB'sinde hiçbir düzenleme yapma bu
+  e-ticaret konusunda" dedi. Madde 3'teki öneriler (Arsiv koşulu, iş saatleri) geri çekildi, canlıya hiçbir şey yazılmadı.
+- **Kontrol (salt okuma):** İşlerin faturada düzelttiği alanların sipariş tarafı bizde yazılıyor:
+  IsETrade=1, IsTaxExempted (mikro), UD_KargoTakipNumarası, EArchivesWebAddress/EArchivesPaymentType (hesap
+  parametresi). Parametreler canlı siparişlerle aynı: Trendyol/HB/Boyner/Pazarama `www.<pazaryeri>` +
+  ODEMEARACISI; Shopify `www.Shopify.com` + DIGER (canlıda 1.487 DIGER, 1 EFT/HAVALE). EArchivesCargoId siparişte
+  yazılmıyor; canlıda da siparişlerin çoğunda NULL (Trendyol'da 30.691 NULL, 4.401 dolu (314926)); faturada iş dolduruyor.
+- **Sonuç:** Kod değişmedi. Fatura alanları (IsEInvoice, 301, ISTISNA, kargo Id) bizim kapsamımızda değil; test
+  ERP'de bu işler çalışmadığı için orada fatura karşılaştırması yapılmayacak.
+
 ## Açık kalanlar / sonraki adım
-- Kullanıcı kararı: `Arsiv` işinin koşulu (TaxNo yer tutucu → cari IsEInvoice=2) ve iş saatlerinin kaydırılması.
 - Boyner'de 102 siparişin tamamı `kurumsal_fatura=1`; şüpheli, bakılmadı.
