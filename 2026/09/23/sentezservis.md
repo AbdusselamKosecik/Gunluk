@@ -78,3 +78,21 @@ GÜNCELLEME.xlsx'ten, gram bazlı ortalama (30 gr = 20 ile 40'ın ortası). Men�
   09:10'dan beri değişen dosyalar yalnızca rayiç ile ilgili (find -newer ile doğrulandı).
 - **Doğrulama:** app.js'te `/rayic` ve karşıt kod rotası var; appsettings.json çıkarıldı (29 sır boşaltıldı).
   Arayüz tarihi: 2026-09-23 11:42 — kurulumdan sonra `/api/surum` bu değeri dönmeli.
+
+### 6. Kâr oranı / KDV'siz / KDV'li bağlı fiyat
+- **İstek:** KDV'siz satış = toplam maliyet (KDV'siz) + %40 (parametrik); KDV'li = KDV'siz + %10 KDV
+  (parametrik). Kâr, KDV'siz veya KDV'li değiştirilince diğerleri güncellensin.
+- **Ne yapıldı:** `RayicParametreleri.HedefKarOrani` (0,40) ve `KdvOrani` (0,10). `FiyatlariTamamla`:
+  öncelik girilen KDV'siz → girilen KDV'li/(1+KDV) → kâr hedefi. Kâr hedefi döngüsel (komisyon KDV'li,
+  stopaj KDV'siz fiyattan) → `S = (1+m)·sabit / (1 − (1+m)·a)`, `a = (1+KDV)·komisyon/1,2 + stopaj`;
+  karlılık tam m çıkıyor. `RayicSonucu`'na çözülmüş `SatisFiyatiKdvsiz/Kdvli` eklendi.
+  Ekran: üçlü alan grubu, son değiştirilen "kaynak" (elle rozeti), sunucuya yalnızca kaynak gider,
+  diğer ikisi önizlemeden 2 haneyle geri yazılır; önizleme isteği girdi JSON anahtarına bağlandı (döngü yok,
+  boştayken 0 istek ölçüldü). Karşılaştırmaya "KDV oranı" ve "Fiyatın kaynağı" satırları eklendi.
+- **Doğrulama:** 573/573 test (yeni: kâr %40/%25/%0 tam oturuyor, KDV'siz 600 → KDV'li 660 & toplam 449,93,
+  KDV'li 660 → KDV'siz 600). Tarayıcıda LocalDB ile: 6230 %40 → toplam 453,89, KDV'siz 635,45, KDV'li 698,99.
+- **Karar:** Komisyondaki `/1,2` Excel'deki gibi kaldı (komisyonun kendi KDV'si), satış KDV'sinden bağımsız.
+  Kaynağı kâr olan kayıtta fiyat saklanmaz → maliyet değişince fiyat %40'ı korur.
+- **Commit:** `4626c5c` — Rayic: kar orani, KDV'siz ve KDV'li satis fiyati birbirine bagli
+- **Paket:** `SentezServis-2026-09-23-rayic-kar.zip` (çalışma kopyasından; önceki paketten sonra başka
+  değişiklik yok). Arayüz tarihi 2026-09-23 12:10.
