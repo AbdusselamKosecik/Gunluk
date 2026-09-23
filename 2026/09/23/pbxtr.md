@@ -172,6 +172,64 @@ diye. Maddeleri kontrol et, ClickUp'ı çevrim sonlarında güncelle, o şekilde
   `clickup-senkron.js` (yazılan 13) → `--kuru` doğrulama: **`fark olan kart: 0, izde olmayan: 0`**.
 - **Commit:** `7d6024bc`
 
+### 8. İkinci çevrim — BR-DB-109 (`kapi_71`) ve BR-00d
+
+- **BR-DB-109 kapandı (`2e568aa3`).** `deploy/sablon-refresh-kapisi.sh` kırmızıydı: `02-guards.sql`
+  gövdesi değişmiş ama onu kurulu veritabanına yeniden uygulayan migration yazılmamıştı.
+  **Öncül ölçümü çarpıcı: defterdeki sha bir hayaletmiş** — `1dd931b4…` hiçbir commit'te var
+  olmamış (son 20 sürüm tarandı). Defter, üç gün commit'lenmeden duran işin (`c4eba581`,
+  639 dosya) **ortasından** alınmış bir ara hâli donduruyordu.
+  **Fark yorum değil gövde:** `pbxtr_sys_function_expectations()` +4 fonksiyon (md5
+  `c732d80e… → 52efa832…`, 30→33), `pbxtr_partial_unique_index_expectations()` +
+  `ux_prov_queue_gaps_open` (7→8), `pbxtr_special_rls_guard()` +
+  `recording_retention_effective_at`. Üçünün de iddiası `MaintenanceRunner.GuardAsserts`'te
+  koşuyor → eski gövde kalan bir DB'de **uygulama hiç açılmaz**. Hijyen değil, açılış ön koşulu.
+  **K6 git'e bakar, kurulu DB'ye bakmaz** — o üç günlük pencerede migrate koşan bir DB
+  `20260921200000`'i eski gövdeyle uygulamıştır ve EF onu bir daha koşmaz.
+  **Kilit sınıfı DDL'den sayıldı:** 51 `CREATE OR REPLACE FUNCTION`, 16 `CREATE FUNCTION`,
+  16 `DROP FUNCTION IF EXISTS`, 40 `COMMENT ON FUNCTION`; satır başında **sıfır** `CREATE TABLE`/
+  `ALTER TABLE`/`CREATE INDEX`/`GRANT`/`CREATE POLICY` → **ACCESS EXCLUSIVE yalnız 83 fonksiyon
+  nesnesinde**, hiçbir kullanıcı tablosunda kilit yok. Bu yüzden 01 koşturulmadı (o
+  `ensure_future_partitions(3)` ile `tenants`/`call_attempts` kilitler ve `call-permission`
+  FAIL-CLOSED'dır). Ölçüm: build 0/0, Architecture **777/777**, `kapi_71` **rc=0**.
+- **BR-00d'nin `PBXTR_ORIGIN` yarısı kapandı.** `manager.conf:22` →
+  `channelvars = PBXTR_TENANT,PBXTR_ORIGIN,QUEUE_PRIO` + `docker restart pbxtr-asterisk`
+  (yasak listeden hiçbir komut kullanılmadı; AMI'nin `write = call,agent,originate` kümesi
+  el değmedi). `ChanVariable: PBXTR_ORIGIN=callback` **0 → 72**, timeline'ın ihtiyaç duyduğu
+  her olayda dolu.
+- **`QUEUE_PRIO` yarısı kapanmadı ve bu ancak DEĞER sayılınca görüldü.** Başlık 144 kez var,
+  **144'ünün 144'ü boş**; değişkeni **kimse `Set` etmiyor** (`grep` tek isabet, o da bir yorum).
+  **Tuzak:** başlık *adını* saymak 0 → 144 der ve kartı **yanlışlıkla kapatırdı** — Asterisk
+  listedeki değişkeni kanalda tanımlı olmasa bile boş değerle yayıyor. → `BR-AST-122`.
+- **SLA olay sırası gerçek santralde ölçüldü:** `QueueCallerLeave → AgentConnect → AgentComplete`,
+  `Leave` iki turda da önce: **−3586 µs** ve **−65 µs** (lab kaydı −272 µs). Yön aynı, büyüklük
+  **55× oynuyor** → öncelik-önce sıralaması doğru ve gerekliydi; ayrıca **zaman damgasına dayalı
+  bir eşik güvenli değildir**.
+- **Yeni kart `BR-BE-213` (P1) — sessiz ve üretimi ilgilendiren bir bulgu:** restart sonrası
+  `t0007-musteri-hizmetleri`'nin **6 dinamik üyesi düştü** ve 100+ sn sonra hâlâ `No Members`;
+  `pbxtr-app` logunda `QueueAdd`/resync izi **yok**. AMI ve ARI **geri geldi** — yani §3.4 resync
+  durumu **okuyor**, üyeliği **itmiyor**. Üretimde aynı restart tüm agent'ları kuyruktan düşürür,
+  panelde "müsait" görünürler ve kuyruk onlara çağrı dağıtmaz. **Hiçbir alarm yanmaz.**
+
+### 9. Frontend ve Integration ölçümleri
+
+- **Frontend temiz:** `vitest` **253 dosya / 2209 test, hepsi geçti** (exit 0); `npx tsc -b` → **0**.
+  (`tsc --noEmit` yayın kapısı değildir — `-b` koşuldu.)
+- **Docker Desktop kapalıydı**, başlatıldı (`%LOCALAPPDATA%\Programs\DockerDesktop`), böylece
+  `Pbxtr.Integration.Tests` **bu oturumda ilk kez** gerçek PostgreSQL'e karşı koştu:
+  **`Failed: 44, Passed: 1164, Skipped: 2, Total: 1210`** (25 dk 15 sn).
+- **Bu 44 kırmızı muhtemelen haftalardır görünmüyordu:** yerelde Docker kapalı, GitHub Actions
+  kaldırılmış. Kayıtlı dersin tam örneği — *koşmayan kapı bulgu değildir*.
+- **Baskın sebep tek:** 26 kez `42703: column e.source does not exist`
+  (`SlaAggregationJob.cs:406,810,956` → `public.call_events`). Kolonu ekleyen migration **var**
+  (`20260919020000_CallDataSourceColumn.cs:92`) ve snapshot'ta da var → sorun SQL'de değil,
+  testlerin koştuğu **fikstür şemasının üründen geri kalmasında** görünüyor (*test ikizi
+  üretimden müsamahakâr*). Ajana ölçtürülüyor.
+- **Ayrıca gerçek bir ürün kusuru:** `telephony_provider_effects` CHECK kısıtında **`Mute`/`Unmute`
+  yok** ama C# kümesinde var → o iki işlem canlıda **`23514`** ile düşer.
+- Diğer kümeler: IVR `complete_graph_required` 409'ları, `DeliveryProofHttpRunnerTests`
+  `proof_step_failed` / `cleanup_failed`, `FinalDeliveryReportTests` donmuş defteri.
+
 ## Kararlar
 
 1. **`#37` sağlık satırı sayıyı taşır, üretmez.** ≤15 dk bayatlık kabul; rollup durursa satır
