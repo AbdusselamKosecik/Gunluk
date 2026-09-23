@@ -85,5 +85,57 @@ yapan gerekecek".
 - **Sonuç:** Kod değişmedi. Fatura alanları (IsEInvoice, 301, ISTISNA, kargo Id) bizim kapsamımızda değil; test
   ERP'de bu işler çalışmadığı için orada fatura karşılaştırması yapılmayacak.
 
+### 5. Yerel deneme: çek → cari → sipariş, canlıyla karşılaştırma
+- **Neden:** Kullanıcı: "localde çalıştırıp deneyelim mi?"
+- **Güvenlik kararı:** Paylaşılan SentezServices'e ikinci kopya bağlanmaz. Sebepler:
+  - Zamanlayıcıda tetiği tek kopyaya ayıran kilit yok; e-arşiv gönderimi iki kez çalışırdı.
+  - Açılışta canlının mükerrerlik kilitleri serbest bırakılırdı (`IsKayitDefteri.EsitleAsync`).
+
+  Bu yüzden:
+  - LocalDB `SentezServisYerel` oluşturuldu; migration'lar açılışta koştu.
+  - `pazaryeri_hesaplari` kopyalandı (10 hesap; scratchpad `hesap_kopyala.py`).
+  - Yeni ayar `ZamanlayiciEtkin` (varsayılan true) eklendi.
+  - Yerelde zamanlayıcı, e-posta ve toplayıcı kapalı. Ortam değişkenleri scratchpad `yerel_calistir.sh`'ta;
+    `SentezServis.exe` ile çalıştırılır. `dotnet x.dll` içerik kökünü `C:\Program Files\dotnet` yapıyor,
+    appsettings okunmuyordu.
+  - Adres `http://localhost:81` (Kestrel yapılandırması).
+  - API: scratchpad `api.py` (CSRF başlığı `X-CSRF-Token`; Git Bash'te `MSYS_NO_PATHCONV=1`).
+- **Çalıştırmalar:**
+  - JOB-1 `pazaryeri-siparis-cek` 23.09, kapsam=hepsi → 6.822 sipariş. 23.09 tarihli olanlar 1.575; gerisi
+    23.09'da güncellenen eski siparişler. Trendyol'da 6 gerçek TCKN geldi (madde 1 düzeltmesi çalışıyor),
+    156 mikro. HB hâlâ 0.
+  - JOB-2/3/4 `pazaryeri-aktarim`: 230 cari ve 230 fiş SentezCore2026Test'e yazıldı, hata yok.
+- **Karşılaştırma** (scratchpad `karsilastir.py`, eşleşme `ECMOrderNo`): canlıda bulunan 191 fişte birebir tutanlar:
+  - sipariş no, tarih, saat (Shopify UTC→TR dahil), genel toplam, KDV, masraf 0;
+  - istisna (mikro), IsETrade, özel kod, web, ödeme tipi;
+  - cari SpecialCode (web), cari e-fatura durumu, kalem sayısı, KDV oranları.
+- **Bulunup düzeltilenler:**
+  1. KDV kuruş farkı (22 Shopify fişi). Canlı net tutarları 8 haneyle saklıyor; başlık matrahı = KDV'li toplam /
+     çarpan (`1559,60/1,10 = 1417,81818182`). `Toplamlar.NetHane = 8`, başlık oran bazında hesaplanıyor.
+  2. Shopify numarası: canlı `DocumentNo=60622` (`#` yok), `MarketPlaceOrderNo=NULL`. `FisSiparisNo` /
+     `PazaryeriSiparisNo` eklendi; mükerrer kontrolü `ISNULL(MarketPlaceOrderNo, DocumentNo)`.
+  3. İlçe: il `Izmir`, ilçe `İzmir` Türkçe kültürde eşleşmiyordu → invariant + IgnoreNonSpace. `Tuzla/ istanbul`
+     → bütün parçalar deneniyor.
+- **Bilinçli / bilinen farklar:**
+  - Kargo adı `PTT Kargo Marketplace` / `PTT Kargo` (148 fiş).
+  - Shopify takip no: canlıda fiş eklendikten saatler sonra başka bir süreç yazıyor.
+  - Shopify `UD_EMail`: canlı boş, biz kullanıcı isteğiyle yazıyoruz.
+- **Canlıda olmayan 39:** 32 Shopify (16:57 sonrası), 4 geç Trendyol, 1 Boyner "Yeni", 2 **iptal** Trendyol.
+- **İptal ölçümü** (23.09 15:00 öncesi Trendyol):
+  - IptalEdildi 58 → canlıda 34 fiş var: 29'u irsaliyeli ve kapalı (kargodan sonra iptal), 5'i açık. 24'ü hiç yok.
+  - İade 79/79 var; TeslimEdildi 1.344/1.345 var.
+  - Bizim hazırlık adımında durum filtresi yok; iptal siparişi de yazıyor. **Kullanıcı kararı bekliyor.**
+- **Test verisi temizliği:** Kod değiştikçe `#`'li 20 Shopify fişi, sonra deneme fişlerinin tamamı (210 fiş / 331
+  kalem / 331 varyant) SentezCore2026Test'ten silindi, yerel defter `bekliyor`'a çekildi, yeniden yazıldı.
+- **Dokunulan dosyalar:** `Ayarlar.cs` (yalnız `ZamanlayiciEtkin` hunk'ı; başka oturumun KuyrukSinirlari
+  değişikliği dışarıda), `Zamanlama/ZamanlayiciServisi.cs`, `Cariler/AdresEslestirici.cs`,
+  `SiparisAktarimi/SentezSiparisYazici.cs`, `SiparisAktarimi/Toplamlar.cs`, 3 test dosyası,
+  `docs/pazaryeri-siparis-aktarimi.md`.
+- **Sonuç / doğrulama:** 612/612 test.
+- **Commit:** `723ea8a` — Yerel deneme bulgulari: KDV 8 hane, Shopify numarasi, ilce eslesmesi
+- **Not:** Live SentezCore2026'da Trendyol fişleri 23.09 23:21'e kadar eklenmiş → eski entegrasyon hâlâ çalışıyor olabilir.
+
 ## Açık kalanlar / sonraki adım
+- Kullanıcı kararı: ilk görüldüğünde iptal edilmiş sipariş (IptalEdildi) fişe yazılsın mı?
+- Yerel host çalışıyor olabilir (http://localhost:81, LocalDB `SentezServisYerel`); scratchpad `yerel_calistir.sh`.
 - Boyner'de 102 siparişin tamamı `kurumsal_fatura=1`; şüpheli, bakılmadı.
