@@ -60,6 +60,20 @@ Kullanıcı bunu yeniden tanımladı: makine üzerindeki fiziksel parçaların e
 - **Commit:** `29750eb`
 - **Paket yenilendi:** `SarfKullanim-IIS-192.168.3.228-89-20260923-parca.zip` (8.5 MB, 83 dosya).
 
+### 5. Seçim listesi modal içinde kırpılıyordu
+- **Neden:** Kullanıcı: "Parça ekle'de ekran küçük kaldığından açılan liste altta kalıyor görünmüyor."
+- **Kök neden:** `AsyncPicker` listesi `absolute`; `Modal` gövdesi `overflow-y-auto` olduğu için liste kırpılıyordu.
+- **Çözüm:** Liste `createPortal` ile `document.body`'ye basılıyor, `fixed` konum + `z-[60]`
+  (modal z-50). Konum butonun `getBoundingClientRect`'inden hesaplanıyor; altta yer yoksa
+  yukarı açılıyor, yükseklik ekrana göre sınırlanıyor (min 180, max 360 px). Kaydırma/resize'da
+  konum güncelleniyor (telefonda klavye açılması dahil); dışarı tıklama hem kök hem menü
+  kontrol edilerek kapatıyor.
+- **Lint tuzağı:** `react-hooks/set-state-in-effect` effect içinde setState'e izin vermiyor →
+  konum, liste açılırken (`openPicker`) hesaplanıyor; effect yalnızca dinleyici bağlıyor.
+- **Etki:** Makine, çalışan ve malzeme seçicilerinin hepsi (hareket formu, raporlar, malzeme kartından ekle).
+- **Doğrulama:** build + lint temiz; tarayıcıda malzeme listesi modal dışına taşıp tam görünüyor. Kullanıcı "düzelmiş" dedi.
+- **Commit:** `82088a7`
+
 ## Açık kalanlar
 - Sunucuda 0003 çalıştırılıp yeni paket deploy edilmeli.
 - Gerçek Sentez kullanıcısıyla login hâlâ denenmedi (şifre bilinmiyor).
