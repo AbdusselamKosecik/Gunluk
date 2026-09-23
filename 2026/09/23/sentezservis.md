@@ -148,3 +148,38 @@ GÜNCELLEME.xlsx'ten, gram bazlı ortalama (30 gr = 20 ile 40'ın ortası). Men�
 - **Açık kalanlar:** Kullanıcı kararları: kod standardı (CariOndeger mi INT- mi), eski entegrasyon ne zaman
   durdurulacak, Shopify kargo, mikro ihracat. Sonra düzeltmeler (transaction, 50 karakter, kolon adı,
   micro, UTC, parametreler).
+
+### 9. Pazaryeri aktarım düzeltmeleri + tablo temizliği
+- **Neden:** Madde 8 bulgularına kullanıcı kararları: hedef `SentezCore2026Test`; cari kodu INT-,
+  pazaryeri ayrımı SpecialCode ile; eski entegrasyon durdu; kargo için "sistem daha önce ne yaptıysa"
+  (= yazma); mikro ihracat eklenecek; e-posta max; parametreleri (ödeme carisi vb.) kullanıcı düzeltecek.
+- **Temizlik (SentezServices):** yedek tablolar `yedek_20260923_pazaryeri_siparisleri` (38.385),
+  `_siparis_kalemleri` (62.522), `_siparis_durum_gecmisi` (47.559), `_carileri` (4.317),
+  `_siparis_aktarimlari` (4.585) → asıllar boşaltıldı. Siparişler yeniden çekilecek.
+- **Temizlik (SentezCore2026Test, kullanıcı "onları da sil"):** INT-/PRK- 680 cari + adres/iletişim +
+  607 fiş / 904 kalem / 904 varyant tek işlemde. `sqlcmd -I` şart (filtreli index → QUOTED_IDENTIFIER,
+  Msg 1934). Cari DELETE'i FK kontrolleri yüzünden 20+ dk sürüyor.
+- **Kod:**
+  - Mikro ihracat: `SiparisAktarimDeposu` ham JSON'dan `$.micro` → `MikroIhracat`; yazıcı KdvOrani=0,
+    başlık+kalem `IsTaxExempted=@istisna`.
+  - Cari `OzelKod` = hesabın `FisOzelKodu`, boşsa pazaryeri adı (Shopify → `web`).
+  - E-posta kırpılmaz: migration `019_eposta_max.sql` (musteri_eposta, carileri.eposta → nvarchar(max));
+    `SiparisDeposu` 200 kırpması kalktı; `UD_EMail` zaten tam yazılıyordu. İletişim kartı (50) sığmazsa boş.
+  - `SentezCariYazici`: cari+adres+iletişim tek transaction; il/ilçe `COLLATE Latin1_General_CI_AI` +
+    yeni `AdresEslestirici` (Merkez eki, Afyonkarahisar→Afyon, Eyüpsultan→Eyüp, Kahramankazan→Kazan,
+    19 Mayıs→Ondokuzmayıs, "A/B"→B, il alanında ilçe varsa tek ile denk gelirse o il).
+  - `TakipKolonu = "UD_KargoTakipNumarası"` (ı = U+0131).
+  - Shopify: `FisZamani` UTC→Europe/Istanbul (tarih, saat, termin).
+  - Kargo fişe yazılmaz: `Toplamlar.Hesapla(kalemler, 0m)`.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Pazaryerleri/Cariler/*`, `.../SiparisAktarimi/*`,
+  `.../Siparisler/SiparisDeposu.cs`, `Data/Migrations/019_eposta_max.sql`, `docs/pazaryeri-carileri.md`,
+  `docs/pazaryeri-siparis-aktarimi.md`, testler (`AdresEslestiriciTestleri.cs` yeni, Cari/Siparis sınır
+  testleri, CariUretimTestleri). Aynı dosyalardaki başka oturumun INT-/tarih filtresi değişiklikleri de commit'te.
+- **Sonuç / doğrulama:** `dotnet test tests/SentezServis.Core.Tests` → 597/597. Commit seti temiz
+  worktree'de derlendi.
+- **Paket:** `SentezServis-2026-09-23-pazaryeri-duzeltme.zip` (arayüz 23:50, çalışma kopyasından).
+- **Commit:** `6eb9bcb` — Pazaryeri aktarimi: mikro ihracat, SpecialCode ayrimi, Shopify saati, takip kolonu
+- **Açık kalanlar:** Paketin sunucuya kurulması (019 migration açılışta koşar); siparişlerin yeniden
+  çekilmesi (çekim 20.09'dan beri durmuş, HB hiç çekilmemiş); sonra cari üret → aktar → sipariş hazırla →
+  aktar ve test ERP'de canlıyla karşılaştırma. Shopify hesabında `FisOzelKodu=web` olmalı. Kargo firma adı
+  eşlemesi, EInvoiceAlias null — bekliyor.
