@@ -68,3 +68,13 @@ GÜNCELLEME.xlsx'ten, gram bazlı ortalama (30 gr = 20 ile 40'ın ortası). Men�
 - Dolar kuru elle; TCMB/ERP'den otomatik doldurma istenirse eklenebilir.
 - `EtiketCiktisiSayfasi.test.tsx`'te 5 test kırmızı — başka oturumun commit'lenmemiş etiket
   değişikliklerinden; bu işle ilgisiz.
+
+### 5. Paket
+- **Ne yapıldı:** `deploy/yayinla.ps1` (ayrı powershell sürecinde; PS içinden `2>&1` ile vite
+  uyarısı hata sayılıyor) → `yayin\` → `SentezServis-2026-09-23-rayic.zip` (73,8 MB, depo kökü, commit'lenmez).
+- **Karar:** Paket ÇALIŞMA KOPYASINDAN alındı, temiz HEAD'den değil. Sebep: bir önceki paket
+  (`SentezServis-2026-09-23-aktarim.zip`, 09:10) commit'lenmemiş karşıt kod / etiket işlerini zaten
+  içeriyor (app.js'te `karsit-kodlar` var) → canlıda bunlar çalışıyor; HEAD'den paket bunları geri alırdı.
+  09:10'dan beri değişen dosyalar yalnızca rayiç ile ilgili (find -newer ile doğrulandı).
+- **Doğrulama:** app.js'te `/rayic` ve karşıt kod rotası var; appsettings.json çıkarıldı (29 sır boşaltıldı).
+  Arayüz tarihi: 2026-09-23 11:42 — kurulumdan sonra `/api/surum` bu değeri dönmeli.
