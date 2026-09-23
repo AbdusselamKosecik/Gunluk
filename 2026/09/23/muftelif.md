@@ -46,8 +46,21 @@ Kullanıcı bunu yeniden tanımladı: makine üzerindeki fiziksel parçaların e
 - Paket üretimi: `npm run build` (Bash) + `.\Deploy-IIS.ps1 -SkipWebBuild`. PowerShell'de doğrudan
   çalıştırınca vite'ın stderr'i NativeCommandError'a dönüşüyor, web build ayrı yapılmalı.
 
+### 4. Parça kaydı silme (kullanıcı isteği)
+- **Neden:** Yanlış girilen parça kaydını arayüzden kaldırmak gerekiyordu; API'de soft delete vardı, ekranda yoktu.
+- **Ne yapıldı:** `MakineDetayPage` içinde her parça kartına "Sil" butonu + `ConfirmDialog` onayı
+  (metinde sökme ile farkı anlatılıyor: sökme geçmişte kalır, silme kaydı yok eder, stok etkilenmez).
+  Yerine başka parça takılmışsa API 409 döndürüyor, mesaj toast olarak gösteriliyor.
+- **Ek düzeltme:** `Features/MakineParca` içindeki ASCII yazılmış Türkçe mesajlar düzeltildi
+  (ör. "Bu parçanın yerine başka bir parça takılmış; önce onu silmelisiniz.").
+- **Doğrulama:** build 0 hata, 134 test geçti, web build+lint OK. Tarayıcıda: test parçası silindi
+  ("Parça kaydı silindi."), değiştirilmiş parçanın silinmesi 409 ile engellendi. Test kayıtları DB'den temizlendi
+  (tabloda yine yalnızca taşınan 2 kayıt).
+- **Uyarı:** çalışan API `dotnet build`'i kilitliyor (MSB3026 → "2 Error"); derlemeden önce süreç durdurulmalı.
+- **Commit:** `29750eb`
+- **Paket yenilendi:** `SarfKullanim-IIS-192.168.3.228-89-20260923-parca.zip` (8.5 MB, 83 dosya).
+
 ## Açık kalanlar
 - Sunucuda 0003 çalıştırılıp yeni paket deploy edilmeli.
-- Parça soft delete API'de var, arayüzde yok (yanlış kayıt silme).
 - Gerçek Sentez kullanıcısıyla login hâlâ denenmedi (şifre bilinmiyor).
 - ImageSharp 4.x'e geçiş lisans alınırsa tek satır.
