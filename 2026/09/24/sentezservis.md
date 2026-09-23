@@ -135,6 +135,19 @@ yapan gerekecek".
 - **Commit:** `723ea8a` — Yerel deneme bulgulari: KDV 8 hane, Shopify numarasi, ilce eslesmesi
 - **Not:** Live SentezCore2026'da Trendyol fişleri 23.09 23:21'e kadar eklenmiş → eski entegrasyon hâlâ çalışıyor olabilir.
 
+### 6. Arayüzden çalıştırınca 400: boolean parametre
+- **Kullanıcı:** "cari üretimlerini neden atlıyorsun; ben çalıştır deyince backend hata veriyor".
+- **Cevap 1:** JOB-4'te cari adımlarını ben kapatmıştım (`cariUret=false`, `cariAktar=false`); yalnızca fişleri
+  yeniden yazmak içindi.
+- **Hata 2:** Yerel log: `BadHttpRequestException ... Path: $.parametreler.cariUret ... token type 'True' as a
+  string`. Dinamik form onay kutusunu JSON `true` gönderiyor; `CalistirIstegi.Parametreler` ise
+  `Dictionary<string,string?>`. API denemelerimde metin gönderdiğim için görünmemişti.
+- **Ne yapıldı:** `src/SentezServis.Host/Api/EsnekParametreDonusturucu.cs`: metin/sayı/boolean/null → metin.
+  `CalistirIstegi` ve `CronIstegi` bunu `[property: JsonConverter]` ile kullanıyor.
+- **Doğrulama:** JOB-5, arayüz biçimiyle (`"azami":1000, "cariUret":true ...`) → 202. Sonuç: 1.000 cari (195 sn),
+  985 fiş (461 sn); parametreler işe `'true'` olarak ulaştı. Bazı barkodlar test ERP'de yok (8699170389422 vb.).
+- **Commit:** `2cd81a9` — Is parametreleri: onay kutusu true/false degeri 400 veriyordu
+
 ## Açık kalanlar / sonraki adım
 - Kullanıcı kararı: ilk görüldüğünde iptal edilmiş sipariş (IptalEdildi) fişe yazılsın mı?
 - Yerel host çalışıyor olabilir (http://localhost:81, LocalDB `SentezServisYerel`); scratchpad `yerel_calistir.sh`.
