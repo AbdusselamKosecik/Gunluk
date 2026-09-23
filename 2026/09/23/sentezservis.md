@@ -108,3 +108,43 @@ GÜNCELLEME.xlsx'ten, gram bazlı ortalama (30 gr = 20 ile 40'ın ortası). Men�
   (453,89 / 401,98 toplam, %40 karlılık).
 - **Commit:** `3b526b7` — Rayic detayi Excel YENI RAYIC satirlariyla birebir
 - **Paket:** `SentezServis-2026-09-23-rayic-detay.zip` (çalışma kopyasından; başka değişiklik yok).
+
+### 8. Cari ve sipariş aktarımı incelemesi (kod + canlı ERP karşılaştırması, KOD DEĞİŞMEDİ)
+- **İstek:** Önce cariler, sonra siparişler aktarılacak; Erp_OrderReceipt / Item / ItemVariant yazımı
+  ve pazaryerine göre cari/order ayrımı incelensin.
+- **Yöntem:** Kod okundu (commit'lenmemiş başka oturum değişiklikleri dahil: INT- cari kodu, e-fatura
+  sorgusu, Erp_CurrentAccountContact). Canlı ERP (SentezCore2026), test (SentezCore2026Test) ve
+  servis DB'sinde (SentezServices) YALNIZCA SELECT (READ UNCOMMITTED). Yardımcılar scratchpad'de
+  (`sorgu.py`, `jsonsorgu.py`, `ham.py`). Not: sqlcmd varsayılanı 256 karakterde keser → `-y 0`.
+- **Canlıdaki pazaryeri ayrımı (mevcut entegrasyon):** cari kod öneki = hesabın `CariOndeger`'i
+  (01/03 Trendyol TRY+7, 04 Trendyol TKT+7, 03 HB HB+7, 04 HB HBT+7, Boyner BYNR-+5, Shopify PCLN-+5,
+  03 Pazarama PZR+7), SpecialCode (Shopify'da `web`), müşteri GL hesabı hesaba göre. Fişte SpecialCode,
+  depo `0`, ödeme carisi, EArchivesPaymentType/WebAddress hesaba göre.
+- **Bulgular (öncelik sırasıyla):**
+  1. Mevcut entegrasyon bugün de canlıya yazıyor → ikisi birlikte canlıda koşarsa mükerrer cari (her
+     sipariş için yeni INT- cari) ve Shopify'da mükerrer fiş (canlı Shopify fişlerinde MarketPlaceOrderNo
+     NULL, bizim mükerrer kontrolümüz MarketPlaceOrderNo+ECMOrderNo).
+  2. Mikro ihracat: Trendyol `micro:true` → canlı IsTaxExempted=1 (başlık+kalem), VatRate=0. Bizde yok.
+     Son 14 günde 532 fiş (03:111, 04:421).
+  3. Boyner e-postaları 53 karakter (79/79), Erp_CurrentAccountContact.EMailAddress nvarchar(50), kod 100'e
+     kırpıyor → iletişim INSERT'i patlar. Cari/adres/iletişim tek transaction'da DEĞİL → yarım kart; ikinci
+     turda "zaten vardı" ile adressiz aktarıldı sayılır.
+  4. CariOndeger kodda hiç kullanılmıyor; yeni kod tüm pazaryerleri için INT-yyyyMMdd#####. Cari
+     SpecialCode Shopify için `Shopify` (canlı `web`).
+  5. Canlı kolon `UD_KargoTakipNumarası` (son harf U+0131), kod `...Numarasi` arıyor, DB Turkish_CS_AS →
+     canlıda takip no bu kolona hiç yazılmaz.
+  6. Shopify fiş saati UTC (3 saat geri); Trendyol saati zaten TR yerel saklandığı için tutuyor.
+     604 test fişinde Trendyol tarih/saat/genel toplam canlıyla birebir.
+  7. Shopify kargo: bizde ExpensesTotal=kargo (659,80), canlıda kargo yok (609,90) — iş kararı.
+  8. Parametre farkları: 03 HB ödeme carisi bizde 120.01.013, canlı NULL; 01 Shopify ödeme tipi bizde
+     DIGER, canlı EFT/HAVALE; Shopify ödeme carisi bizde dolu, canlı NULL; 03 Pazarama muhasebe kodu yok
+     (canlı 120.01.007); `OdemeTuruTagAlanAdi` kodda kullanılmıyor.
+  9. E-fatura carisinde EInvoiceAlias hep NULL (etiket: null).
+  10. Kargo firma adı ham (`PTT Kargo Marketplace`), canlı `PTT Kargo`.
+  11. Hepsiburada siparişi hiç çekilmemiş; sipariş çekimi 20.09 09:25'ten beri durmuş.
+  12. Bizim tabloda 3.599 (04) + 38 (01) eski PRK- kodlu bekleyen cari.
+  13. İl/ilçe adla, büyük/küçük harf duyarlı eşleşiyor: Trendyol 602'de 3 ilsiz/11 ilçesiz, Shopify 10'da 4/9.
+  14. KDV satır bazında 2 haneye yuvarlanıyor, canlı 8 hane → kuruş farkları (genel toplam aynı).
+- **Açık kalanlar:** Kullanıcı kararları: kod standardı (CariOndeger mi INT- mi), eski entegrasyon ne zaman
+  durdurulacak, Shopify kargo, mikro ihracat. Sonra düzeltmeler (transaction, 50 karakter, kolon adı,
+  micro, UTC, parametreler).
