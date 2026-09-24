@@ -139,3 +139,21 @@ Dev ortamı (pgpool `100.109.159.58:9999`) 500 veriyordu. Kullanıcı pgpool'un 
 - İnternete açık: 80 443 **3180 (Traefik dashboard, auth YOK)** 6379 (Dragonfly, parolalı) 9090/9091 (MinIO) 8083/5341 (Seq) 16686/4317/4318 (Jaeger) 9200 (ES, auth var) 4222/8222 (NATS) 18087/18088 **9001 (Portainer agent)** **9999/15433/15434/15435 (Postgres)**. Tailscale/127.0.0.1'e çekilmeli; önce dışarıdan kim bağlanıyor belirlenmeli.
 - `/home/vuo/docker` hiçbir git repo'sunda değil — sunucudaki infra compose versiyonlanmıyor.
 - Novu verisi silindi → Novu kullanan projelerin org/API key'leri yeniden.
+
+---
+
+## Oturum (devam): Postgres portlarını (15433–15435) internete kapatma
+
+- **Neden:** Kullanıcı isteği — 15433–15435 sadece iç ağlardan erişilsin.
+- **Kritik bilgi:** `ufw deny <port>` Docker'ın yayınladığı portları KAPATMAZ (Docker iptables kuralları ufw'nin önünde; ufw zaten "deny incoming" iken portlar açıktı). Filtre `DOCKER-USER` zincirinde yapılmalı. DNAT sonrası hedef port container portu (5432) olduğu için host portu `conntrack --ctorigdstport` ile eşlenir.
+- **Ne yapıldı:** `/etc/ufw/after.rules` sonuna (yedek: `after.rules.bak-20260924`):
+  ```
+  *filter
+  :DOCKER-USER - [0:0]
+  -A DOCKER-USER -i ens160 -p tcp -m conntrack --ctorigdstport 15433:15435 --ctdir ORIGINAL -j DROP
+  -A DOCKER-USER -j RETURN
+  COMMIT
+  ```
+  `sudo ufw reload`. Arayüzler: ens160 = 217.131.14.61 (public, kapandı), ens192 = 192.168.31.13 (LAN, açık), tailscale0 = 100.109.159.58 (açık).
+- **Doğrulama:** 217.131.14.61:15433/15434/15435 kapalı; Tailscale'den üçü açık ve psql bağlandı; LAN 192.168.31.13:15433 açık; standby1/2 quorum (iç docker ağı etkilenmedi). 9999 (PgBouncer) istek dışı olduğu için açık bırakıldı.
+- **Yeni port kapatmak için:** aynı satırı `--ctorigdstport <port>` ile `after.rules`'a ekle + `ufw reload`.
