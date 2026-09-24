@@ -342,3 +342,36 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 - **Commit:** `e1b62898` (compose + yedek), `107da240` (backlog), eşleme json. ClickUp kuru fark 0.
 - **Kalan:** (b) uygulama sağlık satırı; zamanlanmış `pbxtr-yedek` HİÇ hacim yedeklemiyor (yalnız DB) — ayrı bulgu.
 - **Yayın:** imaj çıkarılmadı — bu turdaki değişikliklerin hiçbiri imaja girmiyor (compose/confd/yedek sunucu tarafı, hepsi uygulandı); yayın betiği yerelde `dotnet build`/`docker build` ister, bu turda yasaktı.
+
+---
+
+## 12:00–16:30Z — db-dev + backend-dev-1 entegrasyonu, kapılar, yayın hazırlığı
+
+### 1. İki ajanın işi birleşik ağaçta doğrulanıp tek commit'te alındı (`5f891308`)
+- **Neden:** sağlık yüzeyi (`platformApi.ts`, 9 i18n, `SystemHealthProbe.cs` …) iki ajanın yarım işini birlikte taşıyordu; yarı commit build'i kırardı.
+- **Tarif:** `git ls-files -co --exclude-standard` → tar → sunucu `/root/birlesik` → SDK 10 konteyneri: build + Architecture + Api (filtreli) + Integration (filtreli) + node:22 vitest/tsc.
+- **Tuzaklar (sırayla):** çözüm dosyası `pbxtr.sln` (slnx değil; yanlış adla "RC=0" sahte çıktı);
+  vitest yalnız `Pbxtr.Web` bağlanınca 7 sahte kırmızı (C# kaynağını okuyan parite testleri) → tüm depo bağlanmalı;
+  Integration iç içe docker'da Ryuk başlamıyor (`ResourceReaperException`) ve `172.17.0.1:<port>` zaman aşımı →
+  **`--network host` + `TESTCONTAINERS_RYUK_DISABLED=true`** + koşu sonunda `label=org.testcontainers=true` temizliği;
+  `pkill -f <betik>` ssh oturumunun kendisini öldürdü → `/proc/<pid>/cmdline` tam eşleşmesiyle öldür.
+- **Bulunan test kusuru:** `DbDevSeptember24MigrationRollbackTests:61` `MigrationId > '20260924093000'` hedef migration'ın
+  kendi kimliğini de sayıyordu (her zaman 1) → tam kimlikle.
+- **Karar#83** (koordinatör): üç migration onay defterine; blob'lar dosyalarla eşleşti.
+- **Sonuç:** build 0 hata; Api 742/742; Integration 62/63 + düzeltilen 1/1; Vitest 167/167; tsc 0; Architecture 776/777 (jq yok, ortam).
+
+### 2. Yayın kapıları: 8 kırmızı → 0 (`d10c336c`, `06fb1ae4`)
+- çapraz kip envanteri + yazma daraltması `--dondur` (CallbackRunJob'daki `ExecuteUpdateAsync` ayrı DI kapsamı + kendi transaction'ı → metin tabanlı yanlış pozitif, incelendi);
+  mesai listesi `migration-agir-ddl.py --uret`; trunk compose üç envantere + digest; backlog BR-AST-17/111 boru kayması (`\ /`).
+- **BR-OPS-17 bayatlık kapısı** tam Integration takımını istedi → sunucuda 44 dk: **1226/1229**; 2 kırmızı:
+  kanonik şema revizyonu bayattı + SignedFixture dosyaları Linux umask'ında 0644 doğuyordu (Windows'ta kontrol yok) → ikisi düzeltildi, sınıf 25/25.
+- `--santral` ile yeniden: **87 konteyner + 6 host kapı YEŞİL**.
+
+### 3. Yayın
+- İmajlar sunucuda HEAD `06fb1ae45f59`'dan: `tekbirsoft/pbxtr:demo-06fb1ae45f59`, `tekbirsoft/pbxtr-asterisk:22-06fb1ae45f59` (git.sha damgası doğrulandı).
+- `yayin7.sh` (yerel-yayin 7/7'nin sunucu karşılığı: push + dosya kopyası + SHA'lar + staging-yayin) → **mesai kapısı 71**:
+  4 yeni migration muafiyeti yasak listesinde, ölçülmüş pencere yok. Hiçbir şey değişmedi (yedek `pre-06fb1ae45f59.dump`).
+- **Karar:** kapının belgelenmiş kaçış yolu mesai dışı yayın → sunucuda 17:01Z'ye (20:01 TR) zamanlandı.
+
+### Ayrıca
+- linux-uzmani ek tur: BR-SYS-129(a) spool adlı hacme; yeni kart **BR-SYS-135** (gece yedeği hacimleri almıyor).
