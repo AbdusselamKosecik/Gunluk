@@ -148,7 +148,40 @@ yapan gerekecek".
   985 fiş (461 sn); parametreler işe `'true'` olarak ulaştı. Bazı barkodlar test ERP'de yok (8699170389422 vb.).
 - **Commit:** `2cd81a9` — Is parametreleri: onay kutusu true/false degeri 400 veriyordu
 
+### 7. Tekrar aktarımda güncelleme, iptal, eksik barkod
+- **Kullanıcı:** "bulunmayan barkodları nasıl göndermemiz lazım, yoksa eklememiz lazım, tekrar aktar dediğimizde
+  güncellememiz lazım, iptalse iptal etmemiz lazım."
+- **İnceleme:**
+  - "Karşılığı yok" denen 8 barkod test ERP'de yalnız CompanyId 2'de (01) var. Canlıda CompanyId 7 (04) için
+    15.09.2026'da **elle** eklenmiş (kullanıcı 12, Ahmet Adalar). Stok kartı 2023'ten beri vardı; eksik olan
+    barkod ve varyanttı. Test kopyası bundan eski.
+  - Canlıda iptal hiç işlenmiyor: Eylül'de hiçbir e-ticaret fişi ya da kalemi IsCancelled=1 değil, silinen yok.
+- **Kullanıcı kararları (AskUserQuestion):**
+  - Eksik barkod → beklet ve raporla.
+  - Güncelleme → sevk edilmediyse tam.
+  - İptal → sevk edilmediyse iptal.
+- **Ne yapıldı:**
+  - Migration `020_siparis_aktarim_ozeti.sql`: `icerik_ozeti VARCHAR(64)`.
+  - Yeni durumlar `iptal_bekliyor` ve `iptal_edildi`.
+  - Hazırlık aktarılmış siparişleri de okuyor (defter durumu, özet ve erp_rec_id ile). Karar saf fonksiyonda:
+    `PazaryeriSiparisHazirlaJob.DefterKarari`. İçerik özeti `IcerikOzetiHesapla` (SHA-256; başlık, cari/adres,
+    parametreler, kalem ürün/fiyat). İptal kontrolü diğer bütün kontrollerden önce yapılıyor.
+  - Hazırlık özeti eksik barkodları şirket/barkod olarak tam listeliyor.
+  - Yazıcı: `GuncelleAsync` ve `IptalEtAsync`. `IslemGormusSql` fişi işlem görmüş sayar: başlık ya da kalem
+    IsClosed, veya kalem Erp_InventoryReceiptItem, InventoryAllocation, BoxItem, Requirement, ExpoItem ya da
+    BankCreditItem'a bağlı. Takip no, kargo ve e-posta boşla ezilmiyor (ISNULL). `AyniHedef`: başka veritabanına
+    yazılmış fişin RecId'si kullanılmıyor. Başlık parametreleri `BaslikDegerleri`'ne, kalemler
+    `KalemleriYazAsync`'e taşındı.
+  - Defter: `SonucYazAsync` fiş izini boşla ezmiyor (`ISNULL(@erpRecId, erp_rec_id)`).
+  - Aktarım işi iptal, güncelleme ve yazma sayılarını ayrı ayrı raporluyor.
+- **Dokunulan dosyalar:** `SiparisAktarimi/{SiparisAktarimModelleri,SiparisAktarimDeposu,PazaryeriSiparisHazirlaJob,
+  PazaryeriSiparisAktarJob,SentezSiparisYazici}.cs`, migration 020, `tests/.../SiparisGuncellemeTestleri.cs` (yeni),
+  `SiparisYaziciSinirTestleri.cs`, `docs/pazaryeri-siparis-aktarimi.md`.
+- **Sonuç / doğrulama:** 626/626 test. Yerelde canlı deneme **yapılmadı**: yerel host'u Claude Code bellek
+  sıkışıklığı yüzünden durdurdu; kullanıcı onayı bekleniyor.
+- **Commit:** `0e83342` — Siparis aktarimi: tekrar aktarimda guncelleme, iptal, eksik barkod raporu
+
 ## Açık kalanlar / sonraki adım
-- Kullanıcı kararı: ilk görüldüğünde iptal edilmiş sipariş (IptalEdildi) fişe yazılsın mı?
+- Güncelleme/iptal akışının yerelde uçtan uca denenmesi (host yeniden başlatılacak, 020 migration'ı koşacak).
 - Yerel host çalışıyor olabilir (http://localhost:81, LocalDB `SentezServisYerel`); scratchpad `yerel_calistir.sh`.
 - Boyner'de 102 siparişin tamamı `kurumsal_fatura=1`; şüpheli, bakılmadı.
