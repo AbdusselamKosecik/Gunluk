@@ -49,7 +49,21 @@ olarak el terminalinin ne yapması gerektiğini bir md olarak istedi.
   - Sonuç: planlama için alan boş.
 - **Commit:** `570cdca` (ilk push GitLab 502 verdi, tekrar denemede gitti).
 
+### 4. Sipariş planlama spec'i
+- **Kullanıcı:** "b kullanmıyor, Sentez IsDeleted değilse bakmıyor o alana, altyapısını ben yazdım, yap".
+- **Ek ölçüm (salt okuma, test + canlı):**
+  - Açık siparişlerde `IsETrade=1` ile `ECMOrderNo` dolu olması birebir örtüşüyor (1.800/1.800 ve 1.394/1.394).
+  - Pazaryeri adı başlığın `SpecialCode` alanında.
+- **Ne yapıldı:** `docs/superpowers/specs/2026-09-25-siparis-planlama-design.md`
+  - İçerik: kararlar K1–K10, veri kuralları, yarış koruması (`beklenenOnceki`), otomatik dağıtım
+    algoritması, API, kod yerleşimi, ekran, hatalar, test planı.
+  - Günlük tablosu SentezServices'te, migration 021.
+- **Öz denetim:** Örnek dağıtım tablosundaki çelişki düzeltildi (tam bölünen grup C'de biter, sonraki A'dan
+  başlar).
+- **Commit:** `0d5b17f` (push iki kez düştü: publickey ve sideband; üçüncüde gitti).
+- **Hafıza:** `siparis-planlama-deletedby.md`.
+
 ## Açık kalanlar / sonraki adım
-- Planlama tasarımı onayı → spec `docs/superpowers/specs/2026-09-25-siparis-planlama-design.md` → writing-plans.
+- Spec kullanıcı incelemesinde; onay gelince writing-plans.
 - El terminali açık soruları (cihaz, "toplandı" sonrası süreç, sayım fişi tipi, eksik ürün politikası).
 - Shopify indirim kodu düzeltmesi hâlâ kullanıcı kararı bekliyor.
