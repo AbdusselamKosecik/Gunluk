@@ -327,3 +327,18 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
   **Paylaşılan düğümde rotasyonu platform yöneticisi yapar.**
 - **Sonuç:** aday 304 ile kabul, `.next` kalmadı, özet `b4e763fc→9b25a4dc`; systemd-run sandbox testi: trusted-signers.d ve dugum RO, anahtarlik RW.
 - ClickUp: 6 durum güncellendi, kuru fark 0.
+
+### BR-SYS-129 (a) — Asterisk spool'u adlı hacme taşındı (linux-uzmani, ~15:31Z)
+- **Neden:** `/var/spool/asterisk` ANONİM hacimdi (`4dc45b2f…`); yedeklenemiyor, `down -v` / `--renew-anon-volumes` ile sessizce siliniyordu. Sesli mesajlar (`recording/pbxtr-vm/`) orada.
+- **Ne yapıldı:** `pbxtr-demo/docker-compose.yml` → `asteriskspool:/var/spool/asterisk` + üst düzey `asteriskspool:`. Sunucuda: compose damgalı yedek, anonim hacim damgalı tar'a (`/var/backups/pbxtr/asterisk-spool-anonim-20260924T153116Z.tgz`), compose etiketli `pbxtr_asteriskspool` yaratıldı, `compose stop asterisk` → `cp -a` → `up -d --no-deps asterisk`. `deploy/demo/yedek-al.sh` [6] adımı spool'u arşivliyor.
+- **Komutlar:**
+  ```bash
+  docker volume create --label com.docker.compose.project=pbxtr --label com.docker.compose.volume=asteriskspool pbxtr_asteriskspool
+  docker run --rm -v <anonim>:/kaynak:ro -v pbxtr_asteriskspool:/hedef alpine:3 cp -a /kaynak/. /hedef/
+  docker compose -p pbxtr --project-directory /home/vuo/pbxtr-demo up -d --no-deps asterisk
+  ```
+- **Doğrulama:** bağlantı `volume pbxtr_asteriskspool`, `healthy`, asterisk kullanıcısıyla gerçek yaz-sil OK, t0007 endpoint 13, `compose-sunucu-sapma.sh` exit 0, yedek arşivi sunucuda 8 girdi.
+- **Geri alma:** `docker-compose.yml.onceki-20260924T153116Z` geri koy + `up -d --no-deps asterisk` (anonim hacim silinmedi).
+- **Commit:** `e1b62898` (compose + yedek), `107da240` (backlog), eşleme json. ClickUp kuru fark 0.
+- **Kalan:** (b) uygulama sağlık satırı; zamanlanmış `pbxtr-yedek` HİÇ hacim yedeklemiyor (yalnız DB) — ayrı bulgu.
+- **Yayın:** imaj çıkarılmadı — bu turdaki değişikliklerin hiçbiri imaja girmiyor (compose/confd/yedek sunucu tarafı, hepsi uygulandı); yayın betiği yerelde `dotnet build`/`docker build` ister, bu turda yasaktı.
