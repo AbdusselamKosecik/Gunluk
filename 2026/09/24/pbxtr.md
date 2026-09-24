@@ -467,3 +467,15 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
   (açık kart BR-AST-124).
 - Backlog `a09da883`: 6 kart YAYINLANDI (BR-BE-218/219/220, BR-DB-114, BR-AST-128, BR-AST-119); BR-AST-129 canlı ölçüm bekliyor.
   ClickUp fark 0. Durum: 810 kart, ~755 kapalı, ~55 açık.
+
+## 22:10–22:40Z — db-dev entegrasyonu (`d01a03d7`), Karar#84
+
+- **BR-DB-115:** `20260924140000_IysPermissionPendingTenantIndex` — `ix_iys_permissions_tenant_pending (tenant_id, requested_at)
+  WHERE status='pending'` (istisna yazılmadı). Onay defterine **Karar#84** bloğu + satır
+  `8156cd1a… …IysPermissionPendingTenantIndex.cs Karar#84`. DropIndex içerdiği için yayını mesai dışında.
+- **BR-DB-84:** `CallDataRetentionJob` silmeden önce `VoicemailSlaCapture` → `voicemail_sla_daily`; özet yazılamazsa silme yok.
+  Not: "sıra ters" mutasyonu YEŞİL kaldı (özet ayrı transaction'da, silinenleri hâlâ görüyor) — gerçek kayıp yolları M1b/M5, KIRMIZI.
+- **BR-DB-35:** dokunulmadı (erasure yüzeyi 0 dosya; tasarım işi).
+- Commit öncesi `capraz-kip-yazma-daraltma-kapisi.py` ve `capraz-kip-envanteri-kapisi.py` ana ağaçta OK.
+- Yeni kart **BR-BE-221** (iys-sync ClaimSql Seq Scan). ClickUp: +1 kart, 2 complete, fark 0 (`14154202`).
+- Yeni ajan: db-dev → BR-AST-124 (canlıda 9× `secret_not_stored`) + BR-BE-221.
