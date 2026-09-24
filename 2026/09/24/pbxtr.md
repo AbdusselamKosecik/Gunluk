@@ -297,3 +297,33 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 - linux-uzmani (BR-SYS-132 confd mTLS), backend-dev-1 (BE+FE), db-dev (DB + BR-DB-113) hâlâ koşuyor.
 - Yayınlanmamış kod: `20260924093000` onarım migration'ı, BR-DB-111, BR-BE-216.
 - `.env.oncesi-demo` ölü üç sırrı hâlâ taşıyor (diğer satırları kapsam dışı).
+
+---
+
+## 11:45–12:00Z — linux-uzmani sonuçları, SIP parola döndürme, BR-SYS-134
+
+### 1. BR-SYS-132 KAPANDI — confd mTLS teslimi çalışıyor (`03861d73`)
+- **Neden:** provisioning teslimi 06:35Z'den beri ölüydü; engel hiç var olmayan PKI zinciriydi.
+- **Ne yapıldı (linux-uzmani):** iç CA + düğüm istemci sertifikası + 30 günlük CRL + nginx 8443 opt-in + DOCKER-USER kısıtı.
+  Dört kusur düzeltildi (ayrıştırıcı docker dalı, reload host ikilisi, getpwnam(asterisk)→UID/GID env, TimeoutStartSec 30→180).
+  CRL yenilemesi nginx'e ulaşmıyordu → BindPaths drop-in'i.
+- **Koordinatör:** yalnız sunucuda duran dört dosya depoya alındı: `deploy/pbxtr-crl-yenile.service.d/10-nginx-mount-yayilmasi.conf`,
+  `deploy/telefon-kanali/8443.conf`, `deploy/pbxtr-8443-guvenlik-duvari.{service,sh}` (günün tekrarlayan deseni: sunucuda elle duran, depoda karşılığı olmayan yapılandırma).
+- **Sonuç:** HTTP 200 + Ed25519, kararlı 304; t0007 endpoint 7→13. Ayrıca kapanan: BR-SYS-131, BR-SYS-118, BR-OPS-17.
+
+### 2. t0007 SIP + WebRTC parolaları döndürüldü
+- **Neden:** linux ajanı tanılamada `t0007-1042` bloğunu açık `password=` ile bastı.
+- **Tarif:** demo.sahip ile `GET /api/v1/extensions` → her dahili için `POST /api/v1/extensions/{id}/credential-rotation`
+  ve WebRTC olanlar için `POST /api/v1/users/extensions/{id}/webrtc` (yeniden vermek = döndürmek); yanıtlar atılır.
+  pjsip dosyası `/etc/asterisk/pbxtr.d/pjsip/t0007-pjsip.conf` (alt dizin!).
+- **Sonuç:** 12/12 200, `password=` satırları özeti `ab27f65d→1d425ab9`, `reload: res_pjsip`, endpoint 13 sabit.
+
+### 3. BR-SYS-134 BİTTİ — anahtar rotasyonu elle müdahalesiz (`de4bd263`)
+- **Karar (koordinatör):** anahtarlar `/etc/pbxtr/confd/anahtarlik/` alt dizinine, birimde yalnız o `ReadWritePaths=-…`;
+  trusted-signers.d/dugum/mTLS anahtarı salt-okunur kalır. Tek aktif anahtar kuralı korunur, sıra "önce iptal → üret → .next".
+- **Dokunulan:** `deploy/pbxtr-confd-dugum.sh`, `deploy/pbxtr-confd/pbxtr-confd.service`, `deploy/staging-yayin.sh`, `deploy/pbxtr-confd-runbook.md`.
+- **Yolda tuzak:** paylaşılan düğümde (t0012 üyeyken) t0007 sahibi yeni anahtar açamaz → 403 `node_owned_by_other_tenant`;
+  eski anahtar zaten iptal edilmişti → confd ~40 sn anahtarsız kaldı; superadmin + `X-Tenant-Id: 1111…` ile kurtarıldı.
+  **Paylaşılan düğümde rotasyonu platform yöneticisi yapar.**
+- **Sonuç:** aday 304 ile kabul, `.next` kalmadı, özet `b4e763fc→9b25a4dc`; systemd-run sandbox testi: trusted-signers.d ve dugum RO, anahtarlik RW.
+- ClickUp: 6 durum güncellendi, kuru fark 0.
