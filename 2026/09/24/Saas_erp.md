@@ -112,3 +112,30 @@ Dev ortamı (pgpool `100.109.159.58:9999`) 500 veriyordu. Kullanıcı pgpool'un 
 - Sunucuda eski `pgpool/` klasörü duruyor (kullanılmıyor), yedek: `/home/vuo/posgrasql.bak-20260924`.
 - Novu verisi silindi → Novu'yu kullanan projelerin org/API key'leri yeniden oluşturulmalı.
 - Prod `vuo` DB'sine migration uygulanmadı (prod API açılışta kendisi uygular).
+
+---
+
+## Oturum (devam): Sunucudaki açık işlerin kapatılması (sudo ile)
+
+### 1. Docker genelinde log limiti
+- **Neden:** `/etc/docker/daemon.json` yoktu → tüm container log'ları sınırsız.
+- **Ne yapıldı:** `/etc/docker/daemon.json` = `{"log-driver":"json-file","log-opts":{"max-size":"50m","max-file":"3"}}` (`sudo install -m 644`), `sudo systemctl restart docker` (tüm container'lar kısa süre yeniden başladı, hepsi geri geldi).
+- `/home/vuo/docker/docker-compose.yml`'e de `x-logging` anchor'ı + 15 servise `logging: *default-logging` (yedek: `docker-compose.yml.bak-20260924`, `.bak-20260924-2`).
+
+### 2. Mongo — kök neden bulundu ve kapatıldı
+- **Kök neden:** Novu'nun Mongo havuzu `maxIdleTimeMS` varsayılanı 10 sn → api/worker/ws her biri ~100 bağlantı/dk açıp kapatıyor; Mongo her bağlantıda 5 satır log yazıyor. Yeniden kurulumdan 30 dk sonra log 36 MB idi (~1,7 GB/gün), limitsiz json log'a gidiyordu. Buna TTL'siz Novu koleksiyonları eklenince disk doldu.
+- **Düzeltmeler:**
+  - `novu-api`, `novu-worker`, `novu-ws`: `MONGO_MAX_IDLE_TIME_IN_MS: "600000"` → auth/dk 300 → 0 (sadece healthcheck kaldı).
+  - mongodb: `command: ["--quiet"]` (bağlantı accepted/ended/metadata log'ları kesildi).
+  - mongodb port: `"27017:27017"` → `"127.0.0.1:27017:27017"` (internetten açıktı; Tailscale IP'ye bağlamak reboot'ta tailscale docker'dan geç kalkarsa Mongo'yu başlatmazdı). Compass: `ssh -L 27017:127.0.0.1:27017 vuo@100.109.159.58`.
+  - Novu TTL (`collMod` ile mevcut `createdAt_1` index'i TTL'e çevrildi): executiondetails 30g, jobs 30g, notifications 90g, messages 90g. Novu restart sonrası sağlıklı, index çakışma hatası yok.
+- **Doğrulama:** 217.131.14.61:27017 kapalı; tüm novu servisleri healthy; standby1/2 quorum; LogConfig tüm container'larda `max-size:50m max-file:3`.
+
+### Kararlar
+- Sudo parolası hiçbir dosyaya yazılmadı.
+- Diğer internete açık portlara dokunulmadı (başka projeler/sunucular kullanıyor olabilir).
+
+### Açık kalanlar (güvenlik — kullanıcı kararı)
+- İnternete açık: 80 443 **3180 (Traefik dashboard, auth YOK)** 6379 (Dragonfly, parolalı) 9090/9091 (MinIO) 8083/5341 (Seq) 16686/4317/4318 (Jaeger) 9200 (ES, auth var) 4222/8222 (NATS) 18087/18088 **9001 (Portainer agent)** **9999/15433/15434/15435 (Postgres)**. Tailscale/127.0.0.1'e çekilmeli; önce dışarıdan kim bağlanıyor belirlenmeli.
+- `/home/vuo/docker` hiçbir git repo'sunda değil — sunucudaki infra compose versiyonlanmıyor.
+- Novu verisi silindi → Novu kullanan projelerin org/API key'leri yeniden.
