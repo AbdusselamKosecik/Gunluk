@@ -200,7 +200,40 @@ yapan gerekecek".
     - kalemlere dağıtım: `DistributedDiscount` / `DistributedDiscountVatIncluded`, KDV indirimli matrah üzerinden.
   - Bizde fiş 1.389,70, ödenen 1.250,73. Hazırlıktaki "pazaryeri tutarı tutmazsa aktarma" kontrolü bu farkı yakalamadı.
 
+### 9. Depo yeri '000' kurulum betiği (sipariş planlama ekranının depo yeri filtresi için)
+- **Neden:** Planlama ekranında depo yeri filtresi olacak. Kullanıcının tarifi: depo kodu '0' olan
+  depolarda `FollowUpWarehouseLocation=1`, `Erp_WarehouseLocation`'a '000' yeri, hareket satırlarının
+  In/OutWarehouseLocationId'si bu yere. Varyantın yeri sonra `Erp_WarehouseLocationTotal`'dan okunacak.
+- **Engel:** `Erp_InventoryReceiptItem(Variant)Update` tetikleyicileri satır başına imleçle
+  EditInventoryTotal → EditInventoryTotalD → EditWarehouseLocationTotal çağırıyor. ~1,74 milyon satırda
+  bu saatler sürerdi.
+- **Ne yapıldı:** `docs/sql/depo_yeri_000_kurulum.sql`
+  - Tek işlem ve XACT_ABORT; tekrar çalıştırılabilir.
+  - İki update tetikleyicisi işlem içinde kapatılıp açılıyor.
+  - Toplu güncelleme.
+  - Yer toplamı, EditInventoryTotalD'nin ön koşulları ve EditWarehouseLocationTotal'ın formülüyle
+    toplu hesaplanıyor: kalem satırında NetQuantity, varyantta Quantity.
+  - `@Deneme=1` → ROLLBACK.
+  - Sona stokla karşılaştırma eklendi.
+- **Tuzaklar:**
+  - sqlcmd QUOTED_IDENTIFIER'ı kapalı açıyor; UPDATE Msg 1934 ile reddedildi → SET seçenekleri betiğin içinde.
+  - `Erp_InventoryTotal`'da kümülatif stok `TotalDate IS NULL` satırı. Tarihli satırlarla toplanırsa 2 kat çıkar.
+- **Sonuç (SentezCore2026Test, geri alındı):**
+  - Depolar: 1/Co2, 32/Co5, 36/Co3, 45/Co7.
+  - Güncellenen satırlar: IRI giriş 57.933, çıkış 763.152; IRIV giriş 105.802, çıkış 813.875.
+  - Süre 27–37 sn.
+  - Yer toplamı ile stok karşılaştırması:
+    - Varyant düzeyi: Co2 7.002/0 fark, Co7 3.331/0 fark, Co5 4.341/8 fark.
+    - Co5'teki 8 farkın tamamı 15211 ürününde. Hareketlerin toplamı (−6) bizim toplamı doğruluyor;
+      `Erp_InventoryTotal` (−2.126) sapmış.
+  - Kuru çalıştırmalardan sonra tetikleyiciler açık, '000' yeri yok.
+- **Komut:** `python scratchpad/deneme_calistir.py` (sqlcmd -b -i, test ERP).
+- **Commit:** `98d22b4` — Depo yeri '000' kurulum betigi
+- **Kalan:** Kalıcı çalıştırma (`@Deneme=0`) kullanıcı onayı bekliyor. Canlıda yalnız bakım penceresinde;
+  e-ticaret kuralı gereği canlıya biz dokunmuyoruz.
+
 ## Açık kalanlar / sonraki adım
 - Shopify indirim kodunun canlı gibi yazılması (indirim satırı + kalemlere dağıtım) — kullanıcı onayı bekliyor.
 - Yerel host çalışıyor olabilir (http://localhost:81, LocalDB `SentezServisYerel`); scratchpad `yerel_calistir.sh`.
 - Boyner'de 102 siparişin tamamı `kurumsal_fatura=1`; şüpheli, bakılmadı.
+- Depo yeri betiğinin testte kalıcı çalıştırılması (onay bekliyor), ardından planlama ekranı tasarımına devam.
