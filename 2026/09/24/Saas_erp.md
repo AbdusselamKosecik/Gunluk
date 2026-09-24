@@ -71,3 +71,44 @@ Dev ortamı (pgpool `100.109.159.58:9999`) 500 veriyordu. Kullanıcı pgpool'un 
 - Sunucuda: `git pull` + `docker compose up -d pgbouncer` + `docker compose rm -sf pgpool`; canlı config repo ile drift'li — dikkat.
 - Ekip `appsettings.Development.json`'a `Migrations` bağlantısını eklemeli.
 - Sunucuya SSH için `~/.ssh/id_ed25519.pub` authorized_keys'e eklenmeli.
+
+---
+
+## Oturum (devam): Sunucuya PgBouncer kurulumu + Mongo incelemesi + migration
+
+### 1. SSH erişimi
+- Kullanıcı `~/.ssh/id_ed25519.pub`'ı `vuo@services` authorized_keys'e ekledi. Giriş: `ssh vuo@100.109.159.58` (vuo docker grubunda, sudo parola ister).
+
+### 2. Disk dolumu — Mongo (Novu)
+- Kullanıcı diski dolduranın `vuoapp-mongodb` (Novu'nun DB'si, `/home/vuo/docker/docker-compose.yml`) olduğunu buldu, container+volume'u silip yeniden kurdu → disk %100 → %33.
+- Veri silindiği için kesin kanıt yok. Bulgular:
+  - Novu koleksiyonlarında (`jobs`, `messages`, `notifications`, `executiondetails`) **hiç TTL index yok** → Novu kayıtları sonsuza kadar birikir.
+  - Mongo container log'u limitsiz (`LogConfig {json-file map[]}`, `/etc/docker/daemon.json` yok); Novu servisleri sürekli bağlantı açıp kapatıyor, Mongo bağlantı başına 5 satır log yazıyor → ~1 GB/gün.
+  - **Mongo 27017 internete açık** (`217.131.14.61:27017`, compose'da `"27017:27017"`), auth var ama taranmaya açık.
+- Standby log'larında pgpool kaynaklı `too many clients already`, `remaining connection slots are reserved` ve `cannot execute UPDATE in a read-only transaction` (outbox UPDATE standby'a yönlenmiş) görüldü.
+
+### 3. Sunucuda pgpool → PgBouncer
+- **Neden:** Sunucudaki `/home/vuo/posgrasql` repo'dan farklıydı (2 standby, `ANY 1`, postgis, pgpool-autoattach, 7 projenin DB'si). Repo değil, sunucu esas alındı.
+- **Komutlar:**
+  ```bash
+  cp -a /home/vuo/posgrasql /home/vuo/posgrasql.bak-20260924      # yedek
+  # pgbouncer/{pgbouncer.ini,entrypoint.sh} scp; compose: pgpool+pgpool-autoattach → pgbouncer (9999:9999), x-logging 50m×3
+  docker run ... pgb-probe (vuoapp_net) → vuouser SCRAM ile bağlandı (ön test)
+  docker exec pgc-primary psql -U postgres -c "ALTER SYSTEM SET max_slot_wal_keep_size='10GB'" -c "select pg_reload_conf()"
+  docker compose up -d --remove-orphans     # primary/standby'lar logging için yeniden oluştu
+  ```
+- **Karar:** `max_connections` 100'de bırakıldı — hot standby'da standby değeri primary'den küçük olamaz; 300 yapmak standby'ları açılmaz yapardı (önceki commit'teki 300 geri alındı). Havuz: 15+5, max_db 40, max_user 60.
+- **Doğrulama:** dışarıdan :9999 okuma+yazma OK; 150 paralel istemci 0 hata; standby1/standby2 `streaming|quorum`; API yerelde PgBouncer üzerinden 9 sn'de Ready (şema 95 migration/471 tablo, seed OK), `pg_locks` advisory = 0 (sızıntı yok).
+- **Commit:** `76ebf6a0` — chore(db): sync pg cluster config with live server, deploy PgBouncer (sunucu dosyaları repo'ya çekildi, drift kapandı).
+
+### 4. Migration (vuo_dev)
+- Bekleyen tek migration: `20260912140914_Sprint014_ProcessSequenceCheckAndEmployeeMachineDefaults` (önceden çakışan). 466a9a33 ile idempotent hale gelmişti.
+- Ön kontrol: hedef index'ler yok, `RouteItem (TenantId, RouteId, SequenceNo)` mükerrer yok, kolonlar `IF NOT EXISTS`.
+- `ConnectionStrings__DefaultConnection=<Migrations: :15433 direkt> dotnet run -- migrate` → uygulandı; status: 95 applied, pending none.
+
+### Açık kalanlar
+- Mongo: 27017'yi sadece Tailscale IP'sine bağla (`100.109.159.58:27017:27017`), mongo'ya logging limiti ekle, Novu için retention/TTL.
+- Docker daemon genelinde log limiti (`/etc/docker/daemon.json`, sudo gerekir) — diğer compose'lar hâlâ limitsiz.
+- Sunucuda eski `pgpool/` klasörü duruyor (kullanılmıyor), yedek: `/home/vuo/posgrasql.bak-20260924`.
+- Novu verisi silindi → Novu'yu kullanan projelerin org/API key'leri yeniden oluşturulmalı.
+- Prod `vuo` DB'sine migration uygulanmadı (prod API açılışta kendisi uygular).
