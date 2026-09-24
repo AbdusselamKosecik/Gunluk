@@ -396,3 +396,38 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
   AMI/ARI yeniden bağlanma denemeleri.
 - Backlog: 10 kart YAYINLANDI işaretlendi (`32c6f513`), ClickUp 1 güncelleme, kuru fark 0.
 - **Açık:** backend-dev-1 (BR-BE-218, BR-DB-114) ve backend-dev-2 (BR-BE-219, BR-AST-129, BR-AST-119) çalışıyor.
+
+## 18:10–20:10Z — ajan işlerinin entegrasyonu, BR-DB-116 ürün yoluyla onarım, BR-QA-125
+
+### 1. Ajan işleri commit'lendi
+- `d6c00e7e` BR-BE-218 (rapor zamanlaması: alıcı adları commit'ten ÖNCE okunuyor; gerçek PG testi, mutasyon KIRMIZI) +
+  BR-DB-114 (seed kişiyi `allowed` değil `iys_pending` + `sample-seed` istek yazar).
+- `986d456e` BR-BE-219 (sürüm başlığı yok/bozuk → 400, desteklenmeyen → 422; eskiden 500) + BR-AST-129 (SLA zil grubu yüklemi
+  `UserEvent` + `payload->>'userEvent'`) + BR-AST-119(b) (#37 `dropped-tenant-unresolved` satırı, ≥100/gün kırmızı).
+- `fbfe044d` BR-BE-220: `iys-sync` artık yalnız `pending` değil, 20. saate gelmiş / sağlayıcı sonuna 30 dk kalmış kararları da
+  yeniden sorar. **Neden acil:** canlıdaki 44 t0007 izni 2026-09-25 ~18:53Z'de bayatlar — bu kod ondan önce yayınlanmalı.
+- `3036d0eb` ClickUp: yeni kartlar BR-BE-220, BR-DB-116, BR-QA-125.
+
+### 2. BR-DB-116 — canlı veri ÜRÜN YOLUYLA onarıldı (veri migration'ı yazılmadı)
+- **Neden:** seed düzeltmesi mevcut veriyi onarmaz; canlıda kişi `allowed`, `iys_permissions` boş → her giden arama `BLOCKED_IYS`.
+- Ajan "t0012'de owner yok, ürün yolu yok" demişti — **ölçüldü, çürüdü.** `/root/t12-iys.sh` (scratchpad'de):
+  superadmin `X-Tenant-Id: 2222…` ile `POST /api/v1/users` (login `kuzey.sahip`, rol owner) → 201;
+  `POST /api/v1/impersonation` → 200; impersonation jetonuyla `PUT /api/v1/compliance/iys/permissions`
+  (kara listede olmayan her izinli kişi için `{"number","decision":"allowed"}`) → 4/4 kabul. t0007'nin 44'ü aynı yolla önceden.
+- `iys-sync` turu sonrası (19:18Z): t0007 44 / t0012 4 `allowed/iys-provider`; ekran-kapı çelişkisi 42 → 0.
+- #37 `iys-call-coverage` 20:02Z **ok** (48 geçerli izin, bekleyen 0) — tek seferlik `saglik.sh` ile `GET /api/v1/system/health`.
+- Not: `kuzey.sahip` parolasız açıldı; giriş gerekirse sıfırlama akışı.
+
+### 3. BR-QA-125 (`10d99ee6`)
+- `HealthComponentInventoryTests` metin taraması yerine **çalışan** `SystemHealthProbe.CheckAsync` çıktısını
+  `HealthComponents.All` ile karşılaştırıyor (DB erişilemez porta, bağımlılıklar boş sahte) + yansıma + tekrar anahtar + vacuity.
+- Mutasyonlar (iki satırı ayrı ayrı çıkarma, boş rapor) KIRMIZI; Architecture 777/778 (St48 = SDK imajında `jq` yok, ortam).
+
+### 4. Temizlik / tuzak
+- Ajanlardan kalan 9 asılı arka plan beklemesi durduruldu. Bash içinden `python -c "...\x27..."` kaçışı backlog'a
+  literal `\x27` yazdı → `chr(92)+'x27'` ile dosya-betiği düzeltti (`33e24c68`). **Ders:** backlog yamaları yalnız Write ile .py.
+- ClickUp: olustur 0 yeni, senkron 3 yazım, `--kuru` fark 0.
+
+### Sonraki adım
+- Yayın (uygulama yalnız; 06fb1ae4'ten beri migration ve santral değişikliği YOK): kapılar → sunucuda build → yayin7.
+- Yayın sonrası ölçümler: BR-BE-219 canlı 400, BR-AST-119 satır, BR-AST-129 önce/sonra SLA.
