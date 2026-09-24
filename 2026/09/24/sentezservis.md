@@ -181,7 +181,26 @@ yapan gerekecek".
   sıkışıklığı yüzünden durdurdu; kullanıcı onayı bekleniyor.
 - **Commit:** `0e83342` — Siparis aktarimi: tekrar aktarimda guncelleme, iptal, eksik barkod raporu
 
+### 8. Güncelleme/iptal akışının yerel doğrulaması
+- **Kullanıcı:** "başlat hacim". Boş bellek 11,6/63,7 GB; eski host durduruldu, yeniden derlendi, başlatıldı.
+  Migration 020 açılışta koştu.
+- **Turlar** (23.09, azami 1000, bütün adımlar açık):
+  - JOB-6: 345 cari; hazırlık 334 hazır, 1.175 güncellenecek (eski satırların özeti yoktu, bir kerelik),
+    40 iptal edilecek, 26 atlandı. Aktarım 964 güncellendi, 36 iptal edildi. 11 eksik barkod tam listelendi.
+  - JOB-7: 334 yazıldı, 211 güncellendi, 4 iptal edildi; 968 değişmedi.
+  - JOB-8: 0 hazır, 1.509 değişmedi; aktarım yok, 0 sn → **tekrar çalıştırma güvenli**.
+- **DB doğrulaması:**
+  - 1.549 fiş = 1.549 tekil ECMOrderNo (mükerrer yok).
+  - 40 fiş iptal; bunların 54 kalemi ve varyantı da IsCancelled=1, karışık kayıt yok.
+  - Defter: 1.509 aktarildi, 40 iptal_edildi, hepsinde erp_rec_id var; 26 atlandi.
+- **Canlı karşılaştırma** (1.510 eşleşme): bilinen farklar dışında 2 Shopify fişi farklı (60678, 60690).
+  - **Bulgu — indirim kodu:** Shopify `discount_code` (ör. Yeni10, %10) fişe hiç yansımıyor.
+  - Canlının yazdığı:
+    - ayrı indirim satırı: `ItemType=100`, `DiscountRate=10`, `DiscountAmount` net, `DiscountVatIncluded` brüt;
+    - kalemlere dağıtım: `DistributedDiscount` / `DistributedDiscountVatIncluded`, KDV indirimli matrah üzerinden.
+  - Bizde fiş 1.389,70, ödenen 1.250,73. Hazırlıktaki "pazaryeri tutarı tutmazsa aktarma" kontrolü bu farkı yakalamadı.
+
 ## Açık kalanlar / sonraki adım
-- Güncelleme/iptal akışının yerelde uçtan uca denenmesi (host yeniden başlatılacak, 020 migration'ı koşacak).
+- Shopify indirim kodunun canlı gibi yazılması (indirim satırı + kalemlere dağıtım) — kullanıcı onayı bekliyor.
 - Yerel host çalışıyor olabilir (http://localhost:81, LocalDB `SentezServisYerel`); scratchpad `yerel_calistir.sh`.
 - Boyner'de 102 siparişin tamamı `kurumsal_fatura=1`; şüpheli, bakılmadı.
