@@ -446,3 +446,24 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
   `pbxtr.d/transport/udp-nat.conf`'a üretiliyor, `#tryinclude` (ölçüldü: `#include` + eksik dosya PJSIP'in tamamını düşürür).
   Joker adres exit 78. Sapma kapısı S9. Sunucuda imaj commit'siz ağaçtan (`22-33e24c68c5dc-brast128`) → bu yayın `--santral` ile.
 - Çalışan ajanlar: db-dev (BR-DB-115/84/35), backend-dev-2 (BR-AST-86/89, BR-SYS-129b), backend-dev-1 (BR-QA-124/122/95/123).
+
+## 20:40–22:10Z — YAYIN İNDİ: `demo-28eb40f35952` + santral `22-28eb40f35952` (migration 235, değişmedi)
+
+- **Kapılar:** worktree'de 9 sahte kırmızı (kapı konteyneri `/repo`'yu bağlıyor, worktree `.git` dosyası Windows yolunu
+  gösteriyor → gitleaks/hash-object/git çalışmıyor). Tam klonda (`git clone --no-hardlinks . <scratchpad>/klon`) 2 kırmızı,
+  ikisi de klona özgü: (a) görsel S4 mutantı — klon `core.autocrlf=true` ile CRLF açıldı, mutantın `'\n'` araması eşleşmedi;
+  (b) entegrasyon TRX'i yalnız ana ağaçta. Ana ağaç koşusu (kapilar8) bu ikisini geçmişti ve o koşudan beri `src/`,`tests/`
+  0 dosya değişti → yeşil sayıldı. **Ders:** temiz ağaç için klon `-c core.autocrlf=false` ile açılmalı.
+- **Build (sunucu):** `git archive 28eb40f3 | ssh ... tar -x --touch -C /root/yayin-src`; app
+  `docker build --build-arg SOURCE_REVISION=2026.09.25+28eb40f35952 ... -t tekbirsoft/pbxtr:demo-28eb40f35952 .`,
+  santral `docker build --build-arg PBXTR_GIT_SHA=<tam sha> ... deploy/asterisk-lab` → APP_EXIT=0, SANTRAL_EXIT=0,
+  santral etiketi `io.pbxtr.git.sha` = HEAD.
+- **Yayın:** `/root/yayin8.sh` (yayin7 + KISA + `PBXTR_MESAI_ICI_YAYIN=0`) → YAYIN_EXIT=0; migrate 0 yeni; lab include
+  muafiyeti 3 dosyada çalıştı.
+- **Doğrulama:** app + santral healthy, panel 200, #37 28 bileşen (yeni `dropped-tenant-unresolved` sarı: 12 düşme / eşik 100),
+  `iys-call-coverage` ok, ARI bağlı, t0007 13 endpoint, `udp-nat.conf` üretildi; `asterisk-sunucu-sapma.sh` rc=0 dokuz iddia.
+  **BR-BE-219 canlı:** node-bundle başlık yok 400 / `abc` 400 / `18.0.0` 422 / `22.5.0` 200.
+- App `fail:` satırları: santral yeniden yaratma penceresindeki ARI/AMI yeniden bağlanması + 9× `secret_not_stored`
+  (açık kart BR-AST-124).
+- Backlog `a09da883`: 6 kart YAYINLANDI (BR-BE-218/219/220, BR-DB-114, BR-AST-128, BR-AST-119); BR-AST-129 canlı ölçüm bekliyor.
+  ClickUp fark 0. Durum: 810 kart, ~755 kapalı, ~55 açık.
