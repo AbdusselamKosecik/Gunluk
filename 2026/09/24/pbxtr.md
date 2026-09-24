@@ -257,3 +257,43 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 - **`pbxtr-edge` uygulanmamış** — `4573` ve `8790` dinlemiyor; giden yol kapalı, gelen yönde
   rota kararı hiç sorulmuyor.
 - Bu günün commit'lerinde **tam test takımı koşmadı** (7. yayın koşusu bellekten kesildi).
+
+---
+
+## Öğleden sonra turu (10:40–11:00Z) — QA/Asterisk sonuçları + sır döndürme
+
+### 1. pbxtr-qa ve Asterisk ajanı sonuçları backlog'a işlendi
+- **Neden:** paralel ajan dalgasının iki üyesi bitti; sonuçları görünmez kalmasın.
+- **Ne yapıldı:** QA 13 kart (BR-SEC-16/28, BR-10, BR-QA-121/123/95/112/122/124, BR-SEC-08, BR-A1, BR-C2-1/2)
+  + yeni **BR-BE-218** (rapor zamanlaması canlıda 500 ama satır yazılıyor → çift zamanlama).
+  Asterisk 12 kart: **5 kapandı** (BR-AST-53/105/123/109/125), 3'ünde öncül çürüdü (62/81/89),
+  4'ü engel adıyla açık (119/117/118/126); yeni **BR-AST-129** (SLA zil grubu yüklemi 0 canlı satıra eşleşiyor).
+- **Dokunulan:** `yonetim/backlog.md`, `SlaAggregationJob.cs` + `AsteriskEndpointDialGuardTests.cs` (yalnız XML yorum).
+- **Betik yöntemi:** backlog yamaları `scratchpad/t6.py`, `t7.py` (Write ile yazıldı — Bash heredoc'u `'PYEOF'` ile bile tırnak hatası verdi).
+- **Commit:** `46d38d29`, `1704edbb`.
+
+### 2. SIR DÖNDÜRME — BR-SEC-16 + BR-SEC-28 KAPANDI (kullanıcı kararı "Şimdi, hepsini döndür")
+- **Neden:** QA ölçtü: 09-10'da sızan pepper/AMI/ARI hiç döndürülmemişti; sızan confd anahtarı bugün de kullanılıyordu.
+- **Tarif (yeniden yapılabilir):**
+  1. `.env` (`/home/vuo/pbxtr-demo/.env`) python ile yerinde: üç anahtarın her biri tam 1 kez bulunmalı,
+     yeni değer `secrets.token_urlsafe(32)`; yalnız sha256 öneki basılır.
+  2. `docker compose up -d --no-deps --force-recreate asterisk app` → sağlık bekle → imajın değişmediğini doğrula
+     → beş env değişkeninin konteynerde yeni değere eşit olduğunu `docker inspect` ile ölç.
+  3. **SIRA ÖNEMLİ (iki kez duvara çarpıldı):** (a) t0012 anahtarı aynı düğümde aktifken sahip anahtar açamaz
+     → **403 `node_owned_by_other_tenant`** (Kurul #77); (b) aynı tenant+düğümde eski anahtar aktifken
+     → **409 `node_already_pinned`**. Doğru sıra: **eski anahtarları iptal et → demo.sahip ile yeni anahtar
+     (`POST /api/v1/api-keys`, node `asterisk-01`, allowlist `172.16.0.0/12`) → `anahtar.next`'e 0600 yaz
+     → superadmin + `X-Tenant-Id: 2222…` ile t0012 üyelik anahtarını yeniden aç** (yoksa t0012 düğümden düşer, confd TEMPFAIL 75).
+  4. confd `.next`'i 200 ile kabul etti ama **`mv` Read-only file system** ile düştü (birim `ReadOnlyPaths=/etc/pbxtr/confd`) → elle `mv`.
+- **Sonuç / doğrulama:** önekler `5c157b52→73aa0505`, `0e5b1296→64b6e20a`, `f2d6aa51→9cab332d`
+  (eskiler QA'nın ölçtüğü sızan değerlerle aynı). Eski anahtar **401**, yeni **200**; AMI `pbxtr` bağlı, ARI `pbxtr` app var;
+  confd 304. Yeni anahtarlar: t0007 `ak_52767582a273a168`, t0012 `ak_f4aedbd0a303d366`. `sifreler` aynası `f0c46f6`.
+  Sunucudaki eski-sır yedekleri ve betikler silindi.
+- **Yeni kartlar:** **BR-SYS-134** (P1, belgelenen örtüşmeli rotasyon iki yerden kırık), **BR-BE-219** (P2, node-bundle
+  sürüm başlığı eksikse 500 `INTERNAL`).
+- **Commit:** `5979fd7f`, ClickUp `bdb20ff5` (4 yeni kart, 10 durum, kuru fark 0).
+
+## Açık kalanlar (tur sonu)
+- linux-uzmani (BR-SYS-132 confd mTLS), backend-dev-1 (BE+FE), db-dev (DB + BR-DB-113) hâlâ koşuyor.
+- Yayınlanmamış kod: `20260924093000` onarım migration'ı, BR-DB-111, BR-BE-216.
+- `.env.oncesi-demo` ölü üç sırrı hâlâ taşıyor (diğer satırları kapsam dışı).
