@@ -375,3 +375,24 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 
 ### Ayrıca
 - linux-uzmani ek tur: BR-SYS-129(a) spool adlı hacme; yeni kart **BR-SYS-135** (gece yedeği hacimleri almıyor).
+
+---
+
+## 17:00–18:10Z — YAYIN İNDİ: `demo-06fb1ae45f59` + santral `22-06fb1ae45f59`, migration 231 → 235
+
+- **Tarif (sunucuda, yerelde ağır iş yok):** HEAD `git archive` → `/root/yayin-src` → iki `docker build`
+  (santral imajında `io.pbxtr.git.sha` = HEAD doğrulandı) → `/root/yayin7.sh` (yerel-yayin 7/7'nin sunucu karşılığı:
+  push + dosya kopyaları + dağıtıcı/doğrulayıcı/migrate SHA'ları + `staging-yayin.sh <KISA>`). Kapılar önce yerelde
+  `bash deploy/yerel-yayin.sh --sadece-kapilar --santral` ile YEŞİL (87+6).
+- **Tuzak 1:** mesai içinde 4 yeni migration muafiyet YASAK listesinde → 71 (hiçbir şey değişmedi). 17:01Z'ye zamanlandı.
+- **Tuzak 2 (benim hatam):** mesai dışında koşarken de `PBXTR_MESAI_ICI_YAYIN=1` verildiği için muafiyet listesi yine
+  uygulandı → 71. **Mesai dışında bayrak VERİLMEZ** (`=0`). Yeniden → migrate 4 uygulandı (235), app + santral yeniden yaratıldı.
+- **Tuzak 3:** betik sonda `GOLGELEME/IMAJ` ile exit 1 — extensions/pjsip/queues.conf farkı yalnız bayraklı test
+  sunucusunun lab `#include` satırı; sapma kapısı aynı dosyalara YEŞİL diyordu. `staging-yayin.sh`'a sapma kapısının
+  aynı dar muafiyeti eklendi (`f795eeca`) → BR-SYS-133 kapandı. Yayın sonrası `asterisk-sunucu-sapma.sh`: S1 güncel, 8/8.
+- **Doğrulama:** app+santral healthy, panel 200, `__EFMigrationsHistory` 235 (son `20260924123000_CallDataPurgeDeferredDrop`),
+  AMI bağlı, ARI app `pbxtr`, t0007 endpoint 13, confd 304; yerel trunk → sunucu çağrısı cevaplandı, `call_events`'e
+  Newchannel/Hangup yazıldı (test satırları silindi). App `fail:` satırları yalnız santral yeniden başlatma penceresindeki
+  AMI/ARI yeniden bağlanma denemeleri.
+- Backlog: 10 kart YAYINLANDI işaretlendi (`32c6f513`), ClickUp 1 güncelleme, kuru fark 0.
+- **Açık:** backend-dev-1 (BR-BE-218, BR-DB-114) ve backend-dev-2 (BR-BE-219, BR-AST-129, BR-AST-119) çalışıyor.
