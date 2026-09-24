@@ -38,6 +38,17 @@ olarak el terminalinin ne yapması gerektiğini bir md olarak istedi.
   terminal gerçek alınan yeri kaydetmeli ve sevk hareketine yazmalı.
 - **Commit:** `c2637cd` — El terminali gereksinimleri taslagi
 
+### 3. El terminali kararları
+- **Kullanıcı:** Mobil uygulama olacak. Sipariş satır kimliği harekete yazılınca sipariş kendiliğinden
+  IsClosed olur. Eksikli sipariş kapatılmaz.
+- **Kontrol:** Kapatan bir tetikleyici yok. Bağlantı `Erp_InventoryReceiptItem.OrderReceiptItemId`;
+  kapatma Sentez uygulaması veya süreci tarafından yapılıyor.
+- **Varsayım (b) doğrulandı (salt okuma):**
+  - Test ve canlıda `Erp_OrderReceipt.DeletedBy` hiç dolu değil.
+  - IsDeleted=1 sipariş de yok; Sentez fiziksel siliyor.
+  - Sonuç: planlama için alan boş.
+- **Commit:** `570cdca` (ilk push GitLab 502 verdi, tekrar denemede gitti).
+
 ## Açık kalanlar / sonraki adım
 - Planlama tasarımı onayı → spec `docs/superpowers/specs/2026-09-25-siparis-planlama-design.md` → writing-plans.
 - El terminali açık soruları (cihaz, "toplandı" sonrası süreç, sayım fişi tipi, eksik ürün politikası).
