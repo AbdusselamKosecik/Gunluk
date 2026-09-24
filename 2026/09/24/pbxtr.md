@@ -431,3 +431,18 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 ### Sonraki adım
 - Yayın (uygulama yalnız; 06fb1ae4'ten beri migration ve santral değişikliği YOK): kapılar → sunucuda build → yayin7.
 - Yayın sonrası ölçümler: BR-BE-219 canlı 400, BR-AST-119 satır, BR-AST-129 önce/sonra SLA.
+
+## 20:10–20:40Z — BR-SYS-135 (1) + BR-AST-128 (`28eb40f3`), yayın kapıları
+
+- **Kapı kırmızısı 1:** `capraz-kip-yazma-daraltma` — BR-BE-220 `IysSyncJob.cs` aralığını 66→77 kaydırdı, yazma yok →
+  `python3 deploy/ci/capraz-kip-yazma-daraltma-kapisi.py --dondur` (`39543bc0`).
+- **Ders:** kapılar çalışma ağacını koşuyor; ajanlar çalışırken ağaç kirli → temiz HEAD worktree
+  (`git worktree add --detach <scratchpad>/wt-yayin HEAD`) içinde `bash deploy/yerel-yayin.sh --sadece-kapilar`.
+- **Kapı kırmızısı 2:** `compose-sapma` — linux-uzmani sunucu compose'unu commit'siz değiştirmişti. İşi bitince commit edildi.
+- **BR-SYS-135 (1):** `pbxtr-yedek.sh` artık 5 hacmi (attachments, recordingtargets, asteriskspool, asteriskcdr, asteriskcel)
+  ayrı gpg arşivine alıyor; `.yarim` → çöz + `tar tzf` sayımı = yazım listesi → nihai ad. Tetik: girdi 112/1/8/2/2 = arşiv.
+  Kalan: tatbikatın hacim geri yüklemesi, 26 sa eşiği sağlık satırı.
+- **BR-AST-128:** `pjsip.conf` NAT satırları `lab-entrypoint.sh` tarafından `PBXTR_SIP_YAYIN_ADRES` + konteyner ağından
+  `pbxtr.d/transport/udp-nat.conf`'a üretiliyor, `#tryinclude` (ölçüldü: `#include` + eksik dosya PJSIP'in tamamını düşürür).
+  Joker adres exit 78. Sapma kapısı S9. Sunucuda imaj commit'siz ağaçtan (`22-33e24c68c5dc-brast128`) → bu yayın `--santral` ile.
+- Çalışan ajanlar: db-dev (BR-DB-115/84/35), backend-dev-2 (BR-AST-86/89, BR-SYS-129b), backend-dev-1 (BR-QA-124/122/95/123).
