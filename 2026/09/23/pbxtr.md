@@ -230,6 +230,123 @@ diye. Maddeleri kontrol et, ClickUp'ı çevrim sonlarında güncelle, o şekilde
 - Diğer kümeler: IVR `complete_graph_required` 409'ları, `DeliveryProofHttpRunnerTests`
   `proof_step_failed` / `cleanup_failed`, `FinalDeliveryReportTests` donmuş defteri.
 
+### 10. "Kalan maddeleri bitirelim" turu — 115 açık → 79, ve öncül çürükleri
+
+Kullanıcı *"tamam hacım bitirelim kalan maddeleri"* dedi. 115 açık kartın **111'i** altı ajana
+dağıtıldı (AST 29, DB 19, BE 18, QA/OPS/SEC 27, SYS 10, DOC/FE/C2 6). Dördü bilerek
+dağıtılmadı — `BR-00d`, `BR-SYS-117`, `BR-DB-91`, `BR-BE-150`: dördü de **yayın penceresine**
+bağlı ve planı hazır.
+
+Her ajana aynı üç kural verildi: **(1)** önce kartın *"şu yüzden açık"* cümlesini **ölç**,
+**(2)** küçük ve güvenli işi uygula, **(3)** büyük işe **düşürücü kriter** yaz. Hiçbiri
+`dotnet`/`vitest` koşmadı (tek kilit bende), hiçbiri commit/push yapmadı.
+
+**TURUN TEK BÜYÜK DERSİ: en az 20 kartın öncülü çürük çıktı.** Kartların *"şu yüzden açık"*
+cümleleri haftalardır **doğrulanmadan** taşınıyormuş:
+
+- `BR-AST-*` kartlarının çoğu *"sunucudaki ikili eski (`demo-ea567d11bb2e`, 2026-09-15)"*
+  öncülüne yaslanıyordu. Koşan imaj `current-20260923-r3`, dialplan dosyaları 2026-09-22.
+  `BR-AST-58`'in **kendi dört adımlı reçetesi dörtte dört** geçti → kapandı.
+- `BR-AST-122` — dün benim yazdığım kart. *"`QUEUE_PRIO`'yu kimse `Set` etmiyor"* **yanlış**:
+  `CallbackDispatcher.cs:316` yazıyor, ama **yalnız geri arama yolunda**; ölçüm penceresinde
+  hiç geri arama sevk edilmediği için 144/144 boştu. Kartın iki şıkkı da düşer.
+- `BR-BE-213` — yine dün benim açtığım kart. *"Restart üyeleri düşürdü, uygulama geri
+  yazmıyor"* → **itme var, gecikmeli**: iş 300 sn periyotla koşuyor, üyeler ~8 dk sonra
+  kendiliğinden geri gelmiş. **Benim ölçümüm 100. saniyedeydi.** Kalan gerçek olgu (8 dk
+  üyesiz pencere + alarm yok) `BR-AST-126`'ya taşındı.
+- `BR-SYS-60` — *"kanarya kodu yok"*: aslında **64 isabet** var. Eski ölçüm `frozen` arıyordu,
+  kod `DONDURULMUS` diyor. **Arama terimi yanlışmış.**
+- `BR-SYS-111` — *"bekçi sunucuda kurulu değil"* → kurulu. Üstelik vacuity ölçütünün **iki
+  ayağı da** ölçüldü: canlıda pozitif (0 ihlal, `proconfig={lock_timeout=2s}`), gerçek
+  `postgres:16` tam zincirde negatif (**3 ihlal RAISE**). Bekçi vacuous **değil**.
+- `BR-OPS-14` — şartın penceresi **kaçırılmış** ve bu migration için bir daha ölçülemez.
+  **Sahte ölçüm üretilmeyecek**; şart `BR-OPS-11`'e taşınacak.
+- `BR-OPS-17` — *"hiçbir kapıya bağlı değil"* **kısmen yanlış**: skip fail-closed'ı
+  `DockerEnvironment.cs:34-44`'te **kurulu**. Gerçek boşluk başka: takım **yalnız yayın
+  yolunda** koşuyor ve yayın yapılmayan her gün **sessizce bayatlıyor**.
+
+**Tersi de oldu — iki kart kötüleşti:**
+- `BR-DB-76`: `telephony_provider_effects` **17.913 → 50.213 satır**, `n_tup_del = 0`, 26 MB;
+  purge fonksiyonu ne kodda ne canlıda. Bayat teşhis değil, **büyüyen tablo**.
+- `BR-BE-163`: kart *"bugün `MockSmsProvider` ile zararsız"* diyordu; bugün
+  `SmsServiceCollectionExtensions.cs:200` **gerçek sağlayıcıyı** kaydediyor → çift-SMS riski
+  **erişilebilir**. Mekanizma da farklı çıktı: açık bir `Release` değil, **ambient transaction
+  rollback'i** jeton satırını yok ediyor.
+- `BR-DB-16`: *"tam 63 karakter: 3 ad"* → **9 ad**, ve `webhook_deliveries` ailesi **bölümlü**:
+  PG kısıt adını her partition'a çoğaltıyor, tek EF ad değişimi **yedi** katalog satırını
+  birden ayrıştırır.
+
+**İnen kod:** `#37` node-state satırı (kartın önerdiği yol **sahte yeşil** üretirdi — `app.cross_tenant`
+GUC'u yalnız transaction açılışında yazılır; emsale göre **ayrı DI kapsamı** kullanıldı), üç
+kapalı küme için C# kaynağı, `MESAI_MUAFIYETI_YASAK` listesinin **elle tutulmaktan türetilmeye**
+geçmesi (elle defter **2 ad** taşıyordu, gerçek sayı **150**), kayıt ağacı kurulumu + `kapi_87`,
+IVR Phase B sözleşmesi + bekçisi.
+
+**Commit:** `65045696` (16 dosya) · **ClickUp:** `11b5a363` (yeni 4, 53 durum güncellemesi)
+
+### 11. 84 yerel kapı: 15 kırmızı → 3
+
+**Önce kendi hatamı ölçtüm.** Kapıları doğrudan Git Bash'te koşturmuştum ve 22 kırmızı
+almıştım. Betiğin kendi başlığı bunu yazıyor: *"python3, gitleaks, openssl ve nginx yoktur,
+10 kapı 'araç yok' diye düşer — ve o çıktı bir BULGU değil, ortamın eksiğidir."* Doğru
+ortamda (`pbxtr-kapi:local` konteyneri + docker soketi) koşunca **15** kırmızı.
+
+**11 kapı kapatıldı**, her biri üç sınıftan birine konularak — **(A) gerçek bulgu**,
+**(B) donmuş envanter bayat**, **(C) ölçemedi**:
+
+- **Sır taraması (A):** gitleaks'in yakaladığı şey kapıların kendi yorumu **değil**, gerçek
+  bir sabitti (`ProvisioningSecretMaterializationHttpTests.cs:70`, `c4eba581`). Konvansiyona
+  çevrildi; **değer hiçbir yere yazılmadı**.
+- **Ortam değişkeni eşlemesi (A):** 9 değişken şablonda var, compose'da yok → operatör
+  `.env`'e yazar, **uygulamaya hiç ulaşmaz**. Aynı katman bu depoda **dördüncü kez** atlanmış.
+- **confd selftest (A):** 7 kırmızı iddia **tek kök sebepti** — `[general]` düşümü geldi ama
+  fikstür güncellenmedi → *"teslim edilen kuyruk yüklenmedi"* kriteri **hiç ölçülmüyordu**.
+- **Görsel taban manifestosu (A):** yeniden üretim **gerekmiyordu**; `producedFromSha` yanlış
+  yazılmıştı. Piksel kapısı zaten 13/13 geçiyordu → görsel sapma yoktu, **kayıt yanlıştı**.
+- **`SET LOCAL` ve `set_config` kapıları (A, kapının kendi kusuru):** isabetlerin tamamı
+  **belge metni** ve **negatif fikstür**di. Kapı **gevşetilmedi**, desen sıkılaştırıldı ve
+  muafiyet listesine **yeni ad eklenmedi**.
+- **Üç donmuş envanter (B):** farkın meşruluğu **ölçüldükten sonra** tazelendi; `--dondur`
+  körü körüne koşulmadı.
+
+**Benim kendi alanım (#8, #9) — ve burada kendi hatamı buldum:**
+kapı satırı **naif olarak `|` ile bölüyor**; benim yazdığım durum hücrelerindeki kabuk
+boruları (`ss -lntp | grep`, `... | head`, `backup_tier | skill_mismatch`) hücreyi kaydırmış
+ve durum metni Şart sütununa düşmüştü. Altı satır düzeltildi (metin kaybolmadı, borular
+`/` oldu). **Ayrıca beş satırda öncelik hücresi `P#` biçiminde değildi** (`P1 (P3'ten
+yükseltildi)`, `P1/P2`, `—`, ve `BR-SYS-43`'te hücre **hiç yoktu**) → o kartların önceliği
+**panoda görünmüyormuş**. Beşi de onarıldı, notlar Story hücresine taşındı. Dört bayat
+mezar taşı satır atıfı tazelendi.
+
+**Açık kalan 3 kırmızının üçü de karta bağlı** ve ikisi ciddi:
+- **`BR-DB-111` (P1, ürün kusuru):** `QueueMembershipSyncJob.WriteGapLedgerAsync` **çapraz
+  kipte yazıyor**. Karar #65 Ş65-4.5'in savunması **uygulama katmanındadır** ve arka plan
+  işleri o savunmanın **dışındadır** → bu yazma hiçbir yerde reddedilmiyor. `--dondur`
+  **bilerek koşulmadı**: mutlak kural envanterden bağımsız ateşler, dondurmak yalnız gerçek
+  sinyali susturur.
+- **`BR-DB-112` (P1):** `20260919020000_CallDataSourceColumn` **onaydan sonra düzenlenmiş**.
+  EF uygulanmış bir migration'ı **bir daha koşmaz** → düzeltme, migrate'i daha önce koşmuş
+  **hiçbir veritabanında uygulanmaz** ve backfill FORCE RLS altında **0 satır** görmüş
+  olabilir. *Şablon gövdesi kurulu DB'ye ulaşmaz* sınıfının birebir kardeşi.
+- **`BR-SYS-131` (P2):** `BR-SYS-130` listeyi 2'den 150 ada çıkarınca öz-testin **kontrol
+  grubu** listenin içine düştü → düzeltilmezse **HEP KIRMIZI kapı** olur.
+- **`BR-BE-215` (P2):** `kapi_07`'de kalan 7 migration için onay satırı.
+
+**Commit:** `c07c1691` (17 dosya) · **ClickUp:** `6efebda8`
+
+### 12. Günün kapanış ölçümleri
+
+| Doğrulama | Sonuç |
+|---|---|
+| `dotnet build -c Release` | **0 hata / 0 uyarı** |
+| `Pbxtr.Architecture.Tests` | **777/777** |
+| `Pbxtr.Api.Tests` (3 dilim) | **6326 geçti, 0 kırmızı** |
+| `Pbxtr.Integration.Tests` | **1214/1216** — iki bağımsız koşu |
+| frontend `vitest` | **2209/2209** · `npx tsc -b` **0** |
+| `dotnet format --verify-no-changes` | **EXIT=0** |
+| 84 yerel kapı (konteynerde) | **15 kırmızı → 3**, üçü de karta bağlı |
+| Kart sayımı | **793 kart · 714 kapalı · 79 açık** (P0 4, P1 33, P2 37, P3 5) |
+
 ## Kararlar
 
 1. **`#37` sağlık satırı sayıyı taşır, üretmez.** ≤15 dk bayatlık kabul; rollup durursa satır
