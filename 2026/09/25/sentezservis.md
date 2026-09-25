@@ -63,6 +63,31 @@ olarak el terminalinin ne yapması gerektiğini bir md olarak istedi.
 - **Commit:** `0d5b17f` (push iki kez düştü: publickey ve sideband; üçüncüde gitti).
 - **Hafıza:** `siparis-planlama-deletedby.md`.
 
+### 5. Paket
+- **Kullanıcı:** "paket çıkartır mısın".
+- **Neden temiz worktree:** Ana çalışma klasöründe başka oturumların commit edilmemiş işleri var (Pdks,
+  EtiketCiktisi, efatura…). Pakete yalnız commit edilmiş kod girsin diye HEAD'de ayrık worktree açıldı.
+- **Komutlar:**
+  ```bash
+  git worktree add --detach <scratch>/wt HEAD
+  ```
+  ```powershell
+  New-Item -ItemType Junction <wt>\web
+ode_modules -> ana web
+ode_modules   # package.json aynı
+  powershell -File <wt>\deploy\yayinla.ps1
+  Compress-Archive <wt>\yayin\* SentezServis-2026-09-25-siparis-guncelleme.zip
+  ```
+- **Tuzaklar:**
+  - `appsettings.json` gitignore'da, bu yüzden worktree'de yok ve betik `appsettings.ornek.json` üretmedi.
+    Yerel ayar 23.09 22:42'den beri değişmediği için 24.09 paketindeki temizlenmiş örnek pakete eklendi.
+    Doğrulandı: 6 × `Password=<DOLDURUN>`, dolu parola yok.
+  - Junction `Remove-Item` ile değil `cmd rmdir` ile kaldırıldı; PS 5.1 hedefin içini silebilir.
+- **Sonuç:** `SentezServis-2026-09-25-siparis-guncelleme.zip`, 73,7 MB, 18 dosya, HEAD `0d5b17f`. Arayüz
+  tarihi 2026-09-25 09:18. İçeriğe 723ea8a, 2cd81a9 ve 0e83342 de giriyor: KDV 8 hane, bool parametre
+  düzeltmesi, güncelleme/iptal/eksik barkod.
+- **Kurulum sonrası:** migration 020 açılışta koşar. `/api/surum` → `arayuzTarihi` 2026-09-25 09:18 olmalı.
+
 ## Açık kalanlar / sonraki adım
 - Spec kullanıcı incelemesinde; onay gelince writing-plans.
 - El terminali açık soruları (cihaz, "toplandı" sonrası süreç, sayım fişi tipi, eksik ürün politikası).
