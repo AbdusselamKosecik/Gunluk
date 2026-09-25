@@ -86,6 +86,30 @@ olarak el terminalinin ne yapması gerektiğini bir md olarak istedi.
   düzeltmesi, güncelleme/iptal/eksik barkod.
 - **Kurulum sonrası:** migration 020 açılışta koşar. `/api/surum` → `arayuzTarihi` 2026-09-25 09:18 olmalı.
 
+### 6. HATA: ilk paket canlıdan özellik siliyordu → düzeltme
+- **Kullanıcı:** "menülerde değişiklik yok", "karşıt kodlar da yok, planlama da yok".
+- **Kök neden:** 24.09 paketi çalışma klasöründen çıkmıştı ve başka oturumların commit edilmemiş 35
+  dosyasını içeriyordu (Karşıt kodlar, Pierre Cardin, Mısırlı, e-fatura tetikleme, PDKS/mahsup, iş
+  çalıştırıcı). Temiz HEAD paketi bunları düşürüyordu; app.js'te `karsit-kodlar` 6 → 0. Yanlış paket silindi.
+- **Karar (AskUserQuestion):** Commit et, sonra paketle.
+- **Doğrulama:**
+  - dotnet test: 626/626.
+  - vitest: 5 hata, `EtiketCiktisiSayfasi.test.tsx` eski imzayı bekliyordu. Beklentilere `birdenBasla=false`
+    eklendi; "diğer marka" testi Pierre Cardin packing list girişine çevrildi. Sonuç 63/63.
+- **Commit'ler:**
+  - `3fffe10` Karşıt kodlar
+  - `9e19574` Etiket (Pierre Cardin, birden başla, test güncellemesi)
+  - `ab3ce90` İş çalıştırıcı paralel
+  - `04830c9` E-fatura tetikleme
+  - `1d888ca` PDKS/mahsup
+  - `b8b429d` UZM_ExternalXRef DDL
+- **Paket:** `SentezServis-2026-09-25-karsit-kod-siparis.zip`
+  - 73,8 MB, temiz worktree, HEAD `b8b429d`, arayüz 2026-09-25 09:38.
+  - `appsettings.json` worktree'ye kopyalandı, örnek dosyayı betik üretti: 6 × `<DOLDURUN>`.
+  - Dosya listesi 24.09 ile aynı; app.js'te karsit-kodlar 6, Pierre 3, Mısırlı 1.
+- **Planlama:** Kodu yok, yalnız spec var; pakette olmaması beklenen durum.
+- **Hafıza:** `paket-onceki-paketle-karsilastir.md`.
+
 ## Açık kalanlar / sonraki adım
 - Spec kullanıcı incelemesinde; onay gelince writing-plans.
 - El terminali açık soruları (cihaz, "toplandı" sonrası süreç, sayım fişi tipi, eksik ürün politikası).
