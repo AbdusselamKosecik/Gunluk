@@ -479,3 +479,31 @@ Kullanıcı: *"ne koşacaksan ssh'da koş."* Dört ajan, tüm ölçümler sunucu
 - Commit öncesi `capraz-kip-yazma-daraltma-kapisi.py` ve `capraz-kip-envanteri-kapisi.py` ana ağaçta OK.
 - Yeni kart **BR-BE-221** (iys-sync ClaimSql Seq Scan). ClickUp: +1 kart, 2 complete, fark 0 (`14154202`).
 - Yeni ajan: db-dev → BR-AST-124 (canlıda 9× `secret_not_stored`) + BR-BE-221.
+
+## 22:40Z–01:00Z (25.09 03:55 TR) — gece turu: ultracode iş akışı + üç ajan, 04:30 kapanış
+
+- **Kullanıcı:** "ultracode — açık kartların hepsini bitir" + "04:30'da kapanacak şekilde ayarla / 1 saat 30 dk".
+  `shutdown /s /t <sn>` ile PC 04:30 TR'ye zamanlandı (iptal: `shutdown /a`). Ajanlara son saat 00:50Z verildi.
+  Süre yüzünden iş akışı yalnız P1 hata gruplarıyla (6 grup, QA aşaması yok) koştu; büyük özellikler (Scripter, webhook,
+  zamanlanmış rapor, talep bazlı silme) bu gece dışarıda. **Bu gece yayın YOK.**
+- **Commit'ler (hepsi push):**
+  - `eb29b256` BR-QA-124/122 bitti, BR-QA-95 kısmen (mail_settings ön koşulu; N tekrar ölçülmedi).
+  - `5ee76198` BR-AST-86 (ARI kanal resync), BR-AST-89 (Redis karantina), BR-SYS-129b (kayıt klasörü sağlık satırı) —
+    mutasyon 10/10; `dotnet format` sunucu yükü yüzünden ÖLÇÜLMEDİ.
+  - `69b25bd0` BR-AST-111 bitti (kuyruk callback medyası değişince provisioning tetiklenmiyordu — `RenderedQueue` projeksiyonu).
+  - `d3b94000` BR-AST-114(b) failback metni; `d3bc42ee` BR-SYS-60 (başarısız CLI çağrısı 0 sayılmaz).
+  - **`wip/ast124-be221` dalı (main'e ALINMADI):** BR-AST-124 seed sır düzeltmesi + BR-BE-221 ClaimSql bölme + migration
+    `20260925090000` — odaklı entegrasyonda 19'da 1 kırmızı teşhis edilmedi. Dal geçici index ile yazıldı:
+    `GIT_INDEX_FILE=$(mktemp) git read-tree HEAD; git add <yollar>; git commit-tree $(git write-tree) -p HEAD` → `git push origin <sha>:refs/heads/wip/...`
+    (çalışma ağacına ve main'e dokunmadan).
+- **Canlı onarım:** BR-AST-124 — t0012'nin 3 dahilisi sırsızdı (seed). superadmin → impersonation `kuzey.sahip` → 3× credential-rotation 200;
+  9/9 sırlı, `secret_not_stored` 22:59Z'den beri 0, t0012 endpoint 0→3.
+- **Sunucu olayı:** confd t0007/dialplan+queues 00:17Z'de "reload sonrası doğrulama SAPTI" ile dondu (ajanların eşzamanlı
+  canlı kuyruk/kayıt değişiklikleri); 00:34Z'den beri 304 (sonraki revizyonlar teslim edildi).
+- **Yeni P1 kartları:** BR-BE-222 (callback_digit yazıcısı yok), BR-AST-130 (canlı SLA kovası boş — kuyruk kimliği çözümü),
+  BR-BE-223 (CurrentCallId ezmesi), BR-AST-131 (santralde CDR DB arka ucu yok).
+- **Ölçümle açık kalanlar (sebep):** BR-AST-61/104 — `pbxtr-edge` depoda var ama santral sunucusuna KURULMAMIŞ (4573/8790 dinlemiyor);
+  BR-BE-43-B — migration ister; BR-AST-79 — sağlık satırı dosyaları o an başka ajandaydı.
+- **Durum:** 815 kart, 765 kapalı, 50 açık. ClickUp fark 0 (`c3a8b38d`).
+- **Sonraki:** (1) `wip/ast124-be221` kırmızı testi teşhis → main; (2) mesai dışı yayın (BR-DB-115 migration + gece commit'leri,
+  kapılar TAM klonda `-c core.autocrlf=false`); (3) `pbxtr-edge` kurulumu (AST-61/104'ün ön koşulu); (4) Faz-2 özellikleri.
