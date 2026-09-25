@@ -14,3 +14,13 @@
 ## Açık kalanlar / sonraki adım
 - BR-AST-114 canlı: yayından sonra tuş dolu bir kuyrukta talep alınamayan çağrı → agent masasında "Geri arama talebi alınamadı" şeridi.
 - BR-AST-118 ve BR-BE-43-B açık (gerekçe yukarıda).
+# pbxtr — 2026-09-25
+
+## 06:20–07:00Z — 14 gruplu iş akışı başlatıldı ve kullanıcı emriyle DURDURULDU
+- Sunucu 2 CPU / 7 GB; derlemeler tek kilitte sıraya girdi (21 bekleyen), 30 dk'da ilerleme düşük. Kullanıcı: token maliyeti
+  yüzünden her şeyi durdur, işler tek tek verilecek.
+- Main'e giren: `8b623974` BR-AST-117 (8 dilde hizmet dışı anonsu), `79988a24` BR-BE-223 (CallId'siz olay aktif çağrıyı ezmez),
+  `a000a40d` BR-AST-61 (pbxtr-edge santral ağ ad alanında kuruldu). Bunlar QA denetiminden GEÇMEDİ.
+- Yarım iş (234 dosya, doğrulanmadı) `wip/is-akisi-20260925` dalına yedeklendi (geçici index + commit-tree; main'e dokunulmadı).
+  Yerel ağaçta commit'siz olarak da duruyor. Sunucuda wf-* konteyner/dizin/kilit temizlendi.
+- Ders: `pkill -f` desenini `[.]` ile kır (`pgrep -f "wf-derleme[.]kilit"`), yoksa ssh kabuğu kendini öldürür.
