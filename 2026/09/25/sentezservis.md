@@ -72,9 +72,7 @@ olarak el terminalinin ne yapması gerektiğini bir md olarak istedi.
   git worktree add --detach <scratch>/wt HEAD
   ```
   ```powershell
-  New-Item -ItemType Junction <wt>\web
-ode_modules -> ana web
-ode_modules   # package.json aynı
+  New-Item -ItemType Junction <wt>\web\node_modules -> ana web\node_modules   # package.json aynı
   powershell -File <wt>\deploy\yayinla.ps1
   Compress-Archive <wt>\yayin\* SentezServis-2026-09-25-siparis-guncelleme.zip
   ```
