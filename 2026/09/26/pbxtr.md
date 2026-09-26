@@ -69,3 +69,42 @@ doğrulanmamış yarım işi, içinde `wip/ast124-be221`), 244 dosya commit'siz.
 - Integration.Tests Docker'lı ortamda koşulmalı (yeni migration'lar: IysPermissionRefreshIndexes,
   VoicemailCallbackAndResultCodeRequired, ErasureRequests, SlaAutoAnsweredCount).
 - BR-10, BR-OPS-09: kullanıcı yapılacak yazmadı.
+
+## İkinci tur — kalan 11 kart sırayla (kullanıcı: "evet sırayla devam et")
+
+### 4. BR-AST-59 — gelen çağrı ARI devralması ayarlardan açılır
+- **Neden:** devralma kodu ve `[pbxtr-{t}-ctl]` üretimi depodaydı, ön koşullar (BR-AST-55, BR-SYS-93) Bitti; bayrak yalnız elle SQL ile açılabiliyordu → kullanıcı test edemezdi.
+- **Ne yapıldı:** `TenantSettingsView.AriTakeover`, komut `ariTakeover` (yok = DOKUNMA), ayrı `ChangeSet.AriTakeover`, maske yazma kapısı, `EfTenantSettings` → `AriTakeoverEnabled`, değişince `provisioning.RegenerateAsync`, ayrı denetim satırı; #49 Telefon & Ses paneline onay kutusu (9 dil).
+- **Testler:** `AriTakeoverSettingTests` (3), `settingsApi.test.ts` (+3).
+- **Commit:** `d723a2cc`
+
+### 5. BR-AST-62 — zil grubuna dış numara üyesi (worktree ajanı, backend-dev-2)
+- **Tasarım (brifte sabitlendi):** migration `20260926131158_RingGroupExternalMember`; `PhoneInput` giriş, sunucuda maskeli çıkış, düzenlemede `keepMemberId`; dış üye `Local/<e164>@pbxtr-{t}-rg-ext/n`, bu bağlam miras damgaları (`PBXTR_PERM`, `PBXTR_CTL`, `PBXTR_DIALER_MODE`; düz + `__`) silip `-outbound`'un call-permission AGI'sine gider.
+- **Neden damga temizliği:** `AsteriskAriProvider.cs:323` originate'te `__PBXTR_PERM=1` basar ve `__` miras alınır; aktarılmış pbxtr çağrısı zil grubuna girerse Local bacak kapıyı atlardı. Mutasyon: satır silinince renderer testi KIRMIZI.
+- **Yan kararlar (ajan):** yeni maske yüzeyi `ringgroup`; dış üyeli `Dial()` `t` bayrağı taşımaz.
+- **Merge sonrası:** build 0, Architecture 794/794, Api (Telephony+Live+Tenancy+Privacy+Delivery) 2383/0.
+- **Commit:** `9349bbbd`, merge `0c273ecc`, kart `9ade36a2`
+
+### 6. BR-FE-111 — "Müsait ama çalmıyor" yedek kademe rozeti
+- **Kural (domain `LiveAgentBlockReason`):** müsait + DND açık değil + bekleyen çağrısı olan HER kuyruğunda penalty > kuyruğun min penalty'si + üye sayısı > `penaltymemberslimit`; tek engelsiz bekleyen kuyruk → sebep yok. `skill_mismatch` üretilmez (eşik altı agent üyelikten düşer).
+- **Veri:** `RedisLiveOperationsView` zaten okuduğu `queue_members` (penalty eklendi) ve `queues` (`PenaltyMembersLimit` eklendi) — ek sorgu yok. `LiveAgentDto` sona `blockedReason` + `blockedReasonQueueId`.
+- **Ekran:** `BlockedReasonBadge` (#12/#13 ortak), `queue.read` varsa `/queues?members=<id>`; `QueuesScreen` bu parametreyle `fetchQueue` + üye diyaloğunu açar.
+- **Testler:** `LiveAgentBlockReasonTests` (8), `BlockedReasonBadge.test.tsx` (4).
+- **Commit:** `21fb836d`
+
+### 7. Frontend bekçileri — iş akışından kalan 4 kırmızı
+- **Bulgu:** ilk turda yalnız dokunulan klasörlerin vitest'ini koşmuştum; TAM koşu 4 kırmızı gösterdi (ajan da bildirdi). Ders: *filtreli test kapıyı görmez* — tam takım koşulmalı.
+- **Düzeltme:** #65 tetikleyicilerine `data-pbxtr-action`; ölü `useSessionOptional` mock'u; dar imzalı mock sarmalayıcıları; düzelen satır donmuş listeden çıktı; `MaintenanceBanner` payload tüketicisi izin listesine.
+- **Sonuç:** vitest TAM 261 dosya / 2255 test yeşil. **Commit:** `92747f0c`
+
+### 8. Test/ölçüm işi kalan kartlar Bitti (kullanıcı kararı)
+- BR-BE-203 (kusur BR-BE-223 ile `79988a24`), BR-SYS-60 (kanarya SAPTI tatbikatı), BR-DB-52 (canlı bütçe koşusu), BR-OPS-11 (yıkıcı ölçümler), BR-DB-16 (2. adım `IdentifierLengthGuardTests` zaten WIP'te), BR-SYS-51 (runbook + `SmsOutageDrillTests` zaten WIP'te).
+- Her kapanıştan sonra `clickup-senkron.js`; son `--kuru`: fark 0, izde olmayan 0.
+
+## Kararlar (ikinci tur)
+- BR-BE-43-B ve BR-DB-67 kullanıcıya soruldu, yazılmadı: 43-B'de Karar #66 İ2 başlıktan yazımı yasaklıyor ama pinsiz anahtarın sunucuda çözülebilir düğüm kimliği yok (kural ya sahte kimliğe dayanır ya hiç ateşlenmez); 67 model seçimi + 01 şablon tazelemesi (call-permission FAIL-CLOSED pencere).
+
+## Açık kalanlar (güncel)
+- BR-BE-43-B, BR-DB-67 — kullanıcı kararı bekliyor (öneriler yanıtta).
+- Integration.Tests hiç koşmadı (yerelde Docker kapalı): yeni migration'lar RingGroupExternalMember + dünün dört migration'ı.
+- BR-10, BR-OPS-09: yapılacak yazılmadı; BR-C2-1/2, BR-DB-74, BR-OPS-14: es geçildi.
