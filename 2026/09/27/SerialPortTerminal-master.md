@@ -44,3 +44,26 @@ Uygulama çalışınca COM port adlarının/verinin sonunda garip karakterler ç
 
 ## Kararlar
 - .NET 4.x'e retarget yerine ad temizleme seçildi: minimum değişiklik, VS2008/2010 çözümleri bozulmuyor.
+
+### 4. .NET Framework 3.5 → .NET 10 geçişi
+- **Neden:** Kullanıcı isteği; ayrıca .NET 3.5'teki GetPortNames hatası kökten ortadan kalkıyor.
+- **Ne yapıldı:**
+  - Eski csproj, iki .sln ve AssemblyInfo.cs scratchpad'e yedeklendi, sonra:
+  - `SerialPortTerminal.csproj` SDK tarzı yazıldı: `net10.0-windows`, `UseWindowsForms`, `AssemblyName="SerialPort Terminal"`, `ApplicationIcon=App.ico`, `Nullable/ImplicitUsings=disable`, `About.htm` EmbeddedResource, Settings/Resources generator metadata korundu. ClickOnce/Bootstrapper/PublishFile blokları atıldı.
+  - `dotnet add package System.IO.Ports` → 10.0.12.
+  - `SerialPortTerminal VS2008.sln` / `VS2010.sln` silindi; `dotnet new sln --format sln` + `dotnet sln add`.
+  - `Properties/AssemblyInfo.cs` silindi; Product/AssemblyTitle/Copyright/Version csproj'a (GenerateAssemblyInfo açık → SupportedOSPlatform üretiliyor, CA1416 uyarıları sıfırlandı).
+  - `.gitignore`'a `bin/`, `obj/`, `*.user` eklendi; `git init -b main`.
+- **Dokunulan dosyalar:** `SerialPortTerminal.csproj`, `SerialPortTerminal.sln`, `.gitignore`, `Properties/AssemblyInfo.cs` (silindi), `*.sln` (eski, silindi)
+- **Komutlar:**
+  ```bash
+  dotnet add package System.IO.Ports
+  dotnet new sln -n SerialPortTerminal --format sln && dotnet sln SerialPortTerminal.sln add SerialPortTerminal.csproj
+  dotnet build SerialPortTerminal.sln -c Debug
+  ```
+- **Sonuç / doğrulama:** Build 0 uyarı 0 hata. Uygulama açıldı; UI Automation ile port combobox'ı okundu: `COM3` (67,79,77,51), `COM4` (67,79,77,52) — çöp karakter yok.
+- **Commit:** `574f3bf` — .NET 10'a geçiş ve COM port adı çöp karakter düzeltmesi (yerel; remote yok, kullanıcıya soruldu)
+
+## Açık kalanlar / sonraki adım
+- GitHub'da repo açılıp push edilmesi (kullanıcı onayı bekleniyor).
+- Ayar dosyası yeri değişti (ClickOnce yok) → eski kayıtlı ayarlar (COM4/9600) yeni sürümde varsayılana döner.
