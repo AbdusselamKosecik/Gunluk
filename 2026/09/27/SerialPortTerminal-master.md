@@ -62,8 +62,8 @@ Uygulama çalışınca COM port adlarının/verinin sonunda garip karakterler ç
   dotnet build SerialPortTerminal.sln -c Debug
   ```
 - **Sonuç / doğrulama:** Build 0 uyarı 0 hata. Uygulama açıldı; UI Automation ile port combobox'ı okundu: `COM3` (67,79,77,51), `COM4` (67,79,77,52) — çöp karakter yok.
-- **Commit:** `574f3bf` — .NET 10'a geçiş ve COM port adı çöp karakter düzeltmesi (yerel; remote yok, kullanıcıya soruldu)
+- **Commit:** `574f3bf` — .NET 10'a geçiş ve COM port adı çöp karakter düzeltmesi — push: https://github.com/AbdusselamKosecik/SerialPortTerminal (public, main)
 
 ## Açık kalanlar / sonraki adım
-- GitHub'da repo açılıp push edilmesi (kullanıcı onayı bekleniyor).
+- Repo açıldı: `gh repo create AbdusselamKosecik/SerialPortTerminal --public --source . --remote origin --push`
 - Ayar dosyası yeri değişti (ClickOnce yok) → eski kayıtlı ayarlar (COM4/9600) yeni sürümde varsayılana döner.
