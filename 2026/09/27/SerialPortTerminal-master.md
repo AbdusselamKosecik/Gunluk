@@ -29,3 +29,18 @@ Uygulama çalışınca COM port adlarının/verinin sonunda garip karakterler ç
 - **Neden:** Kullanıcı sorunun USB cihaz takılı değilken de olduğunu söyledi; USB sürücü açıklaması düştü.
 - **Ne yapıldı:** `bin/Debug`'da exe yok (sadece .config/.manifest/.application; ClickOnce publish kalıntısı). Defender olay günlüğü (1006-1119) tarandı: exe silinmemiş; tek kayıt 2026-09-04 balenaEtcher `Behavior:Win32/ModifiedBootRecord` (SD kart yazma, ilgisiz). Kayıtlı ayar: `%LOCALAPPDATA%\SerialPortTerminal\...\user.config` → COM4, 9600 8N1, Text.
 - **Sonuç:** Hâlâ virüs izi yok. Tek port kaynağı Bluetooth COM3/COM4; sorun ekranı görülmeden kesin teşhis yok, kullanıcıdan ekran görüntüsü istendi.
+
+### 3. Kök neden bulundu ve düzeltildi: "COM4潥", "COM3慦"
+- **Neden:** Kullanıcı port listesinde `COM4潥`, `COM3慦` gördüğünü bildirdi.
+- **Teşhis:** Virüs değil. Bluetooth (BthModem) sürücüsü `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` değerini null sonlandırıcısız yazıyor; .NET 2.0/3.5 `SerialPort.GetPortNames()` sonrasındaki bellek baytlarını UTF-16 karakter olarak ekliyor. Proje `TargetFrameworkVersion v3.5` olduğu için etkileniyor (.NET 4+ PowerShell'de aynı değerler temiz).
+- **Ne yapıldı:** `Terminal.cs`'e `using System.Text.RegularExpressions;` ve `private static string[] GetPortNames()` eklendi: her adı `^COM\d+` ile kırpıyor, `Distinct()`. Üç `SerialPort.GetPortNames()` çağrısı (OrderedPortNames, RefreshComPortList x2) buna yönlendirildi.
+- **Dokunulan dosyalar:** `Terminal.cs`
+- **Komutlar:**
+  ```bash
+  /c/Windows/Microsoft.NET/Framework/v4.0.30319/MSBuild.exe SerialPortTerminal.csproj //p:Configuration=Debug //v:minimal
+  ```
+- **Sonuç / doğrulama:** Derleme hatasız. Regex testi: `COM4潥`→`COM4`, `COM3慦`→`COM3`, `COM10`→`COM10`. Uygulamada kullanıcı doğrulaması bekleniyor.
+- **Commit:** Yok — proje klasörü git deposu değil, remote yok (kullanıcıya bildirildi).
+
+## Kararlar
+- .NET 4.x'e retarget yerine ad temizleme seçildi: minimum değişiklik, VS2008/2010 çözümleri bozulmuyor.
