@@ -24,3 +24,8 @@ Uygulama çalışınca COM port adlarının/verinin sonunda garip karakterler ç
 ## Açık kalanlar / sonraki adım
 - Sorun anında cihaz takılıyken SERIALCOMM ve GetPortNames tekrar kontrol edilecek.
 - İstenirse `GetPortNames` sonucunu `COM\d+` regex ile temizleyen düzeltme eklenebilir.
+
+### 2. Ek kontrol: cihaz takılı değilken
+- **Neden:** Kullanıcı sorunun USB cihaz takılı değilken de olduğunu söyledi; USB sürücü açıklaması düştü.
+- **Ne yapıldı:** `bin/Debug`'da exe yok (sadece .config/.manifest/.application; ClickOnce publish kalıntısı). Defender olay günlüğü (1006-1119) tarandı: exe silinmemiş; tek kayıt 2026-09-04 balenaEtcher `Behavior:Win32/ModifiedBootRecord` (SD kart yazma, ilgisiz). Kayıtlı ayar: `%LOCALAPPDATA%\SerialPortTerminal\...\user.config` → COM4, 9600 8N1, Text.
+- **Sonuç:** Hâlâ virüs izi yok. Tek port kaynağı Bluetooth COM3/COM4; sorun ekranı görülmeden kesin teşhis yok, kullanıcıdan ekran görüntüsü istendi.
