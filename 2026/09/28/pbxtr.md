@@ -98,6 +98,28 @@ yazılmadı.
 - **Yerel:** Architecture 794/794; kapi_07 OK; kapi_71 TEMIZ (K6 commit sonrası da).
 - **Commit:** `7f02b806`. ClickUp: kart açıldı (yeni 1), senkron fark 0.
 
+### 6. Integration.Tests TAM koşu (sunucu) — 11 kırmızı → 0
+- **Neden:** takım günlerdir hiç koşmamıştı (yerel Docker yok).
+- **Komut (ssh kopsa da süren biçim):**
+  ```bash
+  git archive HEAD | ssh root@176.88.41.220 'rm -rf /root/pbxtr-it-full && mkdir -p /root/pbxtr-it-full && tar -x -C /root/pbxtr-it-full'
+  ssh root@176.88.41.220 'cd /root/pbxtr-it-full && nohup sh -c "docker run --rm --network host     -v /var/run/docker.sock:/var/run/docker.sock -v /root/pbxtr-it-full:/src     -v /root/.nuget-pbxtr:/root/.nuget/packages -w /src -e TESTCONTAINERS_RYUK_DISABLED=true     -e PBXTR_REQUIRE_DOCKER_TESTS=1 mcr.microsoft.com/dotnet/sdk:10.0 dotnet test     tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj --logger \"console;verbosity=normal\"     > /root/itfull.log 2>&1; echo EXIT=\$? >> /root/itfull.log" >/dev/null 2>&1 </dev/null &'
+  ```
+  İlk deneme ssh'a bağlıydı; bağlantı kopunca `docker run` istemcisi öldü ve çıktı kayboldu.
+- **Sonuç:** 1290 test / 1278 geçti / 11 kırmızı / 1 atlandı (~55 dk). Ürün kodu **değişmedi**:
+  - CrossTenantVersionGateOracle (3): admin Karar #51 ile kuyruk/mesai taşımıyor → vakalar kullanıcı
+    kaynağına taşındı. (Önce birleştirme kaybı sanıp yetkiyi geri koydum; Platform bekçileri
+    6 kırmızıyla kararı gösterdi, geri alındı.)
+  - EnumMirror: `erasure_requests` iki küme aynaya + pairing muaf.
+  - MaintenanceSampleSeed: BR-QA-121 (d) sonrası tohum çekilir (beklenti 0).
+  - FinalDeliveryReport: şema revizyonu + rapor `PBXTR_WRITE_DOCS=1` ile üretildi.
+  - DbDev24 rollback: ihlal mesajı detaylandırıldı → `relocate_dealer_staff_to_home` (BR-DB-117)
+    Down durağında envanter dışı; durak bileşik (09-24 sabit listesi + bugünkü 01). Adla muaf.
+  - Webhook fan-out (yanlış tenant bağlamı), İYS (timestamptz tipi), 63 bayt (PG'nin bölüm çocuk
+    indeks adları), geri arama (cari tohumu yoktu).
+- **Doğrulama:** hedefli 157 + 27 test sunucuda; son hâl 11/11 yeşil.
+- **Commit:** `6405390e`.
+
 ## Kararlar
 - Personel taşıma tek yazma kapısıyla, DB'de. Uygulama katmanında GUC çevirme **yok**.
 - Müşteri tenant'ına bağlı satırı (dahili / kuyruk / beceri) olan personel **taşınmaz**;
