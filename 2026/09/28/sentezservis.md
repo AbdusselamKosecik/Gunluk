@@ -76,9 +76,30 @@ miktarının beden bazlı ayrılması, yalnız incelendi.
   - C) Beden başına etiket.
 - **Kullanıcıya sorulanlar:** Hangi seçenek? Aynı beden çok renkliyse ne olacak? Döküm paket mi adet mi?
 
+### 4. Mısırlı etiketi — PAKET satırında beden bazlı paket
+- **Kullanıcı:** "Bedenden sonraki Paket satırında toplam göstermek yerine ilgili beden sırasına ilgili paket
+  değeri gelsin."
+- **Ne yapıldı:**
+  - `MisirliExcelOkuyucu`: koli taslağında beden → paket sözlüğü tutuluyor. Aynı beden farklı renk
+    satırlarında toplanır (85C 30 + 30 → 60).
+  - `MisirliKoli.PaketDokumu` BEDEN sırasıyla birleştiriliyor ("85B 95B" → "50 5").
+  - Toplam `Paket` alanı yalnız paket × içi = adet denetiminde kullanılıyor.
+  - `MisirliKoliEtiketRaporu.Tablo` ayrı metoda çıkarıldı (testlenebilir). PAKET alanına döküm yazılıyor.
+  - Web: tipe `paketDokumu` eklendi, etiket önizlemesinin PAKET satırı dökümü gösteriyor. Tablodaki
+    "Paket × içi" sütunu toplam olarak kaldı.
+  - `docs/etiket-ciktisi.md` güncellendi.
+- **Karar:** Aynı bedenin iki rengi toplanıyor, çünkü BEDEN satırında beden bir kez yazıyor. Kullanıcı 3
+  sorumdan yalnız birini cevapladı; bu karar kendi kararım.
+- **Testler:**
+  - Yeni: `Paket_satiri_beden_sirasiyla_beden_bazli_paketi_gosterir`,
+    `Etiket_tablosunda_paket_alani_beden_dokumudur`, karışık koli testine "60" ve web önizleme testine
+    "PAKET40 5" eklendi.
+  - Hepsi RED → GREEN. .NET 670/670, web 68/68.
+- **Commit:** `2e65f23`
+
 ## Açık kalanlar / sonraki adım
 - Sipariş planlama pakete girmedi; kullanıcı isterse yeni paket (önceki paketle karşılaştırarak).
 - Ekran elle denenmedi (vitest + API uçtan uca ile kapsandı).
-- Mısırlı beden dökümü: kullanıcının 3 cevabı bekleniyor.
+- Mısırlı: aynı bedenin iki rengi toplanıyor (karar); kullanıcı renk renk isterse değişir.
 - Canlıya geçiş: depo yeri kurulumu (bakım penceresi) + Entegrasyon bağlantısının canlıya çevrilmesi.
 - Önceden kalanlar: Shopify indirim kodu, el terminali açık soruları.
