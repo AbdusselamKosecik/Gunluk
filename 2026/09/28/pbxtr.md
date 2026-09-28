@@ -67,6 +67,37 @@ yazılmadı.
 ### 3. ClickUp
 `clickup-senkron.js` → BR-DB-117 complete, BR-DB-67 complete. `--kuru`: fark 0, izde olmayan 0.
 
+### 4. Integration.Tests ilk kez koştu — sunucuda (DooD)
+- **Neden:** yerel Docker yok; BR-DB-67/117 entegrasyon testleri hiç koşmamıştı.
+- **Ne yapıldı:** `git archive HEAD` → sunucuda `/root/pbxtr-it`; SDK konteyneri
+  `--network host` + docker.sock ile, Testcontainers kardeş PG/Redis açıyor.
+- **Komut:**
+  ```bash
+  git archive HEAD | ssh root@176.88.41.220 'mkdir -p /root/pbxtr-it && tar -x -C /root/pbxtr-it'
+  ssh root@176.88.41.220 'cd /root/pbxtr-it && docker run --rm --network host     -v /var/run/docker.sock:/var/run/docker.sock -v /root/pbxtr-it:/src     -v /root/.nuget-pbxtr:/root/.nuget/packages -w /src     -e TESTCONTAINERS_RYUK_DISABLED=true -e PBXTR_REQUIRE_DOCKER_TESTS=1     mcr.microsoft.com/dotnet/sdk:10.0 dotnet test tests/Pbxtr.Integration.Tests/Pbxtr.Integration.Tests.csproj     --filter "FullyQualifiedName~DealerTenantMoveDealerStaffHttpTests"     --logger "console;verbosity=normal" > /root/it.log 2>&1'
+  ```
+  Çıktıyı `tail` ile KESME: ilk koşuda `tail -60` başarısız test adlarını dışarıda bıraktı.
+- **Sonuç:** 15/17 → iki **test fikstürü** hatası (ürün kodu doğru):
+  - `BrDb67_ikinci_ev_tenanti_23505`: INSERT saklamayı 0 yazıyordu → 23514 (CHECK) indeksten önce
+    patladı. Dünkü ürün hatasının test ikizi. 1 yapıldı.
+  - Sızıntı testi `permission_version`'ı `int` okuyordu; kolon bigint.
+  - Düzeltmeden sonra **17/17**. **Commit:** `f9861979`.
+
+### 5. BR-DB-118 — kısmi tekil indeks envanteri 9 → 18
+- **Neden:** bekçi 9 indeks için yalnız UYARI veriyordu; yüklem daraltılsa/indeks düşse hiçbir
+  kapı görmezdi. (Dün 8 sayılmıştı; `ux_ring_group_members_group_external` sunucuda henüz
+  kurulmadığı için görünmüyordu — evren depodan çıkarılınca bulundu.)
+- **Ne yapıldı:** `02-guards.sql` — `pbxtr_partial_unique_index_expectations()` + ikinci literal
+  liste (C sıralı) + vacuity 18; `partial-unique-indexes.expected`; `ci-check.sh` bayat "7 satır"
+  mesajı. Tazeleme migration'ı `20260928100000_PartialUniqueIndexInventory` (yalnız 02, Down boş).
+  `sablon-refresh.expected` 02 satırı; kapi_07 Karar#87 onay satırı (`git hash-object`).
+  Üretim betiği: tanımlar sunucuda bekçinin normalizatörüyle okundu, EF snapshot kolonlarıyla
+  karşılaştırıldı; betik mevcut 9 satırı dosyadan okuyup 9 yeniyi ekleyip sıralıyor.
+- **Ölçüm (sunucu PG, ROLLBACK):** tüm 02 uygulandı, `GuardAsserts` 30/30, bekçi 0 satır.
+  Mutasyon `DROP INDEX ux_silence_thresholds_did` → `PARTIAL_UNIQUE_MISSING` + assert RAISE.
+- **Yerel:** Architecture 794/794; kapi_07 OK; kapi_71 TEMIZ (K6 commit sonrası da).
+- **Commit:** `7f02b806`. ClickUp: kart açıldı (yeni 1), senkron fark 0.
+
 ## Kararlar
 - Personel taşıma tek yazma kapısıyla, DB'de. Uygulama katmanında GUC çevirme **yok**.
 - Müşteri tenant'ına bağlı satırı (dahili / kuyruk / beceri) olan personel **taşınmaz**;
@@ -74,9 +105,9 @@ yazılmadı.
 - Migration tüm 01'i değil yalnız fonksiyonu uygular (call-permission FAIL-CLOSED penceresi yok).
 
 ## Açık kalanlar / sonraki adım
-- **Integration.Tests hiç koşmadı:** `BrDb67_*` (5), `BrDb117_*` (3, biri sızıntı testi) ve
+- ~~**Integration.Tests hiç koşmadı:**~~ → hedefli sınıf sunucuda 17/17 (bkz. 4). Eski not: `BrDb67_*` (5), `BrDb117_*` (3, biri sızıntı testi) ve
   `DealerHomeTenant` + `DealerStaffHomeRelocation` + `RingGroupExternalMember` + 09-25 migration'ları.
-- Kısmi indeks bekçisi 8 **başka** kayıt dışı indeks için UYARI veriyor (`ux_silence_*`,
+- ~~Kısmi indeks bekçisi 8 **başka** kayıt dışı indeks için UYARI veriyor~~ → BR-DB-118 ile kapandı (9 indeks) (`ux_silence_*`,
   `ux_wallboard_layouts_*`, `ux_callback_entries_*`, `ux_tickets_open_qa_objection`).
   Yayını kırmıyor, benim işim değil; kartsız.
 - Kullanıcı testi (demo.bayi): migrate → `…/home-tenant` 201 → `…/home-tenant/staff` 200 →
