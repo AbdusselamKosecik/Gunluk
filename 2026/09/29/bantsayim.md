@@ -67,3 +67,40 @@ uygulama kapanınca bilgisayar kapanır, başka yere geçiş PIN korumalı Yöne
 - Gerçek donanımda (Debian 13 netinst) uçtan uca deneme: otomatik giriş, poweroff, USB tartı (/dev/ttyUSB0).
 - Linux'ta SQL şifresi b64 (dosya 600); gerekirse libsecret/anahtar dosyası.
 - Tartı ayarı placeholder'ı "COM3" — Linux'ta /dev/ttyUSB0 olmalı.
+
+---
+
+## Tur 2 — Üretim bant terminali (Sentez ERP) tasarımı
+
+### Bağlam
+Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. kalite box → box kapanınca
+10 numaralı fiş, SentezCore'a doğrudan SQL. Önce inceleme + brainstorming, kod yok; spec yazıldı.
+
+### 1. SentezCore incelemesi (salt-okuma)
+- **Nasıl:** Uygulamanın kendi `ayarlar.json`'ındaki DPAPI şifresi PowerShell `ProtectedData.Unprotect`
+  (entropi `Modfex.Ortak.Ayarlar`, CurrentUser) ile `SQLCMDPASSWORD`'a alındı, ekrana basılmadı;
+  `sqlcmd -S 192.168.0.2 -d SentezCore -U uzman -C -N -W -s "|"`. Script scratchpad'de (`q.ps1`,
+  `powershell -ExecutionPolicy Bypass` şart; yol `cygpath -w` ile verilmeli).
+- **Bulgular:** Kesim=ProcessId 167 (1020 kayıt); kesim başlığında WorkOrderId NULL → iş emri
+  `Erp_WorkOrderItem.WorkOrderId`; varyant yolu `ProductionVariant.WorkOrderItemVariantId → WorkOrderItemVariant`.
+  UZM_FindBarcode / UZM_CreateReceipt* SentezCore'da YOK (SentezCore2026'da var). ReceiptType 10 hiç yok.
+  Erp_QualityType boş. FaultyCard 13 kayıt. TRM-01 (1128) günlük Erp_Box açıyor (8 haneli kod).
+  15.841 barkod çok şirketli → barkod `Erp_Inventory.CompanyId` ile filtrelenmeli.
+  Depo 42 · U · Uretim Depo: yer takibi açık, **yeri yok**.
+
+### 2. Kararlar (kullanıcı)
+- Test/geliştirme doğrudan canlı SentezCore (TestModu → `TST` önek + temizle.sql).
+- Box kodu `URT{K}-{YYAAGG}-{BANT:000}-{SIRA:0000}`; UD_ kolonları (BoxItem.UD_WorkOrderItemId,
+  BoxItemVariant.UD_WorkOrderItemVariantId); farklı iş emri okutulursa box otomatik kapanıp yenisi açılır.
+- Hata kartı barkodu `HK`+FaultyCode; 2K modu tek okutmalık; Sil modu var.
+- Fiş: tip 10, fiyatsız, **gün+bant** başına tek fiş (SpecialCode `URT-PL-003`), depo 42, 2K aynı depo (QualityTypeId).
+- Mantık uygulamada (C# + Dapper transaction, applock), SP değil.
+- Bant Kabul ekranları kalıyor → Sentez kullanıcısının Yönetim menüsünde.
+- **Dokunulan dosyalar:** `docs/superpowers/specs/2026-09-29-uretim-bant-terminali-design.md`,
+  `docs/referans/sentezcore2026-uzm-createreceipt.sql` (kullanıcının yapıştırdığı SP'ler)
+- **Commit:** `fd76a4b` — Uretim bant terminali tasarimi (spec) + fis sablonu referansi
+
+### Açık kalanlar
+- Kullanıcı spec'i inceleyecek → sonra writing-plans ile uygulama planı.
+- Kullanıcı Sentez'de açacak: Erp_QualityType 1./2. Kalite, depo 42 için yer; RecId'ler UZM_Ayar'a.
+- Plan görev 1: Erp_InventoryReceiptItem(Variant) kolonlarını SentezCore'da şablonla karşılaştır.
