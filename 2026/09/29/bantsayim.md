@@ -116,3 +116,9 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
 - **Sonuç:** RecId **2 = 1. Kalite**, **3 = 2. Kalite**. Spec'e işlendi (`Kalite1TipId=2`, `Kalite2TipId=3`).
 - **Commit:** `a9795d5` — Spec: Erp_QualityType 1./2. Kalite acildi (RecId 2, 3)
 - Ubuntu paketi isteği: `paketle-linux.sh` çalıştırılmak üzereyken kullanıcı durdurdu (yapılmadı).
+
+### 4. U deposu (42) yer takibi kapatıldı — depo yeri kullanılmayacak
+- **Neden:** Kullanıcı kararı: üretim deposunda depo yeri olmayacak. Depo 42 `FollowUpWarehouseLocation=1` açılmıştı ve yeri yoktu.
+- **Komut:** `UPDATE Erp_Warehouse SET FollowUpWarehouseLocation=0, UpdatedAt=GETDATE(), UpdatedBy=1 WHERE RecId=42 AND CompanyId=2 AND WarehouseCode='U'` (1 satır).
+- **Spec:** `UretimDepoYerId`, `DepoYeriTanimsiz` çıkarıldı; fiş satırında `InWarehouseLocationId=NULL`.
+- **Ders:** Kullanıcı U deposunu açtığını söyleyince "gördüm, 42" diye net teyit et; yer takibini varsayılan sorun gibi sunma.
