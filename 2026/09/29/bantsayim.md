@@ -133,3 +133,28 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
   ```
 - **Sonuç:** https://github.com/AbdusselamKosecik/bantsayim (PRIVATE), main = `0431cbb`. Remote'lar: `origin` (GitLab), `github`.
 - Sonraki değişikliklerde her iki remote'a push: `git push && git push github main`.
+
+### 6. Uygulamaya başlangıç (30 dk dilimi): şema + saf kurallar + testler
+- **Neden:** Kullanıcı "30 dakikalık iş yapalım" dedi → spec onayı sayıldı; en düşük riskli dilim seçildi.
+- **Fiş kolon karşılaştırması** (plan görev 1): SentezCore şeması SentezCore2026'dan eski.
+  Şablonda olup DB'de olmayan (INSERT'ten çıkarılacak): başlık 7 (`UD_KargoTakipNumarası`(ı), ElectricExcise*,
+  UD_MarketBank, DocumentTrackNo, CargoCompanyName, ToRecId), kalem 25 (UTS*, ElectricExcise*, ReturnReceipt*,
+  WorkOrderProductionId, WidthCM/LengthCM/M2Gram, SecondQuantity, ForegoneVatAmount, ItemClassificationCode,
+  WeightedQuantity, ToRecId, YTMachine*), varyant 2 (WorkOrderProductionVariantId, ToRecId).
+  DB'de olup şablonda olmayan: `UD_KargoTakipNumarasi` (i ile), `UD_TeslimEdilen` → NULL. NOT NULL kolon yok.
+- **`db/0001_uretim.sql`** yazıldı ve canlı SentezCore'a **iki kez** uygulandı (idempotent doğrulandı):
+  UZM_Ayar (+IX0 unique CompanyId,Anahtar), UZM_UretimBox (IX0 filtreli unique `(CompanyId,BantUserId,Kalite) WHERE Durum=0`,
+  IX1, IX2 unique BoxId, FK Erp_Box), UZM_UretimOkutma (IX0–IX3), UD kolonları, ayarlar şirket 2:
+  UretimDepoId=42, Kalite1TipId=2, Kalite2TipId=3, KesimProcessId=167, FisTipi=10, TestModu=0.
+  ```bash
+  powershell -NoProfile -ExecutionPolicy Bypass -File <scratch>\q.ps1 -sqlFile <repo>\db\0001_uretim.sql
+  ```
+- **`BantSayim/Ekranlar/Veri/UretimKurallari.cs`**: BantNo, Rol (UretimRolu), HataKodu (HK), BoxKodOnEki,
+  SonrakiBoxKodu, FisOzelKodu, SonrakiFisNo. TDD: önce testler (derleme hatası = kırmızı), sonra kod.
+- **`BantSayim.Tests`** (xUnit, slnx'e eklendi): 29 test geçti (`dotnet test BantSayim.Tests`); Desktop build 0 uyarı.
+- **Commit:** `4e2d574` — Uretim terminali: db/0001 semasi, saf kurallar ve testler (GitLab + GitHub)
+
+### Açık kalanlar / sonraki adım
+- UretimDeposu (okut/sil/box aç-kapat transaction), FisYazici (şablon − eksik kolonlar), giriş listesi + rol yönlendirme,
+  OkutmaView, YonetimView (raporlar, hata kodları, bant kabul).
+- TestModu sorusu hâlâ açık (şu an 0).
