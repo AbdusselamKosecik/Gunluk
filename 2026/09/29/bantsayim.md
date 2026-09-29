@@ -187,3 +187,29 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
 - Giriş ekranı kullanıcı listesi + rol yönlendirme, OkutmaView/ViewModel, YonetimView (raporlar, hata kodları, bant kabul),
   mesaj anahtarlarının TR/EN/AR metinleri.
 - TestModu sorusu hâlâ açık (0).
+
+### 8. Ekranlar: giriş listesi, okutma, yönetim
+- **Ortak (SURUM 1→2):** `UygulamaBilgisi.KullaniciFiltresi` (sabit SQL koşulu, `Meta_User u`). Doluysa giriş ekranı
+  kullanıcı kodu kutusu yerine düğme listesi (ListBox + WrapPanel) gösterir; `SentezGiris.GirisYapAsync` da aynı koşulu
+  uygular (listede olmayan giremez). `SentezGiris.KullanicilarAsync`, `KullaniciOzet`. Diğer repolara taşınacak.
+- **App.axaml.cs:** filtre `(u.UserCode LIKE 'PL-%' OR u.UserCode = 'Sentez')`; `IlkSayfa` → Rol Bant ise
+  `OkutmaViewModel.Olustur()`, değilse `YonetimViewModel`. Uygulama adı "Bant Terminali".
+- **OkutmaView/ViewModel:** OkutKutusu; `HK..` → `HataKartiBulAsync` → amber şerit (İptal); Sil anahtarı (kırmızı şerit);
+  `BoxKarti` ×2 (1K yeşil / 2K amber kenar; box kodu, iş emri, model+renk, büyük adet, beden dağılımı,
+  "Box'ı kapat" → satır içi Evet/İptal onayı); son 10 okutma; "Bugün: 1K · 2K · box". Her işlemden sonra DB'den yenilenir.
+- **YonetimView/ViewModel:** sekmeler Raporlar | Hata Kodları + "Bant Kabul →" (Git ile mevcut liste ekranı).
+  Raporlar: CalendarDatePicker ×2, bant ComboBox, bant özeti (1K, 2K, 2K %, kapalı/açık box), hata dağılımı (adet, %),
+  box listesi (500 satır) + seçili box içeriği. Hata kodları: liste + düzenleme formu (kod, ad, puan, aktif, minor/major/critical),
+  kod çakışma kontrolü, silme yok.
+- **Veri:** `UretimDurumu.cs`, `UretimRaporlari.cs`, `HataKartlari.cs` (Erp_FaultyCard'da tetikleyici yok → `OUTPUT INSERTED.RecId` güvenli).
+- **Tuzaklar:** `BantSecenegi` adı YeniBantKabulViewModel'de vardı → `BantFiltreSecenegi`. Bash heredoc içinde `'` + Arapça
+  metinli uzun betik "unexpected EOF" verdi → Python betiğini Write ile dosyaya yazıp çalıştırmak çözdü.
+- **Bulgu:** SentezCore'da `Sentez` şifresi `147963` DEĞİL (HASHBYTES karşılaştırması) — arayüzü elle denemek için kullanıcıdan şifre gerekli.
+- **Test:** `EkranSorgulariTestleri` (4 DbFact, salt okuma). Bu turda VPN (100.119.104.122) test ortasında koptu,
+  sqlcmd de bağlanamadı → DB testleri tamamlanamadı; çevrimdışı 29/29 geçti, build 0 uyarı.
+- **Commit:** `e5946fa` — Uretim terminali ekranlari: giris listesi, okutma, yonetim (GitLab + GitHub)
+
+### Açık kalanlar
+- VPN gelince: `MODFEX_DB_TEST=1 dotnet test BantSayim.Tests` (40 test) + canlı iz kontrolü (TST box/fiş 10/UZM = 0).
+- Arayüzü elle deneme: bir PL kullanıcısı ve Sentez şifresi gerekli.
+- Ortak SURUM 2 değişikliklerini diğer repolara taşı. TestModu sorusu açık (0).
