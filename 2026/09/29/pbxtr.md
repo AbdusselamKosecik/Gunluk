@@ -79,6 +79,36 @@ Komut hep aynı: `PYTHONUTF8=1 bash deploy/yerel-yayin.sh --yayinla --santral > 
 - Staging adımı 17:05Z'de (20:05 İstanbul) yalnız sunucu tarafı yeniden koşulacak şekilde
   kuruldu (imajlar zaten yayında; tam boru hattı tekrar koşulmaz).
 
+### 5. Staging (20:05 İstanbul) + BR-OPS-09 gerçek santralde: Bitti
+- **Staging:** mesai dışında yalnız sunucu adımı koşuldu (imajlar hazırdı):
+  `ssh root@176.88.41.220 "PBXTR_DAGITICI_SHA=… PBXTR_SANTRAL_IMAJ='tekbirsoft/pbxtr-asterisk:22-736f570d6557' … /root/staging-yayin.sh 736f570d6557"`
+  → `STAGING_RC=0`; 9 migration uygulandı (`__EFMigrationsHistory` 244, son
+  `20260928100000_PartialUniqueIndexInventory`); app + santral `736f570d`.
+- **S1–S9:** `bash deploy/asterisk-sunucu-sapma.sh` → dokuzu TAMAM (S1 imaj güncel, S2 betik depoyla aynı).
+- **Dialplan:** confd ilk tick'te 304 aldı; renderer parmak izi değiştiği için
+  `ProvisioningRerenderJob` ~6 dk sonra üç tenant'ı yeniden üretti (t0007 dialplan rev 30),
+  confd teslim etti: `Progress()` ×10, `Playback(…,noanswer)`, `en` yedeği, `Hangup(21)`.
+- **(4) telde ölçüm (17:16Z):** yerel `deploy/asterisk-lab/trunk` (compose; sır sunucu
+  dosyasından değişkene okundu, basılmadı) → `channel originate PJSIP/7700@t0007-trunk-lab-remote`.
+  Sunucuda geçici `exten => 7700,1,Goto(pbxtr-t0007-in,902129990007,1)` (lab bağlamı,
+  damgalı yedek) + t0007 geçici `suspended`. Sonuç:
+  - edge `announce=pbxtr%2Fsys%2Fhizmet-disi-en`; `CURLOPT(hashcompat)` `%2F`'yi **çözdü**;
+  - `UserEvent(PbxtrRouteDecided … Reason: TENANT_SUSPENDED)` → `call_events` `routeSuspended=1`;
+  - arayan: `100` → `183 Session Progress` → `603 Decline` (Q.850 cause=16); **200 OK yok**
+    (cevaplanmadı, ücretlenmez); santral `Playing 'pbxtr/sys/hizmet-disi-en.gsm'` ~4,9 sn.
+- **Yeni kusur — kapı hiç koşmamıştı:** `staging-yayin.sh` anons kapısını
+  `/home/vuo/pbxtr-demo/deploy/` altında arıyordu, dizin sunucuda yoktu; 25 Eylül'den beri
+  her yayın "ATLANDI" yazdı. `bakim-duyurusu.sh` de hiç açılmadı. Düzeltme `67e4e885`:
+  `yerel-yayin.sh` üç betiği taşır, anons betiği yoksa `exit 1`; öz-test `sANONS` 18/18,
+  eski dal geri konunca KIRMIZI. Kapı sunucuda ilk kez koştu: YEŞİL. Yerel kapılar 87+6 yeşil.
+- **Temizlik:** t0007 `active` (uç 30 sn sonra askıyı bırakıyor), lab bağlamı yedekten geri +
+  `dialplan reload`, verbose kapalı, yerel trunk `compose down`; `call_events` 3 +
+  `webhook_outbox` 2 ölçüm satırı sayı korumalı silindi. pbxtr `cdr`'de 1 satır
+  (linkedid `1790702169.0`) bırakıldı — Asterisk CDR'ı durduğu için.
+- **Commit:** `67e4e885` (düzeltme), `51fc7746` (kart Bitti), ClickUp eşleme; pano fark 0.
+- **Not:** lab trunk yapılandırması okunurken lab trunk parolası oturum çıktısına düştü;
+  değiştirilmesi önerildi.
+
 ## Kararlar
 - Test sunucusunda mesai kapısı **aşılmadı**; kapı ölçülmemiş kilit penceresini koruyor,
   bekleme maliyeti yalnız saat.
@@ -87,7 +117,7 @@ Komut hep aynı: `PYTHONUTF8=1 bash deploy/yerel-yayin.sh --yayinla --santral > 
   "Filtreli test kapıyı görmez").
 
 ## Açık kalanlar / sonraki adım
-- 20:05 staging → S1/S2 yeniden ölç, `__EFMigrationsHistory`'de 9 migration, dialplan'de
-  `Progress()`/`noanswer`, BR-OPS-09 (4) telde (askıdaki tenant anonsu) → kart + ClickUp.
+- Açık kart kalmadı; yalnız kullanıcının "es geç" dediği dört kart duruyor.
+- ÖLÇÜLMEDİ: anonsun RTP'sinin arayana fiilen aktığı (sayaç okunmadı).
 - ÖLÇÜLMEDİ: #37 sağlık ekranı confd KISMI durumunu 4 günde gösterdi mi.
 - Es geçilenler: BR-C2-1, BR-C2-2, BR-DB-74, BR-OPS-14.
