@@ -104,3 +104,15 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
 - Kullanıcı spec'i inceleyecek → sonra writing-plans ile uygulama planı.
 - Kullanıcı Sentez'de açacak: Erp_QualityType 1./2. Kalite, depo 42 için yer; RecId'ler UZM_Ayar'a.
 - Plan görev 1: Erp_InventoryReceiptItem(Variant) kolonlarını SentezCore'da şablonla karşılaştır.
+
+### 3. Erp_QualityType kayıtları açıldı (canlı SentezCore, kullanıcı isteğiyle)
+- **Neden:** Tablo boştu; box/fiş QualityTypeId için gerekli. Kullanıcı "sen aç, TST olarak açma" dedi.
+- **Komut (sqlcmd, transaction, idempotent):**
+  ```sql
+  INSERT INTO Erp_QualityType (CompanyId, QualityCode, QualityName, InUse, InsertedAt, InsertedBy, IsDeleted)
+  VALUES (2,'1',N'1. Kalite',1,GETDATE(),1,0), (2,'2',N'2. Kalite',1,GETDATE(),1,0)  -- IF NOT EXISTS ile
+  ```
+  Tabloda yalnız RecId zorunlu; unique `Erp_QualityType_IX0 (CompanyId, QualityCode)`; tetikleyici yok.
+- **Sonuç:** RecId **2 = 1. Kalite**, **3 = 2. Kalite**. Spec'e işlendi (`Kalite1TipId=2`, `Kalite2TipId=3`).
+- **Commit:** `a9795d5` — Spec: Erp_QualityType 1./2. Kalite acildi (RecId 2, 3)
+- Ubuntu paketi isteği: `paketle-linux.sh` çalıştırılmak üzereyken kullanıcı durdurdu (yapılmadı).
