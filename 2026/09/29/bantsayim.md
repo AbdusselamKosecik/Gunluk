@@ -158,3 +158,32 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
 - UretimDeposu (okut/sil/box aç-kapat transaction), FisYazici (şablon − eksik kolonlar), giriş listesi + rol yönlendirme,
   OkutmaView, YonetimView (raporlar, hata kodları, bant kabul).
 - TestModu sorusu hâlâ açık (şu an 0).
+
+### 7. Evden devam: sunucu IP'si + yazım katmanı (okutma/sil/box/fiş)
+- **IP:** Evde sunucu `100.119.104.122` (VPN). Yalnız bu makinedeki `%LOCALAPPDATA%\Modfex\bantsayim\ayarlar.json`
+  `Sunucu` alanı değişti (repoya girmez). İlk SqlClient denemesi "Named Pipes error 40" ile düştü — geçiciydi
+  (VPN yeni bağlanıyordu); `scratchpad/bagtest` küçük programıyla Mandatory/4096/tcp:/Optional hepsi bağlandı.
+- **FisSql.cs üretimi:** Kullanıcının yapıştırdığı orijinal metinden (tek satır) Python ile kolon/değer çiftleri
+  çıkarıldı (`--<...>` yorumları regex ile silindi, üst düzey virgülle bölündü; 213/255/52 çift birebir),
+  SentezCore'da olmayan kolonlar atıldı → başlık 206, kalem 230, varyant 50 kolon. Değişen değerler: parametreler,
+  CurrentAccount/Address/Forex NULL, fiyat 0, VatRate 0, CalcType 0, InsertedBy=@UserId, QualityTypeId, WorkOrderId,
+  WorkOrderItemVariantId; tarih/saat `@Zaman` (sunucu GETDATE). Tetikleyicili tablolar için `OUTPUT ... INTO @yeni`.
+- **UretimDeposu.cs:** OkutAsync (HK→2. kalite, barkod→varyant şirket filtresi, son kesim, açık box UPDLOCK,
+  iş emri farklıysa kapat+fiş+yeni box, BoxItem/Variant +1, log), SilAsync, BoxKapatAsync, BoxAcAsync
+  (applock `UZM_UretimBoxSira`, `LIKE önek+[0-9]x4` MAX), KilitAlAsync (`sp_getapplock`, <0 → THROW 51222),
+  GuvenliAsync (1205/1222/51222 bir kez tekrar, UretimHatasi → sonuç).
+- **FisYazici.cs:** applock `UZM_UretimFis`; başlık gün+bant (SpecialCode, ReceiptDate, CurrentAccount 0) bul/aç,
+  numara 8 hane MAX+1; kalem anahtarı (InventoryId, ana birim, QualityTypeId, WorkOrderId), varyant anahtarı; box bağları.
+- **Bulgu:** `Erp_Box.EmployeeId` FK → `Erp_Employee` (Meta_User değil). PL kullanıcılarında `Meta_User.EmployeeId` NULL,
+  mevcut box'larda da hiç dolu değil → `(SELECT EmployeeId FROM Meta_User WHERE RecId=@UserId)` yazılıyor; spec güncellendi.
+- **Testler:** `UretimDeposuEntegrasyonTestleri` (7 test, `[DbFact]`, `MODFEX_DB_TEST=1`), her test transaction + ROLLBACK,
+  transaction içinde TestModu=1. Kapsam: ilk okutma, aynı box adet, HK 2. kalite ayrı box, sil (sıfırda satır silinir,
+  KutudaYok), farklı iş emri → kapat + fiş (tip 10, TST-PL-010, depo 42, InsertedBy 1144, fiyat 0, yer NULL, bağlar dolu),
+  aynı gün 2. box aynı fişe birleşir (1 kalem, 2 adet), boş box/bilinmeyen barkod/HK.
+  `MODFEX_DB_TEST=1 dotnet test BantSayim.Tests` → **36/36**. Sonrası canlı kontrol: TST/URT box 0, fiş 10 yok, UZM 0, applock 0.
+- **Commit:** `a3f50ed` — Uretim terminali: okutma/sil/box ve gunluk 10 fisi yazimi (GitLab + GitHub)
+
+### Açık kalanlar
+- Giriş ekranı kullanıcı listesi + rol yönlendirme, OkutmaView/ViewModel, YonetimView (raporlar, hata kodları, bant kabul),
+  mesaj anahtarlarının TR/EN/AR metinleri.
+- TestModu sorusu hâlâ açık (0).
