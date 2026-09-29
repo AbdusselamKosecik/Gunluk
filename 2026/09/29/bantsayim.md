@@ -122,3 +122,14 @@ Yeni görev: PL-001..PL-010 bant kullanıcıları için barkod okutma → 1./2. 
 - **Komut:** `UPDATE Erp_Warehouse SET FollowUpWarehouseLocation=0, UpdatedAt=GETDATE(), UpdatedBy=1 WHERE RecId=42 AND CompanyId=2 AND WarehouseCode='U'` (1 satır).
 - **Spec:** `UretimDepoYerId`, `DepoYeriTanimsiz` çıkarıldı; fiş satırında `InWarehouseLocationId=NULL`.
 - **Ders:** Kullanıcı U deposunu açtığını söyleyince "gördüm, 42" diye net teyit et; yer takibini varsayılan sorun gibi sunma.
+
+### 5. GitHub'a ayna (özel repo)
+- **Neden:** Kullanıcı isteği ("bu şekilde GitHub'a gönder"); repo yalnız GitLab'daydı.
+- **Komutlar:**
+  ```bash
+  gh repo create AbdusselamKosecik/bantsayim --private --source . --remote github --push   # ilk push 404 ile kesildi
+  git push -u github main          # ikinci deneme başarılı
+  git branch -u origin/main main   # varsayılan upstream yine GitLab
+  ```
+- **Sonuç:** https://github.com/AbdusselamKosecik/bantsayim (PRIVATE), main = `0431cbb`. Remote'lar: `origin` (GitLab), `github`.
+- Sonraki değişikliklerde her iki remote'a push: `git push && git push github main`.
