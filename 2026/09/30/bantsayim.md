@@ -103,3 +103,16 @@ için DB testleri tamamlanamamıştı. Kullanıcı PL-001 şifresini verdi (`001
 - **Canlıdaki ilk gerçek okutmalar (PL-001, 30.09):** 44 okutma (1K 41, 2K 3); `URT1-260930-001-0001` 28 adetle kapandı →
   **ilk 10 fişi `00000001`** (URT-PL-001, depo 42, InsertedBy 1134, 1 kalem 28 = varyant 28); açık: URT1-…-0002 (13), URT2-…-0001 (3).
   Her box'ta log net = box içeriği. Kesim aşımı yok (en çok SİYAH 90B 19/100).
+
+### 9. Üretim fişine BoxId (kalem box başına)
+- **İstek:** "Üretim fişine BoxId de ekleyelim, hangi box kaydedildi bilelim." Geriye dönük düzeltme **istenmedi** — kullanıcı
+  şimdiye kadarki deneme kayıtlarını (box, fiş 00000001, log) kendisi silecek.
+- **Karar:** Fiş başlığı gün + bant başına tek kalır; kalem birleştirme anahtarına `BoxId` eklendi → Sentez fişinde her satır
+  bir box'a ait (`Erp_InventoryReceiptItem.BoxId`, standart kolon). Aynı box'ın aynı ürünü tek kalemde birleşir.
+- **Kod:** `FisSql.KalemEkle` şablondaki `BoxId` değeri `null` → `@BoxId` (kolon/değer sırası Python ile eşlenerek; şablonda
+  küçük harf `null` idi); `FisYazici` kalem arama `AND ISNULL(BoxId,0) = @BoxId`, INSERT'e `BoxId = boxId`.
+- **Test:** farklı iş emri testi kalemin BoxId'sini doğrular; "aynı gün ikinci box" testi → 2 kalem (box1: 2 adet, box2: 1 adet),
+  aynı fiş no. 46/46. Commit bu kez testlere `&&` ile bağlandı.
+- **Spec §7.3** güncellendi.
+- **Commit:** `61e8613` — Uretim fisi: kalemler box basina, BoxId dolu (GitLab + GitHub)
+- Not: ekrandaki çalışan uygulama eski sürüm; yeniden başlatılınca yeni davranış geçerli.
