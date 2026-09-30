@@ -35,3 +35,12 @@ için DB testleri tamamlanamamıştı. Kullanıcı PL-001 şifresini verdi (`001
 - Kullanıcının arayüzü elle denemesi (PL-001). Canlıda gerçek okutma = gerçek box + 10 fişi (TestModu 0).
 - Sentez kullanıcısı şifresi (yönetim ekranı elle denemesi için).
 - Ortak SURUM 2'yi diğer repolara taşı; Ubuntu paketi; TestModu sorusu açık.
+
+### 5. Açılışta açık box'tan devam
+- **İstek:** "Açıldığında box var mı kontrol edelim, varsa ondan devam edelim."
+- **Durum:** Zaten böyleydi — `OkutmaViewModel.GosterildiAsync` → `UretimDurumu.AcikBoxlarAsync` (UZM_UretimBox Durum=0)
+  kartlara yükler; `UretimDeposu.OkutAsync` açık box'ı `UPDLOCK` ile alır, yeni box açmaz (iş emri farklıysa kapatır + yeni).
+- **Eklenen:** ilk açılışta açık box varsa toast `AcikBoxDevam` ("Açık box'tan devam ediliyor: URT1-… (12)"), TR/EN/AR.
+- Canlı kontrol: şu an açık box yok, okutma 0, fiş 10 yok.
+- Build: açık uygulama DLL'i kilitlediği için Desktop derlenemedi; `BantSayim` + testler 41/41.
+- **Commit:** `7f65a25` — Okutma: acilista acik box bildirimi
