@@ -30,6 +30,15 @@ menüden kaldırılmasını istedi.
   öğe vardı. `/rayic` rotası, sayfası ve arka tarafı duruyor.
 - **Commit:** `a8d323c`
 
+### 3. Paket
+- **Ön kontrol:** Commit edilmemiş kod yoktu; `main` = `origin/main` = `a8d323c`. Temiz worktree'den
+  `deploy/yayinla.ps1` çalıştırıldı (`appsettings.json` worktree'ye kopyalandı).
+- **Sonuç:** `SentezServis-2026-09-30-misirli-renk-kirilimi.zip`, 73,8 MB. Arayüz 2026-09-30 13:59.
+- **29.09 paketiyle karşılaştırma:**
+  - Dosya listesi aynı.
+  - app.js: karsit-kodlar 6, siparis-planlama 9, Pierre 3, Mısırlı 1, kasa 13 korunmuş.
+  - "Yeni rayiç" 2 → 1 ve `/rayic` 11 → 10: menü bağlantısı gitmiş, sayfa ve rota duruyor.
+  - Örnek ayarda 6 × `<DOLDURUN>`; `appsettings.json` pakette yok.
+
 ## Açık kalanlar / sonraki adım
-- Yeni paket (kullanıcı isterse; önceki paketle karşılaştırılarak).
 - Sipariş planlama ertelenen küçükler, canlıya geçiş adımları, Shopify indirim kodu, el terminali soruları.
