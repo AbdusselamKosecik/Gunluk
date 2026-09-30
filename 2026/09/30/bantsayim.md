@@ -44,3 +44,17 @@ için DB testleri tamamlanamamıştı. Kullanıcı PL-001 şifresini verdi (`001
 - Canlı kontrol: şu an açık box yok, okutma 0, fiş 10 yok.
 - Build: açık uygulama DLL'i kilitlediği için Desktop derlenemedi; `BantSayim` + testler 41/41.
 - **Commit:** `7f65a25` — Okutma: acilista acik box bildirimi
+
+### 6. Hata kodu kartları (barkod)
+- **Karar:** Önek **HK** kalıyor (kullanıcı: "HK01 tamam"). Barkod Code 128, içerik `HK`+FaultyCode.
+- **Veri:** Erp_FaultyCard aktif 13 kayıt (01 LEKE … 13 PAKET). sqlcmd/PowerShell çıktısında Türkçe bozuk görünüyordu
+  (PS 5.1 kodlaması) — veri nvarchar ve doğru; scratchpad `bagtest` (SqlClient) ile UTF-8 dosyaya `Kod|Ad` döküldü.
+- **Betik:** `araclar/hata_kartlari_pdf.py` (reportlab; `pip install --user reportlab`; Arial TTF). A4, 2×4 kart 90×62 mm,
+  kesikli kesim çerçevesi, pembe "MODFEX · HATA KODU", büyük kod, ad, barkod (barWidth 0.55 mm, 16 mm), okunur metin.
+  ```bash
+  python araclar/hata_kartlari_pdf.py kartlar.txt dagitim/hata-kartlari.pdf   # 13 kart, 2 sayfa
+  ```
+- **Doğrulama:** pymupdf ile 200 dpi PNG + `zxing-cpp` → 13 barkodun hepsi Code128 olarak HK01..HK13 okundu; görsel kontrol OK.
+- PDF: `X:\Gitlab\modfex-apparel\bantsayim\dagitim\hata-kartlari.pdf` (dagitim/ gitignore'da).
+- **Commit:** `6c38b11` — Hata kodu kartlari PDF betigi
+- Açık: Yönetim > Hata Kodları'na "Kartları yazdır" düğmesi (seçenek 2) henüz yapılmadı.
