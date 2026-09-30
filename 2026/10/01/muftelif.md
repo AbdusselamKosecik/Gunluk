@@ -57,3 +57,26 @@ GET /api/sentez/planning/capacity/2026-27   # lMinWeek 17280 (480dk→8 saat dö
 - Adetlerin ERP'den ezilmesi tek yönlü: elle düzeltilmiş adetler ilk çekişte kaybolur, planlamacılara söylenmeli.
 - Excel kolon sırası değişti (D'den sonrası bir kaydı); dışarıdaki makro/sheet varsa etkilenir.
 - Filtreli Excel'de hâlâ "KATEGORISIZ" sayfası olabiliyor: hatta düşen ama kategorisi boş order'lar.
+
+### Canlı (eski) sürüm ile karşılaştırma — doğrulama
+- **Neden:** HDD silinmişti; `http://192.168.3.228:90` üzerinde koşan eski kod geri kalmış olabilir.
+  Kullanıcı Excel çıktılarının ve dikim sonuçlarının yeni kodla karşılaştırılmasını istedi.
+- **Ne yapıldı:** Canlı API'ye login olunup `/api/sentez/uretim-plan/{orders,lines,export}`
+  çekildi; xlsx zip'i açılıp sayfa adları, başlık satırı ve shared-string indeksleri okundu.
+  ERP'den (salt okunur) iki kartın etüt toplamları alındı.
+- **Bulgular:**
+  - Canlı export **10 sayfa**, filtre yok, **MODEL kolonu yok**. Yeni kod ekran filtresini
+    (hat/hafta/dikim yeri) uyguluyor ve STYLE'dan sonra MODEL basıyor.
+  - `A9255-1601` canlı export'ta "5 CEP" sayfası satır 156 ve 181'de; iki siparişinin de
+    (94438, 94731) dikim çıkış tarihi ve haftası boş → plan ekranında yok. Filtre düzeltmesi
+    bunu dışarıda bırakıyor.
+  - 501 siparişin 373'ünde dikim çıkış tarihi yok, 83'ü aktif hat kategorileri dışında
+    (29 GÖMLEK - hat kapalı, 54 kategorisiz). Eski export hepsini basıyordu.
+  - **SMV farkı kart farkıymış:** planda `6510-1259-1691` var (order 94761, smv 21,0904);
+    ERP'de bu kartın UD_SMVF = 21,0904 → doğru. Kullanıcının baktığı `6510-1259` kartının
+    UD_SMVF'i 19,9007 ve bu kart planda hiç yok. Fashion & ND hattının smvKaynak = udf.
+  - **Önceki hipotez yanlıştı:** "muadil (InUse=0) operasyonlar toplama giriyor" bu vakayı
+    açıklamıyor; iki kartta da InUse=0 satır yok. InUse filtresi yine doğru ama sebep bu değil.
+- **Sonuç:** Kodda ek değişiklik gerekmedi; `8794ba7` içindeki düzeltmeler yeterli.
+  Canlıya deploy edilmesi gereken fark: modelKodu alanı, export filtresi + MODEL kolonu,
+  yıkama/lazer parametreleri, InUse filtresi, adetleri Sentez'den her zaman güncelleme.
