@@ -86,3 +86,20 @@ için DB testleri tamamlanamamıştı. Kullanıcı PL-001 şifresini verdi (`001
   scratchpad'e yazılıp çalıştırıldı.
 - **Spec:** §6.2 eklendi.
 - **Commit:** `46cc60d` — Okutma: is emri onbellegi, kesim asimi engeli, 2 gidiste okutma (GitLab + GitHub)
+
+### 8. 4316-2 / 6202 kontrolü ve kesim kutucukları
+- **Kontrol:** 4316-2 (WO 51210, model 6202, 4 kalem) — 4 kesim kaydı (27.09), 16 varyant (EKRU/LACİVERT/PUDRA/SİYAH × 75B–90B),
+  kesim = order miktarı (toplam 6.400), her varyantın tek barkodu var ve son kesimi 4316-2. `8699170209201` = SİYAH 90B, kesim 100.
+  Uygulama kodu ile (geçici test, commit edilmedi) çözüldü: VaryantBul → 9864, SonKesim → 51210 / prod 154210, önbellek 16 barkod.
+- **Ekran (istek: "kesim, okutulanları daha küçük göster", "kutu kutu da olabilir"):** kesim tablosu → renk başına satır, beden
+  başına 84 px kutucuk (beden, 2K adedi küçük, okutulan/kesim, kalan); kesim dolunca kutucuk kırmızı. `KesimGrubu`,
+  `KesimGruplari`, `SiraliSatirlar` renk → beden sırası.
+- **Görsel doğrulama:** scratchpad `ekrangoruntu` projesi (Avalonia.Headless 12.1.2 + Skia, `UseHeadlessDrawing=false`,
+  `CaptureRenderedFrame`) ile OkutmaView örnek veriyle PNG'ye çizildi ve kontrol edildi.
+- **Commit:** `9f8c2bd` — kesim kutucukları. ⚠ Aynı zincirde bir test kırmızıydı (`;` ile commit geçti) →
+- **Test düzeltmesi:** kullanıcı PL-001 ile gerçek okutmaya başlamıştı; giriş testi "açık box yok" varsayıyordu ve
+  `GosterildiAsync` bildirimi `KabukViewModel.Ornek` (testte yok) istiyordu → test canlı veriden bağımsız. 46/46. Commit ayrı.
+  Ders: commit'i testlere `&&` ile bağla.
+- **Canlıdaki ilk gerçek okutmalar (PL-001, 30.09):** 44 okutma (1K 41, 2K 3); `URT1-260930-001-0001` 28 adetle kapandı →
+  **ilk 10 fişi `00000001`** (URT-PL-001, depo 42, InsertedBy 1134, 1 kalem 28 = varyant 28); açık: URT1-…-0002 (13), URT2-…-0001 (3).
+  Her box'ta log net = box içeriği. Kesim aşımı yok (en çok SİYAH 90B 19/100).
