@@ -18,7 +18,7 @@ BR-OPS-09'da ölçülmemiş RTP.
   DEĞİL" notu.
 - **Doğrulama:** `deploy/ci/astdb-fallback-iddiasi-kapisi.py` OK, `deploy/pbxtr-edge/selftest.py`
   OK, ClassBHotPath mimari testleri 3/3, tüm yerel kapılar 87+6 YEŞİL.
-- **Commit:** `e2b8bed1 `.
+- **Commit:** `e2b8bed1`.
 
 ### 2. BR-OPS-09 ek ölçüm: RTP
 - **Neden:** dün "arayana RTP aktı mı" ölçülmemişti.
