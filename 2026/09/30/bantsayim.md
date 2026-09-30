@@ -58,3 +58,31 @@ için DB testleri tamamlanamamıştı. Kullanıcı PL-001 şifresini verdi (`001
 - PDF: `X:\Gitlab\modfex-apparel\bantsayim\dagitim\hata-kartlari.pdf` (dagitim/ gitignore'da).
 - **Commit:** `6c38b11` — Hata kodu kartlari PDF betigi
 - Açık: Yönetim > Hata Kodları'na "Kartları yazdır" düğmesi (seçenek 2) henüz yapılmadı.
+
+### 7. İş emri önbelleği + kesim aşımı engeli + 2 gidişte okutma
+- **İstek:** "Farklı bir order okutulunca o order'ın kesim miktarını ve barkodlarını hafızaya alalım, tekrar tekrar DB'ye gitmesin."
+  Aşım sorusu → kullanıcı **(b) engelle** dedi.
+- **Önce:** okutma başına ~11 DB gidişi (ayar 2, saat, barkod, kesim, açık box, box satırı 4, log) + ekran yenileme 4-5 sorgu.
+- **`IsEmriOnbellegi.cs`:** `IsEmriOnbellegiYukleyici.YukleAsync` tek QueryMultiple (3 sonuç): iş emri başlığı/model; varyant başına
+  kesim (`SUM(pv.Quantity)` ProcessId 167) + 1K/2K okutulan (log); barkodlar — son kesimi bu iş emrinde olan varyantlar ve
+  şirkette barkodun **en küçük RecId** kaydı bu varyantsa (DB'deki VaryantBul `ORDER BY b.RecId` ile aynı sonuç için şart).
+  `UretimOnbellegi` (bant başına, WO → önbellek), `Bul(barkod)`, `AsimOlur`, `Uygula(±1)`, 30 dk ömür.
+  Tuzak: Dapper GridReader'da async multi-map yok → düz `BarkodSatiri` sınıfı.
+- **`UretimDeposu`:** `AyarAsync` (5 dk bellek), `OkutAsync(..., VaryantKesim? cozulmus)`. Gidiş (1): `sp_getapplock
+  UZM_Kesim_{WO}_{varyant}` + kesim/okutulan toplamı (tüm bantlar) + GETDATE + açık box UPDLOCK → `okutulan+1 > kesim` ise
+  `KesimAsildi`. Gidiş (2): BoxItem upsert + BoxItemVariant upsert + log tek T-SQL batch. `UretimSonucu` + WorkOrderId, BoxAcildi.
+  `VaryantKesim` public oldu.
+- **`db/0002_uretim_kesim_index.sql`:** `UZM_UretimOkutma_IX4 (CompanyId, WorkOrderId, InventoryVariantId) INCLUDE (Kalite, Miktar)`;
+  canlıya 2 kez uygulandı (idempotent).
+- **Ekran:** `OkutmaViewModel` — önce bellek; bellek "dolu" diyorsa tazele + tekrar bak (başka bant silmiş olabilir); DB aşım
+  deyip bellek demediyse tazele. Başarıda yerel güncelleme (box kartı `AcikBoxDurumu.Uygula(beden)`, son okutmalar, bugün
+  sayaçları, kesim tablosu); box açılınca/kapanınca tam yenileme. Açılışta açık box'ların iş emirleri belleğe alınır.
+  Yeni **Kesim** kartı: Beden · Renk · Kesim · 1K · 2K · Kalan (0'da kırmızı). `AcikBoxDurumu` → `BedenAdetleri` listesi.
+- **Metinler:** KesimBaslik, Kesim, Kalan, KesimAsildi (TR/EN/AR).
+- **Testler (`IsEmriOnbellegiTestleri.cs`):** birim (Bul, Uygula/AsimOlur, 30 dk); entegrasyon: önbellekteki 40 barkodun
+  hepsi DB sorgusuyla aynı alanları veriyor; önbellekten okutma → box açılır, log'da WorkOrderProductionId doğru; başka bant
+  (1143) kesim−2 okutmuş gibi log satırı → +1 tamam, bir sonraki `KesimAsildi`; sil → yer açılır. **46/46**, Desktop build temiz.
+- **Heredoc tuzağı:** Bash heredoc'ta `'` + Türkçe/Arapça içerikli uzun Python betikleri "unexpected EOF" veriyor → betik Write ile
+  scratchpad'e yazılıp çalıştırıldı.
+- **Spec:** §6.2 eklendi.
+- **Commit:** `46cc60d` — Okutma: is emri onbellegi, kesim asimi engeli, 2 gidiste okutma (GitLab + GitHub)
