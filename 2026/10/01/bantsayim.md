@@ -113,3 +113,13 @@ etiketi, box kapanınca otomatik + tekrar yazdır.
 - **Ne yapıldı:** `BoxEtiketi.Zpl` içinde rozet yalnızca `Kalite == 2` olduğunda basılıyor (dolu `^GB` + `^FR` ile "2. KALİTE").
   Test: 1. kalite etiketinde "KALİTE" geçmemeli. Matris başlığı da `^FR` kullandığı için `^FR` üzerinden kontrol yapılmadı.
 - **Sonuç:** 53/53 test geçti. 2. kalite test etiketi yazıcıya basıldı (192.168.0.199).
+
+## Ek — etiket İngilizce
+- **Kullanıcı isteği:** Etiket tamamen İngilizce olacak.
+- **Eşleme:** İŞ EMRİ → WORK ORDER, 2. KALİTE → 2ND QUALITY, RENK → COLOR, TOP → TOTAL, ADET → QTY,
+  BANT n → LINE n, FİŞ → RECEIPT.
+- **Değişmeyenler:** Renk ve model adları Sentez verisinden geldiği için olduğu gibi kalıyor (ör. LACİVERT).
+- **Rozet:** "2ND QUALITY" yazısı rozete sığmıyordu; yazı yüksekliği 6 mm'den 5 mm'ye indirildi.
+- **Dokunulan dosyalar:** `BantSayim/Ekranlar/Veri/BoxEtiketi.cs`, `BantSayim.Tests/ZplTestleri.cs`. Testler 53/53.
+- **Test basımı:** 1. ve 2. kalite etiketleri basıldı (scratchpad `zplonizle -- <box> --bas12`). Yazıcıya ilk iki denemede
+  bağlanılamadı (TCP connect zaman aşımı), üçüncü denemede gitti. Basılan 2. kalite etiketi rozet yazısı küçültülmeden önceki sürümdür.
