@@ -82,3 +82,14 @@ etiketi, box kapanınca otomatik + tekrar yazdır.
 - Bant Kabul etiketi hâlâ taslak.
 - Önceki turdan kalanlar: deneme kayıtlarının temizliği, TestModu sorusu, Hata Kodları "kartları yazdır" düğmesi,
   Ortak SURUM 3'ün diğer repolara taşınması, Ubuntu paketi.
+
+## Ek — yazıcı test basımı denemesi
+- **Ne yapıldı:** Kullanıcı yazıcı IP'si olarak 192.168.0.199 verdi. Bu IP `ayarlar.json` içine yazıldı (YaziciIp=192.168.0.199,
+  port 9100, DPI 203). Firmaya dönüldüğü için Sunucu yeniden 192.168.0.2 yapıldı.
+- **Sonuç:** Yazıcıya ulaşılamadı.
+  - Ping cevabı: "Destination host unreachable" (cevabı veren 192.168.0.72, yani bu PC). ARP kaydı yok.
+  - 80, 9100, 6101 ve 515 portları kapalı.
+  - IP'de kimse yok: yazıcı kapalı ya da IP'si farklı.
+  - Bu PC 192.168.0.72'de, aynı /24 ağında.
+- **Tekrar deneme:** scratchpad `zplonizle` içinde `dotnet run -- URT1-260930-001-0002 --bas`
+  (`BoxEtiketi.BasAsync` kullanılır, gerçek box etiketi basılır).
