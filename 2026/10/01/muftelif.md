@@ -80,3 +80,61 @@ GET /api/sentez/planning/capacity/2026-27   # lMinWeek 17280 (480dk→8 saat dö
 - **Sonuç:** Kodda ek değişiklik gerekmedi; `8794ba7` içindeki düzeltmeler yeterli.
   Canlıya deploy edilmesi gereken fark: modelKodu alanı, export filtresi + MODEL kolonu,
   yıkama/lazer parametreleri, InUse filtresi, adetleri Sentez'den her zaman güncelleme.
+
+### Yıkama planlaması — süre kaynağı zinciri, ıslak ayrımı, hafta ataması, Excel
+- **Neden:** Kullanıcı: *"sürelerini Sentez'de rotadan çekeceksin (örnek `X:\Gitlab\fredericTr\firedericproduct`),
+  rota olmayanları direkt etütten alacaksın. burada yıkamanın tamamını planlayacağız."*
+- **Referans okuma:** `firedericproduct/ViewModels/OrderViewModel.cs:218` — yıkama rotası
+  `Erp_Inventory.UD_UretimRota1` → `Erp_Route` → `Erp_RouteItem` → `Erp_Process`.
+- **Veri keşfi (salt okunur sqlcmd):**
+  - Açık 481 order: 419 rotalı, **62 rotasız** (48 kart). Rotasızlar eski kodda altı grupta da 0 dk.
+  - Rotasız kartların kendi etüdünde yıkama işlemi (`5xxx` kodlu) **yok** — 48 kartın 1'inde var.
+    Etütlerinde yalnız `1xxx` dikim işlemleri. Ana model kartı (ör. `A355-2029`) sistemde hiç yok.
+  - Aynı `UD_WashName`'e sahip **rotalı** kart 48'in 38'i için mevcut; aynı yıkamadaki kartlar
+    pratikte aynı süreyi veriyor (12 örnekte 11'i tek değer).
+  - `Erp_RouteItem.ProcessTime` yıkama bölümlerinde neredeyse boş (Zımpara 20'ye karşı 6.325);
+    dolu olan kolon `Erp_Process.StandartTime` → kolon seçimi doğruymuş.
+  - `UD_SpreyDurumu` = `Sprey Öncesi` (37.126) / `Sprey Sonrası` (23.991) → ıslak ayrılabilir.
+  - **Tuzak:** DB collation `Turkish_CS_AS`. Test SQL'imi sqlcmd ANSI okuduğu için `Zımpara`
+    literalleri bozuldu, "kodda yazım yanlış" sandım. Hex çözümü koddaki yazımın doğru olduğunu
+    gösterdi. Türkçe harf gereken sorgularda `NCHAR(305)` gibi ASCII-güvenli kurulum kullan.
+- **Karar (kullanıcı seçti):** süre kaynağı = **rota → etüt → aynı yıkama**; hiçbiri yoksa "yok".
+  Kart BÜTÜN olarak tek kaynaktan okunur (yarısı rotadan yarısı etütten gelmez).
+- **Ne yapıldı:**
+  - `PlanningSql.cs` yeniden yazıldı: `Orders` (başlık+miktar), `BolumSureleri` (uzun format,
+    rota+etüt), `YikamaSureleri` (yıkama adı bazlı mod). İşlem→bölüm eşlemesi rotalardan öğrenilir
+    (etüt satırlarında `UD_IslemBolumu` yok).
+  - `PlanningService.cs`: zincir çözümleme, ıslak sprey kırılımı, 2 dk snapshot önbelleği.
+  - `planning_week_atama` tablosu + repository + store; order elle haftaya taşınabiliyor.
+  - `PlanningExport.cs`: Haftalık Yük / Kapasite / Order Detay / Süresi Yok sayfaları.
+  - Web: süre kaynağı rozeti, SP Önce–SP Sonra kolonları, "N süresiz" uyarısı, hafta seçici,
+    Excel'e aktar butonu.
+- **Düzeltme (önemli):** eski ıslak sorgusu `p.RecId IN (SELECT ri.ProcessId ...)` yazdığı için
+  bir rotada TEKRAR EDEN işlemi tek sayıyordu (41.861 rota satırı / 36.001 tekil rota-işlem çifti;
+  bir rotada aynı durulama 6 kez). Artık her satır sayılıyor. PP/Lazer/Kılçık/Yıpratma birebir aynı
+  kaldı, Zımpara'da order başına yuvarlamadan 1 dk fark.
+- **Doğrulama (yerel, gerçek veri):**
+  ```bash
+  dotnet build api/SentezPlaning.Api.sln          # 0 uyarı 0 hata (önce API'yi durdur: exe kilitlenir)
+  curl .../planning/weeks                          # 15 hafta, süresiz 62 -> 11
+  curl .../planning/export                         # 4 sayfa, 482 order satırı
+  curl -X PUT .../orders/92408/week -d '{"week":"2026-40"}'
+  ```
+  - 92408 taşındı: 2026-36 islakOnce 38.704 → 37.885 (−819), 2026-40 32.922 → 33.741 (+819).
+    Atama kaldırıldı, `planning_week_atama` 0 satır — test verisi bırakılmadı. Bilinmeyen order → 404.
+  - 2026-27 kıyası: birleşik ıslak %80,8 iken SP önce **%156,5**, SP sonra %32,0 — eski birleşik
+    gösterim aşımı gizliyormuş.
+  - Önbellek: 15,3 sn → 1,6 sn (ilk) / 1,1 sn (sonraki).
+  - Web build geçti; lint 10 hata + 1 uyarı — **değişiklikten önce de aynıydı** (`8794ba7^`
+    ağacında aynı komut aynı sayıyı verdi).
+- **Commit:** `1602129` — feat(sentez-planing/yikama): sure kaynagi zinciri, islak sprey ayrimi,
+  hafta atamasi, Excel
+
+## Açık kalanlar / sonraki adım
+- 11 order'ın yıkama süresi hâlâ yok (rota+etüt+aynı yıkama hiçbirinde): ör. `A300-1285` (DETOX),
+  `A3083-1896` (CROC). Bunlara rota tanımlanması veya etüt girilmesi gerekiyor — ekranda ve
+  Excel'de "Süresi Yok" olarak listeleniyor.
+- 2026-36 ve sonrası haftalarda kapasite girişi yok (yerelde yalnız 2026-27 dolu), bu yüzden
+  yük % hesaplanmıyor.
+- SentezPlaning canlıya (192.168.3.228:90) deploy edilmedi. Deploy'da `api/data/sentez-planing.db`
+  EZİLMEMELİ — dikim çıkış tarihleri, hat ayarları ve hafta atamaları orada.
