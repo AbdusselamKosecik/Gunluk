@@ -93,3 +93,17 @@ etiketi, box kapanınca otomatik + tekrar yazdır.
   - Bu PC 192.168.0.72'de, aynı /24 ağında.
 - **Tekrar deneme:** scratchpad `zplonizle` içinde `dotnet run -- URT1-260930-001-0002 --bas`
   (`BoxEtiketi.BasAsync` kullanılır, gerçek box etiketi basılır).
+
+## Ek — test basımı ve içerik matrisi
+- **Test basımı:** Yazıcı açıldı (192.168.0.199:9100), 1. kalite etiketi iki kez basıldı (`URT1-260930-001-0002`).
+  Her seferinde ilk SQL bağlantısı TLS el sıkışmada zaman aşımına düştü, ikinci denemede geçti. Etiket basımında
+  otomatik tekrar deneme henüz yok.
+- **Matris (kullanıcı isteği):** Beden dağılımı satırı ve renkler satırı kaldırıldı. Yerine renk × beden matrisi geldi:
+  satırlar renk, sütunlar beden, son sütun TOP.
+  - Başlık satırı dolu kutu (`^GB` kalınlık = yükseklik) üstüne `^FR` ile ters yazılıyor.
+  - Alan y=59–82 mm. Satır yüksekliği min(6, alan/(renk+1)), yazı satır yüksekliğinin 0,62 katı (2,2–3,8 mm arası).
+  - Renk sütunu 24 mm, beden sütunları eşit.
+  - `BoxEtiketBilgisi.Hucreler` = (Renk, Beden, Adet). Sorgu Variant1/Variant2 ile gruplar, sıralama Variant2Order → Variant1Order.
+- **Dokunulan dosyalar:** `BantSayim/Ekranlar/Veri/BoxEtiketi.cs`, `BantSayim.Tests/ZplTestleri.cs`. Testler 53/53.
+- **Commit:** `ad4d1d8` — Box etiketi: icerik renk x beden matrisi
+- **2. kalite test basımı:** Gönderilemedi. Yazıcı yeniden ağdan düştü (ping: host unreachable).
