@@ -138,3 +138,33 @@ GET /api/sentez/planning/capacity/2026-27   # lMinWeek 17280 (480dk→8 saat dö
   yük % hesaplanmıyor.
 - SentezPlaning canlıya (192.168.3.228:90) deploy edilmedi. Deploy'da `api/data/sentez-planing.db`
   EZİLMEMELİ — dikim çıkış tarihleri, hat ayarları ve hafta atamaları orada.
+
+### SentezPlaning IIS paketi
+- **Neden:** Yıkama planlaması bitti, canlıdaki (192.168.3.228:90) kod bu değişikliklerin
+  hiçbirini içermiyor. Kullanıcı paketin çıkarılmasını istedi.
+- **Ne yapıldı:**
+  ```bash
+  cd SentezPlaning/web && npm run build          # stderr yüzünden ayrı çalıştırılır
+  .\Deploy-IIS.ps1 -SkipWebBuild                  # -> SentezPlaning/publish (gitignore'da)
+  ```
+- **Sır sızıntısı bulundu ve kalıcı olarak kapatıldı:** paket `appsettings.Development.json`
+  içeriyordu, içinde `Password=204571Roy` ve dev Jwt anahtarı var. SarfKullanim'da aynı hata
+  olmuş ve dosya elle silinmişti; burada csproj'a
+  `<Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />` eklendi.
+  Yeniden paketlendi: `publish/` içinde yalnız `appsettings.json` var,
+  `grep -rE "Password=|User Id=sa" publish/` hiç sonuç dönmüyor. Yerel geliştirme etkilenmiyor
+  (dosya `bin/Debug`'a kopyalanmaya devam ediyor).
+- **Paket denetimi:** 98 dosya / 57 MB. DLL baytlarında yeni semboller doğrulandı
+  (`planning_week_atama`, `YikamaSureleri`, `IslakSonra`, `PlanningExport`, `SureKaynaklari`,
+  `Haftalık Yük`, `SP SONRA %`). `wwwroot/index.html` yeni bundle'ı gösteriyor
+  (`index-D1O2nPau.js`). `publish/data` yok — sunucudaki SQLite ezilmeyecek.
+- **Deploy script'i kontrol edildi:** veriyi zaten koruyor — çıktı temizliğinde `data` ve `logs`
+  hariç tutuluyor, sunucuya kopyalama `robocopy /MIR /XD logs data` ile yapılıyor, app pool
+  `maxProcesses 1` (SQLite tek yazıcı).
+- **Commit:** `e0315d4` — fix(sentez-planing): appsettings.Development.json publish paketine girmesin
+- **Sunucuda kurulum komutu (yönetici PowerShell, canlı site portu 90):**
+  ```powershell
+  .\Deploy-IIS.ps1 -SkipWebBuild -SetupIIS -SiteName SentezPlaning -Port 90 `
+                   -PhysicalPath '<canlı sitenin fiziksel yolu>'
+  ```
+  `ConnectionStrings__Sentez` ve `Jwt__Key` ortam değişkeni olarak tanımlı olmalı.
