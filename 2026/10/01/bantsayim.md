@@ -107,3 +107,9 @@ etiketi, box kapanınca otomatik + tekrar yazdır.
 - **Dokunulan dosyalar:** `BantSayim/Ekranlar/Veri/BoxEtiketi.cs`, `BantSayim.Tests/ZplTestleri.cs`. Testler 53/53.
 - **Commit:** `ad4d1d8` — Box etiketi: icerik renk x beden matrisi
 - **2. kalite test basımı:** Gönderilemedi. Yazıcı yeniden ağdan düştü (ping: host unreachable).
+
+## Ek — kalite rozeti
+- **Kullanıcı isteği:** 1. kalitede etikete kalite yazılmayacak. 2. kalitede rozet siyah zemin üstüne beyaz yazı olacak (değişmedi).
+- **Ne yapıldı:** `BoxEtiketi.Zpl` içinde rozet yalnızca `Kalite == 2` olduğunda basılıyor (dolu `^GB` + `^FR` ile "2. KALİTE").
+  Test: 1. kalite etiketinde "KALİTE" geçmemeli. Matris başlığı da `^FR` kullandığı için `^FR` üzerinden kontrol yapılmadı.
+- **Sonuç:** 53/53 test geçti. 2. kalite test etiketi yazıcıya basıldı (192.168.0.199).
