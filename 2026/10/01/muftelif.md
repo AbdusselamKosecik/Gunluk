@@ -168,3 +168,22 @@ GET /api/sentez/planning/capacity/2026-27   # lMinWeek 17280 (480dk→8 saat dö
                    -PhysicalPath '<canlı sitenin fiziksel yolu>'
   ```
   `ConnectionStrings__Sentez` ve `Jwt__Key` ortam değişkeni olarak tanımlı olmalı.
+
+### SentezPlaning paketi (dağıtıma hazır hali)
+- **Neden:** Kullanıcı "paket çıkartır mısın" dedi; SarfKullanim'daki konvansiyona uyuldu
+  (`<Uygulama>-IIS-<ip>-<port>/` klasörü + zip + `IIS-KURULUM.txt`).
+- **Ne yapıldı:** `SentezPlaning-IIS-192.168.3.228-90/` → `site/` (94 dosya), `ornek/appsettings.json`,
+  `IIS-KURULUM.txt`; zip 24,1 MB / 96 girdi.
+- **İki şey bilerek pakete KONMADI:**
+  1. `appsettings.json` → `ornek/` altına taşındı. Bu bir güncelleme; sunucudaki dosya bağlantı
+     dizesini ve JWT anahtarını taşıyor, `robocopy /MIR` ile ezilirse site açılışta bağlanamaz.
+  2. `site/logs/` → deploy script `publish/logs`'u koruduğu için benim yerel dev log'larım
+     (2026-08-05..07) pakete sızmıştı; çıkarıldı. İçinde şifre yoktu (kontrol edildi).
+- **IIS-KURULUM.txt içeriği:** `robocopy ".\site" "<site yolu>" /MIR /XD data logs` komutu,
+  "appsettings.json'u kopyalamayın" uyarısı, WAL yüzünden yedek alırken app pool'u durdurma notu,
+  `planning_week_atama` tablosunun açılışta kendiliğinden oluştuğu bilgisi, geri alma adımı ve
+  bu sürümde ne değiştiğinin listesi (ıslak süre düzeltmesinin yükü ARTIRACAĞI dahil).
+- **Commit:** `ff2e973` — chore: IIS deploy paket klasorlerini de gitignore'a ekle
+  (paketin açık klasör hali de artık yoksayılıyor; önceden yalnız `SarfKullanim-IIS-*.zip` vardı)
+- **Yapılmadı:** canlıya kurulum. Çalışan siteyi değiştirmek ve planlamacıların verisine dokunmak
+  geri alması zor; kullanıcı onayı ve sitenin fiziksel yolu bekleniyor.
