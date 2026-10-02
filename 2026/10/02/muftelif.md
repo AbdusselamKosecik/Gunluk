@@ -163,7 +163,7 @@ düşünmemiz gerekiyor dendi"*.
   - `publish\logs` altında Ağustos'tan kalma yerel log dosyaları vardı (deploy betiği
     `logs`/`data` klasörlerini koruyor) — paketlemeden önce silindi.
   - `SentezPlaning-IIS-192.168.3.228-90\site` robocopy /MIR ile yenilendi,
-    `ornekppsettings.json` güncellendi, `IIS-KURULUM.txt` yeniden yazıldı.
+    `ornek/appsettings.json` güncellendi, `IIS-KURULUM.txt` yeniden yazıldı.
   - **IIS-KURULUM.txt'teki DİKİM bölümü yanlıştı:** "Excel'e aktarım artık ekrandaki
     filtreyi uygular" yazıyordu, oysa `7e5e614` bunu geri aldı (filtresiz, 3 sayfa).
     Düzeltildi; SMV'nin artık kart ID'sinden okunduğu da açıklandı.
