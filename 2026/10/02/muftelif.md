@@ -155,6 +155,39 @@ düşünmemiz gerekiyor dendi"*.
   koşuyor. Buton "Yükleniyor…" gösteriyor ama uzun gelirse bu adım ertelenebilir.
 - **Commit:** `0fc9b00`
 
+### 8. Yeni IIS paketi (commit 0fc9b00)
+- **Neden:** elimdeki paket `52c9796`'da kalmıştı; ne dikim export/SMV düzeltmesini
+  (`7e5e614`) ne de yıkama yükleme 415 düzeltmesini (`0fc9b00`) içeriyordu.
+- **Ne yapıldı:**
+  - `web` build + `dotnet publish -c Release`.
+  - `publish\logs` altında Ağustos'tan kalma yerel log dosyaları vardı (deploy betiği
+    `logs`/`data` klasörlerini koruyor) — paketlemeden önce silindi.
+  - `SentezPlaning-IIS-192.168.3.228-90\site` robocopy /MIR ile yenilendi,
+    `ornekppsettings.json` güncellendi, `IIS-KURULUM.txt` yeniden yazıldı.
+  - **IIS-KURULUM.txt'teki DİKİM bölümü yanlıştı:** "Excel'e aktarım artık ekrandaki
+    filtreyi uygular" yazıyordu, oysa `7e5e614` bunu geri aldı (filtresiz, 3 sayfa).
+    Düzeltildi; SMV'nin artık kart ID'sinden okunduğu da açıklandı.
+- **Komutlar:**
+  ```bash
+  taskkill /F /IM SentezPlaning.Api.exe     # exe kilidi -> MSB3027
+  npm run build                              # web/
+  .\Deploy-IIS.ps1 -Configuration Release -SkipWebBuild
+  rm -rf publish/logs publish/data
+  robocopy publish <paket>\site /MIR
+  Compress-Archive site,ornek,IIS-KURULUM.txt -> SentezPlaning-IIS-192.168.3.228-90.zip
+  ```
+- **Doğrulama (paketin kendisi çalıştırılarak, port 5399):**
+  - Açılış OK, `/` → 200 (React), `/api/auth/login` → 200 (SentezLive bağlantısı çalışıyor).
+  - `swagger` → 404: Release'de beklenen, Swashbuckle yalnızca Development'ta açık.
+  - Yıkama liste yüklemesi → **200**, okunan 258, süresi yok 1, 13,1 sn. Düzeltme pakette.
+  - Minify edilmiş bundle içinde `listeYukle` çağrısı
+    `{headers:{"Content-Type":"multipart/form-data"}}` ile görünüyor.
+  - Pakette `appsettings.Development.json`, `.log`, `data/`, `logs/` YOK; şifre taraması temiz.
+  - Zip: 24,1 MB, 125 girdi.
+- **Not:** smoke test sırasında `site\data` ve `site\logs` oluşuyor; zip bunlardan ÖNCE
+  üretildi, sonra iki klasör de silindi. Sıra bozulursa canlı veri paketle taşınır.
+- **Paket gitignore'da**, repoya commit girmedi.
+
 ### Veri boşlukları (kullanıcıya iletildi)
 - **9 ERP operasyonunun `Erp_Process.StandartTime` alanı boş**, bu yüzden 0 saat katkı veriyorlar.
   En önemlisi `5075 SANTRİFÜJ SIKMA` — **90 kartta** geçiyor ve süresi yok. Diğerleri:
