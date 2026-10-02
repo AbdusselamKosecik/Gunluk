@@ -58,3 +58,17 @@ Başlangıç durumu: `Views/Orders/Index.cshtml` sadece sekme (durum) + dönem f
 - Canlıda tarayıcı testi: filtre satırı, alt toplam, Excel indirme (iki sayfa, SUBTOTAL).
 - Yayın (publish) yapılmadı.
 - Müşteriye cevap yazılacak.
+
+### 4. Yayın paketi
+- **Neden:** Kullanıcı yayın paketi istedi.
+- **Komutlar:**
+  ```bash
+  cd src/Warehouse
+  dotnet publish Warehouse.csproj -p:PublishProfile=FolderProfile -c Release
+  # Not: CLI'da çıktı profildeki PublishUrl'e değil bin/Release/net10.0/win-x64/publish/ klasörüne gidiyor
+  powershell Compress-Archive -Path 'publish\*' -DestinationPath 'warehouse-2026-10-02.zip'   # win-x64 klasöründe
+  ```
+- **Sonuç / doğrulama:** self-contained win-x64, 400 dosya, 182 MB; zip 84 MB:
+  `src/Warehouse/bin/Release/net10.0/win-x64/warehouse-2026-10-02.zip`. Warehouse.dll içinde yeni
+  kod (il-col-filter, exportExcel, SUBTOTAL) doğrulandı. Paket `appsettings.json` içeriyor —
+  sunucudaki ayar dosyasının üzerine yazılmamalı.
