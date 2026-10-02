@@ -137,6 +137,24 @@ düşünmemiz gerekiyor dendi"*.
   satırı yok (ör. `9519-1359-OPW`), veri eksiği.
 - **Commit:** `7e5e614`
 
+### 7. Yıkama liste yüklemesi 415 veriyordu
+- **Belirti (kullanıcı):** *"yıkamaya excel yüklerken hata veriyor"* —
+  `ÜRETİM PLANI GÜNCEL - 18.09.2026.xlsx`.
+- **Teşhis:** `apiClient` örneği varsayılan `Content-Type: application/json` başlığı taşıyor.
+  `listeYukle` FormData gönderirken bu başlık kalıyor, sunucu multipart beklediği için
+  **415 Unsupported Media Type** dönüyor. Tekrar üretildi: multipart gövdeyi
+  `application/json` başlığıyla göndermek → 415.
+- **Sebep:** dikim tarafındaki dört import çağrısı başlığı açıkça `multipart/form-data`
+  olarak geçiyor; yıkama yüklemesini yazarken bunu atlamışım.
+- **Düzeltme:** aynı başlık eklendi. Axios 1.19 FormData için elle verilen Content-Type'ı
+  düşürüp boundary'yi tarayıcıya bıraktığı için kalıp güvenli (dikim import'ları bunu
+  kanıtlıyor, canlıda çalışıyorlar).
+- **Doğrulama:** `multipart/form-data` → 200, okunan 258, süresi yok 1. Boş dosya → 400.
+  Bozuk dosya → 400 "Excel okunamadi: File contains corrupted data."
+- **Not:** yükleme 12-13 sn sürüyor; `kartiYok` sayısını hesaplamak için üç ağır ERP sorgusu
+  koşuyor. Buton "Yükleniyor…" gösteriyor ama uzun gelirse bu adım ertelenebilir.
+- **Commit:** `0fc9b00`
+
 ### Veri boşlukları (kullanıcıya iletildi)
 - **9 ERP operasyonunun `Erp_Process.StandartTime` alanı boş**, bu yüzden 0 saat katkı veriyorlar.
   En önemlisi `5075 SANTRİFÜJ SIKMA` — **90 kartta** geçiyor ve süresi yok. Diğerleri:
