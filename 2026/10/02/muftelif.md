@@ -110,6 +110,33 @@ düşünmemiz gerekiyor dendi"*.
   şablonda olup ERP'de karşılığı olmayan satırlar, kapasite girişi olmayan haftalar) —
   planlamacı bunu hata sanmasın.
 
+### 6. Dikim: export filtresiz + SMV kart ID'sinden
+- **Neden (kullanıcı):** *"dikimde excel'e atınca 3 sayfa geliyor, fashion nondenim basic
+  gelmiyor. olması gereken böyle (PLANNN.xlsx)"* ve *"SMV'leri alırken model koduna göre değil
+  de order numarasından order item'e gidelim, oradan ilk modeli alalım, o id'ye göre yapalım.
+  model numarası sıkıntılı giriyorlar zannımca."*
+- **PLANNN.xlsx incelendi:** 10 sayfa (5 CEP, FASHION, FASHION BASIC, NON DENIM, GÖMLEK,
+  KATEGORISIZ + 3 kapasite + Özet). **Önemli:** dikim çıkış tarihi BOŞ satırlar da içinde
+  (5 CEP'te 210 satırın 166'sı) ve `A9255-1601` de var — yani 2026-10-01'de eklediğim
+  "planda olmayanlar çıkmasın" filtresinin kaldırılması gerekiyordu. Kullanıcıya bu sonucu
+  söyleyip öyle yapıldı.
+- **Ne yapıldı (1 — export):** `ExportExcel()` artık parametre almıyor, ekran filtresi
+  uygulanmıyor. Controller ve web çağrısı da parametresiz. Çıktı 10 sayfa, `MODEL` kolonu yerinde.
+- **Ne yapıldı (2 — SMV):** `OrderModel` sorgusu order no → `Erp_WorkOrderItem` → **ilk kalem**
+  (ItemOrderNo, sonra RecId) ve kalemin `InventoryId`'sini döndürüyor. Yeni `EtutSmvById` sorgusu
+  etüdü **ID ile** arıyor; kod metniyle arama yalnızca ID çözülemeyen order'lar için yedek.
+  Eskiden order birden fazla model taşıyorsa (`ModelSayisi != 1`) model hiç çözülmüyor, order
+  kendi style'ında bırakılıyordu — artık her zaman ilk kalem alınıyor.
+  `orders.inventory_id` kolonu eklendi (EnsureColumns ile mevcut DB'ye de).
+- **Hata:** `COUNT(DISTINCT ...) OVER (...)` SQL Server'da desteklenmiyor — ilk denemede 500
+  döndü. `ModelSayisi` ayrı bir CTE ile toplanacak şekilde düzeltildi.
+- **Doğrulama:** 1189 order → **1189'unun kart ID'si çözüldü** (0 eksik; eskiden çok modelli
+  order'lar atlanıyordu). SMV recalc 579 kayıt. Kullanıcının tarif ettiği vaka yakalandı:
+  order 93974, style `A328-1885` yazılmış, ERP kartı `A328-1885-1535`, artık etütten SMV alıyor.
+  Export 10 sayfa / 124 KB. SMV'si olmayan 128 order kaldı — bunların modellerinde ERP'de etüt
+  satırı yok (ör. `9519-1359-OPW`), veri eksiği.
+- **Commit:** `7e5e614`
+
 ### Veri boşlukları (kullanıcıya iletildi)
 - **9 ERP operasyonunun `Erp_Process.StandartTime` alanı boş**, bu yüzden 0 saat katkı veriyorlar.
   En önemlisi `5075 SANTRİFÜJ SIKMA` — **90 kartta** geçiyor ve süresi yok. Diğerleri:
