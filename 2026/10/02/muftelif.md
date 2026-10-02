@@ -64,9 +64,21 @@ düşünmemiz gerekiyor dendi"*.
 - Süreler hiçbir zaman Excel'den gelmez; her zaman Sentez'den (rota → etüt → aynı yıkama).
 - Liste boşsa eski davranış korunur: order kümesi ERP açık emirleri, hafta UD_TerminRvz2.
 
+### 3. IIS paketi yenilendi
+- **Neden:** paket `845547b`'den önce çıkarılmıştı, liste özelliği içinde yoktu.
+- **Ne yapıldı:** temiz derleme (`npm run build` + `Deploy-IIS.ps1`), paket yeniden kuruldu:
+  `SentezPlaning-IIS-192.168.3.228-90/` (site 94 dosya, `ornek/appsettings.json`,
+  `IIS-KURULUM.txt`) + zip 24,1 MB / 96 girdi.
+- **Denetim:** sır taraması temiz; `site/logs` ve `site/appsettings.json` pakete girmiyor;
+  DLL baytlarında yeni semboller doğrulandı (`planning_yikama_liste`, `YikamaListeImport`,
+  `YikamaOnceGun`, `KartCozum`, `AdetlerByOrder`, `BolumSureleriKod`); wwwroot yeni bundle
+  (`index-CNQfSmTv.js`).
+- **IIS-KURULUM.txt güncellendi:** iki günün değişiklik listesi, `robocopy /XD data logs` komutu,
+  `appsettings.json` kopyalanmama uyarısı, iki yeni tablonun açılışta kendiliğinden oluştuğu,
+  ve kontrol adımı ("Liste yükle / Sentez'den çek" butonları görünüyorsa yeni sürüm).
+
 ## Açık kalanlar / sonraki adım
-- Arayüz canlıda denenmedi; `SentezPlaning-IIS-192.168.3.228-90` paketi bu commit'ten ÖNCE
-  çıkarılmıştı, yeniden paketlenmeli.
+- Arayüz canlıda denenmedi; paket hazır ama canlıya kurulmadı.
 - Sunucu erişimi gün içinde kesildi (192.168.3.228 ping'e cevap vermedi, SQL 1433 kapandı),
   VPN ile geri geldi. Canlı ekranın hangi sürümü koştuğu hâlâ doğrulanmadı.
 - Süresi bulunamayan 1 order (94890 / A3081-1285) için rota ya da etüt girilmesi gerekiyor.
