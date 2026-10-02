@@ -94,6 +94,22 @@ düşünmemiz gerekiyor dendi"*.
   Order Detay (259) · Suresi Yok.
 - **Commit:** `52c9796` — feat(sentez-planing/yikama): ozet rapor sablon biciminde
 
+### 5. Yıpratma eşlemesi karara bağlandı + paket yenilendi
+- **Karar (kullanıcı):** *"boş kalsın"* → ESKİTME → `WSH-DESTROY`,
+  YIPRATMA → `WSH-BASIC GRINDING`, `WSH-OPEN GRINDING W/AIR` **boş kalır**.
+  Kodda "onay bekliyor" notu yerine alınan karar yazıldı; davranış değişmedi.
+  **Commit:** `07855aa`
+- **Paket:** `52c9796` + `07855aa` üzerinden temiz derleme ile yeniden çıkarıldı.
+  `SentezPlaning-IIS-192.168.3.228-90/` (site 94 dosya, `ornek/appsettings.json`,
+  `IIS-KURULUM.txt`) + zip 24,1 MB / 96 girdi. Sır taraması temiz, `site/logs` ve
+  `site/appsettings.json` pakete girmiyor. DLL'de yeni semboller doğrulandı
+  (`YikamaOzetEsleme`, `OperasyonSureleriKod`, `Yıkama Özet`, `Operasyon Eşleme`,
+  `WSH-1ST WET PROCESS`).
+- **IIS-KURULUM.txt'e eklendi:** 6 Excel sayfasının ne olduğu ve özet raporda bazı
+  satırların neden boş göründüğü (ERP'de StandartTime boş olan operasyonlar,
+  şablonda olup ERP'de karşılığı olmayan satırlar, kapasite girişi olmayan haftalar) —
+  planlamacı bunu hata sanmasın.
+
 ### Veri boşlukları (kullanıcıya iletildi)
 - **9 ERP operasyonunun `Erp_Process.StandartTime` alanı boş**, bu yüzden 0 saat katkı veriyorlar.
   En önemlisi `5075 SANTRİFÜJ SIKMA` — **90 kartta** geçiyor ve süresi yok. Diğerleri:
