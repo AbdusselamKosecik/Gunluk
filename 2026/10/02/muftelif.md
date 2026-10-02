@@ -58,6 +58,53 @@ düşünmemiz gerekiyor dendi"*.
   per-request durum tutmuyor).
 - **Ölçüm:** 12,6 sn → **0,008 sn** (2. ve 3. istek), orders 0,02 sn, export 1,2 sn.
 
+### 4. Yıkama özet raporu — şablon biçiminde
+- **Neden:** Kullanıcı `Frederic Template v85 week12 PLAN.xlsm` dosyasını verdi:
+  *"yıkama için özet rapor bu şekilde olması lazımmış, diğer verilerle bir harmanlar mısın"*.
+- **Şablonun çözümlenmesi:** 4 sayfa (New Product / Orders / Weekly Capacity / Data).
+  Özet rapor **Weekly Capacity** sayfası: satırlar `WSH-*` operasyonları, kolonlar haftalar,
+  değer = `SUMPRODUCT(Data!BW<adet>, Data!<op SMV>)/60` yani **saat**. Kapasite
+  `E*vardiyalı*6 + F*standart*5`, kullanım = yük/kapasite/verimlilik. Operasyon satırlarının
+  etiketleri `Data!` sayfasının başlık satırından (r9) geliyor: her operasyonun bir "X" kolonu
+  ve bir "SMV" kolonu var.
+- **Ana zorluk:** şablonun ~21 satırı KONSOLİDE, ERP'de aynı işi yapan **88 ayrı operasyon** var
+  ve ERP adları Türkçe. Eşleme uydurulamaz; `YikamaOzetEsleme.cs` içinde TEK yerde, desen bazlı
+  ve **denetlenebilir** kuruldu.
+  - Kesin olanlar: PERMANGANAT→POTASSIUM (potasyum permanganat), KURUTMA→DRYING,
+    PARÇABOYA→DYE, KASAR→WHITE, LAZER→LASER, KILÇIK SÖKME→REMOVE TACKING, KILÇIK→TACKING,
+    RODEO→BRUSH, BIYIK→WHISKERS, PP bölümü→PP SPRAY.
+  - **Islak işlemin sprey öncesi/sonrası ayrımı şablonun `1ST WET PROCESS` / `2ND WET PROCESS`
+    satırlarına karşılık geliyor** — dün eklediğim ayrım tam buraya oturdu.
+  - **Onay bekleyen:** şablonda yıpratma tarafında üç satır var (DESTROY, BASIC GRINDING,
+    OPEN GRINDING W/AIR); ERP'de ESKİTME1/2 ve YIPRATMA1/2/3 duruyor. Şimdilik
+    ESKİTME→DESTROY, YIPRATMA→BASIC GRINDING kabul edildi, OPEN GRINDING W/AIR boş.
+- **Dokunulan dosyalar:** `PlanningSql.cs` (`OperasyonSureleriKod`), `YikamaOzetEsleme.cs` (yeni),
+  `PlanningModels.cs`, `PlanningService.cs` (`GetYikamaOzetAsync`), `PlanningController.cs`
+  (`GET /yikama-ozet`), `PlanningExport.cs` ("Yıkama Özet" + "Operasyon Eşleme" sayfaları).
+- **İki hata bulup düzelttim:**
+  1. Bölüm ara toplamları tekrar tekrar basılıyordu — şablon sırası ıslak önce/sonra arasında
+     geçtiği için "bölüm değişince ara toplam" kuralı aynı bölüm için birden fazla ara toplam
+     üretiyordu. Satırlar artık bölüm blokları halinde diziliyor, her bölüm bir kez.
+  2. **Türkçe harf:** `ToUpperInvariant` `'ı'` harfini `'I'` yapmadığı için `Zımpara Rodeo`
+     (5902) `"ZIMPARA RODEO"` desenine takılmıyor, bölüm kuralına düşüp yanlışlıkla
+     WHISKERS'a gidiyordu. Adlar artık ASCII'ye normalize edilip eşleştiriliyor.
+- **Doğrulama (258 order, 10 hafta):** 122 operasyon satırı eşlendi, **eşlenmeyen 0**.
+  Örnek yük (saat): 1ST WET 2063, PP SPRAY 1804, ZIMPARA 1906, LAZER 812, DYE 945.
+  Excel 6 sayfa: Yıkama Özet (38 satır) · Operasyon Eşleme (122) · Haftalık Yük · Kapasite ·
+  Order Detay (259) · Suresi Yok.
+- **Commit:** `52c9796` — feat(sentez-planing/yikama): ozet rapor sablon biciminde
+
+### Veri boşlukları (kullanıcıya iletildi)
+- **9 ERP operasyonunun `Erp_Process.StandartTime` alanı boş**, bu yüzden 0 saat katkı veriyorlar.
+  En önemlisi `5075 SANTRİFÜJ SIKMA` — **90 kartta** geçiyor ve süresi yok. Diğerleri:
+  `5084 KURUTMA` (WSH-DRYING satırı bu yüzden 0), `5093 TAŞ TEMİZLEME(GÖMLEK)`, `207/212 DURULAMA`,
+  `5921 Lazer Yıpratma`, `5901 Zımpara Bıyık`, `5902 Zımpara Rodeo`.
+- Şablonda olup ERP rotalarında karşılığı olmayan satırlar (boş kalıyor, şekil korunsun diye
+  duruyor): LASER FOR POSITION, Cut of Hem with scissor, Overlock Hem with SHORT,
+  Cut of Hem with O/L MC, ATTACH FRONT, TIE FRONT B/LOOPS, OPEN GRINDING W/AIR.
+- 2026-37..2026-46 haftalarında kapasite girişi yok (yerelde yalnız 2026-27 dolu), bu yüzden
+  ara toplam satırlarında kapasite ve yük % sıfır görünüyor.
+
 ## Kararlar
 - Yıkama haftası = `LAST DATE − 7 gün` (`YikamaListeImport.YikamaOnceGun`).
 - Adet = TTL, boşsa SİP.ADETİ. "Sentez'den çek" yalnızca ADET günceller, uyarı vermez.
