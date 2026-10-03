@@ -161,3 +161,10 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
 - **Commit:** `e567e65` — Mail: MailKit'e gecis (465 implicit SSL), devam maili yalnizca Excel eki, gunluk tablo hafifletildi
 - **Ek (devam maili testi):** Aynı scratch konsolla `pdks-devam` maili de gerçek kodla üretildi ve bt@modasima.com.tr'ye gönderildi.
   Konu "[Modfex] Attendance last 45 days — 02.10.2026"; gövde tek satır; ek `Modfex-attendance-2026-10-02.xlsx` (90 KB, 361 personel, 19.08–02.10).
+
+### 7. Günlük giriş/çıkış maili de Excel eki olarak gidiyor
+- **Neden:** Kullanıcı istedi; devam raporuyla aynı düzen olsun.
+- **Ne yapıldı:** Yeni `PdksGirisCikisExcel` eklendi. In-Out sayfasında Department, Code, Name, Local name, Out (önceki gün), In (bugün) sütunları var; eksik saat kırmızı tire.
+  Mail gövdesi yalnızca özet satırı oldu. Yeni test eklendi.
+- **Sonuç / doğrulama:** bt@modasima.com.tr'ye gönderildi (Modfex-in-out-2026-10-03.xlsx, 295 satır, 24 KB). Testler 203/203.
+- **Commit:** `671c917` — PDKS giris/cikis maili: tablo Excel eki olarak, govdede yalnizca ozet
