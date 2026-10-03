@@ -168,3 +168,11 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
   Mail gövdesi yalnızca özet satırı oldu. Yeni test eklendi.
 - **Sonuç / doğrulama:** bt@modasima.com.tr'ye gönderildi (Modfex-in-out-2026-10-03.xlsx, 295 satır, 24 KB). Testler 203/203.
 - **Commit:** `671c917` — PDKS giris/cikis maili: tablo Excel eki olarak, govdede yalnizca ozet
+
+### 8. Düzeltme: tek mail — gövdede liste, ekte 45 günlük Excel
+- **Neden:** Kullanıcının isteğini yanlış anlamıştım. İstenen, giriş/çıkış listesinin ilk sürümdeki gibi mail gövdesinde kalması ve 45 günlük devam Excel'inin AYNI maile ek olarak konmasıydı.
+  Ayrı devam maili olmayacak, giriş/çıkış Excel'i de olmayacak.
+- **Ne yapıldı:** `pdks-devam` işi ve `PdksGirisCikisExcel` kaldırıldı. `PdksGirisCikisJob` artık devam verisini de okuyor (gunSayisi parametresi, varsayılan 45).
+  Tek mail gidiyor: gövdede HTML liste (63 bin karakter), ekte `Modfex-attendance-<dün>.xlsx`.
+- **Sonuç / doğrulama:** bt@modasima.com.tr'ye gönderildi. Testler 202/202.
+- **Commit:** `fe981d1` — PDKS: tek mail -- govdede giris/cikis listesi, ekte 45 gunluk devam Excel'i
