@@ -115,3 +115,32 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
      AND (c.Cikis IS NOT NULL OR g.Giris IS NOT NULL)
    ORDER BY d.dept_name, p.first_name, p.last_name;
   ```
+
+### 5. PDKS raporları: 08:10 giriş/çıkış maili + 45 günlük devam Excel'i
+- **Neden:** Kullanıcı istedi. Giriş/çıkış sorgusu her gün 08:10'da çalışıp mail atılacak.
+  Her gün son 45 günün kişi × gün Excel'i gönderilecek: solda departman, ad soyad, yerel ad; hücrelerde OK / NON (kırmızı) / +3h / -3h.
+  Modfex mailleri ModaSima'dan ayırt edilebilmeli. Her rapor ayrı alıcıya gidecek ve alıcılar arayüzden girilecek.
+- **Ne yapıldı:**
+  - ModaSima'dan zamanlama parametreleri taşındı (`git format-patch` + `git apply`): 60de775 (yalnızca zamanlayıcı, IsUclari, Sorgular, JobParameter, göç 017→016),
+    2cd81a9, c66da4a, a5173a0, d7e000b (web ZamanlamaParametreModal, DinamikForm). Hepsi çakışmasız uygulandı.
+  - Mail kuyruğuna dosya eki eklendi: göç `017_bildirim_ekleri.sql`, `BildirimSatiri`'na EkAdi/EkIcerik, `EpostaGonderici` Attachment ekliyor, `GonderenAdi` ayarı.
+  - `Ayarlar`'a `PdksBaglantiCumlesi`, `FirmaAdi` ("Modfex"; konu satırı `[Modfex] ...`) ve `SaatDilimi` eklendi.
+    Saat dilimi boşsa sunucunun yerel saati kullanılıyor; eskiden Europe/Istanbul'a sabitti, Mısır ekim sonunda Türkiye'den 1 saat geri düşüyor.
+  - `src/SentezServis.Core/Pdks/`: PdksDeposu (salt okunur, punch_state '0'/'1' metin olarak), PdksDevamAnalizi, PdksDevamExcel (ClosedXML geri eklendi),
+    PdksGirisCikisJob (`10 8 * * 0-4,6`), PdksDevamJob (`15 8 * * 0-4,6`, gün sayısı parametresi 45), PdksAlicilari (boşsa mail gitmez, genel listeye düşmez).
+- **Analiz (canlı zkbiotime):** İş günleri pazar–perşembe (~335 kişi); cuma ~13, cumartesi ~58 kişi.
+  Giriş+çıkışı olan iş günlerinin ortalaması 562 dk, %85'i 540–569 dk aralığında. BioTime'daki "normal work time" 565 dk → standart 565 dk alındı.
+  İş günü veriden çıkarılıyor: aktif personelin ≥%50'si okuttuysa iş günü (30.08 tatili de böyle ayrıldı).
+  Fark ≥60 dk olunca tam saate aşağı yuvarlanıyor. İş günü olmayan günde çalışılan sürenin tamamı fazla mesai sayılıyor.
+  İşe giriş tarihinden (hire_date) önceki günler boş kalıyor.
+- **Sonuç / doğrulama:** Canlı veriyle scratch konsoldan çalıştırıldı: 361 personel, 10.656 kişi-gün, 2 sn, Excel 90 KB.
+  Hücre dağılımı: OK 8665, NON 760, +h 449, -h 141, tek okutma 1050. Hiç gelmeyen 2 kişi.
+  .NET testleri 202/202 (yeni `PdksDevamTestleri`, içinde salt okunur kaynak taraması da var), web testleri 40/40.
+- **Commit:** `9fd3457` — PDKS raporlari: 08:10 giris/cikis maili ve 45 gunluk devam Excel'i, is bazli alicilar
+
+## Açık kalanlar (güncel)
+- Sunucuya yayın yapılmadı. Yayın sonrası sunucudaki `appsettings.json`'a `PdksBaglantiCumlesi` eklenmeli (`docs/pdks-raporlari.md`),
+  ardından Zamanlama ekranından iki işin alıcıları girilmeli.
+- Sunucudaki `Eposta:Gonderen` adresi hâlâ modasima.local olabilir; kontrol edilmeli.
+- Security personeli vardiyalı çalıştığı için yüksek NON görünüyor; kural gerekirse ayrıca ele alınacak.
+- Zamanlama parametre ekranı canlı arayüzde gözle denenmedi (birim testleri geçiyor).
