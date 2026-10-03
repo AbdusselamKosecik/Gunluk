@@ -159,3 +159,5 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
   - `pdks-devam` maili sadeleşti: gövdede tek satır var, rapor yalnızca Excel ekinde.
 - **Sonuç / doğrulama:** Mail gönderildi (SMTP hata vermedi). Testler 202/202.
 - **Commit:** `e567e65` — Mail: MailKit'e gecis (465 implicit SSL), devam maili yalnizca Excel eki, gunluk tablo hafifletildi
+- **Ek (devam maili testi):** Aynı scratch konsolla `pdks-devam` maili de gerçek kodla üretildi ve bt@modasima.com.tr'ye gönderildi.
+  Konu "[Modfex] Attendance last 45 days — 02.10.2026"; gövde tek satır; ek `Modfex-attendance-2026-10-02.xlsx` (90 KB, 361 personel, 19.08–02.10).
