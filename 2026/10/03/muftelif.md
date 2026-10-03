@@ -223,3 +223,148 @@ Kod yazılmadı — bu tur tamamen tasarım.
   `UZM_Selvedge_Survey` FASON01, iki cevap, bir ek dosya. Örnek veri olarak
   kalsın mı, silinsin mi — karar verilecek.
 - Paket sunucuya kurulmadı; `IIS-KURULUM.txt` adım adım anlatıyor.
+
+### 12. Dal sonu kod incelemesi — 1 kritik + 7 önemli bulgu, hepsi düzeltildi
+- **Neden:** Kendi yazdığım kodu kendim gözden geçirmek zayıf. Taze bağlamlı bir
+  gözden geçirici (Opus) tüm dalı (13 commit, ~320 KB diff) inceledi; 105 testi de
+  kendi koşturdu. Plan'daki Review Focus maddelerini tek tek kontrol etti.
+
+#### KRİTİK — giriş yetki yükseltmesi ve kimlik karışması
+İki kusur birleşiyordu:
+- Giriş sorgusu `UserCode`'u `Turkish_CI_AS` ile eşliyor (kullanıcı kodunu küçük
+  harfle yazabilsin diye) ama **SentezLive'ın collation'ı `Turkish_CS_AS`**: `UZM`
+  ile `uzm` **ayrı kayıtlar** olabiliyor. `SELECT TOP 1` hangisinin döndüğünü
+  **belirlemiyordu** (ne `ORDER BY` ne tam eşleşme tercihi).
+- `YetkiServisi`, `Selvedge:Yoneticiler` listesini `OrdinalIgnoreCase` karşılaştırıyordu.
+
+**Senaryo:** `Meta_User`'da hem gerçek admin `UZM` hem başka bir çalışan `uzm` var.
+Çalışan **kendi** şifresiyle giriyor; doğrulama kendi satırıyla geçiyor;
+`_yoneticiler.Contains("uzm")` **true** dönüyor → token `Admin` ile çıkıyor
+(`Izin.Hepsi`, `yetki.yonet` dahil). Veritabanında **hiçbir rol kaydı gerekmeden**
+yetki yükseltmesi. İkinci bacak: iki satır da CI eşleşmesini geçtiğinde rastgele
+`TOP 1`, kullanıcıyı **başkasının kimliğiyle** içine alıyor; `CreatedBy`,
+`AuditLog.SentezUserId`, `RespondentSentezUserId` yanlış kişiyi yazıyor. Tam olarak
+Review Focus #1'in yasakladığı sonuç — ve mevcut test (`SentezSqlTests:14`) CI
+collation'ı sabitleyip hiçbir ayrıştırma kuralı koymadığı için kapıyı açık tutuyordu.
+
+- **Düzeltme:** `api/Auth/KullaniciSecimi.cs` — kesin kural, tahmin yok:
+  1. Girilen kodla **tam eşleşen** (Ordinal) kayıt varsa o,
+  2. tam eşleşme yok ama **tek** aday varsa o,
+  3. tam eşleşme yok ve birden fazla aday varsa **hiçbiri** → "kullanıcı bulunamadı".
+  `YoneticiListesi` harf duyarlı (`StringComparer.Ordinal`). Login sorgusundan
+  `TOP 1` kaldırıldı, `ORDER BY RecId` eklendi. **13 test.**
+
+#### ÖNEMLİ
+1. **Soru tipi:** doğrulama harf **duyarsız** kabul ediyordu (`"metin"` geçerli),
+   puanlama harf **duyarlı** `switch` ile eşliyordu (`_ => false`). Zorunlu soru
+   sonsuza kadar 400; zorunlu değilse `"teksecim"` sorusunun seçenek puanları **hiç
+   toplanmıyor** → anket **sessizce yanlış puanla** kaydediliyordu. `SoruTipi.Kanonik`
+   eklendi; tip yazarken kanonikleştiriliyor, okurken normalize ediliyor.
+2. **Kapalı anket cevap kabul ediyordu.** Tek şart "bu anketin silinmemiş sorusu var
+   mı" idi; `IsActive`, `IsDeleted`, `StartDate`, `EndDate` **hiç okunmuyordu**.
+   Arayüz "yalnızca aktif anketler doldurulabilir" diye yazıyor — yani sunucu,
+   arayüzün ilan ettiği kuralı uygulamıyordu. Üstelik anket soft-delete edilirken
+   soruları `IsDeleted = 0` kaldığı için **silinmiş anket de** doldurulabiliyordu.
+3. **Anket düzenlemesi geçmiş cevapları koparıyordu.** Her kayıt tüm soru ve
+   seçenekleri soft-delete edip yenilerini INSERT ediyordu. Verilmiş cevapların
+   `QuestionId`/`ChoiceIds` değerleri `IsDeleted = 1` satırları gösterdiği ve hem
+   `GetirAsync` hem `CevapStore` o satırları filtrelediği için **geçmiş cevaplar
+   okunamaz** hale geliyordu: tek bir yazım hatası düzeltmesi anketi geçmişinden
+   koparıyor, soru kümesini tabloda kopyalıyordu. Artık istemcinin geri gönderdiği
+   `RecId` ile upsert; yalnızca **gerçekten kaldırılan** satırlar soft-delete.
+   `(SurveyId, SortOrder)` filtreli tekil indeksi ara durumda çakışmasın diye sıralar
+   önce `-RecId`'ye parklanıyor (iki soru yer değiştirince 2601 alırdık).
+4. **Tasarımcıdan kayıt `NameEn`/`Target`/`StartDate`/`EndDate`'i NULL'luyordu.**
+   Sunucu `UPDATE`'i bütün iş kolonlarını koşulsuz yazıyor, istemci sözleşmesi ise
+   bu dört alanı hiç taşımıyordu → `undefined` → `null`. Alanlar istemciye ve forma
+   eklendi. Boş tarih kutusu `''` döndüğü ve JSON'da `''` bir `DateTime?` alanına
+   bağlanmadığı (istek 400 olur) için boş metinler `null` gönderiliyor.
+5. **`ScriptTarayici` — db-tool'un ayrıcalıklı bağlantısı önündeki TEK KAPI —**
+   canlı ERP tablosunu hedeflemenin dört yolunu görmüyordu:
+   - `CREATE INDEX` / `CREATE TRIGGER ... ON dbo.Erp_*` — DDL deseni yalnızca
+     `TABLE|VIEW|PROCEDURE|FUNCTION` arıyordu. **Trigger en tehlikelisi:** ERP'nin
+     her işleminde bizim adımıza yazar.
+   - `INSERT dbo.Erp_... VALUES` (INTO'suz) ve `DELETE dbo.Erp_... WHERE` (FROM'suz)
+     — ikisi de geçerli T-SQL, desen `INSERT\s+INTO`/`DELETE\s+FROM` arıyordu.
+   - `SELECT ... INTO yeni_tablo`.
+   Ayrıca `EXEC`/`sp_executesql` (hedefi taranamaz) ve `GRANT/REVOKE/DENY` artık
+   **fail-closed** reddediliyor. Takma adlı `UPDATE o SET ... FROM dbo.UZM_* o`
+   yanlış pozitif vermesin diye ayrıca ele alındı.
+6. **Firma adı araması sessizce boş dönüyordu.** `Code` kolonu `Turkish_CI_AS`
+   tanımlı olduğu için çalışıyordu, `Name` veritabanı collation'ını miras alıyordu.
+   SQL'de doğrudan ölçtüm: `Name` kolonunun collation'ı `Turkish_CS_AS`; `akın`
+   araması `COLLATE` ile **1** kayıt, `COLLATE`'siz **0** kayıt buluyor.
+   *Not: ilk ölçümümde ASCII `akin` yazıp 0 görmüştüm — Türkçe collation'da `I`'nın
+   küçüğü `ı`'dır, `i` değil. Doğru girdi `akın` (U+0131).*
+
+#### Minor listesinden etkiye göre yükselttiğim beş madde
+- **`ChoiceIds` taşması:** virgülle birleştirilmiş ID'ler `NVARCHAR(256)`'ya
+  yazılıyordu; taşınca SQL 8152 → kullanıcı 400 yerine **işlenmemiş 500** görüyordu.
+  *Kendi düzeltmemde hata yaptım:* sınırı "en fazla 50 seçenek" koydum. Kolon
+  genişliğini SQL'de ölçtüm: 256 karakter, seçenek ID'leri `BIGINT IDENTITY` →
+  19 haneye çıkabilir, **14 seçenek bile** 256'yı geçer. Sınır artık birleştirilmiş
+  metnin **karakter uzunluğuna** bakıyor.
+- **Şema eksik logu sunucuda olmayan komutu yazıyordu** (`dotnet run --project
+  db-tool/...`); sunucuda .NET SDK ve kaynak kod yok. Paketteki exe'ye çevrildi ve
+  Review Focus #5'in istediği gibi **hangi script'lerin** uygulanacağı yazıldı.
+- **`9001_yetki.sql` yer tutucu şifreyle `CREATE LOGIN` ediyordu.** Kopyala-çalıştır,
+  şifresi bu dosyada (ve sürüm geçmişinde) yazılı olan ve **ERP'nin tamamında
+  SELECT** yetkisi olan bir hesap açar. `RAISERROR` + `SET NOEXEC ON` ile duruyor.
+  Karşılaştırmanın sağ tarafı bilerek parçalı yazıldı ki bul-değiştir kontrolü
+  geçersiz kılmasın; hata mesajında yer tutucu **yok** — olsaydı değiştirdikten
+  sonra gerçek şifre loga yazılırdı.
+- **`/api/files/{id}` nesne düzeyi kontrol yapmıyordu.** `dosya.oku` her rolün okuma
+  kümesinde ve `RecId` sıralı `IDENTITY` → en düşük yetkili kullanıcı 1..N sayarak
+  tüm ek deposunu gezebiliyordu. Artık ekin bağlı olduğu kaydın okuma izni de
+  aranıyor (`QaReport`→`kk.oku`, `SurveyResponse`→`anket.oku`, ...). Tanınmayan
+  `EntityType` **en geniş izne düşmez**, kapanır.
+- **İmza kontrolü tek `ReadAsync` ile 8 bayt okuyordu;** parçalı akışta kalan baytlar
+  sıfır kalıp **geçerli** dosyayı reddedebiliyordu → `ReadAtLeastAsync`.
+- Ek olarak `TamYol` kapsama kontrolü düz önek karşılaştırmasıydı (`files` öneki
+  `filesX`'i de içerir); ayırıcı eklendi.
+
+- **Testler:** 105 → **159**, hepsi geçiyor.
+- **Commit'ler:** `5cc0200`, `c2d6c8e`
+
+### 13. Davranış değişikliği ve eksik kalan doğrulama
+- **Bilerek değiştirdiğim test:** `ScriptTarayiciTests.Yetki_scripti_grant_icerebilir`
+  GRANT'in **geçmesini** bekliyordu; artık reddedildiğini doğruluyor. Tarayıcı
+  yalnızca otomatik uygulanan `db/` klasörünü denetler; yetki script'i bilerek
+  `db/elle/` altında ve **hiç taranmaz**. Otomatik bir script'te GRANT görmek bir
+  ihtiyaç değil, risktir.
+- **Canlı doğrulama tamamlanamadı.** `192.168.1.22:1433`'e .NET istemcisinden TCP
+  bağlantısı zaman aşımına uğruyor (`sqlcmd` geçerken; ping 148 ms, aralıklı kayıp).
+  Dört deneme yapıldı. Başlangıç koruması her seferinde **doğru davrandı**:
+  uygulama açılmayı reddetti ve nedenini yazdı (Review Focus #5).
+  - **Ölçülenler:** 159 birim test; firma collation'ı doğrudan SQL'de; `ChoiceIds`
+    kolon genişliği doğrudan SQL'de.
+  - **ÖLÇÜLMEYENLER:** anket doldurma kapısı (kapalı/silinmiş/tarihi geçmiş),
+    soru upsert'i (sıra parklama dahil), `/api/files/{id}` yetki kontrolü ve
+    **paket duman testi** (düzeltmelerden önceki sürümde tam geçmişti).
+
+## Kararlar (akşam)
+- Kod kuralı yerine **veritabanı izni** ilkesi gibi, collation da artık tek yerde
+  yazılı kural: kullanıcı kodu → tam eşleşme + belirlenimci; bizim `Code`
+  kolonlarımız → CI; Sentez serbest metni → sorguda **açık** `COLLATE`.
+  Bulgu #1, #2 ve #6 aynı sınıftan: bir uçta harf duyarsız, öbür uçta duyarlı
+  karşılaştırma.
+- "Arayüz kuralı ilan ediyorsa sunucu onu uygulamak zorunda" (#2) ve "store bütün
+  kolonları yazıyorsa istemci sözleşmesi tam olmak zorunda" (#4) — ikisi de aynı
+  kökten: sözleşmenin yarısını yazmak sessiz veri kaybı demek.
+- Tahmin edilemeyen yerde **tahmin edilmez**: belirsiz giriş adayında rastgele
+  seçmek yerine "bulunamadı" denir; tanınmayan `EntityType`'ta en geniş izne
+  düşülmez, kapanır; dinamik SQL'de hedef görülemediği için hiç izin verilmez.
+
+## Açık kalanlar / sonraki adım
+- **Ağ gelince ~15 dakikalık doğrulama turu** (sunucuya kurmadan ÖNCE): yukarıdaki
+  "ÖLÇÜLMEYENLER" listesi.
+- **Faz 1b:** kalite kontrol kayıtları + ölçüm (POM) tabloları ve Excel ile POM yükleme.
+- Ertelenen minor'lar (ledger'da yazılı): `DateValue` DATE/DateTime uyuşmazlığı,
+  firma 404/409 ayrımı, `RequestSizeLimit` 30MB ile `EnFazlaBayt` 25MB ikiliği,
+  CORS'ta sabit `localhost:5173`, `MapFallbackToFile`'ın `/api/*`'ı yakalaması,
+  `Md5Helper.Verify`'da sabit zamanlı karşılaştırma, `ScriptUygulayici`'nin
+  transaction'sız uygulaması.
+- SentezLive'daki canlı test verisi (DB'den teyit edildi): `UZM_Selvedge_Firm` 1
+  kayıt — F001, adı collation ölçümü için "AKIN TEKSTIL" yapıldı;
+  `UZM_Selvedge_Survey` 1 kayıt (FASON01), 2 cevap, 1 ek dosya. Örnek veri olarak
+  kalsın mı, silinsin mi?
