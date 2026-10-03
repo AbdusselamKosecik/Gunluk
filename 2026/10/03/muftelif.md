@@ -368,3 +368,79 @@ collation'ı sabitleyip hiçbir ayrıştırma kuralı koymadığı için kapıy�
   kayıt — F001, adı collation ölçümü için "AKIN TEKSTIL" yapıldı;
   `UZM_Selvedge_Survey` 1 kayıt (FASON01), 2 cevap, 1 ek dosya. Örnek veri olarak
   kalsın mı, silinsin mi?
+
+### 14. Ağ engelinin teşhisi — sorun kodda değildi
+- **Belirti:** `sqlcmd` bağlanıyor, uygulama bağlanmıyor. "Ağ düştü" deyip geçmek yerine
+  ölçtüm:
+
+| Test | Sonuç |
+|---|---|
+| `sqlcmd` (ODBC) → 192.168.1.22:1433 | **bağlandı** (`sys.dm_exec_connections`: `net_transport=TCP`) |
+| Ham `System.Net.Sockets.TcpClient` → :1433, :445, `8.8.8.8:53`, `npmjs.org:443` | **hepsi zaman aşımı** |
+| ICMP (`Test-Connection`) → 192.168.1.22 | **başarılı** |
+| `git push`, `curl` (aynı anda) | **çalışıyor** |
+
+- **Eledikleri:** MTU/`Packet Size` (4096/2048/512 aynı), şifreleme (`Encrypt`
+  True/Optional/False aynı), arayüz seçimi (soketi Wi-Fi `192.168.1.145`, VPN
+  `10.212.134.200` ve varsayılana ayrı ayrı bağladım — hepsi aynı), araç sandbox'ı
+  (kapalıyken de aynı), güvenlik duvarı kuralları (`codex_sandbox_offline_*` üç kural
+  var ama `LocalUser` SID'i `…-1003` = `CodexSandboxOffline`, oturum kullanıcısı `…-1001`).
+- **Sonuç:** .NET'in TCP connect yolu tıkanmış, ICMP ve .NET dışı TCP istemcileri
+  çalışıyordu. Kullanıcı güvenlik duvarını kapattı, `.NET` ham TCP anında açıldı.
+- **Ders:** "ağ düştü" bir teşhis değil. İki istemciyi **aynı anda** karşılaştırmak
+  (ODBC vs SqlClient) ve katman katman elemek, sorunu koddan ayırdı.
+
+### 15. Canlı doğrulama tamamlandı — altı maddenin hepsi ölçüldü
+- **#7 Firma adı araması:** API üzerinden `akın`(ı)=1, `AKIN`=1, `Akın`=1,
+  `TEKSTIL`=1, `tekstıl`(ı)=1, **`tekstil`(i)=0**. Son satır **kusur değil, doğru
+  Türkçe collation**: `I` harfinin küçüğü `ı`'dır, `i` değil. (İlk ölçümümde ASCII
+  `akin` yazıp 0 görmüş, kendi testimi yanlış kurmuşum.)
+- **#2 Soru tipi:** POST'ta `"metin"`/`"teksecim"` gönderildi, DB'de `Metin`/`TekSecim`
+  yazılı. Cevap puanı **7.500** — düzeltmeden önce `"teksecim"` tipinde puan **hiç
+  toplanmıyor**, anket sessizce yanlış kaydediliyordu.
+- **#3 Anket kapısı:** `IsActive=0` → 400 "aktif değil"; `EndDate` geçmiş → 400
+  "süresi 31.01.2026'da doldu"; `StartDate` gelecek → 400 "01.01.2027'de açılıyor";
+  `IsDeleted=1` → 400 "bulunamadı"; normal → 200. DB'de `TextValue='girmemeli'`
+  **0 satır**, `'girmeli'` 1 satır.
+- **#4 Anket düzenlemesi (en riskli düzeltme):** soru `RecId` 6 ve 7 **korundu**,
+  `SortOrder` 1,2 → 2,1 **takas edildi** (filtreli UNIQUE indekste 2601 yok — sıra
+  parklama çalıştı), metin düzeltildi, yaşayan soru 2 (kopya satır yok),
+  **kopan cevap 0**. Düzeltmeden önce 4 cevabın hepsi kopacaktı.
+- **#5 Tasarımcı kolonları:** `NameEn`/`Target`/`StartDate`/`EndDate` GET→form→PUT
+  turundan sonra **aynen korundu**. Eskiden dördü de NULL olurdu.
+- **Dosya deposu:** yükleme 200, `EntityType`'a göre indirme 200, yol
+  `survey/2026/10/3/<guid>.png` — **wwwroot dışında**.
+- **Paket duman testi (düzeltilmiş kodla):** `/` 200 `text/html`, `/anket` 200 (SPA
+  fallback), `index-cDDX-db7.js` 200 `text/javascript`, `.css` 200 `text/css`,
+  tokensiz `/api/anket` **401**, login 200, `/api/anket` 200, `/api/firma` 200,
+  `/api/sentez/order` 200, `/api/yetki/roller` 200, doğrulama hatası 400.
+  `/api/files/2` **404** ve logda *"veritabanında var ama DİSKTE YOK"* — **doğru**:
+  paketin `files` kökü boş, dosya geliştirme kökünde. "Veri iki ayrı yerde"
+  senaryosu tam beklendiği gibi davranıyor; yedek uyarısının somut kanıtı.
+
+### 16. Kendi iddiamı düzeltiyorum — `/api/files/{id}` bulgusu
+İnceleyici "en düşük yetkili kullanıcı sıralı `RecId` ile tüm ek deposunu gezebilir"
+dedi, ben de bunu olduğu gibi aktardım. **`RolIzin`'i ölçtüm: Faz 1a'da bu açık yok.**
+`Okuma` kümesi `[anket.oku, firma.oku, kk.oku, olcum.oku, dosya.oku]` ve **her rol**
+(en düşüğü `Izleyici` dahil) bu beşin hepsini alıyor. Yani `dosya.oku`'su olup varlık
+okuma iznine sahip **olmayan rol yok**.
+
+Düzeltme yine de duruyor, ama kazancı farklı:
+- **tanınmayan `EntityType`** artık `dosya.oku` değil `yetki.yonet` istiyor (fail-closed);
+- Faz 1b'de müşteri bazlı KK fotoğrafları gelince rol daraltılabilir hale geldi.
+
+403 yolu **canlıda ölçülemedi** (öyle bir rol yok), 8 birim testle kapsandı.
+
+## Kararlar (gece)
+- Teşhiste "aynı anda iki istemci" yöntemi: bir şey çalışıp benzeri çalışmıyorsa,
+  ikisini aynı saniyede karşılaştır. "Ağ düştü" açıklaması dört ölçümde çürüdü.
+- İnceleyicinin bulgusunu da ölçmeden kabul etmemek gerekiyordu; `/api/files`
+  iddiasını doğrulamadan aktardım, sonra `RolIzin`'i okuyup düzelttim.
+
+## Açık kalanlar / sonraki adım
+- **GÜVENLİK DUVARI KAPALI** — doğrulama için kapatıldı, **geri açılmalı.**
+- **Faz 1b:** kalite kontrol kayıtları + ölçüm (POM) tabloları, Excel ile POM yükleme.
+- Ertelenen minor'lar ledger'da yazılı (7 madde).
+- SentezLive'daki test verisi: `UZM_Selvedge_Firm` 1 (F001 / "AKIN TEKSTIL"),
+  `UZM_Selvedge_Survey` 2 (FASON01, TIPTEST), 4 cevap, 2 ek. Örnek veri olarak
+  kalsın mı, silinsin mi?
