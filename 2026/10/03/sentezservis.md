@@ -49,3 +49,13 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
 - Sunucuya yayın yapılmadı (`deploy/uzaktan-yayimla.ps1`). Firmada veya Windows yönetici hesabıyla yapılacak.
 - Toplayıcı kaldırılsın mı? Kullanıcıya sorulacak.
 - Eski tablolar düşürülsün mü? Kullanıcıya sorulacak.
+
+### 3. Modfex masaüstü uygulamaları tek sunucuya bağlandı
+- **Neden:** Kullanıcı tüm Modfex sunucu bilgisinin `100.119.104.122` olduğunu, kullanıcının `uzman` olduğunu belirtti.
+  bantdurumekrani, depo, paketleme ve sevkiyat eski geliştirme sunucusuna bakıyordu (`100.73.123.69` / `ModaSima2026` / `sa`).
+- **Ne yapıldı:** `%LOCALAPPDATA%\Modfex\{bantdurumekrani,depo,paketleme,sevkiyat,kesimhane,bantsayim}\ayarlar.json`
+  dosyalarında Sunucu, Veritabani (`SentezCore`), SqlKullanici (`uzman`) ve SqlSifreKorumali güncellendi.
+  Şifre `dpapi:` + DPAPI(CurrentUser, entropi "Modfex.Ortak.Ayarlar") biçiminde yazıldı. Her dosyanın yanına `ayarlar.json.yedek-20261003` yedeği alındı.
+- **Sonuç / doğrulama:** `uzman` ile SQL bağlantısı açıldı. Erişilebilen veritabanları: SentezCore, zkbiotime, zkbiotime1 (ModaSima2026 bu sunucuda yok).
+  Her dosyadaki şifre geri çözülerek doğrulandı.
+- **Not:** Bu yerel bir ayar değişikliği, repoya commit yok. Uygulamalar artık canlı SentezCore'a bağlanıyor.
