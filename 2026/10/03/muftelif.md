@@ -444,3 +444,150 @@ Düzeltme yine de duruyor, ama kazancı farklı:
 - SentezLive'daki test verisi: `UZM_Selvedge_Firm` 1 (F001 / "AKIN TEKSTIL"),
   `UZM_Selvedge_Survey` 2 (FASON01, TIPTEST), 4 cevap, 2 ek. Örnek veri olarak
   kalsın mı, silinsin mi?
+
+---
+
+## 17. Hedef güncellendi: proje bitirilecek + ayrı bir mobil uygulama
+
+- **Neden:** Kullanıcı: *"Goal set: projeyi tamamlayalim. Mobil uygulamayida bitirelim,
+  Ayri bir uygulama olsun."*
+- **Ne yapıldı:** Altı soru sorulup kararlar yazıya geçirildi:
+  - Mobil yığın: **MAUI Android (C#)**
+  - Mobil kapsam: **dördü birden** — POM ölçüm girişi, KK rapor girişi, anket doldurma,
+    fotoğraf çekip ekleme
+  - Çevrimdışı: **yok** (*"Hayır, Wi-Fi her yerde var"*) → yerel DB, senkron kuyruğu,
+    çakışma çözümü **hiç yazılmayacak**
+  - Sıra: **önce Faz 1b (KK + ölçüm, web), sonra mobil**
+  - POM kaynağı: şablon tablosu **yok**; liste Sentez'in iş emri ekinden **o anlık** okunur
+  - Ölçü aleti (Bluetooth/USB): **entegre edilecek** (mobilde)
+- **Dokunulan dosyalar:** `C:\Users\abdus\.claude\projects\...\memory\selvedge-mobil-karari.md`
+- **Sonuç / doğrulama:** Kararlar hafızaya yazıldı; Faz 1b planı bu sıraya göre yazıldı.
+
+### 17.1 Excel talimatını fazla yorumladım, kullanıcı düzeltti
+
+- **Neden:** Kullanıcı *"excell ile birsey yukleme yapmayacagiz hacim. onu es gec."*
+  dedi. Bunu "Excel okuma tamamen kapsam dışı" diye anladım ve `ClosedXML`'i,
+  `Erp_WorkOrderAttachment` sorgusunu kaldırdım (`993c849`).
+- **Düzeltme:** Kullanıcı: *"mezurada oldugu gibi burada sentez uzerinden excell den
+  o anlik okunacak."* — yani **yükleme ekranı** yok, ama **Sentez'in iş emri ekindeki
+  Excel canlı okunacak.** İkisi farklı şey.
+- **Ne yapıldı:** `09673af` ile geri alındı; `ClosedXML` ve ek sorgusu yerine döndü,
+  ayrım spec §4.5'e açıkça yazıldı.
+- **Ders:** "X yapmayacağız" dendiğinde X'in sınırını tahmin etmek yerine sorulmalıydı.
+  Bir bağımlılığı silmek, geri almaktan pahalı.
+
+---
+
+## 18. Faz 1b planı yazıldı — 6.955 satır, 12 görev
+
+- **Neden:** Kullanıcının seçtiği sıra: önce KK + ölçüm (web). Yürütme yöntemi
+  önceki turda **native** seçilmişti, bu yüzden plan doğrudan yazıldı.
+- **Dokunulan dosyalar:** `docs/superpowers/plans/2026-10-03-sentezselvedge-faz1b-kk-olcum.md`
+- **Görevler:**
+
+| # | İş | Yeni/Değişen |
+|---|----|--------------|
+| 1 | Şema: `QaReport`, `QaDefect`, `QaSample`, `QaMeasurement`, `Measure`, `MeasureItem` | `db/0004_kk.sql`, `db/0005_olcum.sql` (14 → **20** tablo) |
+| 2 | `DhuHesap` — DHU % ve kusurlu % | saf sınıf, DB görmez |
+| 3 | `AqlPlan` — numune adedi + kabul/ret | `NumuneAdedi` üretimden taşındı, `KabulRet` **yeni** |
+| 4 | `RaporNo` — `KK-202610-0007` | saf sınıf |
+| 5 | `OlcumSpecExcel` — POM Excel çözümleme + ×2 listesi | saf sınıf, ClosedXML |
+| 6 | Sentez varyant (renk/beden) + iş emri eki okuma | `SentezSql`/`SentezReader` genişler |
+| 7 | KK rapor başlığı — numara yarışı, iyimser kilit, denetim kaydı | `KkStore`, `KkController` |
+| 8 | KK detay satırları + DHU/AQL yeniden hesabı | tek transaction |
+| 9 | Ölçüm — ekten aç, ×2, satırları dondur | `OlcumStore`, `AyarServisi` |
+| 10 | Web KK ekranları | `api/kk.ts`, 2 sayfa |
+| 11 | Web ölçüm ekranları | `api/olcum.ts`, 2 sayfa |
+| 12 | AQL tablosunu müşterinin sayfasıyla doğrula + paket + kurulum dokümanı | — |
+
+- **Planın taşıdığı beş "Review Focus" maddesi** (spec'in ima ettiği ama görev
+  testlerinin kendiliğinden kapsamadığı girdiler) her biri kodun sahibi olan göreve
+  test olarak bağlandı.
+
+### 18.1 Planın en riskli varsayımı GERÇEK VERİYLE ölçüldü
+
+- **Neden:** Ölçüm modülünün tamamı "iş emri ekindeki Excel şu düzende" varsayımına
+  dayanıyor. Yanlışsa 12 görevin 4'ü çöpe gider.
+- **Ne yapıldı:** ERP'de 36.986 POM eki var; ikisi çıkarılıp incelendi
+  (`Erp_WorkOrderAttachment.RecId` 45123 ve 45124, iş emri 95238).
+- **Komutlar:**
+  ```bash
+  sqlcmd -S 192.168.1.22 -d SentezLive -I -Q \
+    "SELECT RecId, WorkOrderId, FileName, UD_MeasurementType FROM dbo.Erp_WorkOrderAttachment WHERE WorkOrderId = 120956"
+  ```
+- **Sonuç / doğrulama:** Düzen mezura'nın `Services/ExcelReader.cs`'indekiyle birebir
+  uyuşuyor: satır 10 etiketler + bedenler (kolon 6'dan), satır 11'den veri
+  (kolon 1 sıra, 2 POM kodu, 4 açıklama, 5 tolerans, 6+i beden spec'i).
+- **YENİ BULGU — "boş hücreye kadar oku" kuralı yükü taşıyor:** 45123'te bedenler
+  6–18. kolonlarda (22…34), **19–20 boş**, sonra **21–33'te aynı bedenler tekrar**.
+  Dosya bir "BEFORE AND AFTER" sayfası: yıkama öncesi ve sonrası iki blok yan yana.
+  Boşluğu geçip okumak her POM'u iki kez, biri **yanlış spec'le** yazardı.
+  45124 ise tek blok ve `UD_MeasurementType = "Yikama Öncesi"` taşıyor.
+- İki küçük ama kırıcı ayrıntı: POM kodları sonunda **boşluk** taşıyor (`'WAIST   '`),
+  beden hücreleri **sayısal** (22, metin değil). İkisi de teste girdi.
+
+### 18.2 Kendi yazdığım Task 9'u silip yeniden yazdım
+
+- **Neden:** Öz-inceleme (plan yazma becerisinin "tip tutarlılığı" adımı) Task 9'un
+  **iki ayrı tutarsızlığını** yakaladı:
+  1. Task 1'in şemasında olmayan kolonlar kullanılmış: `MeasureNo`, `Phase`,
+     `ClosedAt`, `Result`, `Notes`, `FirmId`. Gerçek şema `SpecValue`,
+     `MeasuredValue`, `Tolerance`, `Deviation`, `IsSkipped`, `IsDoubled`,
+     `StartTime`, `EndTime`, `QaReportId` taşıyor.
+  2. **×2 kuralını yanlış anlamışım.** "Satırı ikiye katla, biri yıkama öncesi
+     biri sonrası" diye yazmıştım. mezura'nın yaptığı bu değil: `t = t * 2`,
+     yani **yarım ölçülen POM'un DEĞERİ ikiyle çarpılır** (WAIST yatık ölçülür).
+     Liste `AppSetting`'de (`Olcum.CiftOlcuPomListesi`), kodda değil.
+- **Ne yapıldı:** Task 9 baştan yazıldı. Çarpma **sunucuda** uygulanıyor ve
+  `IsDoubled` kaydediliyor — arayüzde değil, çünkü mobil uygulama da aynı API'yi
+  kullanacak ve kuralın iki yerde yaşaması iki farklı sonuç demek.
+- **Ders:** Plan yazarken "bu modülü hatırlıyorum" yetmiyor; şemanın ve komşu
+  görevin `Produces` bloğunun metnine bakmak gerekiyor.
+
+### 18.3 Öz-incelemenin bulduğu diğer iki kusur
+
+- **`Aql INT` → `DECIMAL(4,2)`:** AQL seviyeleri 1.0 / **1.5** / 2.5 / 4.0.
+  Tamsayı kolonda 1.5 ve 2.5 hiç girilemezdi. Eski Selvedge'deki kusur tam buydu;
+  şemaya taşımak üzereydim.
+- **Toplamlar iki yerde hesaplanıyordu:** Task 8'de `TotalOrderQty` bir yerde
+  `DhuSonuc`'tan, bir yerde elle `Sum(...)` ile çıkıyordu. Aynı sayıyı iki yerde
+  hesaplamak iki farklı sonuç demek; tek kaynağa (`DhuSonuc`) indirildi.
+
+### 18.4 `UnitsPresented` ve AQL kararı — bilerek yapılmayan iki şey
+
+- `QaReportService.cs`'in kendi yorumu kaydediyor: `UnitsPresented` türetilince
+  **uydurma sayılar** çıkıyordu (808 yerine 800). Yeni `DhuHesap`'ın çıktısında
+  bu alan **hiç yok**; girilmemişse boş kalır ve raporda "-" basar.
+- `AqlPlan.KabulRet` üretimde **yok**, Z1.4 Tablo II-A'dan kuruldu. Bu yüzden
+  arayüzde **"danışma amaçlı"** etiketiyle duruyor, `FinalDecision` **insan alanı**
+  kalıyor ve **Task 12 bu tabloyu müşterinin kendi AQL sayfasıyla karşılaştırmadan
+  paket çıkmıyor.** Yapısal testler (`Re = Ac + 1`, monotonluk) yanlış *yazılmış*
+  bir satırı yakalar; yanlış *kaynaktan* alınmışı yalnızca müşterinin sayfası yakalar.
+
+- **Commit'ler:**
+  - `1fbe889` — Faz 1b planı, Task 1..5
+  - `121f80f` — Task 6..9
+  - `8d85747` — Task 9..12 + öz-inceleme düzeltmeleri
+
+## Kararlar (plan turu)
+- Ölçüm satırı yazıldığı an **donar**: spec ve tolerans satıra kopyalanır, FK ile
+  bağlanmaz. Yoksa müşteri yeni Excel yüklediği gün üç ay önceki "uygun" ölçüm
+  geçmişe dönük "uygunsuz" olurdu.
+- Ek okunamazsa ölçüm **açılmaz** ve kayıt **oluşmaz**. Yarım açılmış POM'suz bir
+  ölçüm sahadaki ölçümcüyü "ölçüm var ama hiçbir şey yok" durumunda bırakır.
+- "Atlandı" ile "sıfır ölçüldü" **ayrı** tutulur. mezura'da atlanan nokta 0
+  yazıyordu; o 0 raporda "ölçüldü ve 0 çıktı" diye okunur ve uygunsuz damgası yer.
+- Renk/beden `QaSample`'da **metin kod** olarak saklanır, varyant ID'si değil:
+  ERP'de bir varyant yeniden adlandırılsa geçmiş rapor neyi denetlediğini
+  söylemeye devam etmeli.
+- Rapor numarası yarışı (iki denetçi aynı anda rapor açarsa) bir **çakışma değil**,
+  sıra yarışıdır: store 2601/2627'de 3 kez yeniden dener, kullanıcıya hata göstermez.
+
+## Açık kalanlar / sonraki adım
+- **GÜVENLİK DUVARI HÂLÂ KAPALI** — doğrulama için kapatıldı, geri açılmalı.
+- Plan kullanıcı tarafından gözden geçirilmeyi bekliyor; onaydan sonra Task 1'den
+  başlanacak (yöntem: native).
+- Faz 1b'den sonra: **MAUI Android** mobil uygulaması — kendi brainstorm → spec →
+  plan turunu alacak. API-only (cihazdan doğrudan SQL **yok**, mezura'nın yaptığı
+  tekrarlanmayacak), çevrimdışı yok, ölçü aleti Bluetooth HID klavye olarak.
+- SentezLive test verisi kararı hâlâ bekliyor (Task 12, Step 9 bunu soruyor).
