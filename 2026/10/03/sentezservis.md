@@ -144,3 +144,18 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
 - Sunucudaki `Eposta:Gonderen` adresi hâlâ modasima.local olabilir; kontrol edilmeli.
 - Security personeli vardiyalı çalıştığı için yüksek NON görünüyor; kural gerekirse ayrıca ele alınacak.
 - Zamanlama parametre ekranı canlı arayüzde gözle denenmedi (birim testleri geçiyor).
+
+### 6. Günlük giriş/çıkış maili bt@modasima.com.tr'ye test olarak gönderildi; mail düzeltmeleri
+- **Neden:** Kullanıcı günlük maili görmek istedi (Excel'li olanı değil). Excel mailinde gövde tablosu olmayacak, Excel yalnızca ek olarak gidecek.
+- **Ne yapıldı:**
+  - Bu makinede Outlook COM çalışmadı (80080005). SMTP bilgileri ModaSima'nın yerel `appsettings.json` dosyasından okundu:
+    mail.kurumsaleposta.com:465, noreply@modasima.com.tr. Parola ekrana yazdırılmadı.
+  - Modfex'teki `EpostaGonderici` BCL `SmtpClient` kullanıyordu; bu sınıf 465 portunu (implicit SSL) desteklemiyor.
+    ModaSima f7622b5 örnek alınarak MailKit'e (4.18.0) geçildi; dosya eki ve GonderenAdi korundu.
+  - Test için scratch konsol yazıldı: canlı zkbiotime → `BildirimServisi.PdksGirisCikisAsync` → LocalDB'de geçici `bildirim_kutusu` (PdksMailDeneme) → `EpostaGonderici`.
+    Gönderen "Modfex SentezServis <noreply@modasima.com.tr>", konu "[Modfex] Personnel in/out — 03.10.2026", 295 satır.
+  - Gövde 182 bin karakterdi; hücre stilleri tek `<style>` bloğuna alındı, 63 bin karaktere indi (Gmail 102 KB'tan sonrasını kırpıyor).
+    Gönderilen test maili hafifletmeden önceki sürümdü.
+  - `pdks-devam` maili sadeleşti: gövdede tek satır var, rapor yalnızca Excel ekinde.
+- **Sonuç / doğrulama:** Mail gönderildi (SMTP hata vermedi). Testler 202/202.
+- **Commit:** `e567e65` — Mail: MailKit'e gecis (465 implicit SSL), devam maili yalnizca Excel eki, gunluk tablo hafifletildi
