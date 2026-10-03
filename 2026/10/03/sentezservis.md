@@ -59,3 +59,59 @@ Hedef: uygulamadaki ekran ve iş envanterini çıkarıp kullanılmayan modüller
 - **Sonuç / doğrulama:** `uzman` ile SQL bağlantısı açıldı. Erişilebilen veritabanları: SentezCore, zkbiotime, zkbiotime1 (ModaSima2026 bu sunucuda yok).
   Her dosyadaki şifre geri çözülerek doğrulandı.
 - **Not:** Bu yerel bir ayar değişikliği, repoya commit yok. Uygulamalar artık canlı SentezCore'a bağlanıyor.
+
+### 4. Personel giriş-çıkış (PDKS) sorgusu Modfex için uyarlandı
+- **Neden:** Kullanıcı, Modasima sentezservis'teki PDKS sorgusunun (`Modasima/sentezservis/src/SentezServis.Core/Pdks/PdksDeposu.cs`) Modfex'e uyarlanmasını istedi.
+- **Bulgular (zkbiotime, 100.119.104.122):**
+  - `zkbiotime` canlı; `zkbiotime1` 19.11.2025'te kalmış eski kopya.
+  - Cihazlar Yuz1 ve Yuz2. `punch_state` alanı 0 = giriş (06–07), 1 = çıkış (16).
+  - Puantaj (`att_payloadtimecard`) clock_in/clock_out o gün ve ertesi gün boş kalıyor; 2 Ekim ve 3 Ekim'de 0 satır dolu.
+  - Hafta tatili cuma; cumartesi az hareket var.
+  - Modasima'daki `emp_code <> '24'` istisnası burada yok (öyle bir personel yok), kaldırıldı.
+  - Administration personelinin çoğu çıkış okutmuyor.
+- **Değişiklikler:** Sorgu yalnızca ham hareketleri okuyor. Giriş = bugünkü İLK state=0 hareketi (eskisi MAX'tı, öğleden sonra yanlış sonuç verirdi).
+  Çıkış = önceki iş gününün SON state=1 hareketi. Gruplama ada göre değil, personel id'sine göre.
+- **Sonuç / doğrulama:** @Gun = 2026-10-01 ile denendi: 337 satır, 0,7 sn; çıkışların hepsi 16'da, girişler 06–07'de.
+  Bugün (cumartesi, hareket yok) önceki gün olarak 10-01 seçildi, 295 satır döndü.
+- **Sorgu:**
+  ```sql
+  -- Modfex PDKS — önceki iş gününün ÇIKIŞI + bugünün GİRİŞİ
+  -- Veritabanı: zkbiotime (100.119.104.122). zkbiotime1 2025 sonunda kalmış eski kopyadır.
+  -- Cihazlar (Yuz1, Yuz2) yönü kaydeder: punch_state 0 = giriş, 1 = çıkış.
+  -- Puantaj (att_payloadtimecard) gün içinde boş kaldığı için kullanılmaz; ham hareket okunur.
+  DECLARE @Gun date = CONVERT(date, GETDATE());
+  
+  -- Önceki iş günü: bugünden önce hareket olan son gün (cuma tatili / cumartesi otomatik atlanır).
+  DECLARE @Onceki date = (
+      SELECT MAX(CONVERT(date, punch_time))
+        FROM dbo.iclock_transaction
+       WHERE punch_time < @Gun);
+  
+  WITH cikis AS (
+      SELECT emp_id, MAX(punch_time) AS Cikis
+        FROM dbo.iclock_transaction
+       WHERE punch_state = 1
+         AND punch_time >= @Onceki AND punch_time < DATEADD(day, 1, @Onceki)
+       GROUP BY emp_id
+  ), giris AS (
+      SELECT emp_id, MIN(punch_time) AS Giris
+        FROM dbo.iclock_transaction
+       WHERE punch_state = 0
+         AND punch_time >= @Gun AND punch_time < DATEADD(day, 1, @Gun)
+       GROUP BY emp_id
+  )
+  SELECT d.dept_name  AS Departman,
+         p.emp_code   AS SicilNo,
+         p.first_name AS Ad,
+         p.last_name  AS Soyad,
+         @Onceki      AS OncekiGun,
+         CONVERT(varchar(5), c.Cikis, 108) AS Cikis,
+         CONVERT(varchar(5), g.Giris, 108) AS Giris
+    FROM dbo.personnel_employee p
+    LEFT JOIN dbo.personnel_department d ON d.id = p.department_id
+    LEFT JOIN cikis c ON c.emp_id = p.id
+    LEFT JOIN giris g ON g.emp_id = p.id
+   WHERE p.status = 0
+     AND (c.Cikis IS NOT NULL OR g.Giris IS NOT NULL)
+   ORDER BY d.dept_name, p.first_name, p.last_name;
+  ```
