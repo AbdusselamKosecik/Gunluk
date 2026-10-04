@@ -120,3 +120,14 @@ Yeni repo: `X:\Gitlab\modfex-apparel\selvedge` → git@gitlab.com:modfex-apparel
 - **Risk:** parola yalnız bu diskte (`publish\gizli`). Disk uçarsa: SQL'de `ALTER LOGIN uzm_selvedge_app WITH PASSWORD`
   ile yenisi verilip sunucudaki `C:\Selvedge\app\appsettings.Production.json` güncellenir.
 - **Commit:** `e7375c0`
+
+### 8. servis-kur.ps1 SentezServis `kur.ps1` düzenine göre yeniden yazıldı
+- **Neden:** Kullanıcı SentezServis'in kur.ps1'ini örnek verdi ("bunun gibi yaparmisin setupu").
+- **Ne yapıldı:** comment-based help; `param(-Kaynak=$PSScriptRoot, -Hedef C:\Selvedge\app, -Dosyalar, -Port 8085,
+  -Hesap NetworkService)`; yönetici kontrolü; exe/runtime kontrolü; `Yaz()`; servis varsa durdur + `sc.exe config`,
+  yoksa `sc.exe create ... delayed-auto`; `sc.exe failure restart/10000/30000/60000`; firewall `Selvedge HTTP 8085`
+  LocalSubnet; `WaitForStatus('Running')` + swagger kontrolü. Bizim eklerimiz korundu: appsettings.Production.json
+  koruma/paketten/şablondan, `sql\` kopyalanmaz, icacls. Dosya UTF-8 BOM ile (PS 5.1).
+- **Doğrulama:** parse 0 hata; yönetici olmayan çalıştırmada "Bu betik yönetici olarak çalıştırılmalıdır." ile durdu.
+  Paket: `publish\Selvedge-Modfex-Servis-20261004-2233.zip`.
+- **Commit:** `47c97a7`
