@@ -75,3 +75,36 @@ Yeni repo: `X:\Gitlab\modfex-apparel\selvedge` → git@gitlab.com:modfex-apparel
 - DBA: `9001_yetki.sql`; sunucuda Hosting Bundle .NET 10; KURULUM.md adımları; `sentez_views.sql`.
 - Gerçek Modfex logosu gelirse `modfex-logo*.png` + launcher ikonları değiştirilecek.
 - Sunucuda canlı deneme: Üretim Emirleri listesi, QC kaydı, foto yükleme, PDF.
+
+---
+
+## Devam (öğleden sonra): IIS → Windows servisi, APK
+
+### 5. Windows servisi (kullanıcı: "iis degilde servis olacak sekilde")
+- **Ne yapıldı:**
+  - `Program.cs`: `WebApplicationOptions { ContentRootPath = WindowsServiceHelpers.IsWindowsService() ? AppContext.BaseDirectory : default }`
+    + `builder.Services.AddWindowsService(o => o.ServiceName = "Selvedge")`; Serilog dosya yolu `ContentRootPath\logs`
+    (servisin çalışma klasörü System32 olduğu için). Paket `Microsoft.Extensions.Hosting.WindowsServices` 10.0.9.
+  - `web.config` silindi, csproj `IsTransformWebConfigDisabled=true`.
+  - `deploy/servis-kur.ps1` (sunucuda yönetici, zip klasöründen): ASP.NET Core 10 runtime kontrolü → servisi durdur →
+    robocopy `C:\Selvedge\app` (`appsettings.Production.json` hariç) → ilk kez ise örnekten oluşturup durur →
+    icacls NetworkService (app RX, logs + `C:\Selvedge\files` M) → `sc.exe create Selvedge start= delayed-auto
+    obj= "NT AUTHORITY\NetworkService"` + `sc.exe failure ... restart/10000` → firewall 8085 LocalSubnet → başlat →
+    swagger kontrolü.
+  - `appsettings.Production.ornek.json`: `Kestrel:Endpoints:Http:Url = http://0.0.0.0:8085`; tek ters bölü
+    (`C:\Selvedge\files`) geçersiz JSON hatası düzeltildi.
+  - `yayinla.ps1` → `publish\Selvedge-Modfex-Servis-<tarih>.zip` (servis-kur.ps1 dahil). KURULUM.md yeniden yazıldı.
+- **Doğrulama:** yayın çıktısı Production ayarı + LocalDB ile çalıştırıldı: 8085'te `/` ve `/login` 200, admin token,
+  `/api/mfg-orders` 401, log `publish\selvedge\logs\` altında. Gerçek servis modu (sc create) yönetici gerektirdiği için
+  yerelde denenmedi.
+- **Commit:** `f00d624`
+
+### 6. APK
+- Kullanıcı Geliştirici Modu'nu açtı. İkinci hata: `JAVA_HOME is not set` → `build-apk.ps1`'e varsayılanlar:
+  `ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk`, `JAVA_HOME=C:\Program Files\Android\openjdk\jdk-21.0.8`.
+- **Sonuç:** `publish\modfex-qc-1.0.0.1.apk` (74.8 MB). İkon/splash kaynakları yeniden üretildi.
+- **Commit:** `18e8e45`
+
+## Açık kalanlar (güncel)
+- Sunucu: runtime 10, `9001_yetki.sql`, `servis-kur.ps1` (iki kez), `sentez_views.sql`, admin parolası.
+- APK cihazda denenmedi.
