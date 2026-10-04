@@ -147,6 +147,14 @@ Kullanıcı kararları:
   (`(SELECT x FROM Parametre)`) SQL Server'da çalışmıyor (Msg 102/156) — CROSS JOIN şart.
 - **Doğrulama:** Eylül 2026 (0/1), Temmuz 2025 (1) çıktıları önceki sürümle birebir aynı.
 
+### 14. "Elle girilenler gelmemiş"
+- **Bulgu 1:** Haziran 2026'dan beri zkbiotime'da hiç elle okutma yok (base_adminlog'da manuallog işlemi yok;
+  son source=2 kaydı 2025-10-06). Eylül 2026'da 0 doğru.
+- **Bulgu 2:** ~50 çıkmış kişi kayıtlı çıkış tarihinden sonra da okutmuş (4909: 59 gün). Eski "çıkıştan sonra
+  okutan sayılmaz" kuralı bunları tüm aylardan siliyordu (Haziran 2025: 24 elle kaydın 23'ü).
+- **Düzeltme:** çıkış günü = MAX(resign_date, son okutma); `Son_Okutma` sütunu.
+- **Doğrulama:** Mayıs–Ekim 2025 elle kayıt sayısı (CikanlarDahil=1) veritabanıyla birebir: 28, 24, 14, 14, 4.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
