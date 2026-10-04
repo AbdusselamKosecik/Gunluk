@@ -102,7 +102,7 @@ Kullanıcı kararları:
 - **Sonuç:** web 48/48, `tsc -b` ve lint temiz. Yeni paket
   `SentezServis-Modfex-kurulum\SentezServis-2026-10-04-0507.zip` (arayüz 2026-10-04 05:06).
 - **Not:** Kullanıcı ayrıca `SentezService` adlı boş bir DB açtı (05:07); çalışan servis `SentezServis`'i
-  kullanıyor (58 tablo, yönetici hesabı orada). Hangisinin kalacağı kullanıcıya soruldu.
+  kullanıyor (58 tablo, yönetici hesabı orada). Kullanıcı kararı: `SentezServis` kalıyor; boş `SentezService`'e dokunulmadı.
 
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
