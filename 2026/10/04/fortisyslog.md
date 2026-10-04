@@ -75,6 +75,23 @@ veritabanı oluşturulmasını istedi.
   `ParseError` + `RawLog` ile yazıldı.
 - **Commit:** `c262d80` — FortiSyslog: FortiGate UDP syslog -> MSSQL collector (.NET 8 Worker Service)
 
+### 7. Kurulum betikleri SentezServis `kur.ps1` stiline çevrildi
+- **Neden:** Kullanıcı SentezServis'in `kur.ps1`'ini örnek verip "bunun gibi" istedi.
+- **Ne yapıldı:** `deploy/install-service.ps1` → `deploy/kur.ps1`, `uninstall-service.ps1` → `deploy/kaldir.ps1`.
+  Türkçe parametreler (`-Kaynak` zorunlu, `-Hedef 'C:\Program Files\FortiSyslog'`, `-Port 514`, `-FortiGateIp`,
+  `-Hesap`, `-Parola`), `Yaz()` önekli çıktı, yönetici + exe varlık kontrolü, idempotent
+  durdur → kopyala → oluştur/güncelle → recovery → firewall → başlat → `WaitForStatus('Running')`.
+  `appsettings.Production.json` sunucuda korunur; ilk kurulumda örnekten oluşturulur.
+- **Teknik karar:** Servis yolu `New-Service` (oluşturma) ve registry `ImagePath` (güncelleme) ile yazılıyor;
+  hesap `Win32_Service.Change` (CIM) ile. Sebep: Windows PowerShell 5.1, `"C:\Program Files\..."` gibi boşluklu
+  ve tırnaklı argümanları sc.exe'ye bozuk geçirebiliyor. `sc.exe` yalnızca tırnaksız işlerde
+  (`start= delayed-auto`, `failure`, `failureflag`) kullanılıyor.
+- **Not:** SentezServis `kur.ps1`'indeki `"binPath=`"...`""` (eşittir ile değer bitişik) kullanımı sc.exe'de
+  çalışmayabilir; sc.exe `binPath=` ile değerin ayrı argüman olmasını ister. Orada kontrol edilmeli.
+- **Encoding:** Tüm `.ps1` dosyaları UTF-8 **BOM'lu** kaydedildi; BOM'suz dosyada PS 5.1 Türkçe karakterleri
+  bozuyordu (`yÃ¶netici`). Doğrulama: parser 0 hata, yönetici olmayan oturumda düzgün Türkçe hata mesajı.
+- **Commit:** `301a00b` — deploy: kur.ps1 / kaldir.ps1 (SentezServis kur.ps1 stilinde)
+
 ## Kararlar
 - `ReceivedAt` UTC tutulur; cihaz yerel saati FortiGateDate/Time/TimeZone kolonlarında.
 - Gerçek bağlantı bilgisi `src/FortiSyslog/appsettings.Production.json`'da, **.gitignore'da** (repoya girmez).
@@ -86,7 +103,7 @@ veritabanı oluşturulmasını istedi.
 
 ## Açık kalanlar / sonraki adım
 - Windows servis kurulumu canlı denenmedi (geliştirme makinesinde yönetici yetkisi yoktu); hedef
-  Windows Server'da `install-service.ps1` ile kurulup `sc stop` ile kapanış boşaltması gözlenmeli.
+  Windows Server'da `deploy\kur.ps1` ile kurulup `sc stop` ile kapanış boşaltması gözlenmeli.
 - `uzman` yerine yalnızca SELECT/INSERT/DELETE yetkili ayrı SQL kullanıcısı açılmalı (README'de script var).
 - FortiGate'te `config log syslogd setting` yapılmalı; `AllowedSourceIps`'e FortiGate IP'si yazılmalı.
 - Dead-letter dosyalarını otomatik geri içe aktarma yok (elle).
