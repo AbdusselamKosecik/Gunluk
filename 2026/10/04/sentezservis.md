@@ -117,6 +117,19 @@ Kullanıcı kararları:
 - **Doğrulama:** canlı zkbiotime (salt okuma) Eylül 2026: 357 kişi, 22 iş günü; Mayıs 2025: 5 kişide 11 elle
   kayıt (aktiflerdeki 11'in tamamı). Bulgu: çıkış okutmayan çok (Eylül 7678 giriş / 6864 çıkış) → Tek_Okutma_Gün.
 
+### 11. Aylık özet düzeltmesi — "değerler gelmiyor"
+- **Kök neden:** İş günü eşiği bugünkü aktif sayısının yarısıydı (357/2). Geçmiş aylarda o günkü kadro farklı
+  → Temmuz 2025'te günlerin çoğu iş günü sayılmadı (kişi başı ~11 gün). Eşik artık dönemin en kalabalık
+  gününün yarısı (herkes, çıkmışlar dahil). Temmuz 2025: 21 iş günü (3 ve 24 Temmuz tatil: 49 ve 2 kişi).
+- **İstifa parametresi:** `@CikanlarDahil` (kullanıcı "istifa durumunu başlangıçta girelim" dedi). 1 iken
+  status 99/100 ve `resign_date >= @Baslangic` olanlar çıkış tarihine kadar; çıkıştan sonra okutması olan
+  hariç (eski sorgunun kuralı). `personnel_resign`'da kişi başı tek kayıt; yine de TOP 1 DESC.
+- **Yeniden işe alınan:** 4053'ün hire_date'i 2026-01-20 ama 2024'ten beri okutuyor → 0 gün çıkıyordu.
+  Dönemde hire_date'ten önce okutması varsa dönem başından sayılır.
+- **Karşılaştırma (eski sorgu, Temmuz 2025):** aynı 700 kişi; çalışılan 6801/6904 (fark yalnız çıkış okutulan
+  günler, örn. 181: 10/13); devamsız 9602/800 (eski sorgu tatilleri ve işe giriş öncesini sayıyor).
+- **Commit:** bkz. `db/zkbiotime/aylik-devam-ozeti.sql` geçmişi.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
