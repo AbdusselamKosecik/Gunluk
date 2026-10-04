@@ -139,6 +139,14 @@ Kullanıcı kararları:
 - **Doğrulama (canlı, salt okuma):** Eylül 2026 0/1, Ağustos 2026 1, Temmuz 2025 0/1, Ekim 2026: 0/boş yok
   (yalnız 5337: 01.08.2026'da çıkmış, iş günü yok).
 
+### 13. "Hiçbir sayısal alan gelmiyor" — DECLARE kaldırıldı
+- **Durum:** sqlcmd'de (canlı zkbiotime) değerler doluydu; kullanıcının sorgu aracında Toplam_Gün,
+  Çalışılan_Gün vb. boş. Olası neden: araç `DECLARE @...` değişkenlerini boş parametre sayıyor.
+- **Ne yapıldı:** Parametreler `Parametre` CTE'sine taşındı (CikanlarDahil, Baslangic, Bitis, GirisSaati,
+  CikisSaati, Standart, Esik), bloklara `CROSS JOIN Parametre prm`. Not: SUM içinde alt sorgu
+  (`(SELECT x FROM Parametre)`) SQL Server'da çalışmıyor (Msg 102/156) — CROSS JOIN şart.
+- **Doğrulama:** Eylül 2026 (0/1), Temmuz 2025 (1) çıktıları önceki sürümle birebir aynı.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
