@@ -130,6 +130,15 @@ Kullanıcı kararları:
   günler, örn. 181: 10/13); devamsız 9602/800 (eski sorgu tatilleri ve işe giriş öncesini sayıyor).
 - **Commit:** bkz. `db/zkbiotime/aylik-devam-ozeti.sql` geçmişi.
 
+### 12. "Toplam iş günü boş geliyor"
+- **Bulgu:** Geçmiş dönemde, dönemden SONRA işe girenler de listeleniyor ve 0 geliyordu (Temmuz 2025: 158,
+  Ağustos 2026: 29 kişi). Personel CTE'sine filtre: `hire_date <= @Bitis` veya dönemde okutması var.
+- **Ek önlem:** Sütun adları kullanıcının eski sorgusundakine döndürüldü (`Toplam_Gün`, `Giriiş_Tarihi`,
+  `Toplam_Geç_Kalma_Süresi`, `Toplam_Erken_Çıkma_Süresi`, `Toplam_Mesai_Süresi`) — ada bağlı bir rapor/şablon
+  kullanılıyorsa yeni adlar boş görünür.
+- **Doğrulama (canlı, salt okuma):** Eylül 2026 0/1, Ağustos 2026 1, Temmuz 2025 0/1, Ekim 2026: 0/boş yok
+  (yalnız 5337: 01.08.2026'da çıkmış, iş günü yok).
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
