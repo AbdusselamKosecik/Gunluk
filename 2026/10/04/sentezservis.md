@@ -61,6 +61,35 @@ Kullanıcı kararları:
   React'te hızlı set değiştirmede sıra dışı yanıt ve 409 sonrası tazeleme yok; her istekte durum sorgusu.
 - **Sonuç:** `dotnet test` 239/239, Host build temiz.
 
+### 8. Yayın paketi, main'e birleştirme, canlı kurulum hazırlığı
+- **Neden:** Kullanıcı paket istedi; ardından "main'e birleştir, karma koli SQL'ini çalıştır,
+  appsettings'i çalışacak şekilde ayarla — paketi ben yükleyeceğim, ayarı ayrıca hazırla".
+- **Paket:**
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File deploy\yayinla.ps1
+  Compress-Archive -Path yayin\* -DestinationPath SentezServis-2026-10-04-0441.zip
+  Compress-Archive -Path db\sentezcore\karma-koli.sql -Update -DestinationPath SentezServis-2026-10-04-0441.zip
+  git checkout -- src/SentezServis.Host/wwwroot/.gitkeep   # vite build siliyor
+  ```
+  73,3 MB, 18 dosya, içinde appsettings.json yok. Arayüz tarihi 2026-10-04 04:41.
+- **Birleştirme:** `git merge --no-ff karma-koli` → main `42b2506`, push edildi.
+- **Canlı SentezCore:** `sqlcmd -S 100.119.104.122 -U uzman -d SentezCore -C -b -i db/sentezcore/karma-koli.sql`
+  → `UZM_KarmaKoli`, `UZM_KarmaKoliIcerik` oluştu; `MSR-1008-2` 50 varyant, 0 tanım.
+- **Bulgu:** Modfex SQL'de SentezServis'in kendi DB'si yoktu (yalnızca SentezCore, zkbiotime, zkbiotime1).
+  Uygulama DB oluşturmaz, yalnızca migrasyon uygular → `CREATE DATABASE SentezServis` +
+  `ALTER DATABASE SentezServis COLLATE Turkish_CI_AS` (boş). PDKS verisi `zkbiotime`'da (son kayıt 01.10.2026),
+  `zkbiotime1` eski (2025-11).
+- **appsettings:** depo dışında `X:\Gitlab\modfex-apparel\SentezServis-Modfex-kurulum\appsettings.json`
+  (paket de aynı klasörde). Sırlar içerdiği için git'e girmez. İçerik: Kestrel `http://0.0.0.0:81`;
+  `BaglantiCumlesi` / `SentezCoreBaglantiCumlesi` / `PdksBaglantiCumlesi` → `Server=localhost`, `uzman`
+  (PDKS ReadOnly); `SirketId` 2; `FirmaAdi` Modfex; `TabanAdres` `http://192.168.0.2:81`;
+  Eposta = Modasima'nın SMTP'si (mail.kurumsaleposta.com:465, noreply@modasima.com.tr,
+  GonderenAdi "Modfex SentezServis", Alicilar bt@modasima.com.tr); Kasa ve Toplayıcı kapalı;
+  SaatDilimi boş (sunucu yerel saati).
+- **Kurulum (kullanıcı yapacak):** zip'i sunucuda aç, appsettings.json'ı yanına koy, yönetici olarak
+  `servis-kur.cmd "D:\UzmanAdres\SentezServis" 81`. İlk açılışta `yonetici` için tek kullanımlık parola
+  Windows Olay Görüntüleyicisi → Uygulama (kaynak SentezServis) uyarısında. Doğrulama `http://192.168.0.2:81/api/surum`.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
@@ -75,7 +104,6 @@ Kullanıcı kararları:
 - Canlı SentezCore'da tablo kurulumu kullanıcı onayına bırakıldı.
 
 ## Açık kalanlar / sonraki adım
-- Canlı SentezCore'da `db/sentezcore/karma-koli.sql` çalıştırmak (onay bekliyor).
 - Sunucu appsettings: `SentezCoreBaglantiCumlesi` (ve önceki günden `PdksBaglantiCumlesi`, Eposta).
-- `karma-koli` dalını main'e birleştirme kararı kullanıcıda.
+- Sunucuya kurulum (kullanıcı yapacak), ardından Zamanlama ekranında PDKS alıcıları.
 - Not: listede set olmayan ama kodu `-rakam` ile biten mamuller de görünüyor (AKS-01, E-ASKI-2 …); kural gereği.
