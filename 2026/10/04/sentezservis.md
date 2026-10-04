@@ -90,6 +90,20 @@ Kullanıcı kararları:
   `servis-kur.cmd "D:\UzmanAdres\SentezServis" 81`. İlk açılışta `yonetici` için tek kullanımlık parola
   Windows Olay Görüntüleyicisi → Uygulama (kaynak SentezServis) uyarısında. Doğrulama `http://192.168.0.2:81/api/surum`.
 
+### 9. Yönetici zamanlama ekranında kilitliydi — 6acdbd5
+- **Neden:** Kullanıcı kurup `yonetici` ile girdi; görevlerde mail alıcısı/zaman değiştirme ve diğer
+  işlemler yoktu ("Modasima'daki gibi yap").
+- **Kök neden:** Sayfalar `rol === 'mudahaleEden'` diye tam eşitlik arıyordu; sunucu yöneticiye izin
+  veriyor ama düğmeler (cron, aç/kapat, Şimdi çalıştır, Parametreler) render edilmiyordu. Modasima'da
+  18.09.2026'da `83a5ec2` + `09e8945` ile düzeltilmiş, Modfex'e taşınmamıştı.
+- **Ne yapıldı:** `web/tests/yetki.test.ts` Modasima'dan alındı (`tsconfig.node.json` include'a `tests/**/*.ts`),
+  RED: 5 dosya (CalistirmaDetay, IsListesi, KarmaKoli, Kaynaklar, Zamanlama). `AuthContext.tsx`
+  Modasima'dakiyle aynı (`mudahaleEdebilir = mudahaleEden || yonetici`); sayfalar `useAuth().mudahaleEdebilir`.
+- **Sonuç:** web 48/48, `tsc -b` ve lint temiz. Yeni paket
+  `SentezServis-Modfex-kurulum\SentezServis-2026-10-04-0507.zip` (arayüz 2026-10-04 05:06).
+- **Not:** Kullanıcı ayrıca `SentezService` adlı boş bir DB açtı (05:07); çalışan servis `SentezServis`'i
+  kullanıyor (58 tablo, yönetici hesabı orada). Hangisinin kalacağı kullanıcıya soruldu.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
