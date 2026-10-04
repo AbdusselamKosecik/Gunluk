@@ -108,3 +108,15 @@ Yeni repo: `X:\Gitlab\modfex-apparel\selvedge` → git@gitlab.com:modfex-apparel
 ## Açık kalanlar (güncel)
 - Sunucu: runtime 10, `9001_yetki.sql`, `servis-kur.ps1` (iki kez), `sentez_views.sql`, admin parolası.
 - APK cihazda denenmedi.
+
+### 7. Sunucu ayarı dolduruldu (kullanıcı: "appseting i sen doldurulmusun")
+- **Ne yapıldı:** PowerShell `RandomNumberGenerator` ile SQL parolası (karmaşıklık politikasına uygun, `; " ' = $ \``
+  içermez) ve 64 karakter `Jwt:Key` üretildi → `publish\gizli\appsettings.Production.json` (gitignore; repoya ve
+  günlüğe yazılmadı). Aynı parolayla `publish\gizli\sql-1-yetki.cmd` (`sqlcmd -E -i 9001_yetki.sql -v SelvedgeSifre=...`)
+  ve `sql-2-viewler.cmd`.
+  `yayinla.ps1` bunları + `sql\` (9001_yetki.sql, sentez_views.sql) pakete koyar; `servis-kur.ps1` dolu ayarı yalnız
+  ilk kurulumda kopyalar, `sql\`'i uygulama klasörüne almaz (robocopy `/L` ile doğrulandı).
+- **Paket:** `publish\Selvedge-Modfex-Servis-20261004-2202.zip` (içinde parola var; kurulumdan sonra silinmeli).
+- **Risk:** parola yalnız bu diskte (`publish\gizli`). Disk uçarsa: SQL'de `ALTER LOGIN uzm_selvedge_app WITH PASSWORD`
+  ile yenisi verilip sunucudaki `C:\Selvedge\app\appsettings.Production.json` güncellenir.
+- **Commit:** `e7375c0`
