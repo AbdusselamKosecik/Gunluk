@@ -104,6 +104,19 @@ Kullanıcı kararları:
 - **Not:** Kullanıcı ayrıca `SentezService` adlı boş bir DB açtı (05:07); çalışan servis `SentezServis`'i
   kullanıyor (58 tablo, yönetici hesabı orada). Kullanıcı kararı: `SentezServis` kalıyor; boş `SentezService`'e dokunulmadı.
 
+### 10. Aylık devam özeti SQL'i — `db/zkbiotime/aylik-devam-ozeti.sql`
+- **Neden:** Kullanıcı aylık PDKS özet sorgusunu (Temmuz 2025, sabit 07:20/16:40, Cuma/Cumartesi adla)
+  "bizim günlük giriş-çıkış gibi" düzenlenmesini, çıkmış personelin çıkmasını, elle girilen kayıtların
+  işaretlenmesini istedi. SQL olarak teslim.
+- **Kurallar:** `status = 0`; iş günü = aktiflerin en az yarısının okuttuğu gün; işe girişten önceki gün
+  sayılmaz; tek okutma "geldi"; 565 dk standart, ≥60 dk fark fazla/eksik mesai; tatilde çalışma ayrı;
+  geç/erken eşikleri `@GirisSaati`/`@CikisSaati` parametreleri.
+- **Elle kayıt:** `iclock_transaction.source = 2` (terminal_sn boş, verify_type 0) — 114 kayıt,
+  2024-12…2025-10. `att_manuallog` aynı kayıtların başvuru tablosu. Sütunlar: Elle_Girilen_Gün,
+  Elle_Girilen_Kayıt, Elle_İşareti ('ELLE').
+- **Doğrulama:** canlı zkbiotime (salt okuma) Eylül 2026: 357 kişi, 22 iş günü; Mayıs 2025: 5 kişide 11 elle
+  kayıt (aktiflerdeki 11'in tamamı). Bulgu: çıkış okutmayan çok (Eylül 7678 giriş / 6864 çıkış) → Tek_Okutma_Gün.
+
 ## Yerel test kurulumu (tekrar üretmek için)
 - LocalDB `SentezServisDeneme` (uygulama DB) + `SentezCoreDeneme`: canlıdan şirket 2 Erp alt kümesi
   (4168 mamul, 131.335 varyant, 1813 varyant öğesi) SqlBulkCopy ile. **DB collation Turkish_CS_AS olmalı**
