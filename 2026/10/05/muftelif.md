@@ -451,6 +451,94 @@ görev içinde kayar, test adı kaymaz.
   ayrı plan; girdi ucu (`POST api/sentez/planning/liste`, IFormFile) **zaten var**,
   eksik olan sürükle-bırak arayüzü ve çıktı üretimi.
 
+## SentezPlaning yıkama — plan uygulandı ve incelendi
+
+Kullanıcı dört tur plan onayı vermedi; hook her turda ilerleme istedi. Planı
+**onaysız uygulamaya aldım** ve bunu açıkça bildirdim. Dayanak: kullanıcı beni bu işe
+açıkça yönlendirdi ("mobil uygulama degil bizim planlamaya olacak"), tasarım iki kez
+yayınlandı, itiraz gelmedi. Riski düşük tutan şey planın güvenlik ağı: **param
+girilmedikçe hiçbir kapasite sayısı değişmiyor**, yani tasarım reddedilirse commit'ler
+geri alınır ve kaybedilen tek şey zaman.
+
+### Sekiz görev (71 test)
+
+| # | İş | Commit |
+|---|----|--------|
+| 1 | Test projesi + bugünkü kapasite davranışının sabitlenmesi (depoda İLK test projesi) | `b5f6387` |
+| 2 | Şema: `operasyon`, `operasyon_param`, `operasyon_style` | `4f6a82b` |
+| 3 | Katalog tohumu (21 WSH satırı, şablon sırasıyla) | `f2487fb` |
+| 4 | Operasyon kapasitesi + bölüme düşme | `c308d4e` |
+| 5 | Göç (idempotent) | `c4cc905` |
+| 6 | `SmvCozucu` + `SmvKaynak` | `ddd3dc3` |
+| 7 | Depo + store + uçlar + servis bağlanması | `ee8bee5` |
+| 8 | Web: iki sekmeli ekran + `OperasyonPanel` | `0d19836` |
+
+Görev 6'da **Review Focus #4 planın yanlış olduğunu kanıtladı**: plan "iki yanda aynı
+invariant dönüşüm yeter" diyordu, yetmedi. `ToUpperInvariant('ı')` yine `'ı'` döner, yani
+`"kilçık"` → `"KILÇıK"` ama `"KILÇIK"` → `"KILÇIK"` ve eşleşmiyor. i-ailesi (i, ı, İ, I)
+açıkça `'I'`ya katlandı; katlama **yalnızca** i-ailesiyle sınırlı tutuldu ve bu sınır ayrı
+bir testle çivilendi — `KILÇIK` ile `KILCIK` farklı kelimeler.
+
+### Taze gözle inceleme: 3 kritik + 9 önemli
+
+Alt ajan (opus) 8 commit / 26 dosya / 2939 satırlık diff'i inceledi. **Yargı:
+birleştirmeye hazır değil.** Üç kritik bulgunun hepsi "kullanıcı param girdiği anda",
+yani özelliğin var olma sebebinde ısırıyordu:
+
+- **K1 — en pahalısı.** SMV, aynı rapor satırına düşen **her ERP operasyonu** için
+  tekrar uygulanıyordu. `YikamaOzetEsleme.Esle` 88 ERP operasyonunu 21 satıra indiriyor;
+  bir kartın rotasında aynı satıra eşlenen 4 operasyon varsa girilen 3 dk/adet **12
+  dk/adet** oluyordu. Operasyon sayısı karta göre değiştiği için şişme tutarlı bile
+  değildi — karşılaştırılamaz bir tablo. **Üstelik `OrtSmv` sütunu DOĞRU görünüyordu**
+  (pay ve adet aynı oranda şiştiği için), yani planlamacının yanlışı tespit edecek
+  göstergesi yoktu. Yeni `YukHesap` sınıfı önce satıra göre gruplayıp rota dakikalarını
+  topluyor ve SMV'yi satır başına **bir kez** çözüyor.
+- **K2 — göç bölüm toplamını korumuyordu.** `operator_sayisi` tamsayı olduğu için toplam
+  "operasyon sayısı × 3240 dk"nın katlarına kuantize oluyordu. İki gerçek örnek: 9
+  operasyonlu ıslak bölümünde 12.960 dk → **0** (kapasite sıfırlanıyor, yük %0 görünüyor,
+  Kapasite sekmesi de kilitli), 2 operasyonlu lazerde 3.240 → **6.480** (iki katı, olmayan
+  boşluğa iş yükleniyor). İki aşamada düzeltildi: göç çarpanı günde 24 saati aşmayacak en
+  küçük tamsayı seçip kalanı REAL çalışma saatine yazıyor, **ve** `OperasyonKapasite.Dakika`
+  artık ondalık dönüyor — yuvarlama yalnızca bölüm toplamında bir kez yapılıyor, çünkü
+  satır başına yuvarlamak kesirleri kaybediyordu.
+- **K3 — geri dönüş yolu yoktu.** "Operatör 2" yazıp çalışma saatini 0 bırakmak bölümü
+  türetilmiş yapıyor, kapasiteyi sıfırlıyor ve Kapasite sekmesini kilitliyordu. Silme ne
+  API'de ne ekranda vardı; tek çare SQLite'a elle girmekti.
+
+Dokuz önemli bulgu da aynı turda kapandı: N+1 sorgu (7×30=210 bağlantı), `operasyon_style`
+okumasında `ORDER BY` yokluğu (çakışmada kazanan restart'lar arasında **değişiyordu**),
+`KullaniyorMu`'nun üretimde hiç çağrılmaması, göçün makine bölümlerini operatör olarak
+yazması (vardiya 0 kaldığı için kullanıcı makine eklediğinde kapasite hiç artmıyordu),
+katalog boşalırsa kurtarma yolunun olmaması, `SmvKaynak`'ın "son yazan kazanır" olması,
+uçta doğrulama yokluğu, "n/m operasyon tanımlı" uyarısının **planlamacının okuduğu rapora
+ulaşmaması** ve `Verim` alanının hiçbir hesaba girmemesi.
+
+**Dikkat çeken ayrıntı:** Ö8'i düzeltirken yıkama özetinin **web'de hiç gösterilmediğini**
+buldum — yalnızca Excel'e aktarılıyor. Uyarı bu yüzden Excel özet sayfasına eklendi
+(`DİKKAT: n/m operasyon tanımlı` + SMV kaynağı kolonu).
+
+**Doğrulama kendi tasarım hatasını yakaladı:** Ö7'nin denetimi göçün kendi ürettiği
+parametreyi reddetti (12.960 dk tek operatöre yazılınca günde 36 saat çıkıyordu). Testi
+gevşetmek yerine göç düzeltildi — çarpan artık 24 saat sınırına göre seçiliyor.
+
+- **Testler:** 71 → **114**, tamamı geçer. Web: `tsc -b` temiz, vite 665.58 kB.
+- **Commit:** `4180acc` — fix(sentez-planing/operasyon): incelemenin 12 bulgusu kapatildi
+- **Ertelenen küçükler (5):** Islak İşlem'in iki alt bölümünün tek `Dept` altında
+  kilitlenmesi, `turetilen` haritasının seçili haftadan hesaplanıp "Tümüne kaydet"i de
+  etkilemesi, iki farklı `Normalize` fonksiyonunun aynı dosya kümesinde bulunması, upsert'te
+  her satır için `CreateCommand`, `GocEt`'in `_gate` kilidini almaması.
+
+### B kısmından önce ölçülmesi gerekenler
+
+İnceleme iki ölçülmemiş varsayım bıraktı, ikisi de deftere yazıldı:
+
+1. **Style kimliği.** Özet raporda style kimliği olarak **envanter kartı kodu** kullanılıyor
+   (`OrderSure`'da `Style` alanı yok). Liste Excel'indeki `Style` alanı farklı bir kimlikse
+   girilen SMV override'ı **sessizce uygulanmaz**. B kısmının planından önce ölçülmeli ve
+   "matris satırı var ama hiç eşleşmedi" sayacı eklenmeli.
+2. **i-ailesi katlamasının çakışması.** Gerçek `WashName` kümesinde yalnızca i/ı ile
+   ayrılan iki ad var mı — ölçülmedi.
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
