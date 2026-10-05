@@ -54,3 +54,12 @@ isim / kimlik no / kod yazılmadı, sadece yöntem ve özet bulgular var.)
 - Kullanıcı isterse: bulguları satır numaralı bir "Kontrol" Excel'i olarak üretmek.
 - 2026 Mısır özel sektör asgari ücretinin güncel tutarı teyit edilmeli (7.000 EGP Mart 2025 kararı esas alındı).
 - `aaa` klasörü git reposu değil → proje tarafında push yapılmadı.
+
+### 4. İngilizce denetim raporu (md) — kişi bazlı tablolarla
+- **Neden:** Kullanıcı raporu İngilizce ve her maddenin altında ilgili kişilerin (ad-soyad, sicil, değerler) listesiyle istedi.
+- **Ne yapıldı:** Scratchpad'de `report.py` (yükleyici `load.py`) ile 9 bulgu bölümü + özet tablosu üretildi;
+  her bölümde Satır / Kod / İsim (EN+AR) / ilgili sütun değerleri tablosu var.
+- **Çıktı:** `X:\Yazilim\aaa\Payroll Audit September 2026.md` (~650 satır). Kişisel veri içerdiği için
+  **bu herkese açık repoya kopyalanmadı.**
+- **Düzeltme:** 1d (matrah tutarsızlığı) ilk sürümde normal %77 oranlıları da listeliyordu → filtre
+  "tavan altı ve temelin <%70'i veya temelden büyük" yapıldı; 7a sadece sigorta kesilenleri gösteriyor.
