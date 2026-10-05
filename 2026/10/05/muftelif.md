@@ -227,6 +227,52 @@ doğrulama adımı (KK, Ölçüm, ayar tohumu), bölüm 10 yeniden yazıldı.
 - **BEFORE AND AFTER dosyalarında yalnızca ilk blok okunur.** Yıkama sonrası spec'e şu an
   erişilmiyor; operatör **eki** seçiyor ve tek bloklu "y.ö." dosyası ayrıca var.
 
+## İnceleme turu ve düzeltme pası (akşam)
+
+Taze gözle tüm dal incelemesi bitti: **2 kritik, 7 önemli, 5 küçük** bulgu ve beş
+"yargıya varmadım" kalemi. Yeniden derecelendirme (etkiye göre, spec'in sessizliğine
+göre değil) sonrası dokuz bulgu tek düzeltme turuna alındı; küçükler ertelendi.
+
+### Kapatılan bulgular — her biri önce KIRMIZI görülen testle
+
+| # | Bulgu | Düzeltme | Test |
+|---|-------|----------|------|
+| C1 | `kk.ts` aşama/karar sabitleri sunucunun kabul ettiği değerlerden kaymış: iki dropdown değeri **kaydedilemiyordu** | sabitler sunucuyla hizalandı | `ArayuzSozlukTests` (yeni, TS dosyalarını okuyan 4 test) |
+| C2 | `TuretilenGuncelleSorgusu` ikinci kaydetmede **yanlış DHU** yayınlıyordu | sorgu düzeltildi | `KkSqlTests` +2 |
+| I1 | ölçüm `Difference`/`Status` sunucuda **hiç hesaplanmıyordu** | `KkOlcumHesap.cs` (saf) | `KkOlcumHesapTests` 14 |
+| I2 | rapor numarası öneki Türkçe harf taşıyınca numara bozuluyordu | `RaporNo.AyOneki` + `OnekTemizle` | `RaporNoTests` +3 |
+| I3 | `OlcumDoldurPage` ×2 satırında **kayıtlı** değeri ham değer gibi gösteriyordu; yeniden kaydetmede değer ikiye katlanıyordu | ham/kayıtlı ayrıldı, "Kayıtlı" kolonu eklendi | `tsc -b` temiz |
+| I4 | ikinci ölçüm bloğunun başlığı POM satırı sayılıyordu | pozitif blok sınırı (`TekrarlananBaslikMi`) | `OlcumSpecExcelTests` +2, gerçek ekler 377 satır |
+| I5 | **bozuk ×2 listesi** (virgül yerine noktalı virgül) sessizce yarım ölçüm üretiyordu | `CiftOlcuDenetim.EslesmeYok` + `OlcumStore` uyarı logu | `CiftOlcuDenetimTests` 6 |
+| I6 | Z1.4 tablosu **her varyant satırına** uygulanıyordu: 100/200/300'lük üç renkte 114 parça önerilirken lot planı 80'di | `AqlPlan.NumuneDagit` — lot planı satırlara orantılı dağıtılıyor, artan en büyük kesirli paya | `AqlPlanTests` +6 |
+| I7 | `KabulRet` ok çözümü lottan **büyük** numune adedi döndürüp ekranda plan gibi gösteriliyordu (3 adetlik lotta "8 parça çek") | `AqlPlan.TumMuayeneMi` + `KkOzet.TumMuayene` + banner "%100 muayene" | `AqlPlanTests` +4, `ArayuzSozlukTests` +1 |
+
+- **Neden `ArayuzSozlukTests`:** C1'i `tsc -b` göremez — string literal kaymasıdır.
+  C# tarafından TS dosyasını okuyup sunucu sabitleriyle karşılaştıran bir sürüklenme
+  nöbetçisi, bu sınıfı bir daha sessiz bırakmıyor.
+- **Testler:** 400 → **442**, tamamı geçer. Web: `tsc -b` temiz, vite 441.67 kB.
+- **Commit:** `b733ef3` — fix(sentez-selvedge): inceleme turunun dokuz bulgusu kapatildi
+
+### Ertelenen küçükler (M1–M5)
+
+- M1 `OlcumStore.SatirVarMiSorgusu` ölü dal (`mevcut` her zaman 0); yorumun iddia ettiği
+  yarışı engellemiyor.
+- M2 `SatirKaydetAsync`'te iyimser kilit yok; iki ölçümcü satır satır birbirini eziyor.
+- M3 `ozet.SizeBytes` okunup kullanılmıyor; 60 MB'lık `.xlsm` hâlâ belleğe çekiliyor.
+- M4 KK detay UPDATE'leri `RecId+ReportId` ile eşleşip `IsDeleted` filtresi taşımıyor;
+  başka rapora ait `RecId` hata yerine INSERT'e düşüyor.
+- M5 `OlcumSpecExcel` `Sira` iki numara kaynağını karıştırıyor (sonuç yanlış değil, tuhaf).
+
+### Paket yenilendi
+
+`site\` eski kodu taşıyordu; API yeniden publish edildi, **eski bundle dosyaları
+silindi** (publish temizlemiyor, üst üste yığıyor), zip yeniden kuruldu.
+
+- Kontroller: şifre yok, `appsettings.Development.json` yok, log yok, `sema/db` 5 script,
+  `sema/elle/9001_yetki.sql`, `ornek/appsettings.json`, `site` API dll + web.config +
+  wwwroot/index.html.
+- **Zip:** 12.5 MB / 126 dosya (önceki 142'de eski bundle kopyaları vardı).
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
