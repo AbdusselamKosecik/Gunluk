@@ -796,6 +796,82 @@ kapı alması, okuyanın almaması yetmez — yazan **herkesin** alması gerekiy
 - Web `tsc -b` temiz, vite 667.74 kB.
 - **Commit:** `38edcd3` — fix(sentez-planing): ertelenen 5 minor kapatildi
 
+## Deploy: kurulamayan paket
+
+Planlamayı paketlemeye gidince iki şey çıktı. Birincisi **deploy tamamen kırıktı** —
+bugünkü değişiklikler yüzünden değil, bugün bir eşik aşıldığı için.
+
+### 1. stderr yazan komut deploy'u düşürüyordu (kırık)
+
+`./Deploy-IIS.ps1` şu hatayla duruyordu:
+
+```
+node.exe : [plugin builtin:vite-reporter]
+    + FullyQualifiedErrorId : NativeCommandError
+```
+
+**Kök neden:** betik `$ErrorActionPreference = 'Stop'` ile koşuyor. Windows
+PowerShell 5.1'de yerel bir exe **stderr'e tek satır yazdığı anda** PowerShell bunu
+`NativeCommandError` diye **sonlandırıcı hataya** çeviriyor — exe `0` dönse bile.
+Vite'ın *"chunks are larger than 500 kB"* uyarısı stderr'e gidiyor.
+
+Yani: **paket 500 kB'ı geçtiği gün deploy çalışmıyor.** Planlamanın paketi 667 kB
+olduğu için bugün kırıldı. Hiçbir şey bozulmamıştı; yalnızca bir uyarı eşiği aşıldı.
+
+**Aynı hata SentezSelvedge'de de var ama gizli:** onun paketi 441 kB, uyarı çıkmıyor.
+Bir bileşen eklendiği gün o da duracaktı. **İkisini birden düzelttim** — tek projeyi
+düzeltip ötekini bırakmak, aynı tuzağı ikinci kez kurmak olurdu.
+
+**Çözüm:** `Invoke-Native` — komutu `ErrorActionPreference='Continue'` altında koşturur
+(stderr uyarı olarak akar, hata olmaz), başarıyı **yalnızca çıkış koduyla** ölçer.
+Gerçek başarısızlık yine yakalanıyor.
+
+### 2. Paketin %67'si yabancı platform (23 MB'e indi)
+
+Paket **57 MB** idi; **38 MB'ı `runtimes/`** ve içeriğinin çoğu bu sunucuyla ilgisiz:
+`linux-s390x`, `maccatalyst-arm64`, `browser-wasm`, `linux-ppc64le`… 24 platform
+klasörü. Sebebi `SQLitePCLRaw`: her platformun yerel kütüphanesini taşıyor. Windows
+IIS'e kurulan bir site için ölü ağırlık. (Selvedge'de 5 klasör var, çünkü SQLite
+kullanmıyor — 12,5 MB olmasının sebebi bu.)
+
+`-r win-x64 --self-contained false` ölçüldü:
+
+| | önce | sonra |
+|---|---|---|
+| boyut | 57 MB | **23 MB** |
+| dosya | 95 | **70** |
+| `runtimes/` | 24 platform | **yok** |
+
+`e_sqlite3.dll` köke düzleşiyor. `--self-contained false`: .NET runtime pakete
+girmiyor, sunucudaki Hosting Bundle kullanılıyor — betik onun varlığını zaten
+kontrol ediyor.
+
+**Varsaymadım, paketi çalıştırdım:**
+- `HTTP 200` — `index.html` servis ediliyor
+- `data\sentez-planing.db` + WAL/SHM **oluştu** → `e_sqlite3.dll` kökten yükleniyor
+- tohum koştu (4 hat, hat düzeni W2726'ya hizalandı)
+- `/api/sentez/planning/operasyon` → **401**, yani uç var ve JWT hattı aktif
+  (404/SPA fallback değil)
+
+İlk denemede `/api/planning/operasyon` yoklayıp SPA fallback'ten HTML aldım; doğru yol
+`/api/sentez/planning/operasyon`. Yolu düzeltip tekrar ölçtüm.
+
+Bağlantı dizesi ve JWT anahtarı olmadan uygulama **başlamıyor** — bu doğru davranış ve
+pakette geliştirme dizesi yok. Duman testi için geçici değerler ortam değişkeniyle
+verildi, hiçbir dosyaya yazılmadı.
+
+### 3. Eksik doğrulama eklendi
+
+`appsettings.Development.json` için `csproj`'da `CopyToPublishDirectory="Never"` kaydı
+vardı ama **betikte kontrol yoktu**: kayıt bir düzenlemede düşseydi geliştirme bağlantı
+dizesi sunucuya giderdi ve hiçbir şey yakalamazdı. Selvedge'de bu kontrol vardı,
+planlamaya da eklendi. Ayrıca RID publish'ten sonra `runtimes/` kalırsa uyarı veriyor.
+
+- **Dokunulan dosyalar:** `SentezPlaning/Deploy-IIS.ps1`, `SentezSelvedge/Deploy-IIS.ps1`
+- **Doğrulama:** paket yeniden üretildi — 23 MB / 70 dosya, `runtimes/` yok, yasak
+  dosya yok, `web.config` + `wwwroot/index.html` + `e_sqlite3.dll` yerinde.
+- **Commit:** `a1840d1` — fix(deploy): stderr yazan komut deploy'u dusurmesin
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
