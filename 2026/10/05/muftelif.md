@@ -539,6 +539,72 @@ gevşetmek yerine göç düzeltildi — çarpan artık 24 saat sınırına göre
 2. **i-ailesi katlamasının çakışması.** Gerçek `WashName` kümesinde yalnızca i/ı ile
    ayrılan iki ad var mı — ölçülmedi.
 
+## B kısmı: Excel giriş → çıkış hattı
+
+Müsait saat formülü sorusunu dört turdur cevap gelmediği için **karara bağladım** ve B
+kısmını yazdım.
+
+### Formül kararı (spec 5.4)
+
+**Çıktıya bizim kapasite sayılarımız yazılır.** Gerekçe: pivot sayfaları değer olarak
+üretildiği için şablonun `Weekly Capacity!G = E*7,25*6 + F*9*5` formülü zaten
+korunmuyor — formülün yerine bir **sayı** yazıyoruz. O sayının planlamacının ekranda
+gördüğü kapasiteyle aynı olması gerekir; ekranda bir rakam, çıktıda başka bir rakam
+görmek Faz 1b'nin I6 bulgusunun aynısı olur. Şablonun geleneğini isteyen kullanıcı
+`gun_sayisi`/`calisma_saati` parametreleriyle kurar — formül kodda sabit değil.
+
+### İki ölçüm (B kısmının önündeki engeller)
+
+1. **i-ailesi katlaması çakışma üretiyor mu? HAYIR.** Girdi Excel'inde 197 tekil style →
+   197 anahtar, 129 tekil yıkama adı → 129 anahtar, çakışan 0. 22 yıkama adı Türkçe
+   karakter taşıyor (`PARÇA BOYA`, `DERİ`), yani katlama gerekli ama zararsız.
+2. **Liste `Style`'ı Sentez kart kodu mu? HER ZAMAN DEĞİL.** `PlanningSql`'in kendi
+   ölçümü kayıtlı: 197 style'in **173'ü tam eşleşiyor, 24'ü varyant** olarak bulunuyor
+   (`2305-576` → `2305-576-BEZAL`). Özet rapor kart kodunu anahtarlıyor; matris liste
+   `Style`'ı ile doldurulursa o **%12** için SMV override'ı sessizce uygulanmaz. Anahtar
+   kimliğinin düzeltilmesi ayrı iş, ama **sessizlik kalktı**: matris dolu olup hiçbir
+   satırı eşleşmezse log uyarı veriyor ve sebebini yazıyor (`143d770`).
+
+Canlı veritabanına doğrulama için bağlanmayı denedim, **ulaşamadım** (TCP düşüp named
+pipes'a geçiyor, zaman aşımı). Ölçümü kodun kayıtlı değeriyle aldım.
+
+### Çıktı dosyası
+
+**Uzantı `.xlsm` DEĞİL `.xlsx`:** şablon makro taşımıyor (`vbaProject` yok), yani `.xlsm`
+yalnızca gelenek. ClosedXML makro yazamaz; `.xlsm` üretmek dosyayı "makro var" diye
+işaretleyip boş bırakmak olurdu.
+
+| Sayfa | Durum |
+|---|---|
+| `Data` | satır 9 başlık, 11+ veri; A/B/C/D = Style/Fit/Wash/New-CO, `G..` operasyon kolonları `x`, sonra hafta adetleri + toplam |
+| `Orders` | hafta özeti: hafta, haftanın ilk LAST DATE'i, adet, order sayısı |
+| `Weekly Capacity` | şablonun satır 4 başlıkları; SMV, sayı, müsait saat, birim esası, **SMV kaynağı** ve hafta yükleri |
+| `New Product` | **boş başlıklarla + nedenini yazan not** |
+
+`New Product` neden boş: üç bloğun ("First 10", ">1500 units", "Total List") seçim
+kuralları şablonda **formülde değil pivot yapılandırmasında** gömülü, yani ölçülemedi.
+Yarım doldurulmuş bir sayfa boş olandan daha yanıltıcı; sayfa nedenini kendi üzerinde
+yazıyor.
+
+**Dürüstlük kuralı:** matris boşsa `Data` sayfası operasyon kolonlarını **boş bırakıyor**
+ve sayfanın üstünde nedenini yazıyor. Hangi style'ın hangi operasyonu kullandığı
+bilinmiyorsa hepsini işaretlemek, kullanmadığı operasyonları da yüke sokmak demek.
+
+### Doğrulama
+
+Çıktı dosyası **geri okunarak** doğrulanıyor (ClosedXML test projesine eklendi) ve gerçek
+girdi dosyasıyla uçtan uca test var. Atılacak bir testle dosyayı diske yazıp **gözle de
+inceledim**, sonra sildim:
+
+- `Data`: 208 veri satırı, 21 operasyon kolonu, gerçek style/fit/yıkama adları
+- `Orders`: 10 hafta, Genel Toplam **116.833 adet / 258 order** — listenin kendisiyle birebir
+- `Weekly Capacity`: 21 operasyon satırı (12–32), başlıklar şablonla aynı
+
+- **Testler:** 117 → **143**, tamamı geçer. Web: `tsc -b` temiz, vite 667.15 kB.
+- **Commit:** `583cb92` — feat(sentez-planing): B kismi
+- **Sürükle-bırak:** sayfanın tamamı bırakma alanı (küçük bir kutuya isabet ettirmek
+  gerekmiyor), Excel olmayan dosyada uyarı veriyor.
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
