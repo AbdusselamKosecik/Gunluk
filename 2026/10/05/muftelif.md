@@ -579,12 +579,9 @@ işaretleyip boş bırakmak olurdu.
 | `Data` | satır 9 başlık, 11+ veri; A/B/C/D = Style/Fit/Wash/New-CO, `G..` operasyon kolonları `x`, sonra hafta adetleri + toplam |
 | `Orders` | hafta özeti: hafta, haftanın ilk LAST DATE'i, adet, order sayısı |
 | `Weekly Capacity` | şablonun satır 4 başlıkları; SMV, sayı, müsait saat, birim esası, **SMV kaynağı** ve hafta yükleri |
-| `New Product` | **boş başlıklarla + nedenini yazan not** |
+| `New Product` | ~~boş~~ → **dört blok da üretiliyor** (aşağıya bak) |
 
-`New Product` neden boş: üç bloğun ("First 10", ">1500 units", "Total List") seçim
-kuralları şablonda **formülde değil pivot yapılandırmasında** gömülü, yani ölçülemedi.
-Yarım doldurulmuş bir sayfa boş olandan daha yanıltıcı; sayfa nedenini kendi üzerinde
-yazıyor.
+`New Product` o turda boş bırakılmıştı; **aynı gün dolduruldu**, aşağıya bak.
 
 **Dürüstlük kuralı:** matris boşsa `Data` sayfası operasyon kolonlarını **boş bırakıyor**
 ve sayfanın üstünde nedenini yazıyor. Hangi style'ın hangi operasyonu kullandığı
@@ -604,6 +601,66 @@ inceledim**, sonra sildim:
 - **Commit:** `583cb92` — feat(sentez-planing): B kismi
 - **Sürükle-bırak:** sayfanın tamamı bırakma alanı (küçük bir kutuya isabet ettirmek
   gerekmiyor), Excel olmayan dosyada uyarı veriyor.
+
+## New Product: "ölçülemedi" dediğim şey ölçülebilirdi
+
+### Neden geri döndüm
+
+B kısmında `New Product` sayfasını boş bıraktım ve gerekçe olarak şunu yazdım: üç bloğun
+seçim kuralları şablonda **formülde değil pivot yapılandırmasında** gömülü, yani
+*ölçülemedi*. Kullanıcıya da "kuralları söylerseniz doldurulur" dedim.
+
+**Bu yanlıştı.** Kurallar gerçekten formülde değil — orası doğru. Ama "pivot
+yapılandırması" soyut bir yer değil, `xl/pivotTables/pivotTable*.xml` diye dosyalar ve
+filtreleri **açık metin olarak** taşıyorlar. Sormak yerine açmak yetiyordu. Dersi
+açıkça yazıyorum: *"formülde yok"* ile *"ölçülemez"* aynı şey değil; ikincisini
+söylemeden önce dosyanın içine bakmam gerekiyordu.
+
+### Ölçüm
+
+`Output-...xlsm` içindeki pivot XML'leri okundu:
+
+| Blok | Konum | Kural (XML'den) |
+|---|---|---|
+| ana blok (`pivotTable1`) | `A3:I47` | satır `fld=8` (Wash), kolon `fld=0` (Ex-Factory Week), sayfa `fld=1` (New/CO), değer `fld=10` (**TTL**) |
+| `First 10` (`pivotTable4`) | `T3:U15` | `<filter type="count">` → `<top10 val="10" filterVal="10"/>` |
+| `Grater than 1500 units` (`pivotTable5`) | `X3:Y47` | `<customFilter operator="greaterThanOrEqual" val="1500"/>` → **1500 dahil** |
+| `Total List` (`pivotTable6`) | `AB3:AC122` | filtre **yok**, hepsi; değer `fld=9` (Order Qty) |
+
+Alan indeksleri tahmin değil: pivot önbelleğinin (`pivotCacheDefinition*.xml`) alan
+listesiyle doğrulandı → `0=Ex-Factory Week, 1=New/CO, 8=Wash, 9=Order Qty, 10=TTL`.
+
+Dikkat çeken iki ayrıntı:
+- **Ana blok TTL okuyor, sipariş adedi okumuyor** (`fld=10`); üç yan blok Order Qty
+  okuyor (`fld=9`). İkisini karıştırmak sayıları sessizce bozardı.
+- Eşik `greaterThan` değil **`greaterThanOrEqual`** — tam 1500 listeye **girer**. Test
+  bunu ayrıca çiviliyor (`TAM` satırı 1500 ile listede).
+
+### Ne yapıldı
+
+- **Dokunulan dosyalar:** `SentezPlaning/api/Sentez/Planning/NewProductVeri.cs` (yeni),
+  `.../YikamaPlanExport.cs`, `SentezPlaning/tests/.../NewProductVeriTests.cs` (yeni),
+  `.../YikamaPlanExportTests.cs`, spec §5.5.
+- `NewProductVeri` **veritabanı ve Excel görmez**: saf veri sınıfı, kuralların XML
+  kaynağı sınıfın kendi yorumunda yazılı — bir sonraki kişi "bu 1500 nereden geldi"
+  diye sormasın.
+- Sayfa yerleşimi şablonun ölçülen çapalarıyla aynı: ana blok `A`, `First 10` `T`,
+  eşik `X`, `Total List` `AB`.
+- **Sayfa filtresi uygulanamıyor** (değer olarak üretiyoruz, pivot yok). Onun yerine
+  "New" olan yıkama satırları **kalın** yazılıyor — bilgi kaybolmuyor, filtre
+  olmadığını da gizlemiyoruz.
+- Spec §5.5'teki *"ölçülemedi, boş başlıkla üretilir"* paragrafı **silinmedi, düzeltme
+  olarak işaretlendi** — kaydın kendisi hatanın kaydı.
+
+### Doğrulama
+
+- `NewProductVeriTests` 12 test (kural bazlı: top-10 kesimi, eşik dahil, filtre yok,
+  TTL boşsa sipariş adedine düşme, boş liste).
+- `YikamaPlanExportTests`: "neden boş" testi **kaldırıldı**, yerine dosyayı geri okuyan
+  5 test geldi (ana blok hücre hücre, kalın "New" satırı, First 10'un 10'da kesilmesi,
+  1499'un listeye girmemesi, Total List toplamı).
+- **Testler:** 143 → **159**, tamamı geçer. Web'e dokunulmadı.
+- **Commit:** `454a3c1` — feat(sentez-planing/cikti): New Product sayfasi uretiliyor
 
 ## Açık kalanlar / sonraki adım
 
