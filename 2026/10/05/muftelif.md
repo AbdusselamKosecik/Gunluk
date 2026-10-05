@@ -724,6 +724,78 @@ demektir.
 (güvenlik duvarı kapalı, SQL'e ulaşılamıyor). Köprünün kuralları testle çivili ama
 gerçek veri üzerinde kaç kodun varyant üzerinden eşleştiğini log satırı söyleyecek.
 
+## Ertelenen 5 minör kapatıldı
+
+İncelemede "minör" diye erteleyip kullanıcıya bıraktığım beş bulgunun hepsi kapandı.
+İkisi gerçek etkiye sahipti, biri **düzeltilmemesi gerektiği** için kapandı.
+
+### 1. Islak İşlem kilidi yanlış kapsıyordu (gerçek hata)
+
+Islak İşlem ekranda tek bölüm gibi görünüyor ama **iki alt kesim** taşıyor (Sprey
+öncesi `I`, Sprey sonrası `Iss`) ve bunlar arka uçta **ayrı bölüm**. Kilit `Dept`
+seviyesindeydi ve iki alt kesimi `??` ile birleştiriyordu:
+
+```tsx
+turetilen={turetilen['...Sprey Öncesi'] ?? turetilen['...Sprey Sonrası']}
+```
+
+Yani yalnızca "Sprey öncesi" operasyondan türetilmişse "Sprey sonrası" alanları da
+kilitleniyordu — oysa o hâlâ `weekly_capacity`'den geliyor ve düzenlenebilir olmalı.
+Kullanıcı girdiği değeri değiştiremediği gibi, sebebini de yanlış okuyordu.
+
+**Çözüm:** rozet + `fieldset disabled` ortak bir `Kilit` parçasına çıktı, kilit alt
+kesime indi. Her alt kesim kendi durumunu gösteriyor.
+
+### 2. "Bütün Haftalara Ata" sessizce etkisizdi (gerçek hata)
+
+Türetilmiş bölüme yazılan `weekly_capacity` değeri **okunmuyor**. Kullanıcı butona
+basıyor, o bölümler için hiçbir şey değişmiyor, hata da yok. Faz 1b'nin I6 bulgusunun
+aynı şekli: sessizce uygulanmayan bir girdi.
+
+**Çözüm:** butonun altında, hangi bölümlerin **etkilenmeyeceğini** adlarıyla sayan
+uyarı. İşlemi engellemiyorum — türetilmemiş bölümler için hâlâ doğru çalışıyor.
+
+### 3. İki `Normalize` — birleştirilmemeli (düzeltme değil, karar)
+
+Bulgu "aynı adı taşıyan iki farklı kapsamlı fonksiyon" diyordu. Baktım:
+**birleştirilmemeleri gerekiyor.**
+
+- `YikamaOzetEsleme.Normalize` **bütün** Türkçe harfleri ASCII'ye indiriyor (Ç→C, Ş→S).
+  Çünkü işi **desen araması**: "Zımpara Rodeo" desene takılsın. Sonuç bir `Contains`,
+  yanlış pozitif riski yok.
+- `SmvCozucu.Normalize` **yalnızca i-ailesini** katlıyor. Çünkü işi **anahtar üretmek**:
+  iki ayrı style'ı aynı anahtara düşürmek, birinin SMV'sini ötekine sessizce uygulamak
+  demek. "KILÇIK" ile "KILCIK" farklı kelimeler.
+
+Yani aynı ada sahip olmaları tesadüf, aynı işi yapmaları şart değil. **Birleştirmek
+hata olurdu.** İkisine de karşılıklı "bunlar birleştirilmemeli, çünkü..." notu koydum —
+bir sonraki kişi (veya ben) bunu "tekrar" sanıp birleştirmesin.
+
+### 4. Döngü içinde `CreateCommand` (performans)
+
+Üç upsert de her satır için `CreateCommand` çağırıp **aynı SQL'i yeniden parse**
+ettiriyordu. Katalog 21 satır, önemsiz; ama **style matrisi 197 style × 21 operasyon**,
+yani tek kayıtta binlerce satır. Komut bir kez kurulup parametrelerin yalnızca değeri
+değişiyor (`Parameters.Add(ad, SqliteType.X)` + `.Value`).
+
+### 5. `GocEt` kapı almıyordu (gerçek yarış)
+
+`GocEt` bir **oku-değiştir-yaz**: mevcut parametreleri okur, "zaten tanımlı olana
+dokunmam" der, eksikleri yazar. Ama `_gate` almıyordu. Elle kayıt tam o aralığa düşerse
+göç, okuduğu **anda** tanımsız görünen operasyona kendi payını yazıp kullanıcının
+değerini **eziyor**.
+
+`GocEt`, `ParamKaydet`, `ParamSil` ve `HaftaParamSil` artık aynı kapıyı alıyor. Yazanın
+kapı alması, okuyanın almaması yetmez — yazan **herkesin** alması gerekiyor.
+
+### Doğrulama
+
+- **Testler:** 173/173 geçer (bu turda yeni test eklenmedi; 1, 2 ve 4 davranış
+  değiştirmiyor, 3 yalnızca yorum, 5'in yarışı deterministik testle kurulamıyor —
+  bunu açıkça yazıyorum, kilit kod incelemesiyle doğrulandı).
+- Web `tsc -b` temiz, vite 667.74 kB.
+- **Commit:** `38edcd3` — fix(sentez-planing): ertelenen 5 minor kapatildi
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
