@@ -63,3 +63,10 @@ isim / kimlik no / kod yazılmadı, sadece yöntem ve özet bulgular var.)
   **bu herkese açık repoya kopyalanmadı.**
 - **Düzeltme:** 1d (matrah tutarsızlığı) ilk sürümde normal %77 oranlıları da listeliyordu → filtre
   "tavan altı ve temelin <%70'i veya temelden büyük" yapıldı; 7a sadece sigorta kesilenleri gösteriyor.
+
+### 5. Raporu HTML'e çevirme
+- **Ne yapıldı:** `python -m pip install markdown` → scratchpad `tohtml.py`: md → HTML (tables eklentisi),
+  sabit üst menü (bölüm linkleri), yatay kaydırmalı tablolar, Arapça isimler ayrı satırda RTL, koyu tema
+  ve yazdırma (her bölüm yeni sayfa) CSS'i. Tek dosya, dış bağımlılık yok.
+- **Çıktı:** `X:\Yazilim\aaa\Payroll Audit September 2026.html` (~130 KB, 19 tablo). Kişisel veri → yayınlanmadı.
+- **Tuzak:** markdown kütüphanesi ham `<br>`'yi aynen bırakıyor (`<br />` değil) → regex `<br ?/?>`.
