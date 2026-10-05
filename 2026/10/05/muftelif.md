@@ -340,6 +340,52 @@ olduğu için karara bağladım ve spec'e gerekçesiyle yazdım:
   onayına kadar başlamadı.** B kısmının planından önce New Product + Orders sayfalarının
   satır/sütun düzeni ölçülmeli (Faz 1b'de ölçülmemiş Excel varsayımı yanlış çıkmıştı).
 
+## Şablon mekanizmasının ölçümü ve SMV modelinin düzeltilmesi
+
+Spec'in kendi "henüz ölçülmedi" kalemini kapattım: çıktı şablonunun dört sayfası
+satır satır okunup birbirine bağlanma biçimi yazıldı.
+
+### Mekanizma
+
+```
+Orders (pivot)  J4..S4 = hafta basliklari, r112 = Genel Toplam
+      |
+Data   BW9..CG9 = =Orders!J4..T4      <- hafta basliklari ORDERS'TAN gelir
+       BW11:BW647 = o haftanin style basina adedi,  BW648 = SUM(...)
+       G11..BT647 = "x"/"X"           <- bu style/yikama o operasyonu kullaniyor
+      |
+Weekly Capacity  I9 = Data!BW648
+       her operasyon satiri:
+         D = Average SMV                      (OPERASYON BASINA TEK SAYI)
+         G = E*7.25*6 + F*9*5                 (musait saat)
+         H = Units | Hours | verim boleni (orn. 0.85)
+         I = SUMIF(Data!$G$10:$G$647,"X",Data!BW...)   isaretli style'larin adedi
+```
+
+### Ölçümün getirdiği DÜZELTME
+
+Şablonda **(Style, Yıkama) kırılımı SMV değil, uygulanabilirlik matrisi.** Data'daki
+`x`/`X` "bu style/yıkama bu operasyonu kullanıyor" demek; SMV `Weekly Capacity!D`'de
+operasyon başına **tek** sayı. Spec'im SMV'yi style×yıkama kırılımında tutuyordu —
+şablondan daha ince. "Şablondaki gibi" dediği için modeli düzelttim:
+
+- `operasyon_smv` (operasyon × style × yıkama → smv) **kaldırıldı**
+- `operasyon_style` (uygulanabilirlik + **opsiyonel** smv override) geldi
+- `operasyon` tablosuna `smv` ve `verim` kolonları eklendi
+- `SmvCozucu` artık iki soruyu ayrı soruyor: *kullanıyor mu* / *kaç dakika*.
+  Tek alanda birleştirmek, birini değiştirince diğerini bozar.
+
+### Yeni açık soru — müsait saat formülü çelişiyor
+
+Şablon `vardiya × 7.25 × 6 + standart × 9 × 5` kullanıyor (`Weekly Capacity!G`,
+`E5=7.25`, `F5=9`); SentezPlaning her iki durumda `× 6` (`CapacityCalc`).
+**İki sistem aynı kapasiteyi üretmiyor.** Hangisi esas alınacak, kullanıcıya soruldu.
+
+- **Dokunulan dosyalar:** `docs/superpowers/specs/2026-10-05-sentezplaning-yikama-operasyon-design.md` (324 → 409 satır)
+- **Commit:** `7008c17` — docs(sentez-planing): sablon mekanizmasi olculdu, SMV modeli duzeltildi
+- **Not:** heredoc yine takıldı (Faz 1b'deki aynı sınıf). Python betiklerini Write ile
+  dosyaya yazıp çalıştırmak tek güvenilir yol; bash heredoc'una Python gömmeyeceğim.
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
