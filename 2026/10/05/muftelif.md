@@ -273,6 +273,73 @@ silindi** (publish temizlemiyor, üst üste yığıyor), zip yeniden kuruldu.
   wwwroot/index.html.
 - **Zip:** 12.5 MB / 126 dosya (önceki 142'de eski bundle kopyaları vardı).
 
+## SentezPlaning yıkama — tasarım (akşam, ikinci tur)
+
+Kullanıcı önceliği düzeltti: **mobil değil, planlama.** ("mobil uygulama degil bizim
+planlamaya olacak.") Kalıcı nota yazıldı.
+
+### Ölçülen zemin
+
+- SentezPlaning verisi **yerel SQLite**'ta (`PlaningDb`, `EnsureSchema`+`EnsureColumns`).
+  Yeni tablolar buraya girer; SentezLive salt okunur kalır.
+- Mevcut `smv` tablosu **style bazlı** — operasyon kırılımı yok.
+- Yıkama yükü ERP rotasından (`PlanningService:616-625`, `op.Dakika`, ıslak işlemde
+  kazan doluluğuna bölme). Kapasite 7 bölümde (`WeeklyCapacityInput`).
+- Girdi Excel'i **zaten ayrıştırılıyor** (`YikamaListeImport`) — yeni ayrıştırıcı yok.
+
+### Çıktı şablonunun ölçümü — iki önemli bulgu
+
+1. **Pivotlar kendi Data sayfasını okumuyor.** Beş pivot önbelleğinin kaynağı harici
+   `C:\Dosyalar\Yeni Sip List.xlsm` → `sip list` sayfası (`A13:CF202` vb.). Dosyada
+   görünen pivot değerleri son yenilemeden kalan önbellek anlık görüntüsü. Yani
+   "Data'yı doldurursak pivotlar dolar" **yanlış**; pivot sayfaları değer olarak
+   üretilecek. (`.xlsm` ama vbaProject **yok** — makro taşımıyor.)
+2. **Şablonun 21 `WSH-` kolonu `YikamaOzetEsleme.Satirlar` ile birebir örtüşüyor**
+   (normalize karşılaştırma, iki yönde de fark yok). Operasyon kataloğu tahminle değil
+   **şablondan tohumlanabilir**. Kolonlar: R,S,U,W,Z,AC,AE,AF,AH,AJ,AL,AN,AP,AR,AT,AU,
+   AV,AW,AX,AY,AZ.
+
+**Önceki yanlış notu düzelttim:** 12 pivotTable / 15 pivotCache / 4 externalLink /
+"üç pivot sayfası" diye not edilmişti. Doğrusu **6 / 5 / 2 / iki sayfa**
+(New Product 4 pivot, Orders 2 pivot). Plan bu sayılara dayanmayacak.
+
+Ayrıca şablonun `Weekly Capacity!satır 4` başlıkları istenen dört parametrenin aynısı:
+`Average SMV`, `# of Employees (shift/Std)`, `# Available Weekly Capacity(Hours)`,
+**`Capacity Units/Hours`** (= birim esası). Şablon operasyon başına bu dördünü zaten
+tutuyor; tasarımın `operasyon_param` tablosu onun veritabanı karşılığı.
+
+### Seçilen yaklaşım
+
+**Operasyon kataloğu kaynak, bölüm türetilmiş.** Üç yeni SQLite tablosu: `operasyon`
+(katalog), `operasyon_param` (operasyon×hafta, dört parametre), `operasyon_smv`
+(operasyon×style×yıkama). `weekly_capacity` silinmez, türetilmiş olur — bir bölümde hiç
+operasyon paramı yoksa davranış **bugünküyle birebir aynı** kalır.
+
+- **Neden:** aynı ekranın iki farklı rakam göstermesi bu depoda bir kez pahalıya geldi —
+  Faz 1b'nin I6 bulgusu tam buydu (satır başına 114 parça, lot planı 80). Tek kaynak
+  kuralı o sınıf hatayı imkânsız kılar.
+- **Ekran:** `/haftalik-kapasite` iki sekme; hafta seçimi ortak. Operasyon paramı girilen
+  bölümlerde bölüm alanları salt okunur + "operasyondan türetildi".
+- **SMV önceliği:** elle > rota; hangisi kullanıldı özet raporda satır başına yazılır
+  (I5 dersi: sessizce uygulanmayan kural görünür olmalı).
+
+### İki açık noktayı varsayılan olarak kararlaştırdım
+
+Kullanıcı iki turdur cevap vermedi; mimariyi değiştirmeyen, geri alınabilir seçimler
+olduğu için karara bağladım ve spec'e gerekçesiyle yazdım:
+
+- **Göç:** bölüm değeri operasyonlara eşit bölünür, her satır `kaynak='goc'` işaretlenir.
+  *Neden:* sıfırdan giriş o haftanın kapasitesini aniden sıfıra düşürür. Bölüm **toplamı**
+  doğru kaldığı için ara toplamlar etkilenmez; yanlış olan yalnızca kırılım, ilk
+  düzenlemede düzelir.
+- **Bölüm alanları salt okunur.** İki kaynak çelişkisini önlemek için.
+
+- **Dokunulan dosyalar:** `docs/superpowers/specs/2026-10-05-sentezplaning-yikama-operasyon-design.md` (324 satır)
+- **Commit:** `98ed34f` — docs(sentez-planing): yikama operasyon parametreleri tasarimi
+- **Sonraki adım:** kullanıcı spec'i onaylayınca uygulama planı. **Uygulama kodu plan
+  onayına kadar başlamadı.** B kısmının planından önce New Product + Orders sayfalarının
+  satır/sütun düzeni ölçülmeli (Faz 1b'de ölçülmemiş Excel varsayımı yanlış çıkmıştı).
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
