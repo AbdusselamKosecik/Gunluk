@@ -662,6 +662,68 @@ Dikkat çeken iki ayrıntı:
 - **Testler:** 143 → **159**, tamamı geçer. Web'e dokunulmadı.
 - **Commit:** `454a3c1` — feat(sentez-planing/cikti): New Product sayfasi uretiliyor
 
+## Style kimliği: görünür kılmak yetmedi, kapatıldı
+
+### Neden geri döndüm
+
+B kısmında şunu ölçmüştüm: `operasyon_style` matrisi liste Excel'inin `Style`'ı ile
+doluyor (`2305-576`), özet rapor ise Sentez envanter kart kodunu anahtarlıyor
+(`2305-576-BEZAL`). 197 style'in **173'ü birebir tutuyor, 24'ü varyant**. Yani
+kullanıcının elle girdiği SMV override'ı o **%12** için **sessizce uygulanmıyordu**.
+
+O turda yaptığım şey: bir log uyarısı ekleyip "sessizlik kalktı" demek, düzeltmeyi
+"ayrı iş" diye bırakmak. Doğrusu da buydu o an — ama açık kaldığı sürece kullanıcı
+ekranda SMV girip hiçbir şey olmadığını görmeye devam ediyor. **Kapattım.**
+
+### `StyleEsleyici` — tahmin üretmeyen köprü
+
+Yeni dosya: `SentezPlaning/api/Sentez/Planning/StyleEsleyici.cs`. İki yönde
+eşleştiriyor, ikisi de **yalnızca tire sınırında**:
+
+| Durum | Davranış |
+|---|---|
+| birebir | olduğu gibi — köprü devreye girmez |
+| kod varyant, matris temel (`...-BEZAL` → `2305-576`) | **en uzun** ön ek kazanır |
+| matris varyant, kod temel, **tek** aday | eşleşir |
+| matris varyant, kod temel, **iki+** aday | **eşleşmez**, `Belirsiz`'e girer, loglanır |
+| hiç aday yok | kodun kendisi döner — köprü etkisiz |
+
+**En önemli karar: belirsizlikte eşleştirmiyor.** `2305-576` için matriste iki renk
+varyantı varsa hangisinin SMV'si geçerli bilinmiyor. Yanlış rengin SMV'sini uygulamak
+hiç uygulamamaktan **daha kötü** — ilki sessizce yanlış sayı verir, planlamacı da
+kapasiteyi ona göre kurar. O kodlar loglanıyor ve "matrisi temel style ile doldurun"
+deniyor.
+
+İkinci sınır: `2305-5761` **`2305-576`'nın varyantı değil**. Ön ek eşleşmesi ardından
+`-` görmeyi şart koşuyor; yoksa iki ayrı style birbirine karışırdı.
+
+Üçüncüsü: köprü **kendi normalizasyonunu üretmiyor**, `SmvCozucu.StyleAnahtari`'yı
+kullanıyor (i-ailesi katlaması dahil). İki ayrı normalizasyon iki ayrı kaçak anahtar
+demektir.
+
+### İki yerde de bağlandı
+
+- **Özet hesabı** (`PlanningService`): matris anahtarına köprü üzerinden geçiliyor;
+  varyant üzerinden eşleşen kod sayısı `LogInformation` ile, belirsiz kalanlar
+  `LogWarning` ile raporlanıyor.
+- **Çıktının `Data` sayfası** (`CiktiVeri`): aynı köprü. Birinde kullanıp ötekinde
+  kullanmamak, aynı verinin **ekranda işaretli, Excel'de işaretsiz** görünmesi olurdu —
+  bu tam olarak Faz 1b'nin I6 bulgusunun şekli.
+
+### Doğrulama
+
+- `StyleEsleyiciTests` 12 test (birebir, iki yönlü varyant, tire sınırı, en uzun ön ek,
+  iki adaylı belirsizlik, i-ailesi, boş matris, varyant sayacı, null/boş kod).
+- `CiktiVeriTests`'e 2 test: `Data` sayfası varyantla eşleşiyor, iki varyantta
+  işaretlemiyor. İkincisi **kırmızıydı**, köprü bağlanınca yeşile döndü.
+- **Testler:** 159 → **173**, tamamı geçer. Build uyarısız.
+- **Commit:** `5c3c19f` — fix(sentez-planing/smv): kart kodu <-> liste Style koprusu
+- Spec'e §5.6 eklendi.
+
+**Doğrulanmayan kısım:** 173/24 ölçümünü canlı veritabanında **yeniden doğrulayamadım**
+(güvenlik duvarı kapalı, SQL'e ulaşılamıyor). Köprünün kuralları testle çivili ama
+gerçek veri üzerinde kaç kodun varyant üzerinden eşleştiğini log satırı söyleyecek.
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
