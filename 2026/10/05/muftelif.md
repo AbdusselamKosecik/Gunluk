@@ -386,6 +386,71 @@ operasyon başına **tek** sayı. Spec'im SMV'yi style×yıkama kırılımında 
 - **Not:** heredoc yine takıldı (Faz 1b'deki aynı sınıf). Python betiklerini Write ile
   dosyaya yazıp çalıştırmak tek güvenilir yol; bash heredoc'una Python gömmeyeceğim.
 
+## Uygulama planı yazıldı (A kısmı)
+
+Kullanıcı iki turdur cevap vermedi; cevap bekleyen iki soruyu **parametre yaparak**
+blokeyi kaldırdım ve planı yazdım. Uygulama kodu başlamadı.
+
+### Plan yazarken çıkan en önemli bulgu
+
+**SentezPlaning'in hiç test projesi yok** — yalnızca `api/SentezPlaning.Api.csproj`.
+Web'de de koşucu yok (`scripts` = dev/build/lint/preview). Bu yüzden Görev 1 test
+projesini kuruyor (xunit 2.9.2, SentezSelvedge ile aynı sürümler) ve **bugünkü kapasite
+davranışını yazıya geçiriyor**: göçün doğru olduğunu kanıtlayacak tek ölçüt o.
+
+### Blokeyi kaldıran iki karar
+
+- **Müsait saat formülü** → `operasyon_param.gun_sayisi`, **varsayılan 6**. Bugünkü
+  `CapacityCalc` haftanın 6 iş gününü kullanıyor, yani param girildiğinde hiçbir sayı
+  değişmiyor. Şablonun farklı gün sayısı (vardiya ×6, standart ×5) cevap gelince
+  varsayılan değiştirilerek karşılanır — kod değişmez.
+- **Style/yıkama bazlı SMV override'ı** → `operasyon_style.smv` NULL olarak duruyor;
+  gerekmezse kolon kaldırılır ve model şablonla birebir kalır.
+
+### Planın şekli
+
+8 görev, her biri gerçek kodla ve TDD adımlarıyla:
+
+1. Test projesi + bugünkü kapasite davranışının sabitlenmesi (5 test)
+2. Şema: `operasyon`, `operasyon_param`, `operasyon_style` + `EnsureColumns` (5 test)
+3. Katalog tohumu `YikamaOzetEsleme.Satirlar`'dan (5 test) — `YikamaOzetEsleme`
+   `internal` → `public`
+4. `OperasyonKapasite`: operasyon toplamı, bölüme düşme, gün parametresi (9 test)
+5. `OperasyonGoc`: bölüm → operasyon dağıtımı, idempotent (7 test)
+6. `SmvCozucu` + `PlanningService` entegrasyonu, `SmvKaynak` raporda (12 test)
+7. Depo + store + API uçları (2 test)
+8. Web: iki sekme, `OperasyonPanel`, sürüklenme nöbetçisi (3 test)
+
+**Bir tasarım kararı:** yük hesabı iki soruyu ayrı soruyor — *kullanıyor mu*
+(uygulanabilirlik, şablonun `X` işareti) ve *kaç dakika* (SMV). Tek alanda birleştirmek,
+birini değiştirince diğerini bozar.
+
+**Kritik güvenlik ağı:** bir bölümde hiç `operasyon_param` kaydı yoksa o bölümün
+kapasitesi bugünkü `CapacityCalc` sonucuyla **birebir aynı** kalıyor. Geçiş kademeli;
+kullanıcı bir bölüme dokunmadıkça o bölümün sayısı oynamıyor. Bu, her kapasite
+görevinin kabul koşulu.
+
+### Beş Review Focus kalemi
+
+1. Bölümün sadece bazı operasyonlarına param girilmişse → türetilir + "n/m operasyon
+   tanımlı" uyarısı
+2. Olmayan hafta → bugünkü bölüm değerine düşer
+3. Katalogda olmayan ERP operasyonu → yükü yok sayılmaz, `rota` olarak işaretlenir
+4. Style/yıkama adı büyük-küçük harf ve Türkçe karakter farkı → eşleşme tutar
+   (SQLite `COLLATE NOCASE` ASCII'dir, `İ/ı` için yetmez; anahtar iki yanda aynı
+   invariant dönüşümle üretilir)
+5. Göç iki kez koşarsa → ikiye katlanmaz
+
+**İşaretçiler adım numarası yerine TEST ADI taşıyor.** Faz 1b planında bu işaretçiler
+sallantı kalmıştı (Task 5 Adım 9 yazıyordu, Task 5'in 6 adımı vardı); adım numarası
+görev içinde kayar, test adı kaymaz.
+
+- **Dokunulan dosyalar:** `docs/superpowers/plans/2026-10-05-sentezplaning-yikama-operasyon.md` (1899 satır)
+- **Commit:** `f9401b6` — docs(sentez-planing): yikama operasyon uygulama plani (A kismi)
+- **Sonraki adım:** kullanıcı planı onaylayınca uygulama. B kısmı (Excel giriş→çıkış)
+  ayrı plan; girdi ucu (`POST api/sentez/planning/liste`, IFormFile) **zaten var**,
+  eksik olan sürükle-bırak arayüzü ve çıktı üretimi.
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
