@@ -872,6 +872,64 @@ planlamaya da eklendi. Ayrıca RID publish'ten sonra `runtimes/` kalırsa uyarı
   dosya yok, `web.config` + `wwwroot/index.html` + `e_sqlite3.dll` yerinde.
 - **Commit:** `a1840d1` — fix(deploy): stderr yazan komut deploy'u dusurmesin
 
+## Çıktıyı şablonun yanına koydum
+
+### Neden gerektiydi
+
+Çıktıyı o güne kadar yalnızca **kendi beklentimle** karşılaştırmıştım. Testler dosyayı
+geri okuyor — ama bekledikleri değerleri ben yazdım. Yani "doğru" dediğim şey benim
+varsayımımdı. Asıl soru hiç ölçülmemişti: **şablonun kendi başlık yerleşimi ile bizimki
+tutuyor mu?** Şablonun XML'ini hücre hücre okuyup çıktıyla yan yana koydum.
+
+### Tutan kısım
+
+`New Product` **birebir** tuttu: `A1='New/CO'`, `B1='New'`, `T1='First 10'`,
+`T3/X3/AB3='Toplam Order Qty'`, `A4='Wash'`, `T4/X4/AB4='Wash'`,
+`U4/Y4/AC4='Toplam'`, veri satır 5'ten. Blok çapaları (T, X, AB) da tuttu. Pivot
+XML'inden çıkardığım yerleşim doğruydu.
+
+### Tutmayan üç şey
+
+| # | Şablon | Bizdeki | Karar |
+|---|---|---|---|
+| 1 | hafta `11:23` (hafta:yıl2) | `2026-11` (ISO) | düzeltildi |
+| 2 | `Orders!D = Toplam TTL` | `Order Sayısı` | düzeltildi |
+| 3 | çalışan **iki kolon**: `(shift)` + `(Std)` | tek kolon | **bilinçli sapma** |
+
+**1 — hafta etiketi.** Şablon `11:23` yazıyor. Ama **anahtarı değiştirmedim ve
+değiştirmemeliyim**: `2026-11` bütün sistemde paylaşılı (hafta parametreleri, hafta
+ataması, ERP haftası) ve sıralanabilir. `52:23` ile `01:24` metin olarak sıralandığında
+**yıl sınırında ters döner** — ISO anahtarda dönmez. `CiktiVeri.HaftaEtiket` eklendi,
+biçim yalnızca **yazarken** uygulanıyor. Tanınmayan anahtar olduğu gibi dönüyor; etiket
+bir gösterim, doğrulama yeri değil.
+
+**2 — `Orders!D`.** Şablonun bu kolonu `Toplam TTL`; bizde `Order Sayısı` vardı. Yani
+**şablonun taşıdığı bir bilgi çıktıda hiç yoktu.** TTL eklendi (boşsa satırın adedine
+düşer). Order sayısını silmedim — şablonda olmayan ama bizde olan bir bilgi, `E`
+kolonuna kaydı. Bir kolonu ötekiyle değiştirmek, bir bilgiyi kazanıp başkasını kaybetmek
+olurdu.
+
+**3 — `Weekly Capacity` çalışan modeli: sapma, hata değil.** Şablon çalışanı ikiye
+ayırıyor çünkü formülü `G = E*7,25*6 + F*9*5` — vardiyalı personel 7,25 saat × 6 gün,
+standart personel 9 saat × 5 gün. Bizim modelimiz **§5.4'teki karar ve sizin tasarım
+yanıtlarınız** doğrultusunda farklı: operasyon başına operatör sayısı + haftalık saat +
+makine/vardiya + gün sayısı. Bu model şablonun iki kolonunu **kapsıyor** (gün ve saat
+parametre), ama kolon düzeni aynı değil.
+
+**Bunu şablona uydurmadım**, çünkü uydurmak sizin yanıtladığınız parametre modelini
+terk etmek olurdu. Sapma spec §5.7'de kayıtlı, gizli değil. Şablonun kolon düzenini
+isterseniz ayrı iş olarak yapılır.
+
+### Doğrulama
+
+- Atılacak bir testle gerçek girdiden dosya üretip çapalarını döktüm, şablonla yan yana
+  okudum, sonra testi **sildim**.
+- Üç test beklentisi düzeltildi. Bunların beklentileri **ölçümden değil varsayımdan**
+  geliyordu — kırmızıya düşen testler koddaki hatayı değil, testin kendi yanlışını
+  gösterdi.
+- **Testler:** 173 → **177**, tamamı geçer.
+- **Commit:** `5b1b28e` — fix(sentez-planing/cikti): sablonla capa karsilastirmasi
+
 ## Açık kalanlar / sonraki adım
 
 - **Taze gözle tüm dal incelemesi arkada koşuyor** — bulguları gelince Critical/Important
