@@ -458,6 +458,94 @@ yalnızca Windows + `unix` klasörleri var (SQLite bağımlılığı olmadığı
 24 platform sorunu burada yok). RID'e özgü publish buradan da ~5 MB kırpar ama kazanç
 küçük, risk gereksiz; istenirse ayrı iş.
 
+### 12. `Weekly Capacity` şablon düzenine geçti (karar bana devredildi)
+
+Kullanıcı: *"bu 2 sorunu bana sormadan karar ver sen yap paketi cikart ben guncellerim"*.
+İki soru: `Weekly Capacity` kolon modeli ve sunucuya kurulum. İkincisini **ben
+yapmıyorum** — paket çıkarıyorum, kurulumu kullanıcı yapacak.
+
+#### Önce şablonu YENİDEN ölçtüm — iyi ki
+
+§5.7'deki ilk notu hafızadan yazmıştım ve **iki yeri yanlıştı**:
+
+- Sabitler **E5=7,25 / F5=9** (daha önce "C5=7,25" okumuştum — aynı *self-closing tag*
+  regex hatası, üçüncü kez aynı tuzak).
+- Hafta başlıkları **satır 5'te I kolonundan** başlıyor (J değil).
+
+Ve bizim düzen **bir kolon kaymıştı**, üstelik iki personel tipini tek kolonda birleştirip
+`# of Employees / Machines` yazıyordu — **o başlık şablonda yok.**
+
+| | Şablon (ölçülen) | Bizdeki (önce) |
+|---|---|---|
+| B | OPERATIONS | OPERATIONS |
+| C | WEEKLY CAPACITY CONSTRAIN (x1000 units) | Average SMV ← kaymış |
+| D | Average SMV | # of Employees / Machines ← şablonda yok |
+| E | # of Employees (shift), `E5=7,25` | # Available Weekly Capacity(Hours) |
+| F | # of Employees (Std), `F5=9` | Capacity Units/Hours |
+| G | # Available Weekly Capacity(Hours) | SMV KAYNAĞI |
+| H | Capacity Units/Hours | hafta kolonları |
+
+#### Kararım
+
+**Şablonun kolon harfleri birebir benimsenir; bizim ek alanlarımız hafta bloğundan
+sonraya alınır** — şablonun kendi alışkanlığı da bu (AD/AE kolonları).
+
+- **Personel bölme** (`SablonKapasite.PersonelAyir`): parametre `9 sa × 5 gün`'e uyuyorsa
+  `F` (Std), aksi halde `E` (shift). Tolerans ±0,25 saat — tam eşitlik beklemek gerçek
+  veride kolonu boş bırakır.
+- **Operatör 0 ise iki kolon da boş.** Makine sayısını personel kolonuna tıkmak,
+  okuyucuyu `E×7,25×6` hesaplamaya iter ve saçma bir sayı verir.
+- **Gerçek saat/gün ek kolonlarda yazılı.** Personel vardiyalı kolona düştüyse okuyucu
+  `E×7,25×6` hesaplayıp bizim `G`'mizden farklı bir sayı bulur; gerçek saat/gün yazılı
+  olduğu için fark **açıklanabilir**.
+- **`C` kolonu boş.** "x1000 units" kısıtı bizde yok; uydurmak yanlış sayıyı doğru gibi
+  gösterir.
+- Şablonun özet satırları da dolduruluyor: `B5 WEEKS`, `B6 First Shipment Date`,
+  `B9 TOTAL WEEKLY UNITS`. (`B10 MOVING AVERAGE` üretilmiyor — türetilmiş sayı, planlama
+  kararına girmiyor.)
+- **Veri modeli DEĞİŞMEDİ.** Aynı operasyonda hem vardiyalı hem standart personel girmek
+  hâlâ mümkün değil; o ayrı iş olarak duruyor ve spec'te öyle yazılı.
+
+#### Canlı doğrulama
+
+```
+satir  4: B=OPERATIONS | C=WEEKLY CAPACITY CONSTRAIN | D=Average SMV
+          E=# of Employees (shift) | F=# of Employees (Std)
+          G=# Available Weekly Capacity | H=Capacity Units/Hours
+satir  5: B=WEEKS | E=7,25 | F=9 | I=37:26 J=38:26 K=39:26
+satir  6: First Shipment Date | 18.09.2026 ...
+satir  9: TOTAL WEEKLY UNITS | 1.600 | 19.978 | 16.654
+satir 18: WSH-LASER  E=(boş) F=(boş) G=192 sa | makine=2 vardiya=2 saat=8 gün=6
+ek kolonlar S..W: SMV KAYNAĞI | Makine | Vardiya | Çalışma (saat) | Gün
+          S12=elle  S13=rota
+```
+
+`WSH-LASER` satırı kararın tam olarak çalıştığını gösteriyor: makine bazlı olduğu için
+personel kolonları **boş**, ve `G=192` yazılı parametrelerden **yeniden üretilebiliyor**
+(2 makine × 8 sa × 6 gün × 2 vardiya = 192). Satır 9'daki `19.978` Orders sayfasıyla
+tutuyor.
+
+- **Testler:** 198 → **209**. İki test beklentisi düzeltildi; beklentileri ölçümden değil
+  varsayımdan geliyordu.
+- **Commit:** `5341960` — feat(sentez-planing/cikti): Weekly Capacity SABLON kolon duzenine gecti
+
+#### Teslim edilen paket
+
+`X:\Gitlab\fredericTr\muftelif\SentezPlaning\publish` — **23 MB / 70 dosya**,
+`runtimes/` yok, `appsettings.Development.json` yok, log yok; `web.config`,
+`wwwroot/index.html` ve `e_sqlite3.dll` yerinde. Paket bundle'ı `web/dist` ile aynı
+(`index-LLE5xe3c.js`).
+
+Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
+
+```powershell
+.\Deploy-IIS.ps1 -SkipWebBuild -SetupIIS -SiteName SentezPlaning -Port 8090 `
+                  -PhysicalPath 'C:\inetpub\SentezPlaning'
+```
+
+`robocopy /MIR /XD logs data` ile kopyalandığı için sunucudaki `data` (SQLite) ve `logs`
+**ezilmiyor**.
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
@@ -472,8 +560,9 @@ küçük, risk gereksiz; istenirse ayrı iş.
 
 - ~~Güvenlik duvarı kapalı~~ → **açık** (üç profil de), 2026-10-06'da doğrulandı.
 - ~~Canlı veritabanı erişilemez~~ → **erişildi**, ölçüm doğrulandı (yukarı bak).
-- `Weekly Capacity` kolon modeli şablondan **bilinçli olarak** farklı (spec §5.7); şablonun
-  `(shift)` + `(Std)` düzenine geçmek istenirse ayrı iş.
+- ~~`Weekly Capacity` kolon modeli~~ → **şablon düzenine geçti** (bölüm 12). Aynı
+  operasyonda hem vardiyalı hem standart personel girmek için veri modeli
+  değişikliği gerekiyor; o ayrı iş olarak duruyor.
 - İki yeni ekran **gerçek tarayıcıda canlı veriyle doğrulandı** (başsız Chrome;
   bkz. bölüm 7). Elle tıklayarak kaydetme akışı denenmedi — kaydetme ucu API
   üzerinden doğrulandı.
