@@ -70,3 +70,14 @@ bt@modasima.com.tr kalacak".
 
 ## Açık kalanlar
 - Paketin sunucuya kurulması (kullanıcı). Son kontrolde sunucu 04.10 04:41 sürümünü gösteriyordu.
+
+### 2. (Modfex) Günlük giriş/çıkış mailinde gelmeyenler — `87633a1`
+- **Neden:** Kullanıcı: "gelmeyenler gözükmüyor, onları da göstermemiz lazım" (günlük sorguyu yapıştırdı).
+- **Ne yapıldı:** `PdksDeposu.GunlukAsync` sorgusundan `AND (c.Cikis IS NOT NULL OR g.Giris IS NOT NULL)`
+  kaldırıldı, yerine `hire_date <= @Gun` (bugün işe başlamış tüm aktifler). `PdksSatiri.Gelmedi`
+  (bugün giriş yok), `PdksGunlukSonucu.HareketVar`. `BildirimServisi.PdksSatirlariHtml`: gelmeyen satırı
+  `tr.gelmedi` kırmızı, In hücresinde `ABSENT`; özet "N absent (no check-in today)". İş uyarısı artık
+  "hiç okutma yok"a bakıyor (satır sayısı artık hiç 0 olmaz). `docs/pdks-raporlari.md` güncellendi.
+- **Test:** `tests/SentezServis.Core.Tests/PdksGunlukTestleri.cs` (RED derleme → GREEN), suite 245/245.
+- **Canlı kontrol (06.10.2026, salt okuma):** 359 kişi listeleniyor, 39 gelmedi; eski sorgu 320.
+- **Paket:** `SentezServis-Modfex-kurulum\SentezServis-2026-10-06-0807.zip` (arayüz 08:07); önceki silindi.
