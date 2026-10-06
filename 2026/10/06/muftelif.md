@@ -626,3 +626,17 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
 - Arge rotası Üretim rotasından kısa olabiliyor (yük −%15) — kullanıcı onayı bekliyor.
 - DURULAMA 207/212 ERP'de DIKIM altında; WASHING'e taşınmalı mı?
 - `operasyon_style` tablosu ve `OperasyonStore.StyleKaydet` artık okunmuyor (temizlik).
+
+---
+
+## Ek 3: Paket + 2 haftalık planlama raporu
+
+- **Paket:** `.\Deploy-IIS.ps1` (IIS kurulumu atlandı) → `SentezPlaning\publish`; data/logs hariç
+  zip'lendi: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-7107888.zip` (70 dosya,
+  8,5 MB). Doğrulama: DLL'de `StyleMatrisTuretici`, web JS'te salt okunur matris metni var.
+  Not: betiğin varsayılan portu 8090; eski kurulum 90 → kurulumda `-Port 90` verilmeli.
+- **Rapor:** "SentezPlaning — Son 2 Hafta Raporu" Claude Docs dokümanı
+  (https://claude.ai/code/artifact/cee713ab-38c5-41c1-a910-3d32908d4fa6). Kaynak: git log
+  (`--since=2026-09-22 -- SentezPlaning`, 31 commit) + 10/01, 10/02, 10/05, 10/06 günlükleri.
+  22–30 Eylül'de planlamada iş yok. Bölümler: özet, yapılanlar tablosu, kararlar, ölçülen
+  bulgular, paketler, açık kalanlar (checklist).
