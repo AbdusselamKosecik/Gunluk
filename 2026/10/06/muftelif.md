@@ -692,3 +692,20 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
   PP 53.280 dk/hafta (= (12×9+5×8)×60×6).
 - **Commit:** `b10599f`. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-b10599f.zip`
   (70 dosya, 8,5 MB).
+
+---
+
+## Ek 6: Kapasite alanları ondalıklı
+
+- **Neden:** Kullanıcı: *"ondalık değer de girmemiz gerekli ama"* (önceki turda alanlar tam
+  sayıya yuvarlanmıştı çünkü sunucu int'ti).
+- **Ne yapıldı:** `PlanningModels.cs` `WeeklyCapacityInput` 24 alan `int → double`;
+  `CapacityCalc` dakikayı `Math.Round(AwayFromZero)` ile int'e çevirir.
+  `WeeklyCapacityRepository.cs` `GetDouble` + `SqliteType.Real` — şema değişmedi (INTEGER
+  yakınlıklı kolon 7,25'i REAL saklıyor, testle sabitlendi). `CapacityPanel.tsx` `Num`:
+  `type="text" inputMode="decimal"`, `ondalikOku()` virgül/nokta kabul, geçersiz kırmızı.
+- **Testler:** +3 (ondalıklı hesap, JSON, SQLite gidiş-dönüş) → 224/224.
+- **Tarayıcı:** 2026-41 → 10 / 7,25 / 2,5 / 9 → önizleme 34.200 dk/hafta → kaydet → yenile →
+  aynı. Yerel DB yedekten geri yüklendi; arta kalan vite süreci (5280) durduruldu.
+- **Commit:** `22f63f4`. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-22f63f4.zip`
+  (70 dosya, 8,5 MB).
