@@ -62,6 +62,48 @@ karşılaştırması. Bugün **planın kendi defterinde kayıtlı açık bir kar
   - Deploy paketi yeniden üretildi (23 MB, `runtimes/` yok, yasak dosya yok).
   - **Commit:** `ebf8296` — feat(sentez-planing/web): style x yikama matris ekrani
 
+### 3. Yıkama özeti EKRANDA (hiç ekranı yoktu)
+
+- **Neden:** Matris ekranını bağlarken bir şey fark ettim: `['planning','yikama-ozet']`
+  önbellek anahtarını dün ben eklemişim ama **o anahtarda bir sorgu yok.** Aradım:
+  `GET yikama-ozet` ucu var, Excel'e yazılıyor, plan çıktısına giriyor —
+  **hiçbir ekran onu tüketmiyor.** Yani özetin tamamı (WSH-* satırları × hafta yükü,
+  bölüm kapasitesi, yük yüzdesi) yalnızca **Excel indirerek** görülebiliyordu.
+  `PlanningModels.cs`'teki yorumlar *"Ekranda gösterilir"* diyordu; gösterilmiyordu.
+
+- **Dokunulan dosyalar:**
+  - `SentezPlaning/web/src/components/planning/YikamaOzetTablo.tsx` (yeni)
+  - `SentezPlaning/web/src/api/planning.ts` — `YikamaOzet*` tipleri + `yikamaOzet()`
+  - `SentezPlaning/web/src/pages/PlanningPage.tsx` — sorgu + "Yıkama Özeti" kartı
+  - `SentezPlaning/web/src/components/planning/OperasyonPanel.tsx` —
+    `SMV_KAYNAK_ETIKET` export edildi
+  - `tests/.../ArayuzSozlukTests.cs` — 5 nöbetçi
+
+- **Ekrana taşınan iki uyarı — ikisi de sessizce yanlış karar üretiyordu:**
+  1. **SMV kaynağı.** Elle girilen bir SMV sessizce rotaya düşerse, planlamacı girdiği
+     değerin kullanılmadığını fark etmez. Satır başına renkli etiket geldi.
+  2. **n/m tanımlı** (inceleme bulgusu O8). Bölümün 9 operasyonundan 2'sine parametre
+     girilmişse kapasite ~2/9 görünür ve yük **%95'ten %420'ye** çıkar. Planlamacı bunu
+     **kapasite krizi sanıp sipariş erteleyebilir.** Uyarı raporda ve Excel'de vardı,
+     ekranda yoktu — artık tablonun üstünde hangi bölümlerin eksik olduğunu adlarıyla
+     sayıyor.
+
+- **İki tutarlılık kararı:**
+  - Hafta etiketi sunucudaki `CiktiVeri.HaftaEtiket` ile **aynı kuralı** kullanıyor
+    (`2026-11` → `11:26`); ekran ISO yazsaydı Excel ile ekran farklı görünürdü.
+  - `SMV_KAYNAK_ETIKET` sözlüğü export edildi; iki yerde iki ayrı sözlük tutmak
+    etiketlerin kaymasına davettir.
+
+- **Sonuç / doğrulama:**
+  - 5 kayma nöbetçisi: `YikamaOzetSatirDto` ve `YikamaOzetDto` alanları **reflection
+    ile** TS arayüzüyle karşılaştırılıyor; alan adı kayarsa tablo sessizce boş/`NaN`
+    gösterirdi ve `tsc` bunu göremez.
+  - Nöbetçilerden biri **kırmızıya düştü ve haklıydı ama hata testimdeydi**: JSX metni
+    satır sonuna bölündüğü için iki kelime arasına `\n` giriyordu. Bileşeni değil
+    **testi** düzelttim, tek satırda duran parçayı seçtim.
+  - **Testler:** 190 → **195**. `tsc -b` temiz, vite 679.97 kB. Paket yeniden üretildi.
+  - **Commit:** `ab88ccc` — feat(sentez-planing/web): yikama ozeti EKRANDA
+
 ## Kararlar
 
 - Matris ekranı **tüm kombinasyonları göstermiyor**, yalnızca listedeki gerçek çiftleri.
@@ -75,4 +117,5 @@ karşılaştırması. Bugün **planın kendi defterinde kayıtlı açık bir kar
 - Canlı veritabanına ulaşılamıyor; 173/24 style eşleşme ölçümü canlıda doğrulanmadı.
 - `Weekly Capacity` kolon modeli şablondan **bilinçli olarak** farklı (spec §5.7); şablonun
   `(shift)` + `(Std)` düzenine geçmek istenirse ayrı iş.
-- Matris ekranı gerçek veriyle **tarayıcıda denenmedi** (UZM şifresi yok).
+- Matris ekranı **ve yeni yıkama özeti tablosu** gerçek veriyle **tarayıcıda
+  denenmedi** (UZM şifresi yok, canlı veritabanı erişilemez).
