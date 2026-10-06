@@ -45,3 +45,28 @@ ESLESME HATASI (`|GrandTotal − Debit| > 0.1`) ve OK. Kısa tasarım onaylandı
 
 ## Açık kalanlar / sonraki adım
 - Paket kurulumu sonrası `/api/surum` → arayuzTarihi 2026-10-06 03:09.
+
+---
+
+# modfex-apparel/sentezservis — 2026-10-06 (Modfex kopyası)
+
+## Bağlam
+Modfex sunucusunda (MODFEXSRV, 100.119.104.122) SentezServis kurulu. Kullanıcı arayüzde hâlâ "Modasima"
+yazdığını gördü: "modasima yerlerini modfex ile değiştir"; sonra "mail ayarlarında değişmeyecek,
+bt@modasima.com.tr kalacak".
+
+## Yapılanlar
+
+### 1. Arayüzde firma adı Modfex — `65d9607` (repo: X:\Gitlab\modfex-apparel\sentezservis)
+- **Ne yapıldı:** `web/index.html` (sekme başlığı "Modfex İşlem Merkezi"), `web/src/components/Layout.tsx`
+  (yan panel), `web/src/pages/GirisSayfasi.tsx` (giriş ekranı), `web/src/styles/theme.css` (başlık yorumu).
+- **Bilerek dokunulmayan:** mail adresleri/ayarları (`Ayarlar.Gonderen` varsayılanı, appsettings Eposta,
+  mock/test alıcıları `bt@modasima.com.tr`). Koddaki "ModaSima'dan geldi" yorumları (tarihçe).
+- **Mail içeriği kontrolü:** canlı `SentezServis.bildirim_kutusu` — giden 3 mailin konusu `[Modfex] Personnel
+  in/out - …`, gövdelerde "sima" yok; "Modasima" yalnız alıcı adreslerinde. Kodda mail metinlerinde Modasima yok.
+- **Doğrulama:** web 48/48, .NET 239/239, tsc ve lint temiz.
+- **Paket:** `X:\Gitlab\modfex-apparel\SentezServis-Modfex-kurulum\SentezServis-2026-10-06-0729.zip`
+  (arayüz 2026-10-06 07:29); eski zip'ler silindi.
+
+## Açık kalanlar
+- Paketin sunucuya kurulması (kullanıcı). Son kontrolde sunucu 04.10 04:41 sürümünü gösteriyordu.
