@@ -566,3 +566,22 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
 - İki yeni ekran **gerçek tarayıcıda canlı veriyle doğrulandı** (başsız Chrome;
   bkz. bölüm 7). Elle tıklayarak kaydetme akışı denenmedi — kaydetme ucu API
   üzerinden doğrulandı.
+
+---
+
+## Ek: Haftalık Kapasite — Parametreler ayrı sekme
+
+- **Neden:** Kullanıcı isteği: `/haftalik-kapasite` ekranında parametreler (Kapasite /
+  Operasyon / Style × Yıkama) sol kolonda planla iç içeydi; Dikim ekranındaki gibi ayrı
+  bir sekme olsun.
+- **Ne yapıldı:** `PlanningPage.tsx`'e Dikim sayfasıyla aynı stilde üst sekme çubuğu
+  eklendi: **Haftalık Kapasite** (Haftalık Yük + Yıkama Özeti + Order Listesi, artık tam
+  genişlik) | **Parametreler** (hafta seçici `<select>` + mevcut `Sekmeler` alt sekmeleri).
+  Hafta seçici eklendi çünkü plan sekmesindeki hafta tablosu artık parametrelerle aynı
+  ekranda değil; `selectedWeek` iki sekme arasında ortak state. Kapasite paneli tam
+  genişlikte dağılmasın diye `max-w-md` sarıldı.
+- **Dokunulan dosyalar:** `SentezPlaning/web/src/pages/PlanningPage.tsx`
+- **Komutlar:** `npx tsc --noEmit -p .` (temiz), `npm run build` (başarılı)
+- **Sonuç / doğrulama:** Derleme + build geçti. localhost:90 o an kapalıydı
+  (ERR_CONNECTION_REFUSED) → tarayıcıda görsel doğrulama YAPILMADI.
+- **Commit:** `b503dea` — feat(haftalik-kapasite): parametreler ayri sekmeye tasindi
