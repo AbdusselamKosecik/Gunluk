@@ -71,3 +71,11 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
 - APK yeniden derlenmedi (mobil değişti).
 - `src/selvedge_mobil/analysis_options.yaml` bu işten önce değiştirilmişti; commit'e alınmadı.
 - Mobil `pubspec.yaml`'daki `file_picker` artık kullanılmıyor olabilir.
+
+### 6. Yayın paketi
+- **Komut:** `powershell -ExecutionPolicy Bypass -File deploy\yayinla.ps1`
+- **Sonuç:** `publish\Selvedge-Modfex-Servis-20261006-1254.zip` (47.6 MB, gitignore). İçinde: web wwwroot, API,
+  `db/migrations/0027_sentez_kaynak.sql`, `appsettings.json` (Sentez bölümü), doldurulmuş
+  `appsettings.Production.json` + `sql\sql-1-yetki.cmd` (**parola içerir**, kurulumdan sonra zip silinmeli),
+  `servis-kur.ps1`. `db/views` artık yok.
+- Sunucuda sıra: `sql\sql-1-yetki.cmd` (yeni GRANT'ler) → `servis-kur.ps1`.
