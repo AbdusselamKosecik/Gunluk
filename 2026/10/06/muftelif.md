@@ -664,3 +664,31 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
   0,97 / 0,88 → aynı işin iki kaydı olabilir (çift sayım riski, kullanıcıya soruldu).
 - **Commit:** `768f961`. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-768f961.zip`
   (70 dosya, 8,5 MB). Rapor dokümanı güncellendi.
+
+---
+
+## Ek 5: Kapasite "Kaydet" kayıt yapmıyor görünüyordu — kök neden ve düzeltme
+
+- **Şikâyet:** *"parametrelerde kaydet dediğimizde kayıt yapmıyormuş."*
+- **Yeniden üretme:** API yerelde (`dotnet run --urls http://localhost:5299`, Development),
+  JWT dev anahtarıyla Python'da imzalandı; `curl` ile PUT/GET. Ardından vite (5280) +
+  Chrome DevTools, token `initScript` ile localStorage'a. Yerel SQLite önce yedeklendi,
+  test sonrası geri konuldu.
+- **Kök neden:** sunucu `WeeklyCapacityInput`'u camelCase döndürüyor (`rCompanyStaff`,
+  `zbCompanyStaff`), TS `CapacityInput` PascalCase okuyor (`RCompanyStaff`). PUT 200 dönüyor
+  ve SQLite'a yazıyordu, ama form kayıtlı değerleri HİÇ gösteremiyordu → sayfa yenilenince
+  alanlar boş. Planlama SentezDashbord'dan ayrıldığından (2026-07-29) beri.
+  Ek iki kusur: ondalıklı saat (7.5) → 400 (alanlar int) ve kaydetmede ne başarı ne hata
+  mesajı vardı (sessiz kayıp); 30 sn staleTime + kayıt sonrası haftanın önbelleği
+  güncellenmiyordu.
+- **Operasyon sekmesi:** param PUT/GET ve katalog SMV PUT çalışıyor (ondalıklı saat dahil);
+  sorun yalnız Kapasite sekmesindeydi.
+- **Düzeltme:** `planning.ts` `kapasiteGirisi()` (harf duyarsız eşleme; `capacity()` ve
+  `saveCapacity()`), `PlanningPage.tsx` saveMut/saveAllMut toast + `setQueryData`,
+  `CapacityPanel.tsx` tam sayı + "Yukarıdaki listeden bir hafta seçin".
+  `ArayuzSozlukTests` +2 nöbetçi test (221/221).
+- **Tarayıcı doğrulaması:** 2026-40 seçildi → 12/9/5 göründü; Fason saat 8 → Kaydet →
+  "2026-40 haftasının kapasitesi kaydedildi." → sayfa yenilendi → 12/9/5/8,
+  PP 53.280 dk/hafta (= (12×9+5×8)×60×6).
+- **Commit:** `b10599f`. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-b10599f.zip`
+  (70 dosya, 8,5 MB).
