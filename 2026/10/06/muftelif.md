@@ -382,6 +382,38 @@ olan alan adı ve XML yorumuydu.
   (`index-LLE5xe3c.js`) — 7. bölümdeki bayatlık dersi uygulandı.
 - **Commit:** `a7adbbb` — fix(sentez-planing): KartiYok -> SuresiYok
 
+### 9. Spec §7 soru 5 ölçümle kapandı: style bazlı SMV override GEREKLİ
+
+Kullanıcı açık soruların detayını isteyince, 5. soruyu (*"style bazında SMV override'ı
+gerçekten gerekiyor mu?"*) tahminle cevaplamak yerine ERP verisine baktım. Belirleyici
+fark koddaydı:
+
+- **Rota** dakikası `Erp_Process.StandartTime`'dan geliyor → **operasyon başına tek
+  değer**, karta göre değişmiyor. Yani rotadan beslenen yük style farkını **yapısal
+  olarak taşıyamıyor**.
+- **Etüt** dakikası `Erp_InventoryWorkStudy.StandartTime1` → **kart bazlı**. Fark varsa
+  burada görünür.
+
+Etüt verisi olan yıkama işlemlerinin **4/5'inde** kartlar arası fark var:
+
+| İşlem | Kart | Tekil | En az | En çok | Kat |
+|---|---|---|---|---|---|
+| ÖN BIYIK SÜRME | 361 | 28 | 0,479 | 1,505 | **3,1×** |
+| ARKA BOY SÜRME | 32 | 14 | 0,750 | 2,925 | **3,9×** |
+| ÖN BOY SÜRME | 33 | 12 | 0,750 | 2,138 | 2,9× |
+| BOY-FULL SÜRME | 29 | 9 | 0,750 | 2,696 | 3,6× |
+| ARKA PANELE PENS YAPMA-İÇTEN | 31 | 1 | 0,556 | 0,556 | — |
+
+ERP'nin kendi verisi aynı operasyonun bazı style'larda **3–4 kat** uzun sürdüğünü
+söylüyor. "Operasyon başına tek SMV" o style'larda **kat cinsinden** yanlış olur →
+`operasyon_style.smv` kolonu **kalır**.
+
+**Dürüstlük payı spec'e yazıldı:** etüt verisi yalnızca **5** yıkama işleminde var; geri
+kalanların yükü rotadan, yani style'dan bağımsız tek değerden geliyor. Ölçüm "override
+gerekli" diyor, "her operasyon için gerekli" demiyor.
+
+- **Commit:** `8a96aba` — docs(spec): soru 5 OLCUMLE kapandi
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
