@@ -32,5 +32,16 @@ ESLESME HATASI (`|GrandTotal − Debit| > 0.1`) ve OK. Kısa tasarım onaylandı
   denemede VPN kapalıydı (192.168.1.3'e ping yok); kullanıcı bağlanınca devam edildi.
 - **Commit:** `bed96a9`
 
+### 2. Paket
+- **Ön kontrol:** Commit edilmemiş kod yoktu. Kökte duran `SentezServis-2026-09-30-misirli-renk-kirilimi/`
+  klasörü önceki paketin açılmış kopyası, kaynak kod değil.
+- **Derleme:** Temiz worktree'den (`bed96a9`) `yayinla.ps1`, sonra `Compress-Archive`.
+  - Tek komutta "derle + zip + temizle" bir güvenlik kancasına takıldı; adımlar ayrı çalıştırıldı.
+- **Sonuç:** `SentezServis-2026-10-06-muhasebe-kontrolu.zip`, 73,8 MB. Arayüz 2026-10-06 03:09.
+- **30.09 paketiyle karşılaştırma:**
+  - Dosya listesi aynı.
+  - app.js'te `muhasebe-kontrolu` 0 → 5. Diğer ekranlar (karşıt kod, planlama, Pierre, Mısırlı, kasa) aynı.
+  - Örnek ayarda 6 × `<DOLDURUN>`; `appsettings.json` pakette yok.
+
 ## Açık kalanlar / sonraki adım
-- Yeni paket (kullanıcı isterse; önceki paketle karşılaştırılarak).
+- Paket kurulumu sonrası `/api/surum` → arayuzTarihi 2026-10-06 03:09.
