@@ -104,8 +104,46 @@ karşılaştırması. Bugün **planın kendi defterinde kayıtlı açık bir kar
   - **Testler:** 190 → **195**. `tsc -b` temiz, vite 679.97 kB. Paket yeniden üretildi.
   - **Commit:** `ab88ccc` — feat(sentez-planing/web): yikama ozeti EKRANDA
 
+### 4. Uçları sistematik taradım: bir kurtarma yolu daha yarım kalmış
+
+- **Neden:** Özet ekranı işi şunu gösterdi — "ucu var, ekranı yok" verimli bir arama
+  deseni. Bunu **tek tek değil sistematik** yaptım: controller'daki bütün uçları çıkarıp
+  web kaynağında geçmeyenleri aradım.
+
+- **İki sonuç çıktı, biri yanlış alarm:**
+  - `orders/{workOrderNo}/week` → **yanlış alarm.** Şablon dizesiyle çağrılıyor
+    (`${base}/orders/${...}/week`), düz `grep` görmemiş.
+  - `operasyon/tohumla` → **gerçek.** Uca basacak bir şey yok.
+
+- **Neden ciddi:** İnceleme bulgusu O5 şöyle diyordu — katalog bir bakımda boşalırsa meta
+  işareti yüzünden tohum bir daha koşmuyor ve ekranda hiç operasyon olmadığı için
+  **kullanıcının geri getirecek yolu yok**. Düzeltme olarak `Tohumla()` + uç yazılmış.
+  Ama **düğme eklenmediği için** kurtarma yolu yalnızca `curl` ile erişilebilir kalmış.
+  Yani kullanıcının durumu düzeltmeden öncekiyle **aynıydı**; bulgu kapalı sayılmıştı,
+  değildi.
+
+- **Ne yapıldı:**
+  - Katalog **boşsa** panelin yerine kurtarma bloğu: ne olduğunu, kapasitenin bu durumda
+    bugünkü bölüm değerlerinden hesaplandığını ve tohumlamanın **mevcut satırlara
+    dokunmadığını** söylüyor. Son cümle önemli — kullanıcı girdiği SMV'leri kaybetmekten
+    korkarsa düğmeye basmaz.
+  - Katalog **eksikse** (21'in altında) daha sakin bir "Eksikleri tamamla": eksik
+    operasyonun yükü **hiç hesaplanmıyor**, bunu gizlemek yanlış olurdu.
+  - Tohum sayısı TS'e sabit yazıldı **ama nöbetçiye bağlandı**: kayarsa ekran ya olmayan
+    bir eksiklik uydurur ("18/21") ya da gerçek eksikliği gizler. Nöbetçi 21'in doğru
+    olduğunu da doğruladı.
+
+- **Dokunulan dosyalar:** `web/src/api/planning.ts`,
+  `web/src/components/planning/OperasyonPanel.tsx`, `web/src/pages/PlanningPage.tsx`,
+  `tests/.../ArayuzSozlukTests.cs`
+- **Testler:** 195 → **197**. `tsc -b` temiz, vite 681.63 kB.
+- **Commit:** `8d0f9f7` — fix(sentez-planing/web): katalog kurtarma yolunun DUGMESI yoktu
+
 ## Kararlar
 
+- **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
+  **üç** bulgu çıktı (matris ekranı, yıkama özeti, tohum düğmesi). Bir ucu yazıp
+  ekranını yazmamak, özelliği kâğıt üzerinde bitmiş gösteriyor.
 - Matris ekranı **tüm kombinasyonları göstermiyor**, yalnızca listedeki gerçek çiftleri.
   Gerekçe: 25.000+ hücrelik bir ızgara ne kullanılabilir ne de doldurulabilir.
 - Aday sayımı ve `Data` sayfası ile **aynı köprüyü** kullanıyor; üç yerde üç farklı
