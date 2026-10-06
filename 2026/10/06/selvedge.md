@@ -183,3 +183,8 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
 - **Tablet izinleri:** `dumpsys package` → CAMERA ve READ_MEDIA_IMAGES `granted=false` idi.
   `adb shell pm grant com.modfex.selvedge android.permission.CAMERA` / `...READ_MEDIA_IMAGES` → granted=true.
 - **Commit:** `d879b14` — doc: ornek olcu tablosu Excel'i (6800) + uretici betik; fotograf kayit yeri notu
+
+### 12. Yayın paketi (son)
+- `deploy\yayinla.ps1` → `publish\Selvedge-Modfex-Servis-20261006-1646.zip`. İçinde migration 0027–0029,
+  `appsettings.Production.json` (Sentez:AdminUserCodes dahil — yalnız ilk kurulumda kopyalanır), `sql\9001_yetki.sql`,
+  `sql-1-yetki.cmd`. Parola içerir, kurulumdan sonra silinmeli. APK: `publish\modfex-qc-1.0.3.4.apk`.
