@@ -435,6 +435,29 @@ gizlenmemeli.
 - **Testler:** 198/198 (kod değişmedi).
 - **Commit:** `3079c42` — docs(spec): acik sorularin hepsi kapandi
 
+### 11. Kendi açtığım ucu kapattım: Selvedge deploy betiği doğrulandı
+
+6. bölümde SentezSelvedge'in deploy betiğini de düzeltmiştim (`Invoke-Native`), çünkü
+stderr tuzağı orada **gizli** duruyordu — paketi 441 kB olduğu için vite uyarı
+vermiyordu. Ama **o betiği hiç çalıştırmadım**: gözlemlenemeyen bir hatayı kör
+düzeltip, düzeltmemin betiği bozmadığını da doğrulamamıştım. Bu benim açtığım bir uçtu.
+
+Kapattım:
+
+| Kontrol | Sonuç |
+|---|---|
+| `SentezSelvedge` testleri | **442/442** geçer |
+| `Deploy-IIS.ps1` koşuyor mu | **evet** — "Paket hazir" |
+| yasak dosya (`appsettings.Development.json`, log) | **yok** |
+| bundle paket ↔ `web/dist` | **aynı** (`index-DiIkeZir.js`) |
+| `data` / `files` / `logs` | pakette yok (sunucuda oluşur, `/XD` ile korunuyor) |
+| paket | 24 MB / 68 dosya |
+
+**Uygulamadığım bir iyileştirme, bilerek:** Selvedge paketinde `runtimes/` 5,1 MB ve
+yalnızca Windows + `unix` klasörleri var (SQLite bağımlılığı olmadığı için Planning'deki
+24 platform sorunu burada yok). RID'e özgü publish buradan da ~5 MB kırpar ama kazanç
+küçük, risk gereksiz; istenirse ayrı iş.
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
