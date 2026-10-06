@@ -139,6 +139,91 @@ karşılaştırması. Bugün **planın kendi defterinde kayıtlı açık bir kar
 - **Testler:** 195 → **197**. `tsc -b` temiz, vite 681.63 kB.
 - **Commit:** `8d0f9f7` — fix(sentez-planing/web): katalog kurtarma yolunun DUGMESI yoktu
 
+### 5. VPN geldi: tıkanan iki ölçüm yapıldı
+
+Kullanıcı UZM şifresini verdi ve VPN'i açtı. İlk denemede **hâlâ bağlanamadım** ve
+sebebini ölçtüm:
+
+- Fortinet adaptörü ayağa kalkmış (`10.212.134.200`) ama **hiç rota yüklememiş**.
+  `route print` tablosunda `192.168.1.0/24` **on-link Wi-Fi** (`192.168.1.178`) — yani
+  ofis SQL'i **ev ağında** aranıyordu ve orada yoktu (`arp -a`'da `.22` yok).
+- `192.168.3.0/24` (dağıtım ağı) için **hiç rota yok**, internete çıkıyordu.
+- `.22`'de 1433/1434/445/3389/80 **hepsi kapalı**; `192.168.1.1:80` açıktı ama o **ev
+  router'ı**, ofis geçidi değil.
+- **Ders:** `Find-NetRoute` beni yanılttı (ifIndex 2 / 10.212.134.201 dedi), gerçek karar
+  `route print` tablosundaydı. VPN **adaptörünün ayakta olması rota yüklediği anlamına
+  gelmiyor.** Bir de **alt ağ çakışması** var: ev ağı da `192.168.1.0/24`, ofis SQL'i de
+  `192.168.1.22` — VPN rota yüklemediğinde istek sessizce ev ağına gidiyor.
+
+Kullanıcı VPN'i yeniden bağladı; `route print` bu kez `192.168.0.0/16 → 10.212.134.201`
+gösterdi ve 1433 açıldı.
+
+#### Ölçüm 1 — style kimliği (aylardır bekliyordu)
+
+`ZION / SentezLive`, 294 kullanıcı. Girdi Excel'inin `STYLE` kolonu (D) okunup her kod
+`dbo.Erp_Inventory` ile karşılaştırıldı:
+
+| | sonuç |
+|---|---|
+| tam eşleşme | **173** |
+| varyant | **24** |
+| bulunamayan | **0** |
+| toplam | **197** |
+
+**Kodda kayıtlı değerle birebir.** Varyant örnekleri: `2305-576 → 2305-576-PFD`,
+`6180-1898 → 6180-1898-CAROB`.
+
+#### Ölçüm 2 — yeni bulgu: çoklu renk
+
+Varyant örneğinde `-PFD` görünce (kodda `-BEZAL` yazıyordu) aynı temel style'ın birden
+fazla rengi olabileceğini fark ettim ve **ölçtüm**: 24 varyantın **16'sında birden fazla
+renk** var —
+
+```
+2305-576  -> BEZAL, MAHOGANY, PASHMINA, PFD, WBLK
+2227-1184 -> CARAMEL, CHAMBORD, MOSS, ONYX
+6180-1912 -> ALMOND, GLACIER, PFD, RESERVOIR, VINTAGE NAVY
+```
+
+İlk bakışta bu, köprünün *"belirsizlikte eşleştirme"* kuralını tetikler gibi görünüyor.
+**Tetiklemiyor** — ve bunu varsaymak yerine kontrol ettim: kullanılan yön **kart → temel
+style**, beş rengin hepsi aynı temele düşüyor, belirsizlik doğmuyor. Belirsizlik yalnızca
+**ters yönde** (matris kart kodu ile doldurulursa) oluşur ve orada köprü bilerek
+eşleştirmiyor.
+
+#### Uçtan uca canlı doğrulama
+
+Paketi izole bir klasöre kopyalayıp canlı Sentez'e karşı çalıştırdım, UZM ile giriş yaptım
+(`Uzman Adres`), gerçek girdiyi yükledim: **258 order okundu, 258 eklendi, 1 order'ın
+kartı bulunamadı.**
+
+- **208 aday (style, yıkama) çifti** — matris ekranı tasarımındaki "~200" tahminim
+  doğrulandı; 25.000 hücreli ızgara yapmamakla doğru karar verilmiş.
+- 10 hafta, 29 özet satırı, **eşlenmeyen ERP operasyonu 0** — `YikamaOzetEsleme`
+  gerçek veride tam kapsıyor.
+
+Sonra **asıl testi** yaptım: `2305-576` **temel** koduna SMV override yazdım. Özet rapor
+bu order'ları kart kodu `2305-576-PFD` **varyantı** üzerinden görüyor:
+
+| | `elle` | `rota` | `yok` |
+|---|---|---|---|
+| override öncesi | 0 | 13 | 9 |
+| override sonrası | **3** | 10 | 9 |
+
+**Köprü çalıştı.** Sessizce kaybolan %12 artık uygulanıyor. Aday rozeti de doğru:
+`tanımlı=10, smvOverride=10`.
+
+**Dürüst kalan bir ayrıntı:** override sonrası WSH-DYE'ın yükü 977 → 930 saate *düştü*.
+Override (9,99) o order'ların rota değerinin yerine geçtiği için beklenen bir değişim, ama
+**per-order rota değerlerini doğrulamadım** — `orders` ucu hafta parametresi istiyor ve
+oraya girmedim. Açıklamayı ölçmedim, tahmin ettiğimi söylüyorum.
+
+- **Dokunulan dosyalar:** `SentezPlaning/api/Sentez/Planning/PlanningSql.cs` (ölçüm
+  kaydı), spec §5.6.
+- **Hiçbir şey SentezLive'a yazılmadı** — API Sentez'i salt okunur kullanıyor, liste ve
+  matris izole scratchpad SQLite'ına gitti.
+- **Commit:** `01cd216` — docs(sentez-planing): style kimligi olcumu CANLI dogrulandi
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
@@ -151,8 +236,8 @@ karşılaştırması. Bugün **planın kendi defterinde kayıtlı açık bir kar
 
 ## Açık kalanlar / sonraki adım
 
-- **Güvenlik duvarı 3 Ekim'den beri kapalı** — açılması gerekiyor (kullanıcıda).
-- Canlı veritabanına ulaşılamıyor; 173/24 style eşleşme ölçümü canlıda doğrulanmadı.
+- ~~Güvenlik duvarı kapalı~~ → **açık** (üç profil de), 2026-10-06'da doğrulandı.
+- ~~Canlı veritabanı erişilemez~~ → **erişildi**, ölçüm doğrulandı (yukarı bak).
 - `Weekly Capacity` kolon modeli şablondan **bilinçli olarak** farklı (spec §5.7); şablonun
   `(shift)` + `(Std)` düzenine geçmek istenirse ayrı iş.
 - Matris ekranı **ve yeni yıkama özeti tablosu** gerçek veriyle **tarayıcıda
