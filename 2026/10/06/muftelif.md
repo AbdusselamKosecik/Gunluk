@@ -277,6 +277,75 @@ oymuş; ham XML yalnızca şablonu çözmek için kullanılmalı.
 - **Hiçbir şey SentezLive'a yazılmadı**; liste/matris/param izole scratchpad SQLite'ında.
 - Depoda kod değişikliği yok — bu tur **doğrulama** turuydu.
 
+### 7. Tarayıcı doğrulaması yapıldı (yapamam demiştim, yapılabiliyordu)
+
+"Tarayıcıda görsel gezinti yapamıyorum" demiştim çünkü Chrome DevTools MCP bu oturumda
+bağlanmadı. **Yanlıştı** — Chrome kurulu ve `--headless=new --dump-dom` ile DOM gerçekten
+okunabiliyor.
+
+İki engeli aştım:
+
+1. **Giriş.** Aynı origin'de küçük bir fikstür sayfası `localStorage`'a token ve kullanıcı
+   koyup `/haftalik-kapasite`'ye yönlendiriyor (anahtarlar `sentez_planing_access_token`,
+   `sentez_planing_user`). Fikstür **yalnızca izole e2e kopyasına** yazıldı ve sonra
+   silindi; depoya girmedi.
+2. **Sekme tıklaması.** `--dump-dom` tıklayamıyor, matris paneli ise varsayılan sekme
+   değil. İzole kopyadaki minified bundle'da `useState(\`kapasite\`)` → `useState(\`matris\`)`
+   yaptım. Depodaki kod değişmedi.
+
+#### Özet ekranı — canlı veriyle, gerçek tarayıcıda
+
+81 KB DOM render edildi (boş `root` yok, React hata izi yok):
+
+```
+Yıkama Özeti (Operasyon × Hafta)
+Dikkat: şu bölümlerde operasyon parametreleri eksik, kapasite olduğundan küçük
+görünüyor ve yük yüzdesi şişiyor: Lazer (1/2). ...
+Operasyon  Ort.SMV  Kaynak                        37:26 38:26 ... Toplam
+WSH-DYE    1,66     Elle girildi (style bazlı)      39   192  ...   930
+WSH-WHITE  0,83     ERP rotası                       6    25  ...   311
+WSH-POTASSIUM 0,36  ERP rotası                       3     1          4
+WSH-Cut of Hem with scissor —  Kaynak yok
+```
+
+- **O8 uyarısı ekranda** ve bölümü adıyla sayıyor: `Lazer (1/2)`.
+- **SMV kaynağı ekranda**: köprünün uyguladığı override `Elle girildi (style bazlı)`
+  olarak görünüyor — sessizce rotaya düşme artık görünür.
+- Hafta etiketleri şablon biçiminde, sayılar Türkçe biçimde (`2.066`, `1,66`).
+
+#### Matris ekranı — canlı veriyle
+
+```
+208 / 208 çift — adetten büyüğe sıralı
+2334-1989   INKY RINSE              7.036 adet · 4 order   0/21 tanımlı
+A290B-1183  DEEP ROAST-PARÇA BOYA   2.684 adet · 3 order   0/21 tanımlı
+2305-576    PFD                     1.534 adet · 2 order  10/21 tanımlı  10 SMV
+```
+
+Son satır **tam zinciri kanıtlıyor**: API'den `2305-576` **temel** koduna yazdığım
+override, ekranda rozet olarak görünüyor; aynı override özet tablosunda
+`Elle girildi` olarak çıkıyor; arada köprü kart kodu `2305-576-PFD` ile temel kodu
+eşliyor.
+
+Türkçe karakterler doğru render ediliyor (`PARÇA BOYA`), sıralama adetten büyüğe.
+
+**İki "bulunamadı" vardı, ikisi de hata değildi:** arama alanının metni bir
+`placeholder` attribute'u (metin çıkarımı attribute'ları atıyor — ham DOM'da var), ve
+"Sıfır bir override değildir" uyarısı yalnızca bir çift **seçilince** render ediliyor.
+
+#### Yan bulgu: depo paketi BAYATTI
+
+Render testini kurarken fark ettim: `publish/` içindeki bundle `index-DVKT_VMy.js`, ama
+son yapı `index-DYaOpqwP.js` üretmiş. **Tohum düğmesi commit'inden sonra paketi yeniden
+üretmemişim.** O paket kurulsaydı katalog kurtarma düğmesi sunucuda **olmayacaktı**.
+Paket yeniden üretildi, ikisi artık aynı.
+
+**Süreç dersi:** web dosyası değişen her commit'ten sonra `Deploy-IIS.ps1` koşmalı;
+`tsc -b` + `npm run build` temiz çıkması paketin güncel olduğu anlamına **gelmiyor**.
+
+- Depoda kod değişikliği yok; bu da doğrulama turuydu.
+- SentezLive'a hiçbir şey yazılmadı.
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
@@ -293,6 +362,6 @@ oymuş; ham XML yalnızca şablonu çözmek için kullanılmalı.
 - ~~Canlı veritabanı erişilemez~~ → **erişildi**, ölçüm doğrulandı (yukarı bak).
 - `Weekly Capacity` kolon modeli şablondan **bilinçli olarak** farklı (spec §5.7); şablonun
   `(shift)` + `(Std)` düzenine geçmek istenirse ayrı iş.
-- İki yeni ekranın **verisi** canlı doğrulandı (aday listesi 208 çift, O8 uyarısı
-  tetikleniyor, override uygulanıyor). **Tarayıcıda görsel olarak gezilmedi** —
-  render doğrulaması yapılmadı.
+- İki yeni ekran **gerçek tarayıcıda canlı veriyle doğrulandı** (başsız Chrome;
+  bkz. bölüm 7). Elle tıklayarak kaydetme akışı denenmedi — kaydetme ucu API
+  üzerinden doğrulandı.
