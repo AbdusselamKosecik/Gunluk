@@ -60,3 +60,45 @@ Spec: `depo/docs/superpowers/specs/2026-10-06-pastal-kesim-hammadde-design.md`. 
 - Fabrika DB'sine betikler (depo 0001 → kesimhane 0001), `PastalOnayKullanicilari` ve `DosyaKlasoru` (UNC) belirlenmeli.
 - Android'de PDF "aç" yalnız yolu gösteriyor.
 - Kesim sonrası bant/paketleme entegrasyonu kapsam dışı.
+
+---
+
+## Ek iş — 6328-4731001-EKRU-D-40KAT pastal verimi (resim olarak)
+
+### Bağlam
+Kullanıcı `kesimhane/6328-4731001-EKRU-D-40KAT.pdf` için "verimliliği arttırabilir misin, resim olarak çek" dedi.
+Gemini raporu: en 172 cm, boy 7.40 m, **verim %60.05**, 77 ürün / 308 parça, kullanılan alan 7.65 m²
+(4731001-2-SUTYEN B/C/D; 75B–95B, 75C–90C, 75D–85D). Pastalın sağında büyük bir dikey boşluk vardı.
+
+### Yapılanlar
+- **Neden:** Gerçek parça geometrisi (DXF/Gemini) elimizde yok; yalnız PDF içindeki pastal resmi var.
+  Bu yüzden parçaları resimden çıkarıp yeniden yerleştirerek **yaklaşık** kazanç gösterildi.
+- **Ne yapıldı:** Betikler `Gunluk/2026/10/06/kesimhane-pastal/` altında (scratch'tan kopya):
+  1. PyMuPDF ile 2. sayfadaki gömülü JPEG çıkarıldı (`sayfa2_16.jpeg`, 2600×602 px = 740×172 cm, ≈2.85 mm/px).
+  2. `ayikla.py`: beyaz = min kanal > 225, koyu (kontur/yazı) = max kanal < 120, kalan = dolgu; 4-komşu etiketleme;
+     yalnız 250–900 px kırıntılar en çok temas ettiği **tek** aynı renkli (fark < 28) büyük parçaya eklenir
+     (büyük parçalar birbirine zincirlenmesin — önceki "her komşuyla birleş" denemesi 249/270 parçaya çöktü);
+     parça başına delik doldur, 1 px genişlet (kontur geri), ≥ 250 px tut → 312.
+  3. `halka.py`: koyu mor parçalarda dikiş payı bandı farklı tonda → açık halka olarak ayrı parça çıkıyordu (doluluk < 0.35).
+     Halka, kutusu en çok örtüşen parçayla birleştirildi → **308 parça (raporla birebir)**.
+  4. `nest.py <pay> <rastgele_sayısı>`: her maske +1 px genişletilir (alan 7.56 m² ≈ rapor 7.65 → kalibrasyon);
+     doluluk ızgarası 602 × uzunluk; parçalar sıralı, 0°/180°; çakışmasız konumlar `scipy.signal.fftconvolve(occ, maske[::-1,::-1], 'valid') < 0.5`;
+     en soldaki x, sonra en küçük y (sol-alt doldurma). Sıralamalar: alan/en/boy + 20 gürültülü alan sırası; en kısa tutulur.
+  5. `ciz.py`: orijinal ve yeni aynı ölçekte alt alta, çakışma kontrolü (0 piksel).
+- **Komutlar:**
+  ```bash
+  pip install pymupdf numpy scipy pillow
+  python ayikla.py && python halka.py && python nest.py 1 20 && python ciz.py
+  ```
+- **Sonuç:** yeni boy **≈6.05 m**, verim **≈%73.5** (orijinal 7.40 m / %60.05) → kat başı ≈1.35 m, 40 katta ≈54 m kumaş.
+  Çıktılar PDF'in yanında (repoya eklenmedi, PDF de untracked):
+  `kesimhane/6328-4731001-EKRU-D-40KAT_karsilastirma.png`, `..._yeni_yerlesim.png`.
+- **Commit:** kesimhane reposunda değişiklik yok (çıktılar untracked müşteri dosyası yanında).
+
+### Kararlar
+- Yön: yalnız 0°/180° (ayna yok); parçalar arası ek boşluk yok (orijinalde de yok), kontur payı +1 px.
+- Sonuç yaklaşık: 2.85 mm/px çözünürlük. Gerçek kesim için Gemini Nest'te aynı ayarlarla (180° izinli, otomatik nest süresi uzun)
+  yeniden pastal çıkarılmalı; resim yalnız kazancın büyüklüğünü ve sağdaki boşluğun kapatılabildiğini gösterir.
+
+### Açık kalanlar
+- Gemini'de yeniden nest yapılıp gerçek boy/verim teyit edilmeli; düz ipe göre 180° yasaksa sonuç değişir.
