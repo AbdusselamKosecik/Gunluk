@@ -128,3 +128,15 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
 - **Sonuç:** `publish\modfex-qc-1.0.1.2.apk` (74.8 MB). Cihazda denenmedi.
   `web/index.html` splash üretiminin yan etkisiyle değişti, commit'lenmedi.
 - **Commit:** `ea6e849` — mobil: surum 1.0.1+2
+
+### 9. Tablete kurulum + genel adres (APK 1.0.2+3)
+- Cihaz: Galaxy Tab A9 (SM-X110, `R83XB0S3C7Y`). İlk denemede Windows cihazı görmedi (USB hata ayıklama/
+  dosya aktarımı açılınca göründü). `adb install -r` + `monkey -p com.modfex.selvedge` ile açıldı.
+- Kullanıcı genel adresi verdi: `https://mf-selvedge.uzmanadres.com` (Cloudflare). Kontrol: `/` 200, swagger 200,
+  yanlış giriş 401; swagger'da `/api/sentez/sync` ve mfg yok → sunucuda 0028'li son sürüm çalışıyor.
+- **Ne yapıldı:** `lib/app/app_state.dart` `ServerCfg` varsayılanı host `mf-selvedge.uzmanadres.com`, `HTTPS`, `443`
+  (baseUrl 443'te portu yazmaz); ayar ekranı ipucu + yorum. Sürüm `1.0.2+3`. `deploy\build-apk.ps1` →
+  `publish\modfex-qc-1.0.2.3.apk`; tablette uninstall + install + açıldı (ekran görüntüsü: giriş "Sentez kullanıcı kodu").
+- **Açık:** Tablette ağ yoktu (`ping 8.8.8.8` → Network is unreachable) → girişi cihazda deneyemedim. Eski kurulumu
+  olan cihazlarda kayıtlı adres korunur; Sunucu Ayarları'ndan değiştirilmeli.
+- **Commit:** bkz. git log — mobil: varsayilan sunucu https://mf-selvedge.uzmanadres.com
