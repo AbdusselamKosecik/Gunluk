@@ -140,3 +140,32 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
 - **Açık:** Tablette ağ yoktu (`ping 8.8.8.8` → Network is unreachable) → girişi cihazda deneyemedim. Eski kurulumu
   olan cihazlarda kayıtlı adres korunur; Sunucu Ayarları'ndan değiştirilmeli.
 - **Commit:** bkz. git log — mobil: varsayilan sunucu https://mf-selvedge.uzmanadres.com
+
+### 10. Tablette hatalar: login'e atma, anket ekleyememe, boş sipariş listesi
+- **Teşhis yöntemi:** `adb logcat -s flutter` (uygulama `[Dio→]/[Dio←]` logluyor) + geçici `debugPrint` adımları.
+  Sunucu tarafı: `sv_RefreshToken` kayıtları tabletten gelen girişlerin başarılı olduğunu gösterdi.
+- **Bulgu 1 — login'e atma:** Girişten sonra ilk istek `auth=NO` → 401 → interceptor oturumu kapatıyordu. Neden:
+  `ApiAuthNotifier.build()` depodan **asenkron** `_load()` başlatıyor; ilk girişte sağlayıcı o an oluşuyor,
+  `setTokens` token'ı koyuyor, gecikmeli biten `_load()` depodaki boş değerle state'i eziyordu. Aynı desen
+  `AuthNotifier` (oturum bayrağı) ve `ServerCfgNotifier`'da da var.
+  **Düzeltme:** `_touched` bayrağı — set/clear/signIn/signOut sonrası biten `_load()` state'i değiştirmez.
+  Doğrulama: yeni APK'da tüm istekler `auth=YES`, 200.
+- **Bulgu 2 — anket ekleyememe:** `Sentez` kullanıcısı Admin yerine QualityControl almıştı (rol 12:42 UTC'de ilk girişte
+  atanmış). Yerelde aynı kodla (geçici `SelvedgeTest` DB, `Sentez`/`1`) Admin alıyor → sunucu ayarında liste okunmuyor
+  (sunucu dosyalarına erişemedim). Sunucuda `sv_UserRole`'e Admin elle eklendi (UserId 1).
+  Kullanıcı isteği: "admin kullanıcılarını appsettinge alsak" → `AuthService.EnsureRolesAsync`: `Sentez:AdminUserCodes`'taki
+  kullanıcıya **her girişte** Admin; rolsüz diğerine QualityControl. Koddaki varsayılan liste yok.
+  `deploy/appsettings.Production.ornek.json` + `publish\gizli\appsettings.Production.json`'a `Sentez` bölümü eklendi;
+  KURULUM.md: mevcut sunucuda `C:\Selvedge\app\appsettings.Production.json`'a elle eklenmeli (servis-kur ezmez).
+- **Bulgu 3 — firma → sipariş listesi boş:** Mobil siparişleri `supplierId` ile listeliyor; Order'da tedarikçi yerel ve boştu.
+  `0029_order_tedarikci_cari.sql`: `sv_CustomerOrder.SupplierId = ISNULL(sv_OrderQc.SupplierId, CurrentAccountId)` +
+  tetikleyici yeniden (CREATE OR ALTER). Rollback testi: 1439 Order'ın tümü bir firmaya düşüyor. **Sunucuya doğrudan
+  uygulandı** (idempotent); API'de MODASIMA (957) → 1175 sipariş.
+- Not: PowerShell 5 `Set-Content -Encoding utf8` pubspec/version.dart'ta Türkçe karakterleri bozdu → git checkout + sed.
+- **Commit:** `638ffd6` (admin + mobil yarış, APK 1.0.3+4), `5d4b27a` (0029).
+- **Çıktılar:** `publish\modfex-qc-1.0.3.4.apk` (tablette kurulu), `publish\Selvedge-Modfex-Servis-<tarih>.zip`.
+
+## Açık kalanlar (güncel)
+- Sunucuya yeni paket kurulmadı: `AuthService` (her girişte admin) değişikliği için kurulum + `appsettings.Production.json`'a
+  `Sentez:AdminUserCodes`. 0029 zaten uygulandı.
+- Web'de anket eklemek için `Sentez` çıkış yapıp tekrar girmeli (rol token'da).
