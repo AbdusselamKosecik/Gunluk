@@ -224,6 +224,59 @@ oraya girmedim. Açıklamayı ölçmedim, tahmin ettiğimi söylüyorum.
   matris izole scratchpad SQLite'ına gitti.
 - **Commit:** `01cd216` — docs(sentez-planing): style kimligi olcumu CANLI dogrulandi
 
+### 6. O8 senaryosu ve canlı Excel çıktısı doğrulandı
+
+Tarayıcı yerine **en riskli veri yolunu** ölçtüm; ekranın gösterdiği uyarının verisi canlı
+veride doğru üretiliyor mu?
+
+#### O8: eksik parametre yük yüzdesini şişiriyor
+
+Lazer bölümünün **iki operasyonundan birine** parametre yazdım:
+
+| | önce | sonra |
+|---|---|---|
+| tanımlı | 0/0 | **1/2** |
+| kapasite (ilk hafta) | 0 sa | 192 sa |
+| yük % | 0 | 4 |
+| **ekran uyarısı** | — | **çıkıyor** |
+
+Yani yeni özet tablosunun kırmızı bandı gerçek veride tetikleniyor ve "Lazer (1/2)"
+yazacak. Bu veri setinde şişme dramatik değil (kapasite zaten 0'dı), ama **mekanizma
+doğrulandı**.
+
+#### Canlı veriden gerçek Excel çıktısı
+
+`yikama-plan-cikti` ucu canlı veriyle çağrıldı: **26.563 bayt**, 4 sayfa.
+
+| Sayfa | Doğrulanan |
+|---|---|
+| `Data` | 219 satır (208 veri), gerçek style adları (`1746-1664 / ANNINA STRAIGHT LEG 33" / SOFT WHITE / C/O`), **21 WSH kolonu**, hafta başlıkları `37:26`… (şablon biçimi), adetler doğru haftada |
+| `Orders` | `D = Toplam TTL` — **çapa karşılaştırmasından gelen düzeltme yerinde**, `E = Order Sayısı`, 38:26 → 19.978 adet / 48 order |
+| `Weekly Capacity` | şablon başlıkları + `SMV KAYNAĞI` kolonu; `G12 = elle` — canlı override yansımış |
+| `New Product` | dört blok da üretiliyor: `T1 First 10`, `X1 Grater than 1500 units`, `AB1 Total List`, 134 satır |
+
+#### İki kez kendi okuyucuma kandım — ikisi de dosyada hata DEĞİLDİ
+
+Bunu yazıyorum çünkü ikisinde de hatalı bir bulgu bildirmeye çok yakındım:
+
+1. **"Sayfa yok" sandım.** ClosedXML XML'i `x:` ön ekiyle yazıyor, şablonu yazan Excel
+   yazmıyor. Regex'im `<sheet name=` arıyordu. Dosya doğruydu, okuyucum yanlıştı. Aynı
+   sebepten `workbook.xml.rels`'te ClosedXML `Target`'ı `Id`'den **önce** ve başında `/`
+   ile yazıyor — ikinci regex de bu yüzden boş döndü.
+2. **`C3 = 471` diye hayalet değer gördüm.** Sebebi: kendi kendine kapanan
+   `<x:c r="C3" s="1" />` etiketlerinde `</x:c>` yok, benim non-greedy regex'im bir
+   sonraki hücrenin `</x:c>`'sine kadar uzayıp **T3'ün değerini C3'e** atfetti. Ham XML'e
+   bakınca `C3` boş çıktı.
+3. **`Orders!B5 = 46283`** — tarih yerine sayı sandım. `numFmtId=164` = `dd.MM.yyyy`;
+   seri sayı **Excel'in tarih saklama biçimi**. Şablon da aynısını yapıyor.
+
+**Ders:** üretilen dosyayı ham XML'le okumak, okuyucunun kendi hatalarını bulguymuş gibi
+gösteriyor. Kalıcı testler ClosedXML ile okuyor (`YikamaPlanExportTests`) — doğru karar
+oymuş; ham XML yalnızca şablonu çözmek için kullanılmalı.
+
+- **Hiçbir şey SentezLive'a yazılmadı**; liste/matris/param izole scratchpad SQLite'ında.
+- Depoda kod değişikliği yok — bu tur **doğrulama** turuydu.
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
@@ -240,5 +293,6 @@ oraya girmedim. Açıklamayı ölçmedim, tahmin ettiğimi söylüyorum.
 - ~~Canlı veritabanı erişilemez~~ → **erişildi**, ölçüm doğrulandı (yukarı bak).
 - `Weekly Capacity` kolon modeli şablondan **bilinçli olarak** farklı (spec §5.7); şablonun
   `(shift)` + `(Std)` düzenine geçmek istenirse ayrı iş.
-- Matris ekranı **ve yeni yıkama özeti tablosu** gerçek veriyle **tarayıcıda
-  denenmedi** (UZM şifresi yok, canlı veritabanı erişilemez).
+- İki yeni ekranın **verisi** canlı doğrulandı (aday listesi 208 çift, O8 uyarısı
+  tetikleniyor, override uygulanıyor). **Tarayıcıda görsel olarak gezilmedi** —
+  render doğrulaması yapılmadı.
