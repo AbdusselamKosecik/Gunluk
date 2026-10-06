@@ -640,3 +640,27 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
   (`--since=2026-09-22 -- SentezPlaning`, 31 commit) + 10/01, 10/02, 10/05, 10/06 günlükleri.
   22–30 Eylül'de planlamada iş yok. Bölümler: özet, yapılanlar tablosu, kararlar, ölçülen
   bulgular, paketler, açık kalanlar (checklist).
+
+---
+
+## Ek 4: Yıkama süresi rota VE etüt birlikte (5000'li etüt kayıtları)
+
+- **Neden:** Kullanıcı: *"etütde 5000li kayıtlar varsa onları da getireceksin, ya rota ya
+  etüt olmayacak, 2'si de olacak."* Önceki kural rotası olan kartın etüdünü hiç okumuyordu.
+- **Ölçüm (canlı, liste 197 style, #temp tablolu sorgu):** etütte ProcessCode 5xxx ile
+  ParentId=WASHING birebir aynı (445 satır, fark 0). 111 style'ın etüdünde yıkama var,
+  hepsinin rotası da var, rotayla ORTAK işlem 0 (SÜRME, KILÇIK ÇAKMA detay işlemleri).
+  Bu işlemlerin çoğu hiçbir rotada geçmiyor → öğrenilmiş bölüm yok.
+- **Ne yapıldı:** `PlanningSql.cs`: `EtutBolum` (öğrenilmiş bölüm, yoksa addan SÜRME → PP
+  Sürme, KILÇIK → Kılçık), `RotadaYok` (aynı ProcessId kartın rotasında varsa etüt satırı
+  sayılmaz); 3 sorgunun etüt parçası. `PlanningService.cs`: `Dakikalar.Topla` +
+  `RotaArtiEtut` (iki kaynak toplanır, not "rota + etut eki"). `StyleMatrisTuretici`:
+  `KaynakRotaEtut = "rota+etut"`, `KaynakBirlestir`. Matris paneline "rota + etüt" rozeti.
+- **Doğrulama:** 219/219 test, tsc temiz. Canlı: BolumSureleri 2 sn, BolumSureleriKod 6 sn,
+  OperasyonSureleriKod 8 sn, hata 0 (`sqlcmd -f i:65001` — Türkçe LIKE için şart).
+  Etüt satırları: PP Sürme 415, Kılçık 15, bölümsüz 12.
+- **Etki:** toplam 26.167 + 363 dk (+%1,4); PP Sürme 186 → 539 dk.
+  Örnek 2038C-3028: rota "PP SÜRME ÖN 1 / ARKA 1" 0,75'er + etüt "ÖN SÜRME / ARKA SÜRME"
+  0,97 / 0,88 → aynı işin iki kaydı olabilir (çift sayım riski, kullanıcıya soruldu).
+- **Commit:** `768f961`. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-06-768f961.zip`
+  (70 dosya, 8,5 MB). Rapor dokümanı güncellendi.
