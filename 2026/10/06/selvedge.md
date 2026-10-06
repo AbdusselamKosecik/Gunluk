@@ -169,3 +169,17 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
 - Sunucuya yeni paket kurulmadı: `AuthService` (her girişte admin) değişikliği için kurulum + `appsettings.Production.json`'a
   `Sentez:AdminUserCodes`. 0029 zaten uygulandı.
 - Web'de anket eklemek için `Sentez` çıkış yapıp tekrar girmeli (rol token'da).
+
+### 11. Örnek ölçü Excel'i + fotoğraf izinleri
+- **Örnek Excel:** `doc/ornek/olcu-tablosu-ornek-6800.xlsx`, üretici `doc/ornek/olcu_ornek.py` (openpyxl;
+  `python doc/ornek/olcu_ornek.py <çıktı.xlsx>`). Model 6800 (Ales Desteksiz Straplez Sütyen), bedenler Sentez
+  Order 4314-1'den: 75B 75C 80B 80C 85B 85C 90B 95B; 9 POM (BND, BND-S, BNDH, CUPH, CUPW, NECK, WING, TOPE, HOOK),
+  temsili cm değerleri. Yerleşim `StyleService.ImportMeasureSpecsFromExcelAsync` ile aynı (R4 `Style:`, R10 başlık
+  A=#, B=POM, D=açıklama, E=tolerans ±, F+ bedenler).
+  **Doğrulama:** geçici `SelvedgeTest` DB + yerel API → `POST /api/lookups/styles/14949/measure-specs/import-excel`:
+  pomCount 9, sizeCount 8, specCount 72, uyarı yok; test DB silindi (canlıdaki 6800'e yüklenmedi — değerler temsili).
+- **Fotoğraflar:** sunucuda `C:\Selvedge\files\<EntityType>\<Id>\...` (`Storage:RootPath`). Canlıda test: 1×1 PNG
+  `POST /api/attachments/upload` (Style 14949) → 201, view 200, sonra silindi → sunucu klasör izni sorunsuz.
+- **Tablet izinleri:** `dumpsys package` → CAMERA ve READ_MEDIA_IMAGES `granted=false` idi.
+  `adb shell pm grant com.modfex.selvedge android.permission.CAMERA` / `...READ_MEDIA_IMAGES` → granted=true.
+- **Commit:** `d879b14` — doc: ornek olcu tablosu Excel'i (6800) + uretici betik; fotograf kayit yeri notu
