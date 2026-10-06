@@ -346,6 +346,42 @@ Paket yeniden üretildi, ikisi artık aynı.
 - Depoda kod değişikliği yok; bu da doğrulama turuydu.
 - SentezLive'a hiçbir şey yazılmadı.
 
+### 8. "kartiYok" adı canlı ölçümde yanlış çıktı
+
+Doğrulama sırasında geçtiğim bir sayının peşine düştüm: liste yüklemesi
+**`kartiYok: 1`** diyordu. Kartı olmayan bir order sessizce plandan düşüyorsa yük eksik
+hesaplanır — o yüzden baktım.
+
+**Sessizce düşmüyor:** order `kaynak=Yok` alıyor, sayaçta raporlanıyor, `GET suresiz`'de
+listeleniyor ve ekranda *"Bu order'lar yüke girmiyor"* bandı çıkıyor (render testinde
+DOM'da gördüm). Burası doğru kurulmuş.
+
+**Ama ad yanlıştı.** `GET suresiz` tek order döndü:
+
+```
+94890 / A3081-1285 BLACK / MADERA-DERİ / 2026-40
+```
+
+**Kart Sentez'de duruyor** (`A3081-1285`). Olmayan şey **süre**: rota, etüt ve aynı
+yıkama adında süre — üçü de yok. Sayaç baştan beri `Kaynak == SureKaynaklari.Yok`
+sayıyordu; adı yanlıştı.
+
+Yanlış ad boş iş üretir: planlamacı (ve **ben**) kayıp bir envanter kartı arar, bulunacak
+kayıp kart yoktur. Arayüz metni zaten doğruydu (*"order'ın süresi bulunamadı"*); yanlış
+olan alan adı ve XML yorumuydu.
+
+- `KartiYok` → **`SuresiYok`** (API + TS + ekran).
+- Yorumda artık **ölçümün kendisi** yazılı: hangi order, hangi kart, neyin eksik olduğu
+  ve ayrıntılı listenin `GET suresiz` olduğu.
+- Kayma nöbetçisi: yükleme sonucu DTO'sunun alanları TS arayüzüyle reflection ile
+  karşılaştırılıyor ve `kartiYok` adının **geri dönmediği** yoklanıyor — dönerse ekranda
+  "undefined order'ın süresi bulunamadı" yazar.
+
+- **Testler:** 197 → **198**. `tsc -b` temiz.
+- **Paket yeniden üretildi**; depo paketi ve `web/dist` artık aynı bundle
+  (`index-LLE5xe3c.js`) — 7. bölümdeki bayatlık dersi uygulandı.
+- **Commit:** `a7adbbb` — fix(sentez-planing): KartiYok -> SuresiYok
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
