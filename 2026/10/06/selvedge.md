@@ -79,3 +79,44 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
   `appsettings.Production.json` + `sql\sql-1-yetki.cmd` (**parola içerir**, kurulumdan sonra zip silinmeli),
   `servis-kur.ps1`. `db/views` artık yok.
 - Sunucuda sıra: `sql\sql-1-yetki.cmd` (yeni GRANT'ler) → `servis-kur.ps1`.
+
+---
+
+## Devam: eşitleme iptal → doğrudan SentezCore (kullanıcı: "senkronizasyonu iptal et. direk sentez database'inden çalışacak")
+
+### 7. Ayna tablolar → canlı view'ler
+- **Durum:** Paket sunucuya kurulmuştu (`_sv_SqlMigrations`'ta 0027 var, `sv_CustomerOrder` 0 kayıt, `sv_User` 42).
+- **Karar:** Tablo yerine **aynı adlı view** → EF modeli ve QA/anket servisleri değişmeden canlı Sentez okur.
+  Kimlik = Sentez RecId. Yazılabilir yerel alanlar küçük tablolarda; view'de `INSTEAD OF UPDATE` tetikleyicisi
+  (EF `ToTable(..., t => t.HasTrigger(...))` — OUTPUT kullanmasın diye).
+- **Ne yapıldı:** `db/migrations/0028_sentez_canli.sql`:
+  1. 10 tabloya bağlı tüm FK'ler dinamik DROP.
+  2. Yerel tablolar: `sv_OrderQc` (Status, SupplierId, Notes, FinalQcResult/At), `sv_StyleQa` (QA alanları),
+     `sv_UserPref` (PreferredLanguage, LastLoginAt).
+  3. `sv_RefreshToken`, `sv_UserRole`, `sv_UserSupplier` temizlendi (eski yerel kimlikler); 10 tablo DROP.
+  4. View'ler: Season, Supplier, Firm, Brand (Order'ı olan cari), Color/Size (VariantType 'Renk'/'%Beden%',
+     kod başına MIN(RecId)), Style (tip 15 kalemlerindeki stok + sv_StyleQa), CustomerOrder (WorkOrder tip 15 +
+     sv_OrderQc; iptal → Cancelled), CustomerOrderSize (Variant1 renk/Variant2 beden, kodla view join), User
+     (Meta_User + sv_UserPref). Tüm id kolonları `CAST(... AS BIGINT)` (Meta_User/VariantItem RecId int — EF long okur).
+  5. Tetikleyiciler: `TR_sv_CustomerOrder_Update`, `TR_sv_Style_Update`, `TR_sv_User_Update` (MERGE).
+- Kod: `SentezSyncService/Sql`, `SentezSyncWorker`, `SentezController` silindi; `SentezUserDirectory` (yalnız
+  Meta_User şifre okuma). `AuthService`: rolsüz kullanıcıya ilk girişte AdminUserCodes → Admin, değilse QC.
+  Model ölçü Excel'i bilinmeyen bedeni oluşturmaz, uyarıyla atlar. Entity'lerden Sentez*Id kaldırıldı.
+  Web: eşitle düğmesi/son eşitleme kaldırıldı. `9001_yetki.sql`: +Erp_VariantCard, +Erp_VariantType (11 tablo).
+- **Doğrulama:**
+  - Sunucu `Selvedge`'de BEGIN TRAN → 0028 → sayılar/tetikleyici → ROLLBACK: Season 12, Style 588, Order 1439,
+    OrderSize 23 402, Color 517, Size 120, Brand 13, Supplier/Firm 49, User 41; UPDATE'lerde `@@ROWCOUNT = 1`.
+  - Uçtan uca: sunucuda geçici `SelvedgeTest` DB → API yerelde (`ConnectionStrings__Selvedge` env) → tüm
+    migration'lar temiz → dev Jwt anahtarıyla ADM-01 (RecId 104, Admin) token'ı (python HMAC) ile: Order listesi/
+    detay (4 beden satırı, toplam 2500), lookups, firms, users, PATCH supplier, PUT style, PUT user (rol),
+    POST qa-reports (201), POST final-qc (Order Closed/Pass), birleşik QA PDF (200, 54 KB), yanlış şifre girişi 401.
+    Yerel tablolara doğru yazdığı SQL ile görüldü. Sonra `SelvedgeTest` DROP edildi.
+- **Commit:** `3caf65f` — Sentez: esitleme kaldirildi, tanim/Order/kullanici dogrudan SentezCore'dan
+- **Paket:** `publish\Selvedge-Modfex-Servis-20261006-1336.zip` (parola içerir).
+
+## Açık kalanlar (güncel)
+- Sunucuda: önce `sql\sql-1-yetki.cmd` (yeni GRANT'ler — yoksa view'ler hata verir), sonra `servis-kur.ps1`.
+  0028 açılışta otomatik uygulanır. Gerçek Sentez şifresiyle giriş henüz denenmedi (şifre bilinmiyor; MD5 yolu
+  bantsayim ile aynı).
+- `src/Selvedge.Web/package-lock.json` yayinla.ps1'in npm install'ı ile değişti, commit'lenmedi.
+- APK yeniden derlenmedi.
