@@ -120,3 +120,11 @@ Kararlar (kullanıcıya soruldu, hepsi önerilen):
   bantsayim ile aynı).
 - `src/Selvedge.Web/package-lock.json` yayinla.ps1'in npm install'ı ile değişti, commit'lenmedi.
 - APK yeniden derlenmedi.
+
+### 8. Android APK 1.0.1+2
+- **Neden:** Mobil kod Sentez girişi / salt-okunur tanımlar / MODFEX için değişmişti (madde 5).
+- **Ne yapıldı:** `pubspec.yaml` `1.0.0+1 → 1.0.1+2`, `lib/core/version.dart` `kAppVersion` (Frederic'ten kalan
+  `1.0.4.77`) → `1.0.1.2`. `powershell -ExecutionPolicy Bypass -File deploy\build-apk.ps1`.
+- **Sonuç:** `publish\modfex-qc-1.0.1.2.apk` (74.8 MB). Cihazda denenmedi.
+  `web/index.html` splash üretiminin yan etkisiyle değişti, commit'lenmedi.
+- **Commit:** `ea6e849` — mobil: surum 1.0.1+2
