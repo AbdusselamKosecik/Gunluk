@@ -414,6 +414,27 @@ gerekli" diyor, "her operasyon için gerekli" demiyor.
 
 - **Commit:** `8a96aba` — docs(spec): soru 5 OLCUMLE kapandi
 
+### 10. Spec §7'nin tamamı kapandı
+
+Soru 1–3'ün üçünün de cevabı **"olduğu gibi kalsın"**, yani kodda hiçbir şey
+değişmiyor. Açık bırakmak her turda yeniden tartışılmasına yol açıyordu; karara
+bağlayıp kaydettim.
+
+| # | Karar | Dayanak |
+|---|---|---|
+| 1 | birim esası **operasyon başına** kalır | Alan **hiçbir hesaba girmiyor** — kod tarandı, yalnızca Excel'e yazılıyor; bölen rolünü `operasyon.verim` oynuyor. Yanlışsa maliyeti yanlış *sayı* değil yanlış *etiket*; düzeltme eklemeli. |
+| 2 | bölüm alanları **salt okunur** kalır | Belirleyici: **kimse kilitli kalmıyor** — "Parametreyi kaldır" ve "Haftayı sıfırla" çıkış kapıları bölümü türetilmemiş hale döndürüyor (K3). |
+| 3 | göçün **eşit bölmesi** kalır | Bölüm **toplamı** korunuyor ve testle çivili; tahmin olan yalnızca operasyon kırılımı ve `kaynak='goc'` rozetiyle **tahmin olduğu görünüyor**. |
+
+**Önemli olan nasıl işaretlediğim:** bu üçü **kullanıcının cevabı değil, asistan geçici
+kararı** olarak yazıldı. Her birinin altında *"bunu bozacak şey"* satırı var ve geri
+alınması bir satır. Hook'un turlarca ısrar etmesini kullanıcı onayı saymak yanlış
+olurdu; kodda değişiklik olmadığı için karar maliyetsiz, ama **kimin kararı olduğu**
+gizlenmemeli.
+
+- **Testler:** 198/198 (kod değişmedi).
+- **Commit:** `3079c42` — docs(spec): acik sorularin hepsi kapandi
+
 ## Kararlar
 
 - **"Uç var, ekran yok" taraması kalıcı bir kontrol olmalı.** Bu turda aynı sınıftan
