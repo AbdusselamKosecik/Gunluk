@@ -585,3 +585,44 @@ Kurulum komutu (kullanıcı çalıştıracak, yönetici olarak):
 - **Sonuç / doğrulama:** Derleme + build geçti. localhost:90 o an kapalıydı
   (ERR_CONNECTION_REFUSED) → tarayıcıda görsel doğrulama YAPILMADI.
 - **Commit:** `b503dea` — feat(haftalik-kapasite): parametreler ayri sekmeye tasindi
+
+---
+
+## Ek 2: Style × Yıkama matrisi ERP'den türetiliyor (rota / etüt)
+
+- **Neden:** Kullanıcı: *"Style × Yıkama zaten rotadan geliyor, UD_YikamaRota veya arge
+  rotadan … birde etüte bakılacak. 5000 olanlar yıkama operasyonları."* Elle girilen
+  matris ERP'deki bilginin bayatlayan kopyasıydı.
+- **Kullanıcı kararları (soruldu):** rota `UD_YikamaRota1 → UD_ArgeRota1` (Üretim yok);
+  yıkama işlemi = üst işlemi WASHING (`Erp_Process.ParentId` → `ProcessCode '50'`);
+  süre önceliği rota → etüt (değişmedi); matris sekmesi salt okunur.
+- **Bulgular:** KazanKontrol'de rota/etüt sorgusu YOK (yalnız kalite kontrol fişi,
+  `UD_WashName`). Eski kod rotayı `ISNULL(UD_UretimRota1, UD_ArgeRota1)` ile okuyordu ve
+  yıkamayı `UD_IslemBolumu` doluluğuyla seçiyordu.
+- **Ne yapıldı:**
+  - `PlanningSql.cs`: `RotaKodu` (COALESCE/NULLIF), `YikamaIslemi`, `IslemCte`,
+    `RotaBolum` sabitleri; 5 sorgu bunlara geçti. `OperasyonSureleriKod` kart bazlı
+    rota → etüt yedeği + `Kaynak` kolonu.
+  - Yeni `StyleMatrisTuretici.cs` (saf fonksiyon) + `PlanningService.StyleMatrisiAsync`
+    (2 dk önbellek). Özet hesabı elle matrisi artık uygulamıyor; çıktının Data "x"
+    işaretleri türetilmiş matristen. `PUT operasyon/style` kaldırıldı.
+  - `MatrisPanel.tsx` salt okunur (operasyon ✓, dakika, kaynak rozeti).
+  - Testler: `StyleMatrisTureticiTests` (7), `ArayuzSozlukTests` iki test yeni tasarıma.
+- **Doğrulama komutları:** SQL metinleri `dotnet run dump.cs` (file-based app, reflection
+  ile `PlanningSql` alanları) ile döküldü, `sqlcmd` ile ZION/SentezLive'da 197 liste
+  style'ıyla koşturuldu: 6 sorgu hatasız. `OperasyonSureleriKod` 39 sn → 28 sn
+  (NOT EXISTS rota CTE yerine doğrudan RouteItem). Eski (HEAD worktree) ve yeni
+  `BolumSureleriKod` karşılaştırıldı.
+- **Ölçüm:** açık order kartlarında Arge≠Üretim 404/651, 374'ünde yıkama dakikası farklı.
+  Listede 126/185 style'ın dakikası değişti, toplam 30.893 → 26.177 dk (−%15). Örnek
+  A197-1765: Arge "AG1243 OPT1" HİPO/LAKKAZ×3/SUSUZ TAŞ içermiyor, Üretim içeriyor.
+  WASHING kuralı +1.329 kalem (KURUTMA vb., çoğu süresiz), −21 kalem (DURULAMA 207/212,
+  üst işlemi DIKIM). 208 çiftin 193'ü rotadan, 15'i ERP'de yıkamasız.
+- **Sonuç:** 217/217 test, tsc + vite build temiz. Ekran tarayıcıda görülmedi
+  (localhost:90 kapalı).
+- **Commit:** `7107888` — feat(sentez-planing): style x yikama matrisi ERP'den turetilir
+
+### Açık kalanlar
+- Arge rotası Üretim rotasından kısa olabiliyor (yük −%15) — kullanıcı onayı bekliyor.
+- DURULAMA 207/212 ERP'de DIKIM altında; WASHING'e taşınmalı mı?
+- `operasyon_style` tablosu ve `OperasyonStore.StyleKaydet` artık okunmuyor (temizlik).
