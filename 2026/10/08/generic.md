@@ -54,3 +54,40 @@ uzak PowerShell'de askıda servisler görülmüştü. Hedef: sebebi bulmak, sunu
 - Değerlendir: `WaitToKillServiceTimeout` kısaltma.
 - Debian VM'in AutomaticStartAction'ı "StartIfRunning" — kapalıyken host açılırsa otomatik başlamaz.
 - Administrator şifresi sohbette düz metin paylaşıldı → değiştirilmeli.
+
+---
+
+## Ek: Log analizi — "her elektrik kesintisinde sorun" (2026-10-09 gece)
+
+### Bulgular
+- **Sunucu nadiren elektriksiz kalıyor:** 90 günde tek Event 41 (15.09 10:25).
+- **Switch/ağ düşüyor:** HPE AMS id=4367 "NIC Link Failure": 15.09 (2x), 30.09 (6x, 15:25–18:41),
+  01.10 (3x, 15:43'te "All links are down"). Sunucu ayakta kalıyor, linki gidip geliyor.
+  Sunucuda UPS yazılımı yok.
+- **DC + NLA sorunu:** DNS sırası `127.0.0.1, 192.168.0.3`. Ağ geri gelince NlaSvc domaini bulamıyor →
+  "Network 4 / Public". Reboot sonrası 23:59'da Public, ancak 00:06'da DomainAuthenticated
+  (NetworkProfile/Operational 10000/10001).
+- **Kilitlenme deseni:** SCM 7011 (30 sn timeout) — 23.09: NlaSvc+iphlpsvc; 08.10 12:06–12:18:
+  NlaSvc+iphlpsvc+Schedule (9'ar kez). Sonra RDP kopuyor, reboot takılıyor (23.09'da 44 dk,
+  08.10'da hiç bitmedi). 23.09 21:53 TermService başlayamadı (7000/7038).
+- **Yan riskler:** PDC saat kaynağı "Local CMOS Clock" (30.09'da ~2 dk geri atlama);
+  SQL max server memory sınırsız (RAM 96 GB); 15.09'da bio-redis 168 kez crash-loop (09:34–10:23);
+  FlexibleLOM Port 3'te genel IP 196.204.119.91 / GW .89 tanımlı (kablo takılı değil).
+
+### Kullanılan sorgular (özet)
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='System';Id=41,6005,6006,6008,1074,1076,109,12,13;StartTime=(Get-Date).AddDays(-90)}
+Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Service Control Manager';Id=7000,7011,7031,7034,7038,7043;StartTime=(Get-Date).AddDays(-30)}
+# Mesajlar uzaktan boş geliyor → $_.Properties ile oku
+Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-NetworkProfile/Operational';StartTime=(Get-Date).AddDays(-30)}
+Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='Agentless Management Service';Level=1,2,3}
+w32tm /query /source
+```
+
+### Önerilen düzeltmeler (onay bekliyor, uygulanmadı)
+1. Switch + FortiGate'i UPS'e bağla (fiziksel, asıl tetikleyici).
+2. DNS sırası: önce 192.168.0.3 (DC olduğu doğrulanınca), sonra 127.0.0.1.
+3. NlaSvc → DNS/NTDS bağımlılığı + gecikmeli başlatma.
+4. PDC → dış NTP (`w32tm /config /manualpeerlist:... /syncfromflags:manual /reliable:yes`).
+5. SQL max server memory sınırı (ör. 64 GB).
+6. UPS varsa kapatma ajanı kur.
