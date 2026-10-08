@@ -50,3 +50,15 @@ hata sahadaki SQL oturumunda çıkıyor.
 ## Açık kalanlar (ek)
 - Bu makinedeki `uzman` girişi Türkçe değil (eski SQL normal testte geçiyordu); sahadaki hatayı veren oturumun dili
   Türkçe olmalı — sahada kurulumdan sonra teyit.
+
+### 3. Asıl görünen tarih hatası: koli listesi tarih seçici
+- **Neden:** Kullanıcı giriş yapınca tam ekran görüntüsünde "Shipping Cartons" ekranında her iki tarih seçicinin altında:
+  `System.InvalidCastException: Could not convert '10/15/2026 12:00:00 AM' (System.DateTime) to System.Nullable'1[System.DateTimeOffset]`.
+  `CalendarDatePicker.SelectedDate` tipi `DateTime?`, `KoliListeViewModel.Baslangic/Bitis` ise `DateTimeOffset?` idi →
+  seçilen tarih bağlamada reddediliyor, liste filtrelenmiyordu.
+- **Ne yapıldı:** `Baslangic/Bitis` → `DateTime?` (varsayılan `DateTime.Today.AddDays(-7)` / `DateTime.Today`),
+  `ListeAsync(Baslangic ?? DateTime.Today, Bitis ?? DateTime.Today, ...)`. Diğer uygulamalarda (bantsayim, sevkiyat) aynı hata yok.
+- **Test:** `Paketleme.Tests/BaglamaTipiTestleri.cs` — VM özellik tipi `CalendarDatePicker.SelectedDate` tipine eşit olmalı.
+  Eski kodla kırmızı (git stash ile denendi), düzeltmeyle yeşil. Tam paket canlı DB ile 59/59.
+- **Nasıl bulundu:** PowerShell `CopyFromScreen` ile tam ekran görüntüsü (VirtualScreen, DPI-aware) alınıp okundu.
+- **Commit:** `44c180b` — Koli listesi: tarih filtresi DateTime? (InvalidCastException)
