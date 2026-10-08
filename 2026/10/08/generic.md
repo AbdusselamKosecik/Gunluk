@@ -91,3 +91,34 @@ w32tm /query /source
 4. PDC → dış NTP (`w32tm /config /manualpeerlist:... /syncfromflags:manual /reliable:yes`).
 5. SQL max server memory sınırı (ör. 64 GB).
 6. UPS varsa kapatma ajanı kur.
+
+---
+
+## Ek 2: Düzeltmelerin uygulanması (2026-10-09 ~02:40)
+
+### Ön kontrolde çıkan kritik bulgu
+- `netdom query fsmo` → **tüm FSMO rolleri + PDC = DataSRV.modfextr.local (192.168.0.3)**, MODFEXSRV değil.
+- DataSRV ulaşılamıyor (ping, 53/88/389/445/3389 kapalı). `repadmin /replsummary`: DATASRV→MODFEXSRV
+  5/5 fail, (1722) RPC server unavailable, son başarılı replikasyon ~9h37m önce (08.10 ~17:00).
+- MODFEXSRV w32tm: Source=Local CMOS Clock, not synchronized; time.windows.com'a göre **-122 sn**.
+
+### Uygulanan
+1. **NlaSvc (DC için):**
+   ```powershell
+   New-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters -Name AlwaysExpectDomainController -PropertyType DWord -Value 1 -Force
+   sc.exe config NlaSvc start= delayed-auto
+   ```
+   Doğrulandı: AlwaysExpectDomainController=1, DelayedAutostart=1. Bir sonraki açılışta etkin
+   (servis şimdi yeniden başlatılmadı). Geri alma: değeri sil + `sc config NlaSvc start= auto`.
+2. **SQL max server memory:** 2147483647 → **65536 MB** (`sp_configure`, RECONFIGURE; value_in_use=65536).
+   `show advanced options` tekrar 0'a alındı.
+
+### Uygulanmadı (bilinçli)
+- DNS sırası (0.3 önce): DataSRV kapalıyken isim çözümlemeyi yavaşlatır → DataSRV dönünce.
+- NTP: dış NTP, PDC olan DataSRV'de yapılmalı; MODFEXSRV NT5DS (domain hiyerarşisi) olmalı → DataSRV dönünce.
+- UPS ajanı: sunucuda UPS cihazı (Win32_Battery / PnP) görünmüyor → UPS'in USB/ağ kartı ile bağlı olup olmadığı fiziksel kontrol.
+
+### Açık kalanlar
+- **DataSRV (192.168.0.3) neden kapalı?** Fiziksel kontrol gerek. Dönünce: repadmin ile replikasyon,
+  DataSRV'de `w32tm /config /manualpeerlist:"0.pool.ntp.org,0x8 1.pool.ntp.org,0x8" /syncfromflags:manual /reliable:yes /update`,
+  MODFEXSRV'de `w32tm /config /syncfromflags:domhier /update`, sonra DNS sırası.
