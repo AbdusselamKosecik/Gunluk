@@ -29,3 +29,24 @@ hata sahadaki SQL oturumunda çıkıyor.
 - Sahada yeni sürüm kurulup koli kapatma / fiş yazımı denenmeli; kullanıcı hata metnini iletmedi, teyit bekleniyor.
 - Bant / paketleme / sevkiyat okutma ekranlarını "5 yaşındaki çocuk" sadeliğine getirme: brainstorming sürüyor
   (hedef: okutma ekranı sade; cihaz: PC + el okuyucu).
+
+### 2. Çalıştırıp doğrulama (canlı DB + uygulama)
+- **Neden:** Kullanıcı "çalıştırıp dener misin" dedi; düzeltme yalnız birim testiyle doğrulanmıştı.
+- **Ne yapıldı:**
+  - Canlı SentezCore'a karşı tüm DB testleri (tek transaction, sonda ROLLBACK):
+    ```bash
+    MODFEX_DB_TEST=1 dotnet test Paketleme.Tests   # 56/56
+    MODFEX_DB_TEST=1 dotnet test BantSayim.Tests   # 56/56 (bantsayim reposu)
+    ```
+  - Yeni DB testi `FisYaziciTestleri.Turkce_oturumda_fis_yazilir`: `SET LANGUAGE Turkish` sonrası 10 fişi yazar,
+    `ReceiptTime` tarih kısmı 1899-12-30 olmalı. Eski literal geri konunca canlıda birebir saha hatası:
+    "varchar veri türünden bir datetime veri türüne dönüştürme aralık dışı bir değerle sonuçlandı." Yeni literal ile geçiyor.
+  - `Paketleme.Desktop` derlendi ve açıldı; giriş ekranı şirketleri DB'den yükledi. Ayarlar ekranında Koli yazıcı
+    IP/port/DPI alanları görünüyor, ürün etiketi 50×30 → 45×20 otomatik geçmiş.
+  - GUI sürme: `mouse_event` tıklamaları uygulamaya ulaşmadı; UI Automation `InvokePattern` ile buton tetiklendi
+    (betik scratchpad'de, repoda değil).
+- **Commit:** `f615654` — Test: Türkçe SQL oturumunda fiş yazımı (canlı DB, rollback)
+
+## Açık kalanlar (ek)
+- Bu makinedeki `uzman` girişi Türkçe değil (eski SQL normal testte geçiyordu); sahadaki hatayı veren oturumun dili
+  Türkçe olmalı — sahada kurulumdan sonra teyit.
