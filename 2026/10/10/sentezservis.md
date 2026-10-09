@@ -57,3 +57,19 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
 - Karma koli tanımları (TEST-10). NUDE, MÜRDÜM, VİZON, LİLA TEST'in kullanımda renkleri değil.
 - Birlikte kontrol → `siparis-work-order.sql` çalıştır → `WorkOrderYazmaAcik: true` (+ `WorkOrderEkleyenId`).
 - Sunucuya yayın (MODFEXSRV, port 81).
+
+### Siparişler: ürün başına work order + alt numara
+- **Neden:** Kullanıcı tanımları tamamladı, paketi kurdu; istek: "her ürün (varyant değil) bir order oluşacak,
+  oluşan order 1'den fazlaysa -1 -2 -3 diye artacak".
+- **Kontrol (salt okuma, kayıt yok):** 573123 önizlemesi eksiksiz: TEST · EKRU 2169 (241/beden), LACİVERT 900,
+  SİYAH 585, TEN 1350 = 5004 (= 2502 set × 2). Geçici canlı test dosyasıyla hesaplandı, dosya silindi.
+- **Ne yapıldı:** Gruplama (cari) → (cari, bileşen mamul); `WorkOrderTaslagi`'na `MamulId`, `MamulKod`.
+  `WorkOrderNumarasi.Sonrakiler`: tek order → `Test-005`, çok → `Test-005-1..n`; ana numara `Test-NNN[-k]`'nın
+  NNN'inden (en büyük + 1). Arayüz kart başlığında ürün kodu.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Siparis/{SiparisModelleri,WorkOrderToplayici}.cs`,
+  `src/SentezServis.Host/Api/SiparisUclari.cs`, `tests/.../SiparisWorkOrderTestleri.cs`, `web/src/api/siparis.ts`,
+  `web/src/pages/SiparislerSayfasi.tsx`
+- **Sonuç:** Core 260 geçti / 6 atlandı, vitest 50/50, build temiz. Paket yeniden (arayüz 2026-10-10 02:19),
+  `yayin-siparisler-2026-10-10.zip` güncellendi.
+- **Commit:** `decf055`
+- **Açık:** UZM_SiparisWorkOrder betiği + `WorkOrderYazmaAcik: true` → kullanıcı onayı bekleniyor.
