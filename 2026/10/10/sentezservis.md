@@ -73,3 +73,16 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
   `yayin-siparisler-2026-10-10.zip` güncellendi.
 - **Commit:** `decf055`
 - **Açık:** UZM_SiparisWorkOrder betiği + `WorkOrderYazmaAcik: true` → kullanıcı onayı bekleniyor.
+
+### Order yap kontrolü + "Bağlantıyı kopar"
+- **Kontrol (salt okuma):** Kullanıcı UZM_SiparisWorkOrder'ı kurdu (kolonlar/indeksler doğru), 02:19 paketini kurdu
+  (`/api/surum` derleme 4321ca7… → aslında 02:19 exe), "Order yap" dedi. **Kayıt oluşmadı:** Erp_WorkOrder'da
+  `Test-%` yok, son WO 4539; takip tablosu boş; SentezServis.dbo.denetim_kayitlari'nda `work-order-olusturuldu` yok,
+  hata_kayitlari boş. Olası neden: sunucu appsettings'te `WorkOrderYazmaAcik` yok → 503 "yazma kapalı".
+  `\MODFEXSRV\D$` erişimi reddedildi, ayar dosyası okunamadı.
+- Not: Sentez'in kendi çoklu WO numaraları da `4314-1`, `4314-2` biçiminde — bizim `Test-NNN-k` ile uyumlu.
+- **Ne yapıldı:** `SiparisDeposu.BaglantiyiKoparAsync` (DELETE … OUTPUT DELETED.WorkOrderNo, yalnız UZM_SiparisWorkOrder),
+  `DELETE /api/siparisler/{id}/baglanti` (MudahaleIster, denetim `work-order-baglantisi-koparildi`), listede
+  WO no yanında "Bağlantıyı kopar" düğmesi (onaylı). WO Sentez'de kalır, sipariş yeniden seçilebilir.
+- **Sonuç:** Core 260/6 atlandı, vitest 50/50, build temiz; yazma sınırı guard'ı geçiyor. Paket 02:51.
+- **Commit:** `0874891`
