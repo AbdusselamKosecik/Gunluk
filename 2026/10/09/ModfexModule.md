@@ -26,5 +26,5 @@ ModaSimaModule (Sentez/LIVE eklenti modülü) temel alınarak yeni müşteri iç
 - ModaSima'nın commitlenmemiş halleri de kopyaya dahil edildi (çalışma ağacı esas alındı).
 
 ## Açık kalanlar / sonraki adım
-- GitHub remote yok — `Sentez-Core/ModfexModule` reposu oluşturulup push edilecek.
+- ~~Remote~~ → `gh repo create Sentez-Core/ModfexModule --private --source=. --remote=origin --push` ile oluşturuldu ve push edildi: https://github.com/Sentez-Core/ModfexModule
 - Kod içindeki müşteriye özel mantık (ModaSima'ya özgü kurallar) Modfex için gözden geçirilmeli.
