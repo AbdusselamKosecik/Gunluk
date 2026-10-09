@@ -35,3 +35,11 @@ Dünkü iskelet sonrası onay akışı kararları.
 - **Commit:** `3bff88c` — Spec: Onay Merkezi tasarimi
 ## Sonraki adım
 - Spec onayı → writing-plans → uygulama. Kullanıcıdan: BotFather token + botu gruba eklemek.
+
+### 4. Pastal onayı + yapay zeka onaycısı
+- **Neden:** Kullanıcı: amaç pastal bilgisinin gitmesi; "Yapay zeka onayladı, Ahmet onayladı, Mehmet şu sebepten onaylamadı" gibi.
+- **Ne yapıldı:** Spec'e iki bölüm eklendi. (1) İlk kullanım = kesimhane pastal revizyonu
+  (`UZM_PastalRevizyon`: en, boy, kat, verim, pay, beden×kat başı adet, yerleşim PNG). Sonuç OnayDurum/OnayAt/OnayNotu'na yazılır.
+  (2) Yapay zeka onaycısı: Claude API, panelde olay türü başına kurallar metni, JSON çıktı {karar, gerekce}.
+  YZ onayı 1 onay sayılır (YzSayilir), YZ reddi olayı tek başına düşürmez. API'ye `veri` JSON + `gorsel` eklendi.
+- **Commit:** `2ad2fc5` — Spec: pastal onayi ornegi ve yapay zeka onaycisi
