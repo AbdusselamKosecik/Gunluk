@@ -16,3 +16,11 @@ Dünkü iskelet sonrası onay akışı kararları.
 ## Açık kalanlar / sonraki adım
 - Karar kuralı (herkes / çoğunluk / ilk onay; tek ret düşürür mü), karar değiştirilebilir mi,
   grup sohbeti mi özel mesaj mı, kullanıcı eşleştirme, ilk olay türleri.
+
+### 2. Grup onayı kararı
+- **Neden:** Kullanıcı: mesaj bir gruba gitsin; grupta 10 kişi var, 3 onay gerekiyor.
+- **Ne yapıldı:** `docs/tasarim-taslak.md`'ye "Grup onayı" bölümü: grupta tek mesaj, "Onay: x / 3" sayacı,
+  her basışta editMessageText, 3. onayda ONAYLANDI + butonlar kalkar, yetkisizin basışı answerCallbackQuery
+  ile reddedilir. Tablolar: `UZM_TelegramGrup` eklendi, `UZM_OlayMesaj` yerine `UZM_OlayKarar` (kişi başı karar).
+- **Commit:** `14912b5` — Tasarim: grup mesaji, N onay esigi
+- **Açık:** ret kuralı, yetkili kişiler (10'un hepsi mi), karar değiştirme.
