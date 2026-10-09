@@ -51,3 +51,14 @@ Dünkü iskelet sonrası onay akışı kararları.
   kotada eşleştirme ile sayılır. Mesajda isim yanında görev ve eksik kota satırı. Tablolar UZM_OnayGorev,
   UZM_OnayGorevKisi, UZM_OlayTuruGorev (UZM_OlayTuruYetkili kalktı); UZM_OlayKarar'a GorevId.
 - **Commit:** `cab1381` — Spec: gorev bazli onay yetkisi
+
+### 6. Uygulama planı + bildirim olayları
+- **Neden:** Kullanıcı "başlayalım"; ardından botu (@modfex_bot) "modfex onay" ve "modfex bildirim" gruplarına ekledi.
+- **Ne yapıldı:** `docs/superpowers/plans/2026-10-09-onaymerkezi.md` (12 görev, TDD, tam kod): KararMotoru (kota eşleştirme),
+  MesajBicimleyici, UZM_ şema + Dapper depo, OlayServisi, YZ/iptal/zaman aşımı, Telegram long polling, Claude YZ,
+  API + anahtar, panel (giriş/dil/olaylar, türler/görevler, Telegram/uygulamalar), Windows servisi (port 8086).
+  Spec'e bildirim olayları (GerekenOnay = 0 → butonsuz, durum Bildirildi=5) ve `/kayit` ile kişi/grup tanıma eklendi.
+- **Doğrulama:** Bot token'ı getMe ile doğrulandı (gizlilik modu açık). Token repoya/günlüğe yazılmadı; panelden UZM_OnayAyar'a girilecek.
+- **Commit:** `c7bb6b4` — Uygulama plani (12 gorev) ve spec: bildirim olaylari, /kayit
+## Sonraki adım
+- Kullanıcı planı onaylayıp yürütme yöntemini seçecek; Task 3'te DDL'in SentezCore'a uygulanması için ayrıca onay istenecek.
