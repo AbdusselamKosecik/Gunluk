@@ -43,3 +43,11 @@ Dünkü iskelet sonrası onay akışı kararları.
   (2) Yapay zeka onaycısı: Claude API, panelde olay türü başına kurallar metni, JSON çıktı {karar, gerekce}.
   YZ onayı 1 onay sayılır (YzSayilir), YZ reddi olayı tek başına düşürmez. API'ye `veri` JSON + `gorsel` eklendi.
 - **Commit:** `2ad2fc5` — Spec: pastal onayi ornegi ve yapay zeka onaycisi
+
+### 5. Görev bazlı onay yetkisi
+- **Neden:** Kullanıcı: kimlerin onaylayabileceğini görev bazlı tanımlayacağız.
+- **Ne yapıldı:** Spec'e "Görev bazlı yetki": görevler + kişi atama (çoka çok), olay türünde onaylayan görevler ve
+  görev başına EnAzOnay (örn. pastal: toplam 3; Kesimhane Şefi ≥1, Planlama ≥1). Çok görevli kişinin onayı tek onay,
+  kotada eşleştirme ile sayılır. Mesajda isim yanında görev ve eksik kota satırı. Tablolar UZM_OnayGorev,
+  UZM_OnayGorevKisi, UZM_OlayTuruGorev (UZM_OlayTuruYetkili kalktı); UZM_OlayKarar'a GorevId.
+- **Commit:** `cab1381` — Spec: gorev bazli onay yetkisi
