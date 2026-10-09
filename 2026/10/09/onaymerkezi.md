@@ -89,3 +89,17 @@ Dünkü iskelet sonrası onay akışı kararları.
   BaglantiAyari açılışta kontrol; sorgu parametresi byte? yerine int?; form POST testleri eklendi.
 - **Ertelenen:** DDL'in SentezCore'a uygulanması (kullanıcı onayı), DB entegrasyon testleri, canlı uçtan uca deneme.
 - **İnceleme:** son bütün-dal incelemesi bağımsız ajanla yapılıyor.
+
+### 8. Son inceleme ve düzeltmeler
+- **Neden:** Bağımsız inceleyici (fable modeli) bütün dalı inceledi: Kritik 0, Önemli 4, Küçük 10.
+- **Düzeltilen (her biri önce kırmızı test):** pasif görevin kotası olayı kilitliyordu (TuruGorevleriAsync aktif görev
+  süzer); uzun ret notlarında mesaj HTML'i ortadan kesiliyordu (not 300 karakter, son kesim satır sınırında);
+  kaynakRef/isteyen/geriCagirmaUrl fazla uzunsa 500 yerine 400 kod; giriş dönüş adresinde "/\" ile dış siteye
+  yönlendirme; metin gönderilemezse fotoğraf her dakika yeniden gidiyordu (önce metin, sonra bir kez fotoğraf).
+- **Sonuç:** `dotnet test` 112 geçti, 4 atlandı. **Commit:** `6391fc3`.
+- **Ertelenen küçükler:** YZ çağrısına zaman aşımı, dagitim/ gitignore istisnası, kilit sözlüklerinin temizlenmesi,
+  panel form kurcalamada 500, /cikis antiforgery, Türkçe harflerin HTML varlığına dönüşmesi, Olaylar'da kaynak filtresi,
+  Telegram sayfasında bağlantı durumu, servis-kur yeniden oluşturma yarışı, giriş deneme sınırı.
+## Açık kalanlar
+- DDL'i SentezCore'a uygulamak (kullanıcı onayı), DB testleri, canlı uçtan uca deneme (bot token panelden), sunucuya kurulum.
+- Kesimhane → olay gönderme entegrasyonu (ayrı plan).
