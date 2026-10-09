@@ -33,10 +33,18 @@ Sütyen", CompanyId 2) varyantlarının çoğunda barkod yoktu. Kullanıcı iste
   barkod 0; örnek barkodların kontrol hanesi Python ile doğrulandı.
 - **Commit:** yok (repo değişikliği yok, yalnızca veri).
 
+### 2. TEST stok kartı için aynı işlem
+- **Neden:** Kullanıcı `TEST` kartında da barkod istedi.
+- **Ne yapıldı:** `TEST` = Erp_Inventory.RecId **87601** ("6800 Ales Desteksiz Straplez Micro Sütyen",
+  21 renk × 25 beden = 525 varyant, hiç barkod yoktu). Aynı script, yalnızca `87600 → 87601`
+  (`sed 's/87600/87601/g' ekle.sql > ekle_test.sql`).
+- **Sonuç / doğrulama:** 525 eklendi; 525/525 varyant barkodlu; çakışan barkod 0.
+- **Commit:** yok (yalnızca veri).
+
 ## Kararlar
 - Rastgele barkodlar `2` önekli → gerçek GS1 firma barkodlarıyla çakışma riski yok.
 - Mevcut 9 barkoda dokunulmadı.
 
 ## Açık kalanlar / sonraki adım
-- Geri almak gerekirse: `DELETE Erp_InventoryBarcode WHERE InventoryId=87600 AND Barcode LIKE '2%' AND InsertedAt >= '2026-10-10'`
+- Geri almak gerekirse: `DELETE Erp_InventoryBarcode WHERE InventoryId IN (87600,87601) AND Barcode LIKE '2%' AND InsertedAt >= '2026-10-10'`
   (00:11'deki 9 kayıt 2 ile başlamıyor, etkilenmez).
