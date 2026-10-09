@@ -62,3 +62,30 @@ Dünkü iskelet sonrası onay akışı kararları.
 - **Commit:** `c7bb6b4` — Uygulama plani (12 gorev) ve spec: bildirim olaylari, /kayit
 ## Sonraki adım
 - Kullanıcı planı onaylayıp yürütme yöntemini seçecek; Task 3'te DDL'in SentezCore'a uygulanması için ayrıca onay istenecek.
+
+### 7. Planın uygulanması (12 görev, inline, main dalında)
+- **Neden:** Kullanıcı "yaz hacım" — planı bu oturumda yürüt.
+- **Yöntem:** superpowers:executing-plans; her görev TDD (önce test kırmızı, sonra yeşil), plan kod blokları
+  scratchpad'deki `cek.py` ile plandan birebir dosyaya kopyalandı (yeniden yazım hatası olmasın).
+  Defter: `.superpowers/sdd/2026-10-09-onaymerkezi/progress.md` (gitignore'da).
+- **Commitler:**
+  - a0fe4b8 Dagitim betikleri (gitignore'daki dagitim/ kuralina ragmen izlenir)
+  - a2b759a Windows servisi, dagitim betikleri, README ve spec guncellemesi
+  - c21e93b Panel: Telegram/YZ ayarlari (gizli degerler maskeli), kisiler, uygulama anahtarlari
+  - 5496890 Panel: olay turleri (gorev kotalari, YZ kurallari) ve gorevler (kisi atama)
+  - 6117b39 Panel: Sentez girisi, TR/EN/AR, olay listesi ve detayi, iptal
+  - fc1194f API: olay olustur/sorgula/iptal, uygulama anahtari filtresi, Program baglantilari
+  - 0fecf6c Claude YZ degerlendirici: yapilandirilmis cikti, gorsel, refusal fallback
+  - 4ca817a Telegram long polling, istemci, guncelleme cevirici; arka plan, zamanlayici, geri cagirma
+  - 7ad5902 OlayServisi: YZ akisi, iptal, zaman asimi ve yeniden gonderme turu
+  - 5b64981 OlayServisi: olustur/gonder, Onayla/Reddet, ret notu, kisi/grup kaydi, olay kilidi
+  - 5a7c9ac UZM_ sema, IOnayDeposu, SqlOnayDeposu (Dapper), BellekDepo
+  - 288eb2d Telegram mesaj bicimleyici (tr/en/ar), gorsel turu, buton verisi
+  - 3a1ffa5 Alan modelleri ve KararMotoru (gorev kotalari, YZ sayimi, ret esigi)
+- **Sonuç:** `dotnet test` → 100 geçti, 4 atlandı (3 DB testi `MODFEX_ONAY_DB` yok, 1 ücretli canlı YZ testi).
+  `dotnet build -c Release` 0 uyarı. `yayinla.ps1` ile yayın alındı; bağlantı metni yokken uygulama açılışta durur (doğru).
+- **Plandan sapmalar (rulings):** Telegram.Bot 22'de `Message.Id`; Anthropic SDK adları `MediaType`, `Effort`,
+  `List<BetaFallbackParam>`; API'de durum sayfası yalnız /api dışı (401/404 yönlendirmeye dönüyordu);
+  BaglantiAyari açılışta kontrol; sorgu parametresi byte? yerine int?; form POST testleri eklendi.
+- **Ertelenen:** DDL'in SentezCore'a uygulanması (kullanıcı onayı), DB entegrasyon testleri, canlı uçtan uca deneme.
+- **İnceleme:** son bütün-dal incelemesi bağımsız ajanla yapılıyor.
