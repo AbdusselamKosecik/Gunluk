@@ -24,3 +24,14 @@ Dünkü iskelet sonrası onay akışı kararları.
   ile reddedilir. Tablolar: `UZM_TelegramGrup` eklendi, `UZM_OlayMesaj` yerine `UZM_OlayKarar` (kişi başı karar).
 - **Commit:** `14912b5` — Tasarim: grup mesaji, N onay esigi
 - **Açık:** ret kuralı, yetkili kişiler (10'un hepsi mi), karar değiştirme.
+
+### 3. Spec tamamlandı (kalan kuralları Claude belirledi)
+- **Neden:** Kullanıcı: "sen istediğin gibi ayarla".
+- **Ne yapıldı:** `docs/tasarim-taslak.md` → `docs/superpowers/specs/2026-10-09-onaymerkezi-design.md`.
+  Kararlar: ret eşiği olay türü başına (varsayılan 1, ret notu zorunlu, force_reply); yalnız yetkili kişiler sayılır;
+  kişi tanıma botun gördüğü kişilerden (UZM_TelegramKisi); karar değiştirilebilir (son karar sayılır, geçmiş log);
+  isteğe bağlı zaman aşımı; kapanınca butonlar kalkar; API anahtarı (X-Api-Anahtari); sonuç GET + opsiyonel geri
+  çağırma; panel Sentez girişi + TR/EN/AR; bot long polling, token panelden. API v1, 4 panel ekranı, 8 UZM_ tablosu.
+- **Commit:** `3bff88c` — Spec: Onay Merkezi tasarimi
+## Sonraki adım
+- Spec onayı → writing-plans → uygulama. Kullanıcıdan: BotFather token + botu gruba eklemek.
