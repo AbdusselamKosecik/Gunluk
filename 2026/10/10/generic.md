@@ -82,3 +82,9 @@ Henüz kurulum yapılmadı; sunucuya erişim (SSH) bekleniyor.
 - **Bulgu:** 2026-10-08'de 3 kayıt, 2026-10-09'da hiç kayıt yok — tatil mi, cihaz sorunu mu sorulacak.
   Cihazlar şu an online (Yuz1 192.168.0.30, Yuz2 192.168.0.29).
 - Yerel git repo açıldı (`*.xlsx` ignore — kişisel veri). **Remote yok → push yapılamadı, kullanıcıya soruldu.**
+
+### 6. Onay Merkezi'ne devir promptu
+- **Neden:** Kullanıcı: Telegram'ı ayrı bot yerine mevcut Onay Merkezi (@modfex_bot) botuna dahil edelim.
+- **Ne:** `pdks-rapor/ONAYMERKEZI_PROMPT.md` (kopya `generic-scripts/`): yapılanların özeti + /ai, /pdks entegrasyon
+  görevi. Kritik not: bir token = tek long polling (409 Conflict) → ayrı bot süreci yok, onaymerkezi işleyicisine eklenecek.
+  Port 8086 çakışma kontrolü notu (sunucuda 8085–8088 dinleniyor).
