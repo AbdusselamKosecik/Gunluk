@@ -95,3 +95,16 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
   yeniden başlatma gerekmez); `OlusturAsync`'e `ekleyen` parametresi; durum `ayarDosyasi` (ContentRootPath) döner,
   uyarı tam yolu ve ne yazılacağını gösterir.
 - **Sonuç:** Core 260/6, vitest 50/50, build temiz. Paket yeniden.
+
+### "Order yap" → beklenmeyen hata: trigger + OUTPUT
+- **Belirti:** Ayar açıldıktan sonra Order yap "Beklenmeyen bir hata". DB'de Test-% yok, UZM_SiparisWorkOrder boş
+  (işlem geri alınmış; 71524 kimliği harcanmış). hata_kayitlari boş (yalnız job hataları oraya düşüyor).
+- **Kök neden:** `Erp_WorkOrderItem`'da Sentez trigger'ları (`Erp_WorkOrderItemInsert/Update/Delete`; Insert,
+  OrderItemId doluysa `EditOrderWorkOrderOrdered` ile siparişin aktarılan miktarını günceller — biz OrderItemId boş
+  bırakıyoruz). SQL Server trigger'lı tabloya INTO'suz `INSERT … OUTPUT`'a izin vermez.
+- **Düzeltme:** Erp_WorkOrder/Item insert'lerinde `OUTPUT INSERTED.RecId` → `; SELECT CAST(SCOPE_IDENTITY() AS bigint)`.
+  Test `Erp_tablolarina_insert_output_kullanmaz` (RED → GREEN; ilk koşuda kendi SQL yorumum regex'e takıldı, yorum
+  değiştirildi). `/order` SqlException'ı yakalayıp loglar, ekranda SQL mesajını gösterir (503).
+- **Doğrulama:** Aynı SQL canlı DB'de `SET XACT_ABORT ON; BEGIN TRAN … ROLLBACK` ile denendi: başlık 71525,
+  kalem 84332, beden 1 satır, tutarlı; ROLLBACK sonrası `Test-DENEME` 0 satır. Core 261/6, build temiz.
+- **Paket:** arayüz 2026-10-10 03:25. **Commit:** `29ba7d5`
