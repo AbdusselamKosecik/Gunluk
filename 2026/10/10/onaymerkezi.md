@@ -18,3 +18,13 @@ Plan tamamlanmış (6391fc3); kullanıcı sisteme kurmak için paket istedi.
 
 ## Açık kalanlar
 - DB betiği, sunucuya kurulum, token panelden, gruplarda /kayit, görev/tür tanımları, kesimhane entegrasyonu.
+
+### Port çakışması → 8087
+- **Belirti:** Kullanıcı kurdu, http://MODFEXSRV:8086 "Modfex / Türkçe / Servis Planlama" girişi açtı.
+- **Neden:** ServisPlanlama (`ServisPlanlama/src/ServisPlanlama/appsettings.json` Url 0.0.0.0:8086) aynı sunucuda 8086'da.
+  Yoklama: 8087 cevapsız (boş), 8088 302 (dolu), 8089 cevapsız.
+- **Ne yapıldı:** `OnayMerkezi/appsettings.json` Urls, `dagitim/servis-kur.ps1` güvenlik duvarı kuralı, `KURULUM.txt`,
+  README → 8087. Paket yeniden (`onaymerkezi-2026-10-10.zip`), testler 112/4.
+- **Commit:** bkz. git log (Port 8086 -> 8087).
+- **Kullanıcıya:** yeni zip'i üzerine kopyala + servis-kur.ps1 (servisi silip yeniden kurar, 8087 kuralı ekler);
+  eski 8086 güvenlik duvarı kuralı "Modfex Onay Merkezi 8086" silinebilir.
