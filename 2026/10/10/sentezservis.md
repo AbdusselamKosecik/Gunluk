@@ -129,3 +129,7 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
 - **Sonuç:** Core 262/6, canlı 7/7 (salt okuma), vitest 50/50, build temiz. 573123 önizlemesi: Test-003, kalem
   948166, termin 10.10.2026, MSN boş, 5004. Paket 08:51. **Commit:** `c2087c0`
 - **Açık:** Kullanıcı v2 betiğini çalıştıracak; Test-001'in Sentez'den silinmesi kullanıcıda.
+
+### 08:51 paketi kuruldu, tablo v2 bekliyor
+- `/api/surum` 08:51. Ama `UZM_SiparisWorkOrder.OrderReceiptItemId` yok, `UQ_UZM_SiparisWorkOrder_Siparis` duruyor →
+  `siparis-work-order.sql` (v2) henüz çalıştırılmadı; Order yap bunu isteyecek. OrderItemId kararı: kullanıcı "orası kalsın".
