@@ -42,3 +42,10 @@ Plan tamamlanmış (6391fc3); kullanıcı sisteme kurmak için paket istedi.
   `SqlOnayDeposuTestleri.TelegramSayfasiOkumalari` (gerçek DB, TransactionScope geri alınır).
 - **Doğrulama:** 118 geçti / 5 atlandı; DB testleri 4/4 (MODFEX_ONAY_DB); yerelde gerçek DB ile /telegram 200, form alanları var.
   Paket 10:55 (`onaymerkezi-2026-10-10.zip`). **Commit:** `6cde27d`
+
+### Hata sürüyor → /api/surum
+- Kullanıcı "hata oluştu" dedi; sunucuda /telegram hâlâ 500 (olaylar 200). Sunucunun 10:55 paketini çalıştırıp
+  çalıştırmadığı dışarıdan görülemiyordu (BotToken hâlâ boş).
+- `OnayMerkezi/Api/SurumUcu.cs`: `GET /api/surum` (anonim, no-store) → derleme (InformationalVersion+commit),
+  dllTarihi, makineAdi. Test `Surum_girissiz_derleme_bilgisi_verir` RED(404)→GREEN; 119/5.
+- Paket 11:03, derleme `1.0.0+a23df99…`. **Commit:** `a23df99`
