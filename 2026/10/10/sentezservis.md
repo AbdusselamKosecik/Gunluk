@@ -86,3 +86,12 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
   WO no yanında "Bağlantıyı kopar" düğmesi (onaylı). WO Sentez'de kalır, sipariş yeniden seçilebilir.
 - **Sonuç:** Core 260/6 atlandı, vitest 50/50, build temiz; yazma sınırı guard'ı geçiyor. Paket 02:51.
 - **Commit:** `0874891`
+
+### WorkOrderYazmaAcik açılmıyor sorunu
+- **Neden:** Kullanıcı ayarı "güncelliyorum ama" uyarısı kalkmıyor dedi. Ayar `IOptions` ile yalnız açılışta okunuyordu;
+  ayrıca servis kurulu klasördeki `appsettings.json`'u okur (paketteki `appsettings.ornek.json` değil), anahtar
+  `"SentezServis"` bölümünün içinde olmalı.
+- **Ne yapıldı:** `/api/siparisler/durum` ve `/order` `IOptionsMonitor<Ayarlar>.CurrentValue` kullanıyor (reloadOnChange →
+  yeniden başlatma gerekmez); `OlusturAsync`'e `ekleyen` parametresi; durum `ayarDosyasi` (ContentRootPath) döner,
+  uyarı tam yolu ve ne yazılacağını gösterir.
+- **Sonuç:** Core 260/6, vitest 50/50, build temiz. Paket yeniden.
