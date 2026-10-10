@@ -51,3 +51,20 @@ Henüz kurulum yapılmadı; sunucuya erişim (SSH) bekleniyor.
 - İndirme bitince: `Start-ScheduledTask llama-server`, /health ve chat testi, hız ölçümü, CPU yükü kontrolü.
 - `srv02.cred` iş bitince silinecek; Domain Admin şifresi sohbete yazıldı → değiştirilmeli.
 - İsteğe bağlı: `--api-key`, 12B karşılaştırması.
+
+### 3. llama-server devreye alındı ve test edildi
+- İndirme 13:55'te bitti; `llama-model-download` görevi silindi, `Start-ScheduledTask llama-server`.
+- `/health` 20 sn'de ok. Süreç önceliği **BelowNormal**, RAM ~28 GB.
+- Laptop'tan `http://192.168.0.2:8180/v1/chat/completions` (firewall kuralı çalışıyor).
+- **Hız:** prompt ~31 tok/s, üretim **~10.9 tok/s**. Türkçe yanıt kalitesi iyi.
+- **Not:** Gemma 4 varsayılan "thinking" açık → max_tokens düşükse content boş döner.
+  Kapatmak için istekte `"chat_template_kwargs":{"enable_thinking":false}`.
+- Üretim sırasında toplam CPU ~%33 (6 thread); DNS yanıtı 1–2 ms (etkilenmedi).
+
+### 4. Rapor (Sentez + PDKS) keşfi — sadece metadata okundu
+- SQL Server 2022 (16.0.1200). DB'ler: **SentezCore** (3.6 GB, 511 tablo; Erp_WorkOrder*, Erp_Inventory*),
+  **zkbiotime** (ZKTeco BioTime PDKS, 2.9 GB, 285 tablo; iclock_transaction ~312k, att_payloadtimecard ~230k),
+  SentezServis, ServisPlanlama, Selvedge, FortiGateLogs, zkbiotime1.
+- Plan (onay bekliyor): `ai_okuyucu` SQL login, sadece `ai` şemasındaki Türkçe kolonlu view'lara SELECT;
+  text-to-SQL uygulaması (sadece SELECT, TOP 5000, 30 sn timeout, SQL'i göster) + sabit SQL'li sık raporlar.
+- Kullanıcıdan beklenen: ilk 3–5 rapor listesi.
