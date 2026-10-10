@@ -108,3 +108,24 @@ Kullanıcı: "Serviste https://mf-s.uzmanadres.com/karma-koli de kullanımda olm
 - **Doğrulama:** Aynı SQL canlı DB'de `SET XACT_ABORT ON; BEGIN TRAN … ROLLBACK` ile denendi: başlık 71525,
   kalem 84332, beden 1 satır, tutarlı; ROLLBACK sonrası `Test-DENEME` 0 satır. Core 261/6, build temiz.
 - **Paket:** arayüz 2026-10-10 03:25. **Commit:** `29ba7d5`
+
+### Test-001/Test-002 kontrolü + sipariş kalemi başına work order
+- **Kontrol (salt okuma):** Kullanıcı 03:25 paketiyle Order yaptı: Test-001 (71526, 03:39) ve Test-002 (71527, 07:47,
+  oluşturan `busra`). İkisi de WO 4539 kalıbında: tür 15, Status/IsChecked/IsApproved 1, Package 1, Quantity =
+  QuantityPerLot = 5004; 4 kalem 87601 (EKRU 2169 / LACİVERT 900 / SİYAH 585 / TEN 1350), InventoryVariantIds
+  "renkId,", Variant1Id dolu, her kalem 9 beden, toplamlar tutarlı. Takipte yalnız Test-002 (Test-001 bağı koparılmış;
+  Test-001 Sentez'de duruyor). Sipariş carisi sonradan 957'ye değişmiş (WO'lar 16549).
+- **İstek:** "Her Erp_ReceiptItem için yapmamız lazım; termin tarihleri, müşteri sipariş numarası (CustomerOrderNo)
+  satırdan aktarılmalı."
+- **Ne yapıldı:** `SiparisSatiri` + KalemId/KalemSira/Termin/MusteriSiparisNo; `WorkOrderTaslagi` + SiparisId/SiparisNo/
+  SiparisKalemId/Termin/MusteriSiparisNo (SiparisIdleri kalktı). Gruplama (kalem, bileşen mamul), sıralama sipariş →
+  kalem sırası → mamul. SQL: Termin = `COALESCE(i.DeliveryDate, o.TermDate)`, MSN = `COALESCE(NULLIF(i.CustomerOrderNo,''),
+  NULLIF(o.CustomerOrderNo,''))`; Erp_WorkOrder ve Erp_WorkOrderItem'a `DeliveryDate`, `CustomerOrderNo`.
+  Takip satırı taslak başına (OrderReceiptItemId). Kopar sipariş bazında tüm bağları siler.
+  `db/sentezcore/siparis-work-order.sql` sürüm 2 (idempotent): OrderReceiptItemId ekler, UQ_…_Siparis düşürür,
+  IX_…_Siparis + UX_…_Kalem (filtreli unique). Kayıt 2. sürümü ister (COL_LENGTH); liste sürümden bağımsız.
+  Liste WO no'ları FOR XML ile birleştirir. OrderItemId (Sentez yerel bağ) bilerek boş: trigger
+  EditOrderWorkOrderOrdered siparişe bileşen adedini (5004) set adedi (2502) gibi yazardı.
+- **Sonuç:** Core 262/6, canlı 7/7 (salt okuma), vitest 50/50, build temiz. 573123 önizlemesi: Test-003, kalem
+  948166, termin 10.10.2026, MSN boş, 5004. Paket 08:51. **Commit:** `c2087c0`
+- **Açık:** Kullanıcı v2 betiğini çalıştıracak; Test-001'in Sentez'den silinmesi kullanıcıda.
