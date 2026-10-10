@@ -68,3 +68,17 @@ Henüz kurulum yapılmadı; sunucuya erişim (SSH) bekleniyor.
 - Plan (onay bekliyor): `ai_okuyucu` SQL login, sadece `ai` şemasındaki Türkçe kolonlu view'lara SELECT;
   text-to-SQL uygulaması (sadece SELECT, TOP 5000, 30 sn timeout, SQL'i göster) + sabit SQL'li sık raporlar.
 - Kullanıcıdan beklenen: ilk 3–5 rapor listesi.
+
+### 5. PDKS günlük giriş-çıkış raporu
+- **Neden:** Kullanıcı günlük işe giriş/çıkış raporu istedi.
+- **Ne:** `X:\Yazilim\generic\pdks-rapor\pdks_gunluk.py` (kopya: `generic-scripts/pdks_gunluk.py`).
+  WinRM + SqlClient (ApplicationIntent=ReadOnly, sadece SELECT) ile zkbiotime'dan çeker, openpyxl ile Excel
+  (sayfa "Günlük": sicil, ad, departman, ilk giriş, son çıkış, süre, okutma, durum; sayfa "Özet": departman bazlı).
+- **Veri modeli:** `iclock_transaction` (emp_code, punch_time, punch_state 0=giriş 1=çıkış, terminal Yuz1/Yuz2),
+  `personnel_employee` (status=0 aktif, 359 kişi), `personnel_department`. BioTime'da vardiya tanımlı DEĞİL
+  (timecard check_in 00:00) → eşikler parametre: `--gec 06:30 --erken 16:30` (dakika bazında).
+- **Komut:** `python pdks_gunluk.py --tarih 2026-10-07`
+- **Sonuç 2026-10-07:** 359 aktif, 329 geldi, 30 gelmedi, 19 geç, 16 eksik okutma.
+- **Bulgu:** 2026-10-08'de 3 kayıt, 2026-10-09'da hiç kayıt yok — tatil mi, cihaz sorunu mu sorulacak.
+  Cihazlar şu an online (Yuz1 192.168.0.30, Yuz2 192.168.0.29).
+- Yerel git repo açıldı (`*.xlsx` ignore — kişisel veri). **Remote yok → push yapılamadı, kullanıcıya soruldu.**
