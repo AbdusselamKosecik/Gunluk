@@ -65,3 +65,13 @@ koli U depoya (42) girer; sonra el terminaliyle Mamul'e (41), sevkiyatta 120. Ay
 - Kullanıcı `db/0002_tezgah.sql`'i çalıştıracak; sonra ekran ve etiket baskısı ofiste denenmeli (yazıcılar evden erişilemez).
 - Ofise dönünce `ayarlar.json.bak-ofis` geri alınmalı (ya da Ayarlar'dan sunucu 192.168.0.2).
 - sevkiyatmobil (Mamul Giriş + 120) alt ajanla yazılıyor; tezgahekrani tamamlandı (`tezgahekrani.md`).
+
+### 8. Bağımsız inceleme + düzeltmeler — `da07cb2`
+- **Neden:** stok/tezgah mantığı kritik; 1190924..95fabc7 alt ajan (code-reviewer) ile incelendi. Kilit sırasında döngü yok,
+  tezgah eksiye düşemez, adet hesabı/rollback/SQL/ZPL doğru bulundu.
+- **Düzeltilen (düşük güvenli ama sahada olası):**
+  - Adet sorusu açıkken başkasının okuttuğu barkod adet kutusuna düşüyordu → `PaketKurallari.BarkodGibi` (6 karakterden uzun
+    ya da rakam dışı) ise bekleyen ürün iptal, uyarı `AdetYerineBarkod`, metin yeni okutma olarak kuyruğa (7 test).
+  - Kapatma paneli açıkken sayfadan çıkılırsa terazi portu açık kalıyordu → `SayfaViewModel.Ayrildi()` + `KabukViewModel`
+    eski sayfada çağırır; okutma ekranı dinleyiciyi durdurur.
+- **Ertelenen:** SHIP TO'da şehir/ülke yok (SentezCore'da Erp_City/Erp_Country ad kolonu bulunamadı); SilAsync tek satıra bakar.
