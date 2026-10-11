@@ -66,3 +66,13 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
   koruma çubuğu uzantısının altında; ürün 2,4 mm + beden 2,8 mm **kalın** (`ZplEtiket.Metin(kalin)` = 1 nokta kaydırmalı ikinci baskı);
   karakter tahmini 0,6 → 0,5×yükseklik (baskıda ölçülen ≈ 0,43).
 - **Sonuç:** 46 test geçti. Kalibrasyon (`~JC`, birkaç boş etiket ilerletir) kullanıcı onayı bekliyor.
+
+### 7. Kalibrasyon, eski şablon (PRN), koyuluk 15, ürün adı büyük
+- **Kalibrasyon (kullanıcı onayıyla):** `~JC` gönderildi → LABEL LENGTH 159 → 155 nokta, WEB 052 / MEDIA 080. Not: etiketteki `^PR3`
+  yazıcının çalışan hızını 3.0 IPS gösteriyor (kalıcı kaydedilmedi; güç kesilince döner).
+- **Eski sistem PRN** (`X:\Gitlab\modfex-apparel\aaaaaaaaa.prn`, kullanıcı verdi): sürücü bitmap'i (^GFA 704×160 nokta), başlık
+  `^MNW ^MTT ^LL0160 ^PR6,6 ~SD15 ^JUS ^PQ10`; şablon: üstte model (küçük), TB kalın, barkod, altta Barkod solda / Ac + Made in Egypt sağda.
+  Dikey ayarlar bizimkiyle aynı → `^LL` değiştirilmedi (kayma için asıl şüpheli sensör kalibrasyonuydu).
+- **Ne yapıldı:** `ZplEtiket.Koyuluk` (~SD) ile mutlak 15 (kullanıcı: "koyuluk 15 olacakmış"), `^MD` kaldırıldı;
+  ürün adı 2,4 → 2,8 mm kalın; karakter tahmini 0,45×yükseklik (33 karakter sığar).
+- **Sonuç:** 47 test geçti. **Commit:** bkz. git log (Urun etiketi: koyuluk ~SD15 …)
