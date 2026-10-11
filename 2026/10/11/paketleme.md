@@ -57,3 +57,12 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 - **Ne yapıldı:** `ZplEtiket.BosluklaHizala()` → her sıraya `^MNY` (boşluk algılama; kullanıcının "her etikette kâğıt sonu" önerisi);
   EAN rakamları yeniden yazıcıdan (`^BEN,h,Y,N`, standart düzen). Üst boşluk 3 mm, barkod 4,4 mm, koyuluk -5 kaldı.
 - **Sonuç:** 45 test geçti. Hâlâ kayarsa yazıcı bir kez kalibre edilmeli (besleme tuşu / `~JC`).
+
+### 6. Ürün etiketi — alt satır, kalın yazı, kayma teşhisi
+- **Yazıcı teşhisi (192.168.0.251, ^XA^HH^XZ ile salt okuma):** MEDIA TYPE GAP/NOTCH (zaten boşluk modunda → ^MNY etkisiz),
+  SENSOR TRANSMISSIVE, WEB 055 / MEDIA 080 (fark düşük → boşluk kaçırma → birikimli kayma şüphesi), 6 IPS, DARKNESS +15,
+  LABEL LENGTH 159, THERMAL-TRANS, 2,5 M etiket sayacı.
+- **Ne yapıldı:** etikette `^PR3` (yalnız bu baskı); alt satır: barkod numarası solda (2,2 mm), MADE IN EGYPT sağda (2,0 mm),
+  koruma çubuğu uzantısının altında; ürün 2,4 mm + beden 2,8 mm **kalın** (`ZplEtiket.Metin(kalin)` = 1 nokta kaydırmalı ikinci baskı);
+  karakter tahmini 0,6 → 0,5×yükseklik (baskıda ölçülen ≈ 0,43).
+- **Sonuç:** 46 test geçti. Kalibrasyon (`~JC`, birkaç boş etiket ilerletir) kullanıcı onayı bekliyor.
