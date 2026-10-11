@@ -79,3 +79,8 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 
 ### 8. Üst boşluk 4 mm
 - Kullanıcı: "yukarıdan 1 mm boşluk versen tamam". `UstBoslukMm` 3 → 4 (eski şablonla aynı); alt satır ~19,2 mm'de biter. 47 test geçti.
+
+### 9. Hata Barkodları sekmesi
+- Kullanıcı: hata barkodlarını paketlemeden alalım (sekme seçildi). `HataEtiketi` (Erp_FaultyCard, aktifler) + `HataBarkoduView/ViewModel`:
+  seçim, Tümünü seç/Hiçbiri, "Her koddan" adet, ürün etiketi yazıcısına 2'li 45×20 (ad kalın, Code 128 HK+kod, okunur metin; ~SD15 ^PR3 ^MNY).
+  bantsayim'deki etiketle aynı. 51 test geçti. Baskı kontrolü kullanıcıda.
