@@ -76,3 +76,6 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 - **Ne yapıldı:** `ZplEtiket.Koyuluk` (~SD) ile mutlak 15 (kullanıcı: "koyuluk 15 olacakmış"), `^MD` kaldırıldı;
   ürün adı 2,4 → 2,8 mm kalın; karakter tahmini 0,45×yükseklik (33 karakter sığar).
 - **Sonuç:** 47 test geçti. **Commit:** bkz. git log (Urun etiketi: koyuluk ~SD15 …)
+
+### 8. Üst boşluk 4 mm
+- Kullanıcı: "yukarıdan 1 mm boşluk versen tamam". `UstBoslukMm` 3 → 4 (eski şablonla aynı); alt satır ~19,2 mm'de biter. 47 test geçti.
