@@ -50,3 +50,10 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 - **Ne yapıldı:** `UstBoslukMm` 2 → 3; barkod yüksekliği 6 → 4,4 mm; EAN'da yazıcının rakamları (^BY3'te büyük) yerine
   kendi rakamlarımız 1,8 mm, koruma çubuğu uzantısının (5 modül) altında; MADE IN EGYPT 1,8 mm; `Karartma` -10 → -5.
 - **Sonuç:** 44 test geçti; baskı kullanıcıda.
+
+### 5. Ürün etiketi — kayma ve rakamlar
+- **Bulgu:** etiket gittikçe kayıyordu (yazıcı sürekli modda: her etiket ^LL=20 mm sayılıyor, aradaki boşluk eklenmiyor → birikir);
+  1,8 mm rakamlar çok küçük kaldı.
+- **Ne yapıldı:** `ZplEtiket.BosluklaHizala()` → her sıraya `^MNY` (boşluk algılama; kullanıcının "her etikette kâğıt sonu" önerisi);
+  EAN rakamları yeniden yazıcıdan (`^BEN,h,Y,N`, standart düzen). Üst boşluk 3 mm, barkod 4,4 mm, koyuluk -5 kaldı.
+- **Sonuç:** 45 test geçti. Hâlâ kayarsa yazıcı bir kez kalibre edilmeli (besleme tuşu / `~JC`).
