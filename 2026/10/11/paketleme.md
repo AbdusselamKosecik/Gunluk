@@ -34,3 +34,12 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 - **Dokunulan dosyalar:** `Paketleme/Ortak/Donanim/ZplEtiket.cs`, `Paketleme/Ekranlar/Veri/UrunEtiketi.cs`, `Paketleme.Tests/UrunEtiketiTestleri.cs`
 - **Sonuç:** 41 test geçti; canlı DB etiket sorgusu testi de geçti (MODFEX_DB_TEST=1). Baskı sonucu kullanıcıdan bekleniyor.
 - **Commit:** `e53ca25`
+
+### 3. Ürün etiketi — ikinci baskı düzeltmesi (fotoğraflı geri bildirim)
+- **Bulgu:** EAN-13 koruma çubukları (baş/orta/son) aşağı uzanıp kendi bastığımız rakamların üstüne biniyordu (ortadaki rakam
+  okunmuyordu); üst satır besleme kaymasıyla kesiliyordu; isimler sola yaslıydı.
+- **Ne yapıldı:** `ZplEtiket.BarkodEan13(..., yorum)` → `^BEN,h,Y,N` (rakamları yazıcı standart düzende basar), EAN'da ayrı metin yok;
+  Code 128'de okunur metin bizde (2,2 mm). `UstBoslukMm=2`, isim ve beden·renk satırları ortalı (^FB …,C).
+  Düzen (20 mm): isim 2,0 · beden 4,4 · barkod 7,4 (6 mm) + rakamlar · MADE IN EGYPT 17,4.
+- **Sonuç:** 44 test geçti. Baskı kontrolü kullanıcıda.
+- **Commit:** `43d6bc4`
