@@ -28,3 +28,6 @@ diğer modfex oturumu kendisinin olmadığını söyledi; isteğe birebir uyduğ
 - Ayarlar'a küçük yazıcı IP'si girilmeli (paketlemedeki ürün etiketi yazıcısı 192.168.0.251).
 - Box etiketi ve hata barkodu gerçek baskıda kontrol edilmedi.
 - Ortak/ farkları: bantsayim ZplEtiket/Ayarlar diğer repolardan ayrıştı (paketleme ile ZplEtiket aynı).
+
+### 4. Linux x64 paketi
+- `bash paketle-linux.sh` → `dagitim/bantsayim-linux-x64.tar.gz` (~46 MB, tek dosya ELF, commit `4e0c9ee` içerir: 10 mm box barkodu, 2 günlük liste, hata barkodu). Kurulum: `tar xzf …; cd bantsayim-linux-x64; ./kur.sh` (kiosk için `kiosk-kur.sh`).
