@@ -43,3 +43,10 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
   Düzen (20 mm): isim 2,0 · beden 4,4 · barkod 7,4 (6 mm) + rakamlar · MADE IN EGYPT 17,4.
 - **Sonuç:** 44 test geçti. Baskı kontrolü kullanıcıda.
 - **Commit:** `43d6bc4`
+
+### 4. Ürün etiketi — üçüncü ayar
+- **İstek:** biraz aşağı; barkod yazısıyla birlikte bir tık küçük; biraz daha koyu.
+- **Kısıt:** 203 dpi'da EAN-13 eni yalnız 95×modül: 23,8 mm (^BY2) ya da 35,6 mm (^BY3) → en 35,6 mm kaldı, yükseklik küçüldü.
+- **Ne yapıldı:** `UstBoslukMm` 2 → 3; barkod yüksekliği 6 → 4,4 mm; EAN'da yazıcının rakamları (^BY3'te büyük) yerine
+  kendi rakamlarımız 1,8 mm, koruma çubuğu uzantısının (5 modül) altında; MADE IN EGYPT 1,8 mm; `Karartma` -10 → -5.
+- **Sonuç:** 44 test geçti; baskı kullanıcıda.
