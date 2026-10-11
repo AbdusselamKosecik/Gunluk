@@ -55,3 +55,20 @@ yerel modele almak. Tek long-polling istemcisi kuralı (409) nedeniyle ayrı bot
 - Ağa dönünce `YerelLlmCanliTesti` ile şemasız karar sürümünü doğrula.
 - Kullanıcıya sorulacaklar: mesai saatleri (cumartesi), 8–9 Ekim boşluğu, KVKK tercihi, /ai hangi gruplarda.
 - Sentezservis: v2 takip tablosu betiği hâlâ bekliyor (ayrı günlük).
+
+### 6. Kurulum doğrulama ve görevler (öğleden sonra)
+- **Durum:** kullanıcı `onaymerkezi-2026-10-11.zip`'i MODFEXSRV'ye kurdu; `GET http://MODFEXSRV:8087/api/surum` → `1.0.0+3bd44ac`.
+  `/ai` "bu komut için yetkiniz yok (görev: YZ)" dedi: `UZM_OnayGorev` boştu (hiç görev yoktu).
+- **Ne yapıldı (kullanıcı onayıyla, canlı DB'ye veri yazıldı, DDL yok):** idempotent tek transaction:
+  ```sql
+  IF NOT EXISTS (SELECT 1 FROM dbo.UZM_OnayGorev WHERE Kod=N'YZ')   INSERT dbo.UZM_OnayGorev (Kod,Ad,Aktif) VALUES (N'YZ',N'Yapay zeka (/ai)',1);
+  IF NOT EXISTS (SELECT 1 FROM dbo.UZM_OnayGorev WHERE Kod=N'PDKS') INSERT dbo.UZM_OnayGorev (Kod,Ad,Aktif) VALUES (N'PDKS',N'PDKS raporlari (/pdks /gelmeyenler /gec)',1);
+  INSERT dbo.UZM_OnayGorevKisi (GorevId,UserId) SELECT g.Id,k.UserId FROM dbo.UZM_OnayGorev g
+    JOIN dbo.UZM_TelegramKisi k ON k.KullaniciAdi=N'tekbirsoft'
+    WHERE g.Kod IN (N'YZ',N'PDKS') AND NOT EXISTS (SELECT 1 FROM dbo.UZM_OnayGorevKisi x WHERE x.GorevId=g.Id AND x.UserId=k.UserId);
+  ```
+- **Sonuç:** YZ ve PDKS aktif, ikisine de Abdusselam Kösecik atandı. Ayarlar: `YzGorevKodu=YZ`, `PdksGorevKodu=PDKS`, `YzSaglayici=yerel`.
+  Bot görevleri her mesajda DB'den okur; servis yeniden başlatma gerekmez.
+- Ayrıca: SentezServis planlama SQL'i (`siparis-plan.sql`) kullanıcı çalıştırdı; `UZM_SiparisPlan` (7 kolon) ve
+  `UZM_SiparisPlanAyar` (3 kolon) kurulu, boş (eşikler kodda varsayılan 20.000/40.000).
+- **Açık:** `/ai` canlı cevap testi; PDKS için `0002_pdks_okuyucu.sql` + bağlantı metni; diğer onaycıların `/kayit`'ı.
