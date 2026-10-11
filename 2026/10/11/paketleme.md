@@ -25,3 +25,12 @@ Kararlar (soru-cevap): paket barkodu = sipariş varyantlarının (set/paket) ken
 - Ağa dönünce `MODFEX_DB_TEST=1 dotnet test --filter EtiketKaynagi` ve ekranı canlı deneme.
 - Sırada: okutmada barkod + **adet** girişi (tek okuyucu, birden çok kişi).
 - sevkiyatmobil önkoşulu: koli kapanışında tekli ürünler de 130/10 ile mamul depoya (sevkiyatmobil spec).
+
+### 2. Ürün etiketi baskı düzeltmeleri (ilk gerçek baskıdan sonra)
+- **Neden:** kullanıcı: (1) çok siyah, (2) kod ve ad birbirine girmiş, (3) barkod enine büyüyebilir, kod/ad bir tık küçülebilir.
+- **Ne yapıldı:** `ZplEtiket.Karartma` (^MD, -30…30) + barkodlara isteğe bağlı `modul` + `Ean13GenislikMm`;
+  `UrunEtiketi`: `Karartma=-10`; kod+ad 2,4 → 2,0 mm ve `AzamiKarakter` (≈0,6×yükseklik) ile kırpma — Zebra tek satırlık ^FB'ye
+  sığmayanı aynı satıra bindiriyordu; beden·renk 2,6 → 2,4 mm; barkod sığarsa 1,5 kat modül (203 dpi 2 → 3 nokta, EAN-13 23,8 → 35,6 mm).
+- **Dokunulan dosyalar:** `Paketleme/Ortak/Donanim/ZplEtiket.cs`, `Paketleme/Ekranlar/Veri/UrunEtiketi.cs`, `Paketleme.Tests/UrunEtiketiTestleri.cs`
+- **Sonuç:** 41 test geçti; canlı DB etiket sorgusu testi de geçti (MODFEX_DB_TEST=1). Baskı sonucu kullanıcıdan bekleniyor.
+- **Commit:** `e53ca25`
