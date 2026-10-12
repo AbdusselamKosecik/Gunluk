@@ -45,3 +45,8 @@ Soru: fabrika ısıtması için ısı pompası + GES ne gerekir, maliyet, enerji
   Aparey 90/70 °C için seçilir; 50–55 °C suda kapasite ~%45–55'e düşer, ama depo hedefi 12–14 °C olduğu için
   (eski fabrika yükü ~145+ kW → depo ~85 kW) mevcut apareyler büyük ihtimalle yeter. Kazan yedek kalırsa hibrit.
 - **İstenecek:** aparey sayısı + etiket (model, kW), kazan dairesi/kazan etiketi, gaz faturaları, apareylerin çalışıp çalışmadığı.
+
+### 5. Rapor (Claude Docs)
+- **Ne:** "Gümüşova Depo — Isı Pompası ve GES Ön Değerlendirme" dokümanı: https://claude.ai/artifact/Wn1TKEiKm6Drb6L1VHaDsa
+  Bölümler: bina tablosu, mevcut ısıtma (2 fotoğraf), ısı ihtiyacı tablosu, hibrit ısı pompası şeması + maliyet kalemleri,
+  GES seçenekleri tablosu, dikkat edilecekler, yapılacaklar listesi, varsayımlar + kaynaklar. Paylaşılmadı (özel).
