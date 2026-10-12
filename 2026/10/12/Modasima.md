@@ -24,3 +24,14 @@ Soru: fabrika ısıtması için ısı pompası + GES ne gerekir, maliyet, enerji
 ## Açık kalanlar
 - Son 12 ay elektrik/doğalgaz faturaları, sözleşme gücü/trafo kVA, çatı örtüsü ve durumu, mevcut ısıtma sistemi,
   vardiya düzeni, yaz soğutması isteniyor mu. Parsel numarası teyidi. Statik çatı yük kontrolü (GES).
+
+### 3. Revizyon: bina DEPO olarak kullanılıyor
+- **Kullanıcı:** Makine yok, sadece depo; ısıtılacak yerler yemekhane + depo içi.
+- **Yeni varsayımlar:** depo 12–14 °C (tekstil için nem/yoğuşma koruması), yemekhane 20 °C; sızıntı 0,3 hava değişimi; iç kazanç ~0.
+  Depo UA ~3,35 + havalandırma ~1,9 = ~5,2 kW/K × ΔT 16 K ≈ 85 kW; yemekhane ~15–20 kW → **~100 kW**.
+  Yıllık: HDD(13 °C) ~1.400 → depo ~120–180 MWh ısı; yemekhane ~14 MWh; SCOP ~3,3 → **~40–60 MWh elektrik**.
+  8–10 °C hedefte yaklaşık yarısı.
+- **Sistem önerisi:** havadan havaya (VRF / çatı tipi paket) — su tesisatı gereksiz; yüksek tavan için destratifikasyon fanı.
+  Kaba maliyet ~3–5 M TL + KDV.
+- **GES:** tüketim küçük (~80–120 MWh/yıl toplam) → ~90–100 kWp yeterli (~50–65 bin $); tüm çatı (~220 kWp) fazla üretir.
+  Kış üretimi düşük, mahsuplaşma kuralı kurulumcuyla netleşmeli.
