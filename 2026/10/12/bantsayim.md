@@ -19,3 +19,12 @@ Kullanıcı 60 maddelik hata listesini (kod, üretim aşaması, tür, açıklama
   bant okutmasında (`HataKartiBulAsync`) dışlandı (`ISNULL(IsMainFaulty,0)=0`).
 - Hata barkodu artık `HK` + yeni kod → ör. `HKH004`. **Eski basılmış HK01…HK13 etiketleri artık okunmaz; yeniden basılmalı.**
 - **Testler:** bantsayim `MODFEX_DB_TEST=1` 65/65 (yeni: aşama kartı okutulamaz; eski "04" sabitleri H004'e).
+
+### 2. Hata barkodu etiketi yeni tasarım — `53ea6cf` (paketleme `5e7be28`)
+- **Neden:** kullanıcı "barkod dizaynını da değiştirebilir misin"; seçenekten "Ad üstte, kod barkod altında" seçti.
+- **Ne yapıldı (45×20, yan yana 2'li, iki repoda aynı `HataEtiketi.Ciz`):** üstte aşama (2 mm, büyük harf, tr-TR), altında hata adı
+  (2,8 mm kalın), ortada Code 128, altında hata kodu (H004, kalın). Barkod içeriği `HK` + kodun rakamları: H004 → **HK004**
+  (`HataKartiKaydi.KartBarkodu`). Listeler üst kartı `LEFT JOIN Erp_FaultyCard p ON p.RecId = f.ParentId` ile aşama adını alır.
+- Bant okutma: `HataKartiBulAsync` `FaultyCode = @kod OR 'H' + @kod` → HK004 ve önceki HKH004 baskısı ikisi de H004'ü bulur.
+- **Testler:** bantsayim `MODFEX_DB_TEST=1` 70/70, paketleme 77 (+38 DB atlandı). Baskı denenmedi (evden yazıcı yok).
+- **Not:** bant terminalleri (Linux) yeni sürüm paketlenip kurulmadan HK004'ü tanımaz (eski sürüm "004" kodunu arar).
