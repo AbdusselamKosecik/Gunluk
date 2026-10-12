@@ -28,3 +28,20 @@ Gemini CAD (X20.1.0.4783, Apparel) ile entegrasyon: Sentez'den order + kumaş bi
 ## Açık kalanlar
 - Nest Expert'te kaydedilen nest/sipariş dosyası örneği (uzantısı neyse) ve lisanstaki modüller (Nest Expert Server / Cut Plan).
 - OTX belgesi Gemini desteğinden.
+
+### 3. .gemx üretme denemesi (kumaş adı, model adı, order no, kumaş eni)
+- **Yapı:** `.gemx` = ZIP. Geometri ve asıl model verisi Gemini'nin ikili `unk`-etiketli biçiminde (`models/rp*.rp`,
+  `phd.dat`; parça adları rp2.rp içinde UTF-16). Sıfırdan .gemx üretmek gerçekçi değil → **mevcut kalıbı şablon al, bilgi alanlarını doldur.**
+- `info_ext.xml` TechnicalSheetInfo: ProductName, DesignerName, ProductTypeName, ClientName, SeasonName, **OrderName**,
+  ProductDrawing, **Specifications**, AdditionalSpecifications(count), Attachements. Kumaş/en için ayrı alan YOK
+  (en, nest/pastal parametresi) → şimdilik Specifications metnine.
+- **Belirsizlik:** info_ext.xml büyük ihtimalle önizleme/özet önbelleği; asıl teknik föy ikili dosyada olabilir.
+- **Deneme:** `gemx_bilgi_yaz.py <kaynak> <hedef> Alan=Değer ...` → `X:\Yazilim\generic\gemini-deneme\EYSUNA-DENEME-1.gemx`
+  (ProductName=EYSUNA MODEL DENEME, OrderName=ORDER-DENEME-4315, ClientName=LCW, Specifications=KUMAS…155 cm).
+  `unzip -t` OK. Orijinal dokunulmadı (md5 fb3c1edf…, 1612740 bayt, 23.04).
+- Müşteri kalıbı içerdiği için üretilen .gemx git'e/günlüğe konmadı; betikler `generic-scripts/`.
+- EYSUNA Sentez'de (Erp_Inventory / Erp_WorkOrder) bulunamadı.
+
+## Sonraki adım
+- Kullanıcı EYSUNA-DENEME-1.gemx'i Gemini'de açacak: açılıyor mu, Teknik Föy'de alanlar görünüyor mu?
+- Görünmezse: Gemini'de aynı kalıba Teknik Föy'den ayırt edici değerler girip "farklı kaydet" → ikili diff ile alan yeri çözülecek.
