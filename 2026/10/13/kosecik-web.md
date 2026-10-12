@@ -26,3 +26,72 @@ kosecik.com, kosecik.com.tr, kosecik.tr, abdusselam.com, abdusselam.com.tr, abdu
 ## Açık kalanlar / sonraki adım
 - Kullanıcı tasarım örneklerini `tasarim/`, detayları `docs/` içine ekleyecek.
 - Ana alan adı, teknoloji, barındırma ve DNS sağlayıcı kararları verilecek.
+
+---
+
+## Tur 2 — Site, teklif sihirbazı, PHP mail, WhatsApp
+
+### Bağlam
+Kullanıcı `tasarim/AK Technology Consulting — Website.html` (Claude Design bundle'ı) ve detaylı brief'i (kişisel marka + teknoloji danışmanlığı sitesi, TR/EN, tekstil odaklı) verdi. Ekstra istek: kaçmadan hızlıca ihtiyacı anlayan **teklif sihirbazı**, **PHP ile mail**, **WhatsApp butonu**.
+
+### 1. Tasarım dosyasını açma
+- **Neden:** Dosya, base64+gzip ile paketlenmiş iç içe bundle; doğrudan okunamıyor.
+- **Ne yapıldı:** Python ile `__bundler/manifest` ve `__bundler/template` script bloklarını çözüp her sayfanın (`page.html`) içine indim. 6 board: Home EN/TR, Textile EN, Contact EN/TR, Brand & Design System. Fontlar: Manrope + IBM Plex Mono. Renkler: navy #0B1422, #142338, accent #367FCB (UI metinde #2A68AD), bg #F7F9FC.
+- **Tarif:** manifest[uuid] = {mime, compressed, data(base64)} → gzip.decompress; template JSON string; iç sayfalar da aynı formatta tekrar paketli.
+
+### 2. Mimari kararı
+- **Karar:** Next.js 16 + TS + Tailwind 4, `output: "export"`, `trailingSlash: true` → `out/` düz HTML. Mail için `public/api/quote.php`. Böylece her cPanel/Apache PHP hostingde çalışır, Node sunucu gerekmez.
+- Dil başına ayrı root layout: `src/app/tr/layout.tsx`, `src/app/en/layout.tsx` (html lang doğru). Slug'lar dile göre farklı → route haritası `src/lib/i18n.ts`. İçerik `L<T> = {tr, en}` tipiyle; eksik çeviri tip hatası verir.
+- Paketler: next@16.4.0, react@19, tailwindcss@4.3.3, typescript@5.9 (TS 7 kuruldu, Next uyumu için 5.9'a sabitlendi).
+
+### 3. Teklif sihirbazı — `src/components/QuoteWizard.tsx`, içerik `src/content/quote.ts`
+- 4 adım: Konu (5 kart, tek tık ilerler) → İhtiyaç (çoklu çip + mevcut durum) → Zamanlama/büyüklük/bütçe (isteğe bağlı, "atla") → İletişim (ad, e-posta, telefon, dönüş tercihi e-posta/telefon/WhatsApp, onay).
+- Taslak `localStorage` (`ak-quote-draft-v1`) — sayfa kapansa da kalır; başlangıç zamanı da taslakta (geri dönen kullanıcı bot tuzağına düşmesin diye).
+- `?topic=textile&need=assessment` ön seçim; tekstil sayfasında sihirbaz gömülü ve ön seçili.
+- Canlı özet paneli, adım değişince başlığa odak, başarıda talep no + WhatsApp linki (talep no ile hazır mesaj).
+
+### 4. PHP mail — `public/api/quote.php`
+- POST JSON; Origin kontrolü (6 alan adı), honeypot, <4 sn gönderim = sessiz düşür, IP başına saatlik limit (temp dosya), opsiyonel Turnstile, sunucu doğrulaması (422 + alan listesi).
+- PHPMailer v7.1.1 vendored (`public/api/lib/PHPMailer`), SMTP; Reply-To = müşteri. Opsiyonel müşteriye onay maili.
+- Her talep `../quote-submissions/YYYY-MM.jsonl` yedeğine yazılır; mail düşerse lead kaybolmaz (yedek varsa 200 döner).
+- Config: `quote-config.php` public_html'in BİR ÜSTÜNE (deploy silmesin). Şablon `api/config.example.php`. `api/.htaccess` sadece quote.php'ye izin verir.
+- Saat dilimi Europe/Istanbul (ref numarası tarihi için).
+
+### 5. WhatsApp
+- `src/components/WhatsAppButton.tsx`: her sayfada sabit yeşil buton (navy ikon, kontrast için). Numara `src/site.config.ts` → `whatsapp`.
+
+### 6. Sayfalar ve SEO
+- TR/EN: anasayfa, tekstil landing (örnek dashboard "ÖRNEK VERİ" etiketli), hizmetler + 5 hizmet sayfası (ortak `ServiceView` şablonu), hakkımda, projeler + detay (hepsi `draft:true`, noindex, sitemap dışı), blog + 1 gerçek yazı (Hazır MES mi özel yazılım mı), gizlilik (KVKK/GDPR), iletişim.
+- İçerikler: services/about/privacy/cases/blog iki alt ajana yazdırıldı (uydurma bilgi yasak, köşeli parantezli yer tutucular).
+- canonical + hreflang (tr/en/x-default), OG, sitemap.xml, robots.txt, JSON-LD (ProfessionalService, Person, Service, FAQPage, Article).
+- `public/.htaccess`: tüm alan adları + www → `https://kosecik.com` 301, HTTPS, kök `/` Accept-Language ile /tr/ veya /en/ (IP değil), `/not-found.html` 404 (Next kendi 404.html'ini ezdiği için ad değişti).
+
+### 7. Bulunan sorun: Next 16 export prefetch 404
+- **Belirti:** Linklerde `/tr/iletisim/__next.tr.iletisim.__PAGE__.txt` 404. Export dosyayı `__next.tr/iletisim/__PAGE__.txt` (iç içe) yazıyor; `next start` eşliyor, Apache eşlemiyor.
+- **Çözüm:** `scripts/flatten-rsc.mjs` build sonrası noktalı adlara kopyalar. `"build": "next build && node scripts/flatten-rsc.mjs"`.
+
+### 8. Doğrulama
+- **Komutlar:**
+  ```bash
+  npm run build && npm run check:links   # 40 sayfa: link, tek h1, title, description, canonical, hreflang, lang
+  # Docker: php:8.3-apache (out/ mount, rewrite+headers açık) + axllent/mailpit:v1.27 aynı network'te
+  # curl ile: 405, 422, 403 origin, 400 json, honeypot/fast sessiz 200, 5/saat sonra 429, config/lib 403,
+  #           kök 302 tr/en, www.abdusselam.com.tr → 301 https://kosecik.com, 404 sayfası
+  # Playwright-core + yerel Chrome ile sihirbaz uçtan uca: hata mesajları, reload sonrası taslak,
+  #           gönderim → Mailpit'e 2 mail (sahibe + müşteriye), 375px'te 30 sayfada taşma yok, mobil menü Esc
+  ```
+- **Sonuç:** Tümü geçti. HTML mailde `<script>` kaçışlı. Test sırasında bot tuzağının (4 sn) taslakla dönen gerçek kullanıcıyı düşürebileceği fark edildi → startedAt taslağa eklendi.
+- **Commit:** `85a00c7` — Site: Next.js static export, quote wizard with PHP mail, WhatsApp button
+
+## Kararlar
+- Statik export + PHP (Node hosting gerektirmesin).
+- Canonical alan adı şimdilik kosecik.com (`.htaccess` iki satır + `NEXT_PUBLIC_SITE_URL` ile değişir).
+- Vaka çalışmaları taslak/noindex; doğrulanmış bilgi gelmeden yayınlanmaz.
+- Bütçe aralıkları (TR: 100 bin / 500 bin ₺; EN: €5k / €25k) ve "1 iş günü içinde dönüş" sözü benim varsayımım — kullanıcı onaylamalı.
+
+## Açık kalanlar / sonraki adım
+- `src/site.config.ts`: gerçek e-posta, telefon, WhatsApp numarası (şu an yer tutucu 905000000000).
+- Hosting/SMTP bilgisi → `quote-config.php`.
+- Ana alan adı kararı; DNS + SSL (6 alan adı + www).
+- Portre ve fabrika fotoğrafı; kariyer özeti; proje vakaları; gizlilik metnindeki adres/saklama süresi.
+- İsteğe bağlı: Turnstile anahtarları, analytics (eklenirse gizlilik metni güncellenmeli), deploy otomasyonu (GitHub Actions → FTP).
