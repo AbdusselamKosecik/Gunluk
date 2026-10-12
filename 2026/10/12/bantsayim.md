@@ -28,3 +28,9 @@ Kullanıcı 60 maddelik hata listesini (kod, üretim aşaması, tür, açıklama
 - Bant okutma: `HataKartiBulAsync` `FaultyCode = @kod OR 'H' + @kod` → HK004 ve önceki HKH004 baskısı ikisi de H004'ü bulur.
 - **Testler:** bantsayim `MODFEX_DB_TEST=1` 70/70, paketleme 77 (+38 DB atlandı). Baskı denenmedi (evden yazıcı yok).
 - **Not:** bant terminalleri (Linux) yeni sürüm paketlenip kurulmadan HK004'ü tanımaz (eski sürüm "004" kodunu arar).
+
+### 3. Düzeltme: barkod HKH001, etiket aşağı — `17c9c6e` (paketleme `7e73db9`)
+- Kullanıcı: "HKH001 olması lazım değil mi? barkodu biraz aşağı indir, çok yukarıdan başlıyor".
+- `KartBarkodu` yine `"HK" + FaultyCode` (HKH001). Okutma her iki biçimi de tanımaya devam eder.
+- Üst boşluk 1,4 → 3,0 mm, ad–barkod arası 0,6 → 1,0 mm (20 mm etikette barkod ≈ 6,8 mm, kod yazısı altta).
+- Testler: bantsayim 69/69 (canlı), paketleme 76.
