@@ -35,3 +35,13 @@ Soru: fabrika ısıtması için ısı pompası + GES ne gerekir, maliyet, enerji
   Kaba maliyet ~3–5 M TL + KDV.
 - **GES:** tüketim küçük (~80–120 MWh/yıl toplam) → ~90–100 kWp yeterli (~50–65 bin $); tüm çatı (~220 kWp) fazla üretir.
   Kış üretimi düşük, mahsuplaşma kuralı kurulumcuyla netleşmeli.
+
+### 4. Mevcut ısıtma: sıcak sulu hava apareyleri (2 fotoğraf)
+- **Dosyalar:** `X:\Gitlab\Modasima\new\WhatsApp Image 2026-10-12 at 08.45.36/37.jpeg`
+- **Görülen:** Duvara konsolla asılı, ayarlı panjurlu, sıcak sulu (gidiş-dönüş vanalı) hava apareyleri; galvaniz boru +
+  PPR rakor geçişleri, birleşimlerde pas; panjurlar tozlu, örümcek ağı → uzun süredir kullanılmıyor olabilir.
+  Sulu sistem olduğuna göre bir kazan (muhtemelen doğalgaz) var.
+- **Sonuç:** Havadan suya ısı pompası mevcut boru + apareylere bağlanabilir (ayrı VRF gerekmez).
+  Aparey 90/70 °C için seçilir; 50–55 °C suda kapasite ~%45–55'e düşer, ama depo hedefi 12–14 °C olduğu için
+  (eski fabrika yükü ~145+ kW → depo ~85 kW) mevcut apareyler büyük ihtimalle yeter. Kazan yedek kalırsa hibrit.
+- **İstenecek:** aparey sayısı + etiket (model, kW), kazan dairesi/kazan etiketi, gaz faturaları, apareylerin çalışıp çalışmadığı.
