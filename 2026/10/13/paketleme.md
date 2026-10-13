@@ -31,3 +31,10 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   - 42 yeni metin TR/EN/AR.
 - **Testler:** `EkranRehberiTestleri` 11 + metin kapsama 29 (her komut/ipucu anahtarının çevirisi var); suite 123 geçti.
 - **Doğrulanmadı:** ekran görsel olarak açılmadı (giriş şifresi gerekiyor); kullanıcı bakacak.
+
+### 3. Ürün/paket etiketi: kodsuz, sağ etiket sağa — `89218f2`
+- **Neden:** kullanıcı "paket ve ürün barkodlarında ürün kodunu kaldırıp…", ardından "sağ taraftaki sağa kayacak, sol taraftaki normal".
+- **Ne yapıldı (`UrunEtiketi.cs`):** `UrunAdi(kod, ad)`: yalnız ad; ad kodla başlıyorsa kod ve ayraç kırpılır, ad boşsa kod.
+  `SagEtiketKaydirmaMm = 1.5`: sağ sütun `sol + g + ara + 1,5`'ten başlar; sol sütun ve ^PW (736) aynı.
+- **Testler:** 6 eski test yeni düzene göre güncellendi (kodsuz ad, sağ etiket ilk metin 400 nokta), 5 yeni; suite 128 geçti.
+- Baskı denenmedi; kaydırma miktarı (1,5 mm) baskıya göre ayarlanabilir.
