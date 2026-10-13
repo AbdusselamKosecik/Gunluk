@@ -181,3 +181,8 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
 - **Neden (kullanıcı):** "toplam quantity'yi sağa, ağırlık ve net ağırlığı sola alalım".
 - **Ne yapıldı (`KoliEtiketi.Zpl`):** GW (x5, y77) ve NW (x5, y81) solda 3,5 mm; "TOTAL QTY" etiketi x52 y78, adet x70–95 sağa yaslı 8 mm.
 - **Test:** `Toplam_sagda_agirliklar_solda` (RED → GREEN); suite 203/203.
+
+### 14. TOTAL QTY yazısı büyük ve daha sağda
+- **Neden (kullanıcı):** "total quantity yazısını biraz büyütelim", "biraz da sağa taşıyalım".
+- **Ne yapıldı:** "TOTAL QTY" 2,8 → 4 mm (32 nokta), x52–73 sağa yaslı; adet x73–95 sağa yaslı 8 mm.
+- **Test:** `Toplam_yazisi_buyuk` (RED → GREEN); suite 204/204.
