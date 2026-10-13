@@ -145,3 +145,15 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   düşüp kırıldı. `TezgahDeposu.TezgahsizBaglantilar` (ConditionalWeakTable<SqlConnection>) eklendi; `KoliOkutmaTestleri.HazirlaAsync`
   kendi bağlantısını ekler → yalnız o bağlantıda `KuruluMuAsync` false. Paralel testler etkilenmez.
 - **Testler:** `Dokumde_is_emri_alinir_ve_gosterilir` (RED: IndexOutOfRange → GREEN); suite 198/198.
+
+### 10. PK test kolileri silindi (canlı, kullanıcı istedi) + PO başa — `1568490`
+- **Neden (kullanıcı):** "pk barkodlarını siler misin"; "PO başa alalım, OrderReceiptNo'yu sonraya alalım".
+- **Ön kontrol (salt okunur):** PK1-00000001-001 (Box 313091, 6 set) ve -002 (Box 313388, 11 set), ikisi kapalı, mamul girişi yok.
+  Fiş 10 #733120 (No 00000006, 42'ye 6+11) ve 130 #733121 (No 00000004, 42'den 12+22) yalnız bu iki kolinin kalemlerini içeriyordu.
+  `Erp_InventoryReceiptItem(Variant)` Update/Delete trigger'ları IsDeleted'i işliyor (stok toplamı geri alınır).
+  `Erp_Box_IX0` (CompanyId, BoxType, BoxCode) unique, filtresiz → koli kodunun yeniden kullanılabilmesi için box hard delete.
+- **Yapılan (tek transaction, beklenmeyen kalem/koli varsa ROLLBACK):** betik `scratchpad/pk_sil.sql`:
+  fiş varyant 6 + kalem 4 (BoxId=NULL) + fiş 2 → `IsDeleted=1, DeletedAt, DeletedBy=1` (soft, Sentez gibi);
+  `UZM_PaketOkutma` 12, `UZM_PaketKoli` 2, `Erp_BoxItemVariant`/`Erp_BoxItem`/`Erp_BoxTotal`/`Erp_Box` 2 → DELETE.
+  Doğrulama: PK box 0, UZM_PaketKoli 0, UZM_PaketOkutma 0, iki fiş IsDeleted=1. Yeni koli numarası 001'den başlar.
+- **Etiket:** PO solda (x=5), ORDER (sipariş no) x=39'da. Test `Po_once_siparis_no_sonra` (RED → GREEN); suite 199/199.
