@@ -95,3 +95,21 @@ Kullanıcı `tasarim/AK Technology Consulting — Website.html` (Claude Design b
 - Ana alan adı kararı; DNS + SSL (6 alan adı + www).
 - Portre ve fabrika fotoğrafı; kariyer özeti; proje vakaları; gizlilik metnindeki adres/saklama süresi.
 - İsteğe bağlı: Turnstile anahtarları, analytics (eklenirse gizlilik metni güncellenmeli), deploy otomasyonu (GitHub Actions → FTP).
+
+## Tur 3 — Gerçek iletişim bilgileri
+
+### 1. WhatsApp / telefon / e-posta
+- **Neden:** Kullanıcı gerçek bilgileri verdi: `info@kosecik.com`, `905428198069`.
+- **Ne yapıldı:** `src/site.config.ts` → `phoneDisplay: "+90 542 819 80 69"`, `whatsapp: "905428198069"` (tel: linkleri de bu alandan üretiliyor), TODO işaretleri kaldırıldı. `public/api/config.example.php` → `to_email: 'info@kosecik.com'`. README'deki "iletişim bilgileri yer tutucu" maddesi silindi.
+- **Dokunulan dosyalar:** `src/site.config.ts`, `public/api/config.example.php`, `README.md`
+- **Komutlar:**
+  ```bash
+  npm run build && npm run check:links
+  grep -o 'wa.me/[0-9]*' out/tr/index.html | sort -u        # wa.me/905428198069
+  grep -o 'tel:+[0-9]*' out/tr/iletisim/index.html | sort -u # tel:+905428198069
+  ```
+- **Sonuç / doğrulama:** Build OK, 40 sayfa sorunsuz; WhatsApp ve tel linkleri doğru numarada.
+- **Commit:** `d3415c3` — Contact: real WhatsApp/phone number (+90 542 819 80 69), info@kosecik.com as recipient
+
+### Açık kalanlar
+- Sunucudaki gerçek `quote-config.php` (gitignore'da) hostingde `to_email => info@kosecik.com` + SMTP bilgileriyle oluşturulacak.
