@@ -115,3 +115,22 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   kalemi `CustomerOrderNo` da boş; 00000001 en son 15:28'de güncellenmiş. PO Sentez'in bu alanlarına girilmiyor — kullanıcıya
   hangi alana yazdığı soruldu.
 - **Testler:** `Koli_ve_kalemleri_is_emrini_tasir` (RED: null → GREEN), etiket boyut/konum testleri; suite 197/197.
+
+### 8. Tezgah sıfırlandı (canlı, kullanıcı istedi) + bant box'larında iş emri kontrolü
+- **Neden (kullanıcı):** "tüm bu tezgaha okutulmuşları iptal eder misin, tekrar okutalım; bant sonu kolilerinde workorder eklememiş
+  miyiz, ona bakar mısın".
+- **Durum:** `db/0002_tezgah.sql` kullanıcı tarafından canlıda çalıştırılmış (WorkOrderId kolonları dahil). Tezgahta 2 döküm —
+  URT1-261013-001-0001 (70) ve -0002 (35), iş emri 71533 — ve PK1-00000001-001 için 2 paketleme hareketi (−6, −6). Hareketler
+  WorkOrderId kolonu gelmeden önceki kodla yazıldığı için WorkOrderId NULL'dı.
+- **Yapılan (tek transaction, `UZM_Tezgah` kilidiyle):**
+  ```sql
+  UPDATE dbo.UZM_TezgahHareket SET IsDeleted=1, DeletedAt=GETDATE(), DeletedBy=1,
+         Sebep=ISNULL(Sebep, N'Kullanici istegi 13.10: tezgah sifirlandi, yeniden okutulacak')
+  WHERE CompanyId=2 AND RecId IN (1,2,3,4);          -- 4 satır (soft delete, iz kalır)
+  DELETE FROM dbo.UZM_TezgahBox WHERE CompanyId=2 AND RecId IN (1,2);   -- 2 satır; BoxId unique, box tekrar dökülebilsin
+  ```
+  Doğrulama: UZM_TezgahBox 0 satır, aktif bakiye 0, açık koli 0.
+- **Bant box'larında iş emri:** var. Son 15 box'ta `UZM_UretimBox.WorkOrderId`, `Erp_Box.WorkOrderId` ve
+  `Erp_BoxItem.UD_WorkOrderItemId` dolu (71533 = Test-005-2 → sipariş 00000001; 71531 = 4315-2 → sipariş 00000002).
+  Eski sistemden kalan BoxType 1 box'ların çoğunda boş (13838'de 22 dolu) — onlar bantsayim öncesi.
+- **Dokunulmayan:** kapalı test kolileri PK1-00000001-001 ve -002 (fiş 10/130 yazılmış: 733120/733121, WorkOrderId yok).
