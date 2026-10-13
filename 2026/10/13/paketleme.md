@@ -99,3 +99,19 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   tek dolu alan UD_Explanation, o da içi boş RTF. PO Sentez'de hâlâ girilmemiş.
 - **Testler:** 3 yeni (boyutlar + satırlar, YerSatiri, IletisimSatiri); suite 193/193. Canlı adres sorgusu PK1-00000001-001 için
   "Çekmeköy, Istanbul, Türkiye" + telefon + e-posta döndürdü.
+
+### 7. Koli üstünde iş emri + etiket düzeni ikinci tur — `936096d`
+- **Neden (kullanıcı):** "box'ı oluştururken üstünde workOrderId olması lazım veya workOrderItemId"; "adres %50 büyütelim, posta
+  kodunu ilçenin önüne alalım, matrisi biraz küçültelim, total quantity ve ağırlıkları biraz daha aşağıya alalım. PO gene gelmiyor".
+- **Ne yapıldı:**
+  - `KoliDeposu.OkutAsync`: yeni kolide `Erp_Box.WorkOrderId = seçili iş emri` (bant box'ları gibi). Kalem yazılırken iş emri kalemi
+    (`Erp_WorkOrderItem` + `Erp_WorkOrderItemVariant`, `WorkOrderId` + `InventoryVariantId`) bulunursa
+    `Erp_BoxItem.UD_WorkOrderItemId` ve `Erp_BoxItemVariant.UD_WorkOrderItemVariantId` dolar (bulunamazsa NULL).
+  - `KoliEtiketi`: adres 1,55 → 2,325 mm (19 nokta), 2,9 mm aralık, y=10,6; adres satırı en çok 3 (posta kodu çıktı).
+    `YerSatiri(mahalle, posta, ilçe, il, ülke)` → "Mahalle, 34782 Çekmeköy, İstanbul, Türkiye"; posta kodu `a.PostalCode`,
+    boşsa `Meta_Town.PostalCode`. Matris 44,5–68 mm, satır en çok 4,5 mm, yazı 1,8–2,25 mm. TOTAL QTY y=78 (sayı 76,5),
+    GW 77, NW 81.
+- **PO (canlı, salt okunur):** şirket 2'de hiçbir satış siparişinde `CustomerOrderNo` dolu değil (başlık/kalem); iş emri ve iş emri
+  kalemi `CustomerOrderNo` da boş; 00000001 en son 15:28'de güncellenmiş. PO Sentez'in bu alanlarına girilmiyor — kullanıcıya
+  hangi alana yazdığı soruldu.
+- **Testler:** `Koli_ve_kalemleri_is_emrini_tasir` (RED: null → GREEN), etiket boyut/konum testleri; suite 197/197.
