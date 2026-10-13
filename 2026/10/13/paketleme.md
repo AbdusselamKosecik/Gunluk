@@ -134,3 +134,14 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   `Erp_BoxItem.UD_WorkOrderItemId` dolu (71533 = Test-005-2 → sipariş 00000001; 71531 = 4315-2 → sipariş 00000002).
   Eski sistemden kalan BoxType 1 box'ların çoğunda boş (13838'de 22 dolu) — onlar bantsayim öncesi.
 - **Dokunulmayan:** kapalı test kolileri PK1-00000001-001 ve -002 (fiş 10/130 yazılmış: 733120/733121, WorkOrderId yok).
+
+### 9. Dökümde iş emri görünür — `6770df7`
+- **Neden (kullanıcı):** "tezgaha alırken work order'larını da alalım; bant sonunda work order açıkça çıkıyor".
+- **Durum:** iş emri dökümde zaten `UZM_TezgahBox` + `UZM_TezgahHareket.WorkOrderId`'ye yazılıyordu (silinen 4 hareket eski sürümle
+  yazıldığı için NULL'dı).
+- **Ne yapıldı:** `TezgahDeposu.DokAsync` iş emrini `COALESCE(UZM_UretimBox.WorkOrderId, Erp_Box.WorkOrderId)` ile alır ve sonuç mesajı
+  "Tezgaha alındı: {box} · {adet} adet · İş emri {no}" (TR/EN/AR).
+- **Test kancası:** canlıda tezgah kurulduğu için eski 42-stok yolunu sınayan 13 test (KoliOkutma 5, KoliKapat 8) tezgah moduna
+  düşüp kırıldı. `TezgahDeposu.TezgahsizBaglantilar` (ConditionalWeakTable<SqlConnection>) eklendi; `KoliOkutmaTestleri.HazirlaAsync`
+  kendi bağlantısını ekler → yalnız o bağlantıda `KuruluMuAsync` false. Paralel testler etkilenmez.
+- **Testler:** `Dokumde_is_emri_alinir_ve_gosterilir` (RED: IndexOutOfRange → GREEN); suite 198/198.
