@@ -16,3 +16,18 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
 
 ## Durum
 - Tezgah/mamul/sevk tabloları canlıda hâlâ **yok** (`db/0002_tezgah.sql`, `sevkiyatmobil/db/0001_sevkiyatmobil.sql` çalıştırılmadı).
+
+### 2. "Beş yaşındaki çocuk" okutma ekranı — `f356f13`
+- **Neden:** kullanıcı "5 yaşındaki çocuğun anlayacağı gibi yapar mısın ekranları". Seçimler: düzen "Komut + dev sonuç";
+  terazi kararlı olunca operatör **TAMAM**'a basar (otomatik kapatma yok).
+- **Ne yapıldı:**
+  - `Ekranlar/Veri/EkranRehberi.cs` (saf): durum → adım (① box ② ürün ③ adet ④ terazi ⑤ etiket) + tek komut anahtarı;
+    hata → `Ipucu_{hata}` "ne yapmalı" anahtarı (21 hata).
+  - VM: `Iyi/Kotu` sonuçları büyük alana da yazar; `KomutGuncelle`; `BuKolideSayi`, `KalanSayi`; `Tus` (sayı tuşları),
+    `HizliAdet` (6/12/24/kalan), `YanlisOkuttum` (Sil aç/kapa, kenar kırmızı), `DetayGoster`, `YeniKapandi` (⑤).
+  - XAML: üstte adım hapları + 34 pt komut + okut kutusu; ortada ✓/✗ 64 pt + 30 pt metin + ipucu; adet paneli (56 pt kutu,
+    3×4 tuş takımı, hızlı tuşlar); tam alan terazi (72 pt ağırlık, sarı → yeşil, TAMAM — KAPAT, ETİKET BAS); tablo Detay'da;
+    sağda tezgah şeridi; altta BU KOLİDE / SİPARİŞTE KALAN (44 pt) + YANLIŞ OKUTTUM / DETAY / KOLİ BİTTİ.
+  - 42 yeni metin TR/EN/AR.
+- **Testler:** `EkranRehberiTestleri` 11 + metin kapsama 29 (her komut/ipucu anahtarının çevirisi var); suite 123 geçti.
+- **Doğrulanmadı:** ekran görsel olarak açılmadı (giriş şifresi gerekiyor); kullanıcı bakacak.
