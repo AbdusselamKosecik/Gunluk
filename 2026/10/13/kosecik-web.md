@@ -113,3 +113,27 @@ Kullanıcı `tasarim/AK Technology Consulting — Website.html` (Claude Design b
 
 ### Açık kalanlar
 - Sunucudaki gerçek `quote-config.php` (gitignore'da) hostingde `to_email => info@kosecik.com` + SMTP bilgileriyle oluşturulacak.
+
+## Tur 4 — Ana alan adı abdusselam.tr
+
+### 1. Canonical host değişikliği
+- **Neden:** Kullanıcı kararı: "abdusselam.tr yapalım siteyi". Diğer 5 alan adı + tüm www'ler buraya 301.
+- **Ne yapıldı:**
+  - `public/.htaccess`: iki `[CANONICAL]` satırı → `RewriteCond %{HTTP_HOST} !^abdusselam\.tr$ [NC]` ve `RewriteRule ^(.*)$ https://abdusselam.tr/$1 [R=301,L]` (HTTPS kuralında da aynı hedef).
+  - `src/site.config.ts`: `url` varsayılanı `https://abdusselam.tr` (canonical, hreflang, OG, sitemap, robots buradan üretiliyor).
+  - `public/api/config.example.php`: `from_name` → `abdusselam.tr Teklif Formu`. E-posta adresleri (`info@kosecik.com`, `noreply@kosecik.com`) kosecik.com'da kaldı — posta kutusu orada.
+  - `README.md`: alan adı tablosu ve Search Console satırı.
+- **Dokunulan dosyalar:** `public/.htaccess`, `src/site.config.ts`, `public/api/config.example.php`, `README.md`
+- **Komutlar:**
+  ```bash
+  npm run build && npm run check:links
+  docker run -d --rm --name akq-web -p 18080:80 -v "$(pwd -W)/out:/var/www/html" php:8.3-apache \
+    sh -c "a2enmod rewrite headers && sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf && apache2-foreground"
+  curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -H "Host: kosecik.com" localhost:18080/tr/iletisim/
+  ```
+- **Sonuç / doğrulama:** canonical `https://abdusselam.tr/tr/`, sitemap/robots abdusselam.tr; kosecik.com, www.abdusselam.tr, kosecik.com.tr, abdusselam.com → 301 `https://abdusselam.tr/...`; abdusselam.tr (https) → 200.
+- **Commit:** `5158395` — Canonical domain: abdusselam.tr (all other domains 301 here)
+
+### Not
+- Dikkat: Git Bash `sed` ile `\.` kaçışı yutuldu (`!^abdusselam.tr$` oldu); Edit ile düzeltildi. Regex'li satırları sed yerine editörle değiştir.
+- Search Console mülkü `https://abdusselam.tr` olarak açılacak.
