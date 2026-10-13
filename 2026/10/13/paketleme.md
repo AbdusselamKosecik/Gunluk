@@ -46,3 +46,45 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   UPDATE dbo.UZM_Ayar SET Deger=N'1.2', UpdatedAt=GETDATE() WHERE CompanyId=2 AND Anahtar=N'KoliDara';
   ```
 - Kod değişmedi: kapanışta Net = Brüt (terazi) − KoliDara (`PaketKurallari.Net`); ayar uygulamada 5 dk önbellekte, yeniden açılışta geçerli.
+
+### 5. İş emri seçimi + iş emri bazlı tezgah, etiket listesi, UPC, PO, QR-only etiket — `c1de795`
+- **Neden (kullanıcı):** "çıktıdaki alttaki barkodu kaldıralım; okuturken siparişe bağlı workorder seçelim; tezgahta hangi
+  workorder'dan var onu da bilelim; başka work order'a okutamayalım". Ayrıca: "etiket listesi karton no ve sipariş no'ya göre
+  listelenip yeniden basılabilmeli", "PO gelmemiş", "700083526670'ı bulamadı".
+- **Ne yapıldı:**
+  - **Şema** `db/0002_tezgah.sql` (henüz canlıda çalıştırılmadı, kullanıcı çalıştıracak): `UZM_TezgahHareket.WorkOrderId`
+    (CREATE içinde + eski kuruluma ALTER), `UZM_PaketKoli.WorkOrderId`, `UZM_TezgahHareket_IX2 (CompanyId, WorkOrderId,
+    InventoryVariantId, Kalite) INCLUDE (Miktar)`. `TezgahDeposu.KuruluMuAsync` artık bu iki kolonu da arar.
+  - **Tezgah** (`TezgahDeposu.cs`): bakiye kovası = varyant + kalite + iş emri (null = iş emirsiz kova). Dökmede hareket box'ın
+    `UZM_UretimBox.WorkOrderId`'siyle yazılır; `DuzeltAsync(..., workOrderId)`; `BakiyeListesi` iş emri no'su ile ayrı satır.
+  - **Okutma** (`KoliDeposu.OkutAsync`): `KoliOturumu.WorkOrderId`. Siparişin `UZM_SiparisWorkOrder` kaydı varsa iş emri zorunlu
+    (`IsEmriSec`); ürün yalnız seçilen iş emrinin sipariş kalemindeyse kabul (yoksa `BaskaIsEmri`); tezgah kontrolü/düşüm/iade o iş
+    emrinden; yeni koli iş emrine bağlanır, açık koli başka iş emrindeyse `AcikKoliBaskaIsEmri`. `IsEmirleriAsync` = siparişin iş
+    emirleri + tezgahtaki adet.
+  - **Ekran:** başlıkta İŞ EMRİ açılır listesi (`IsEmriSecenegi`: no · model · tezgahta); tek iş emri varsa kendiliğinden seçilir,
+    açık koli varken kilitli; seçilmemişse komut "① ÜSTTEN İŞ EMRİNİ SEÇ" (`EkranRehberi` `IsEmriBekliyor`). Tezgah şeridinde iş
+    emri no; satır stokları seçili iş emrine göre. 9 yeni metin TR/EN/AR.
+  - **Koli etiketi:** alttaki Code 128 kaldırıldı, koli yalnız QR; kod düz yazı kaldı (üstüne ayırıcı çizgi).
+  - **Etiket listesi** (`KoliListe`): Sipariş no + Karton no filtreleri — verilince tarih aralığı yok sayılır; sayısal sipariş
+    no'da baştaki sıfırlar önemsiz ("1" = "00000001"); Karton sütunu. "Etiketi tekrar yazdır" kapalı kolilerde (mevcut).
+  - **UPC:** `PaketKurallari.BarkodAdaylari`: 12 hane → `[x, "0"+x]`, 13 hane 0'la başlıyorsa → `[x, x[1..]]`. Sentez
+    `0700083526670` saklıyor, okuyucu `700083526670` gönderiyor. `OkutAsync` sorgusu `Barcode IN @adaylar` (tam eşleşme önce);
+    VM satır eşlemesi `AyniBarkod`.
+  - **PO:** başlık `CustomerOrderNo` boşsa koli kalemlerinin `Erp_OrderReceiptItem.CustomerOrderNo`'ları (STRING_AGG).
+    Canlı kontrol: 00000001/00000002 siparişlerinde başlık, kalem ve iş emri PO'su **boş** — Sentez'de girilmemiş.
+- **Testler:** yeni `KoliIsEmriTestleri` (7), `KoliEtiketiPoTestleri`, `KoliListeTestleri`, rehber/metin, barkod adayları.
+  Test dünyası (`TestVerisi`) canlıda karma koli tanımı olan varyantları artık seçmez (canlıya tanım eklenince 28 test kırılmıştı).
+  ```bash
+  MODFEX_DB_TEST=1 dotnet test Paketleme.Tests   # 186/186 (rollback transaction)
+  ```
+
+## Kararlar
+- İş emri koli başına tek; açık koli bitmeden iş emri değiştirilemez.
+- Sipariş iş emrine dönmemişse (bağlantı yok) eski davranış: iş emirsiz kova.
+- Box dökme her iş emrine açık (tezgah ortak), yalnız okutma seçilen iş emrine kısıtlı.
+
+## Açık kalanlar
+- `db/0002_tezgah.sql` canlıda çalıştırılmalı (iş emri kolonları dahil) — kullanıcı.
+- PO'lar Sentez'de sipariş "Müşteri Sipariş No" alanına girilmeli.
+- Set ürünün bileşenleri farklı iş emirlerinden geliyorsa tek iş emri kuralı engeller — gerekirse konuşulacak.
+- Etiket basım loglaması (UZM_EtiketBaski) cevap bekliyor.
