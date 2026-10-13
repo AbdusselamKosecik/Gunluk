@@ -38,3 +38,11 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   `SagEtiketKaydirmaMm = 1.5`: sağ sütun `sol + g + ara + 1,5`'ten başlar; sol sütun ve ^PW (736) aynı.
 - **Testler:** 6 eski test yeni düzene göre güncellendi (kodsuz ad, sağ etiket ilk metin 400 nokta), 5 yeni; suite 128 geçti.
 - Baskı denenmedi; kaydırma miktarı (1,5 mm) baskıya göre ayarlanabilir.
+
+### 4. Koli darası 1,2 kg
+- **Neden:** kullanıcı "teraziden net brüt arası 1.2 kg olacak, şimdilik böyle ayarla; biz brüt ölçüyoruz neti kendin al".
+- **Ne yapıldı:** canlı SentezCore `UZM_Ayar` (CompanyId 2) `KoliDara` 1.1 → **1.2** (kullanıcı istedi):
+  ```sql
+  UPDATE dbo.UZM_Ayar SET Deger=N'1.2', UpdatedAt=GETDATE() WHERE CompanyId=2 AND Anahtar=N'KoliDara';
+  ```
+- Kod değişmedi: kapanışta Net = Brüt (terazi) − KoliDara (`PaketKurallari.Net`); ayar uygulamada 5 dk önbellekte, yeniden açılışta geçerli.
