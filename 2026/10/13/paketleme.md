@@ -88,3 +88,14 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
 - PO'lar Sentez'de sipariş "Müşteri Sipariş No" alanına girilmeli.
 - Set ürünün bileşenleri farklı iş emirlerinden geliyorsa tek iş emri kuralı engeller — gerekirse konuşulacak.
 - Etiket basım loglaması (UZM_EtiketBaski) cevap bekliyor.
+
+### 6. Koli etiketi yazı boyutları + yer/iletişim satırları — `25c7876`
+- **Neden (kullanıcı):** "cari adı %75'e küçültelim, cari adresini %50, model de %75; mahalle, il, ülke de eklensin altına,
+  telefon ve maili de ekleyelim". Ayrıca "PO gene gelmemiş"; "tek koli tek iş emri, karışık yok" (mevcut kural, değişiklik yok).
+- **Ne yapıldı (`KoliEtiketi.cs`):** cari 4,5 → 3,375 mm (27 nokta), adres satırları 3,1 → 1,55 mm (12 nokta, 2,1 mm aralık,
+  y=11'den), model 4 → 3 mm. Adres satırlarının altına `YerSatiri` (Neighborhood ya da Meta_Town.TownName, Meta_District,
+  Meta_City, Meta_Country; boşlar atlanır) ve `IletisimSatiri` ("TEL {Phone} · {EMail}"). Adres sorgusu bu tablolara LEFT JOIN.
+- **PO kontrolü (canlı, salt okunur):** 00000001'in tüm metin kolonları tarandı: başlık/kalem CustomerOrderNo boş, DocumentNo boş;
+  tek dolu alan UD_Explanation, o da içi boş RTF. PO Sentez'de hâlâ girilmemiş.
+- **Testler:** 3 yeni (boyutlar + satırlar, YerSatiri, IletisimSatiri); suite 193/193. Canlı adres sorgusu PK1-00000001-001 için
+  "Çekmeköy, Istanbul, Türkiye" + telefon + e-posta döndürdü.
