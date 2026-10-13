@@ -176,3 +176,8 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
 - **Ne yapıldı:** ayrı WO alanı kaldırıldı; üst satır yine PO (x5, 5 mm) · ORDER (x39) · CARTON NO. PO değeri = kolinin iş emri no
   (`IsEmriNo`), yoksa `MusteriSiparisNo`, o da yoksa "-".
 - **Testler:** `Po_alanina_is_emri_no_basilir_wo_alani_yok` (RED → GREEN), `Is_emri_yoksa_po_musteri_siparis_no`; suite 202/202.
+
+### 13. Toplam sağa, ağırlıklar sola — `e4488f3`
+- **Neden (kullanıcı):** "toplam quantity'yi sağa, ağırlık ve net ağırlığı sola alalım".
+- **Ne yapıldı (`KoliEtiketi.Zpl`):** GW (x5, y77) ve NW (x5, y81) solda 3,5 mm; "TOTAL QTY" etiketi x52 y78, adet x70–95 sağa yaslı 8 mm.
+- **Test:** `Toplam_sagda_agirliklar_solda` (RED → GREEN); suite 203/203.
