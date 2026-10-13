@@ -157,3 +157,16 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   `UZM_PaketOkutma` 12, `UZM_PaketKoli` 2, `Erp_BoxItemVariant`/`Erp_BoxItem`/`Erp_BoxTotal`/`Erp_Box` 2 → DELETE.
   Doğrulama: PK box 0, UZM_PaketKoli 0, UZM_PaketOkutma 0, iki fiş IsDeleted=1. Yeni koli numarası 001'den başlar.
 - **Etiket:** PO solda (x=5), ORDER (sipariş no) x=39'da. Test `Po_once_siparis_no_sonra` (RED → GREEN); suite 199/199.
+
+### 11. Yeni PK kolisi silindi (canlı) + etikete iş emri no — `422cc1a`
+- **Neden (kullanıcı):** "PK'ları silelim. PK oluştururken work order ya gelmemiş ya da etikete yazmamış".
+- **Teşhis (salt okunur):** PK1-00000001-001 (Box 313587) `UZM_PaketKoli.WorkOrderId` ve `Erp_Box.WorkOrderId` = 71533 → iş emri **geliyor**;
+  etikete basılmıyordu (alan yoktu). `UD_WorkOrderItemId` boş: koliye giren set (Inventory 87600) iş emrinde yok, iş emri
+  bileşen ürününün (87601) — set varyantı iş emri kalemiyle birebir eşleşmez; başlıkta iş emri yeterli.
+- **Silme (tek transaction, `scratchpad/pk_sil2.sql`, `UZM_Tezgah` kilidi):** fiş 735515/735516 kalem+varyant+başlık `IsDeleted=1`;
+  koliye ait tezgah paketleme hareketleri (3 satır, Islem 2/4) `IsDeleted=1` → tezgaha iade (bakiye yine 105, iş emri 71533);
+  UZM_PaketOkutma 2, UZM_PaketKoli 1, Erp_Box(+Item/Variant/Total) 1 DELETE. Mamul girişi olan koli varsa ROLLBACK koşulu.
+- **Etiket:** üst satır PO (x5) · ORDER (x32) · WO (x56) · CARTON NO (x80, sağa); değerler 4 mm. `BilgiAsync`:
+  `IsEmriNo = Erp_WorkOrder.WorkOrderNo` (`COALESCE(UZM_PaketKoli.WorkOrderId, Erp_Box.WorkOrderId)`).
+- **Test düzeltmeleri:** `KoliIsEmriTestleri` artık canlıda aktif tezgah bakiyesi olan iş emrini seçmez (71533 105 adet tutuyordu);
+  iki regex'te Python'un yazdığı gerçek satır sonu `\n` yapıldı. Suite 201/201.
