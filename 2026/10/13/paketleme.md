@@ -170,3 +170,9 @@ Kullanıcı: "paketlemede tezgah işlemleri tamam mı? terazi işlemleri falan" 
   `IsEmriNo = Erp_WorkOrder.WorkOrderNo` (`COALESCE(UZM_PaketKoli.WorkOrderId, Erp_Box.WorkOrderId)`).
 - **Test düzeltmeleri:** `KoliIsEmriTestleri` artık canlıda aktif tezgah bakiyesi olan iş emrini seçmez (71533 105 adet tutuyordu);
   iki regex'te Python'un yazdığı gerçek satır sonu `\n` yapıldı. Suite 201/201.
+
+### 12. PO alanına iş emri no — `1c495a6`
+- **Neden (kullanıcı):** "WO'yu kaldır, PO'ya yaz".
+- **Ne yapıldı:** ayrı WO alanı kaldırıldı; üst satır yine PO (x5, 5 mm) · ORDER (x39) · CARTON NO. PO değeri = kolinin iş emri no
+  (`IsEmriNo`), yoksa `MusteriSiparisNo`, o da yoksa "-".
+- **Testler:** `Po_alanina_is_emri_no_basilir_wo_alani_yok` (RED → GREEN), `Is_emri_yoksa_po_musteri_siparis_no`; suite 202/202.
