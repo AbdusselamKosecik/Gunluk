@@ -25,3 +25,15 @@
 ## Açık kalanlar
 - `sevkiyatmobil/db/0001_sevkiyatmobil.sql` çalıştırılmalı, sonra mal kabul (fiş 17, 42 → 41).
 - Koli etiketi yazıcıda denenmedi.
+
+### 3. Windows yayını
+- **Neden (kullanıcı):** "paketlemeye publish çıkartır mısın" (sunum).
+- **Ne yapıldı:** `dagitim/yayinla.ps1` (UTF-8 BOM'lu; PS 5.1 BOM'suz betikte Türkçeyi bozuyor): `dotnet publish Paketleme.Desktop -c Release
+  -r win-x64 --self-contained true -p:PublishReadyToRun=true -o dagitim/paketleme-win-x64`, sonra `paketleme-win-x64-<tarih>.zip`.
+  Çıktılar `.gitignore`'da. Kalıp: onaymerkezi/dagitim/yayinla.ps1.
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File dagitim/yayinla.ps1
+  ```
+- **Sonuç:** `dagitim/paketleme-win-x64-2026-10-14.zip` (89 MB). Yayınlanan `Paketleme.Desktop.exe` başlatıldı, pencere "Modfex - Paketleme".
+- Uyarı: NU1903 System.Security.Cryptography.Pkcs 9.0.11 (bilinen yüksek önemli açık) — paket güncellemesi ayrıca ele alınmalı.
+- Aynı gün: tezgahekrani ve bantdurumekrani Windows'ta açıldı (sunum); tezgahekrani'ye bantdurumekrani ayarlar.json'u kopyalandı.
