@@ -35,3 +35,20 @@ armeabi-v7a, seri 39916cf0) USB ile bağlandı.
   ofiste 192.168.0.2.
 - Mal kabul denemesi; dokunma/kaydırma ve okuyucu ile uzun süreli kullanım shim ile sınanmadı.
 - Diğer Avalonia Android uygulamaları (bantsayim vb.) Android 6'da aynı sorunu yaşar; shim oraya da taşınabilir.
+
+### 4. Shim: tek kalıcı timerfd — `210aefa`
+- **Belirti:** uygulama kullanılırken bir noktadan sonra ekran güncellenmiyordu (dokunma tepkisiz görünüyordu).
+- **Sebep (tahmin, kodla tutarlı):** her kare için yeni timerfd açılıp looper'a ekleniyor, geri çağırmada kapatılıp 0 dönülüyordu.
+  Başka iş parçacığı arada yeni kare isterse kapanan fd numarası yeniden kullanılıyor, looper eski kaydı silerken yeni bekleyen kareyi de
+  siliyordu → `_pendingCallback` sonsuza dek true, zamanlayıcı ölü.
+- **Ne yapıldı:** `getInstance`'ta bir kez timerfd + `ALooper_addFd` (geri çağırma 1 döner, kalıcı); `postFrameCallback(64)` isteği
+  pthread mutex altında saklar ve timerfd'yi bir sonraki 16,67 ms sınırına kurar.
+- **Ölçüm (geçici logcat, sonra kaldırıldı):** getInstance looper ve fd geldi; kareler ~16 ms aralıkla; boşta Avalonia kare istemiyor
+  (normal), dokunuşta yeniden istiyor.
+- **Açık:** adb `input tap` ile Avalonia tepki vermedi (giriş kuyruğu boş, pencere odakta). Kullanıcı sabah cihazda elle gezinebildi;
+  elle dokunma ile doğrulama kullanıcıdan bekleniyor. Son APK (`dagitim/sevkiyatmobil-2026-10-14.apk`) cihaz USB'den çıkarıldığı için
+  yüklenemedi — cihazda bir önceki (günlüklü) sürüm var.
+- Araç: `dotnet tool install -g ilspycmd` (Avalonia.Android kodunu okumak için).
+
+## Sonraki adım
+- Mobil ekranlar küçük ekranda (480×800, ölçek 1,5 → 320 dp) çok büyük: genel ~%80 küçültme + üst çubuk (dil düğmeleri taşıyor).
