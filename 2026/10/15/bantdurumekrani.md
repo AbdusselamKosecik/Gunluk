@@ -29,3 +29,8 @@ Kullanıcı: "Bant durum ve tezgah durum ekranini tablete yuklermisin".
 ## Açık kalanlar
 - Tablette USB hata ayıklama onayı verilince `adb install -r` ile yüklenecek.
 - Tablette ilk açılışta bağlantı ayarları girilecek: evde Tailscale `100.119.104.122`, ofiste `192.168.0.2`.
+
+## Ek (aynı gün): tablete kuruldu
+- Kullanıcı izin verdi; tablet Samsung SM-X110 (Galaxy Tab A9, Android 16, 800x1340, 213 dpi).
+- `adb install -r dagitim/bantdurumekrani-2026-10-15.apk` → Success.
+- Kurulumdan hemen sonra tablet bağlantısı koptu; açılış ve ekran kontrolü yapılamadı.

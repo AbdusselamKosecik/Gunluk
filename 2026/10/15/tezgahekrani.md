@@ -23,3 +23,8 @@ Kullanıcı tezgah durum ekranının tablete yüklenmesini istedi. Projenin Andr
 
 ## Açık kalanlar
 - Tablete yükleme ve ilk açılış kontrolü. Ekran tablet çözünürlüğüne göre hiç denenmedi.
+
+## Ek (aynı gün): tablete kuruldu
+- Kullanıcı izin verdi; tablet Samsung SM-X110 (Galaxy Tab A9, Android 16, 800x1340, 213 dpi).
+- `adb install -r dagitim/tezgahekrani-2026-10-15.apk` → Success.
+- Kurulumdan hemen sonra tablet bağlantısı koptu; açılış ve ekran kontrolü yapılamadı.
