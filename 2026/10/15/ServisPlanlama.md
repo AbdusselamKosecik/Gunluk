@@ -121,3 +121,45 @@ ev adreslerinin oradan güncellenmesini istedi. Ek uyarısı: **"PDKS yi guncell
   ("Amreya First", "Raml Second", "Borg El Arab", "Montaza Section").
 - Öneri: `Bolgeler.Takmalar` içine Latin yazımlar eklemek, `Parcala` / `Temizle` için İngilizce ekler
   ("St.", "First/Second", "Section", "Village") tanıtmak.
+
+### 5. DENDATA Excel: Original Department + Job (PDKS'ye göre)
+- **İstek:** "Employee's Working Data" sayfasında E (Original Department) ve F (Job) sütunları doldurulacak.
+  Departman yeni 01–21 koduna göre (bordro programı `X:\Yazilim\aaaa` DEPXX.MAS ile aynı ad ve kod), iş PDKS'deki görevden.
+- **Kaynaklar (salt okuma):**
+  - PDKS `personnel_employee`: `emp_code`, `department_id → dept_code`, `position_id → position_name`.
+    Operatörlerin `last_name` alanında makine türleri yazıyor ("Singer-Over-Zigzag", "Joker A", "orle"...).
+  - Excel satır r = Enrollment satır r; sicil = Enrollment!A.
+- **Departman eşlemesi** (PDKS → yeni kod):
+  - 1 / Administration → 01
+  - Production → 02, Sample → 03, Warehouse → 04, Cutting → 05
+  - Bant 1–7 → 06–12, Line 8 → 13
+  - Quality control / Qc / Final Qc → 14
+  - Ironing → 15, Packing → 16, Export Warehouse → 17, Maintenance → 18, Security → 19, Service → 20, Training → 21
+  - Biçim: `05 - Cutting` (şablon örneği "6 - Embroidery").
+- **Operatör iş kuralı** (Jobs List'teki makine işleri):
+  - Makine aileleri:
+    - S (düz dikiş): singer, zigzag, bartack/partack, 2needle
+    - O: over
+    - R: orle
+    - F (flat): recme
+  - Eşleme:
+    - Tek aile: S → 028, O → 032, R → 031, F → 128
+    - İkili: SO → 088, SR → 089, OR → 090, SF → 129, RF → 130, OF → 131
+    - 3+ aile ya da "Joker" → 029 Machine Joker
+    - Makine bilgisi yok → 030 Machine Operator
+  - Şablondaki tek örnek ("orle -ziazag" → 089) bu kuralla birebir tutuyor.
+- **Diğer görevler:**
+  - Helper → 022, Packing → 039, Qc → 043, Triming Machine → 123 Thread Operator, Final Qc → 065
+  - Accessories (depo) → 139 Store Keeper, Cutting Chief → 077, QC cap → 157 Team Leader
+  - vb.; tam tablo betikte (`GOREV`).
+- **Yazım:**
+  - openpyxl kaydederken x14 dataValidation'ı (F sütunu Jobs List açılır listesi) siliyor.
+    Bu yüzden xlsx zip içinde yalnız `xl/worksheets/sheet2.xml` E/F hücreleri `inlineStr` olarak değiştirildi.
+  - İlk denemede self-closing hücre regex'i sonraki hücreyi yuttu; assert yakaladı, dosyaya yazılmadı.
+    Düzeltilmiş desen: `<c r="E4"(?:[^>]*?/>|[^>/]*>.*?</c>)`.
+- **Sonuç:**
+  - E 359/359, F 358/359 dolu. Boş kalan sicil 5343: PDKS'de görev ve soyad boş.
+  - Tüm işler Jobs List'te var; açılır liste korundu.
+  - Satır 3'teki şablon örneği ("6 - Embroidery") PDKS'ye göre "08 - Line 3" oldu.
+- **Yedek:** Excel'in yazım öncesi kopyası scratchpad'de `DENDATA-yedek-*.xlsx`.
+- Excel git'e eklenmedi (kişisel veri).
