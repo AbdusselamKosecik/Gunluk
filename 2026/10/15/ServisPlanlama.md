@@ -98,3 +98,26 @@ ev adreslerinin oradan güncellenmesini istedi. Ek uyarısı: **"PDKS yi guncell
 
 ## Açık kalanlar
 - Yeni butonlar sunucuya henüz yayınlanmadı. Gereken adımlar: `deploy/yayinla.ps1`, ardından sunucuda zip açılıp `servis-kur.ps1` (yönetici).
+
+### 4. Kişi bazında "Konumu yeniden ara"
+- **Neden:** Kullanıcı, toplu tarama bittikten sonra istediği kişiyi tek başına yeniden taratmak istedi.
+- **Ne yapıldı:**
+  - `POST /api/personel/{id}/konum/ara`: `Geocoder.CozAsync(p.Adres, p.Sehir)` sonucu `Konum`'a yazılır.
+    Elle konulmuş konumda istemci onay sorar, onaylanırsa konum değişir.
+  - İstemci: `pano.js` içinde `konumYenidenAra(id)`. Butonlar:
+    - Personel tablosunda satır başına 🔄
+    - Kişi penceresinde `#kisiKonumAra`
+    - Harita balonunda `data-is="ara"`
+  - TR/EN/AR metinleri: `kd.konumAra`, `kd.elleOnay`, `kd.araniyor`, `kd.bulundu`.
+- **Doğrulama:**
+  - `dotnet test` 34/34; `node --check` ile JS dosyaları temiz.
+  - Yerelde (ofis SQL'i) uç denendi; yanıt döndü.
+  - Denenen adres `12 Al-Nour Al-Muhammady St., Janoty, Raml Second, Alexandria` sonucu: "yok".
+- **Commit:** `9ee53d0` — Kişi bazında konumu yeniden ara
+
+### Gözlem: İngilizce adreslerde konum kalitesi düşük
+- Sunucudaki toplu taramanın ilk 102 sonucu: yer 27, bölge 55, yok 20.
+- `AdresAyristirici` ve `Bolgeler` takma adları Arapça ağırlıklı. Excel adresleri Latin harfli
+  ("Amreya First", "Raml Second", "Borg El Arab", "Montaza Section").
+- Öneri: `Bolgeler.Takmalar` içine Latin yazımlar eklemek, `Parcala` / `Temizle` için İngilizce ekler
+  ("St.", "First/Second", "Section", "Village") tanıtmak.
