@@ -52,3 +52,49 @@ ev adreslerinin oradan güncellenmesini istedi. Ek uyarısı: **"PDKS yi guncell
 - Adresler İngilizce (Latin harf). Ayrıştırıcı (`AdresAyristirici`) Arapça ağırlıklı; Nominatim İngilizce adları genelde buluyor.
   Konum sonuçları "bolge" ağırlıklı kalırsa sözlüğe Latin takma adlar eklenmeli.
 - Excel dosyası maaş ve kimlik bilgisi içeriyor ve repo klasöründe izlenmeyen dosya olarak duruyor. Commit edilmemeli.
+
+---
+
+## Devam (aynı gün)
+
+### 2. Uygulama kullanıcılarının parolası sıfırlandı (kullanıcı isteğiyle)
+- **Neden:** Kullanıcı `admin` / `user` parolalarını bilmiyordu. Özetten parola geri çıkarılamaz.
+- **Ne yapıldı:**
+  - `Kullanici.ParolaOzeti` iki kullanıcı için kullanıcının verdiği parolayla yeniden yazıldı. Parola günlüğe yazılmaz.
+  - Biçim `Kimlik/Parola.cs` ile aynı: `pbkdf2$100000$<tuz b64>$<özet b64>`, PBKDF2-SHA256, 16 bayt tuz, 32 bayt özet.
+  - Özet PowerShell 5.1'de üretildi: `New-Object Security.Cryptography.Rfc2898DeriveBytes(p, tuz, 100000, SHA256)`.
+    .NET Framework'te statik `Pbkdf2` yok.
+- **Doğrulama:** `POST http://192.168.0.2:8086/api/oturum/giris` iki kullanıcı için de 200 döndü.
+
+### 3. "Tüm atamaları temizle" + "Tüm adreslerin konumunu yeniden bul" butonları
+- **Ne yapıldı:**
+  - `ServisDeposu.AtamalariTemizleAsync`: `PersonelServis.ServisId` ve `DurakId` NULL yapılır.
+    Servisler, duraklar ve oturma adresleri kalır.
+  - Uç: `POST /api/atamalar/temizle` (yönetici) → `{ temizlenen }`.
+  - Servisler panosu araç çubuğunda onaylı "Tüm atamaları temizle" butonu.
+  - Ayarlar › Konumlar'da onaylı "Tüm adreslerin konumunu yeniden bul" butonu.
+    Mevcut `POST /api/konum/bul?yeniden=true` ucunu çağırır; elle konulan konumlar korunur.
+  - TR/EN/AR metinleri `dil.js` içine eklendi.
+- **Dokunulan dosyalar:**
+  - `src/ServisPlanlama/Veri/ServisDeposu.cs`
+  - `Api/PlanlamaUclari.cs`
+  - `wwwroot/index.html`
+  - `wwwroot/js/pano.js`
+  - `wwwroot/js/ayarlar.js`
+  - `wwwroot/dil.js`
+- **Komutlar:** `dotnet test ServisPlanlama.slnx` → 34/34.
+- **Canlı veri (kullanıcı isteğiyle):**
+  - Yerel uygulama ofis SQL'ine (192.168.0.2) bağlanarak açıldı. Bağlantı cümlesindeki sunucu yalnız ortam değişkeninde değiştirildi:
+    `ServisPlanlama__BaglantiCumlesi`, `ServisPlanlama__BioTimeBaglantiCumlesi`.
+  - Yeni uçla tüm atamalar temizlendi: 275 kaldırıldı.
+  - Sonrasında servisli 0, duraklı 0, adresli 359.
+- **Konum:** Sunucudaki (eski sürüm) servis üzerinden `konum/bul?yeniden=true` başlatıldı; 353 kişi işleniyor.
+- **Commit:** `39ca432` — Tüm atamaları temizle ve tüm konumları yeniden bul butonları
+
+### Ortam notları
+- `modfexsrv` Tailscale'de çevrimdışıydı (100.119.104.122 erişilemiyor). Kullanıcı ofis ağındaydı (192.168.0.80); 192.168.0.2 doğrudan erişilebiliyordu.
+- `dotnet run` apphost exe'si bu makinede SQL'e bağlanamayabiliyor; `dotnet <dll>` ile çalıştırmak gerekiyor.
+- Kestrel ayarı `--urls` parametresini eziyor; uygulama her zaman 8086'da dinliyor.
+
+## Açık kalanlar
+- Yeni butonlar sunucuya henüz yayınlanmadı. Gereken adımlar: `deploy/yayinla.ps1`, ardından sunucuda zip açılıp `servis-kur.ps1` (yönetici).
