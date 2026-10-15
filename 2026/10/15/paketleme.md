@@ -45,3 +45,15 @@ Koli okutmada iş emri seçimi zaten vardı (`c1de795`), etiket ekranında yoktu
 
 ## Açık kalanlar
 - Ekranın kullanıcı tarafından denenmesi.
+
+### 2. İş emri no Sentez'den (Erp_WorkOrder)
+- **Neden:** Kullanıcı: "Is emri numralarini sentezden alirmisin? degistirdik ama TEST diye kaliyor".
+  İş emri listesi `UZM_SiparisWorkOrder.WorkOrderNo` sütunundan okunuyordu. Bu sütun, sentezservis iş emrini oluştururken yazdığı kopya.
+  Sentez'de 71531'in numarası Test-004-2 → 4315-2 olarak değişmiş ama kopya eski kalmıştı.
+  Diğer üçü (Test-004-1, Test-005-1, Test-005-2) Sentez'de de hâlâ Test.
+- **Ne yapıldı:** `KoliDeposu.IsEmirleriAsync`: numara artık `ISNULL(MIN(w.WorkOrderNo), MIN(sw.WorkOrderNo))`. Sıralama da bu ifadeye göre.
+  Bu liste hem koli okutmada hem sipariş etiketinde kullanılıyor.
+- **Test:** `Is_emri_no_sentezden_okunur`: transaction içinde kopya 'ESKI-NO' yapılır, listeden Sentez numarası beklenir.
+  Önce kırmızı ("ESKI-NO"), sonra yeşil. Suite 211/211.
+- **Commit:** `f8f291b`
+- Uygulama yeniden derlenip açıldı.
