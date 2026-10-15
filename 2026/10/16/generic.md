@@ -30,3 +30,19 @@ gösteren bir pano; ilk 20 dışındakiler tıklanıp detay görülebilsin.
 
 ## Açık kalanlar
 - Remote (GitLab/GitHub) açılıp push edilmesi — kullanıcıya soruldu.
+
+### 3. Anlık (canlı) ağ panosu
+- **Neden:** Kullanıcı SRUM panosunu beğendi ("dursun"), anlık olanı istedi. SRUM saatlik yazıldığı için canlı değil.
+- **Ne:** `ag-kullanimi\canli` — .NET 10 konsol + `Microsoft.Diagnostics.Tracing.TraceEvent 4.0.0`.
+  Özel çekirdek ETW oturumu `AgCanliKernel`, `Keywords.NetworkTCPIP`: TcpIp/UdpIp Send/Recv (+IPv6) → PID, size, saddr/daddr.
+  Yerel taraf = makinenin IP'si olan adres (NetworkInterface, 10 sn'de bir yenilenir); Wi-Fi adı `netsh wlan show interfaces` SSID.
+  Çoklu yayın/yayın/link-local → "Yerel ağ (yayın)". Loopback hariç. Süreç adına göre gruplanır (chrome'un tüm PID'leri tek satır).
+  120 sn halka tampon (toplam + uygulama başına); hız = son 3 sn ortalaması.
+- HttpListener `http://localhost:8765/`: `/` (wwwroot/index.html, her istekte diskten), `/api/anlik`, `/api/uygulama?ad=`.
+- `app.manifest` requireAdministrator → UAC. Başlatma: `canli-baslat.cmd` (önce derler, sonra başlatır).
+- Pano: SRUM panosuyla aynı görünüm; mod "Şu anki hız / Başlangıçtan beri", ağ filtresi, son 2 dk çizgi + imleç,
+  ilk 20, ağlar, diğerleri, detay (canlı grafik, ağ kırılımı, en çok konuştuğu 15 uzak adres:port).
+- **Doğrulama:** `curl -o NUL https://speed.cloudflare.com/__down?bytes=20000000` → curl.exe ↓ **20,0 MB**, ağ Orange_347F_5G. ✔
+  Headless Edge ekran görüntüsü kontrol edildi.
+- **Not:** Çalışan yönetici süreci normal kullanıcıdan kapatılamıyor (Access denied) → pencereyi kullanıcı kapatır.
+- **Commit:** yerel repo (remote yok).

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anlık İnternet</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3f0; --surface-1: #fcfcfb; --surface-2: #f0efec;
+  --border: #e3e2de; --grid: #ebeae6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --series-1: #2a78d6; --series-2: #eb6834; --focus: #2a78d6;
+  --good: #0ca30c; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --surface-2: #383835;
+    --border: #2e2e2c; --grid: #2a2a28;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+    --series-1: #3987e5; --series-2: #d95926; --focus: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --surface-2: #383835;
+  --border: #2e2e2c; --grid: #2a2a28;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+  --series-1: #3987e5; --series-2: #d95926; --focus: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.sayfa { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+h1 { font-size: 22px; margin: 0; }
+h2 { font-size: 15px; margin: 0; }
+.alt { color: var(--text-secondary); font-size: 13px; }
+.kucuk { color: var(--text-muted); font-size: 12px; }
+.canli { font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.canli i { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+.canli.kopuk i { background: var(--critical); }
+.kart { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.kutular { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kutu .deger { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kutu .etiket { color: var(--text-secondary); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.kutu .etiket i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.filtre { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+select, input[type=search], button { font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.secim button[aria-pressed="true"] { background: var(--surface-2); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.izgara { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .izgara { grid-template-columns: 1fr; } }
+.baslik { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.lejant { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); }
+.lejant i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.r1 { background: var(--series-1); } .r2 { background: var(--series-2); }
+.satir { display: grid; grid-template-columns: minmax(90px, 190px) 1fr 92px; gap: 10px; align-items: center;
+  padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+.satir:hover, .satir.secili { background: var(--surface-2); }
+.satir .ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.satir .sira { color: var(--text-muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.cubuk { display: flex; gap: 2px; height: 14px; transition: width .4s ease; }
+.cubuk span { height: 100%; min-width: 0; }
+.cubuk span:first-child { border-radius: 4px 0 0 4px; }
+.cubuk span:last-child { border-radius: 0 4px 4px 0; }
+.cubuk span:only-child { border-radius: 4px; }
+.satir .top { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-secondary); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface-1); }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr[data-ad] { cursor: pointer; }
+tbody tr[data-ad]:hover { background: var(--surface-2); }
+.kaydir { max-height: 420px; overflow: auto; }
+#ipucu { position: fixed; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgb(0 0 0 / .15);
+  display: none; z-index: 20; max-width: 300px; }
+#ipucu b { display: block; margin-bottom: 4px; }
+#detay { position: fixed; inset: 0; background: rgb(0 0 0 / .35); display: none; z-index: 10; }
+#detay .panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(720px, 100%); background: var(--surface-1);
+  overflow: auto; padding: 20px 16px; border-left: 1px solid var(--border); }
+.yol { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--text-muted); word-break: break-all; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+svg text { fill: var(--text-muted); font-size: 11px; }
+.uyari { border: 1px solid var(--critical); color: var(--text-primary); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; display: none; }
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <header>
+    <div>
+      <h1>Anlık İnternet Kullanımı</h1>
+      <div class="alt" id="baslangic"></div>
+    </div>
+    <span class="canli" id="canli" role="status"><i></i><span>Bağlanıyor…</span></span>
+  </header>
+
+  <div class="uyari" id="uyari">⚠ İzleme programına ulaşılamıyor. Program penceresi kapandıysa yeniden başlatın.</div>
+
+  <div class="filtre">
+    <div class="secim" role="group" aria-label="Sıralama">
+      <button type="button" id="modHiz" aria-pressed="true">Şu anki hız</button>
+      <button type="button" id="modTop" aria-pressed="false">Başlangıçtan beri</button>
+    </div>
+    <label class="alt" for="agSec">Ağ:</label>
+    <select id="agSec"><option value="">Tüm ağlar</option></select>
+    <button id="temaBtn" type="button">◐ Tema</button>
+  </div>
+
+  <div class="kutular">
+    <div class="kart kutu"><div class="etiket"><i class="r1"></i>Şu an indirme</div><div class="deger" id="kInd">–</div></div>
+    <div class="kart kutu"><div class="etiket"><i class="r2"></i>Şu an yükleme</div><div class="deger" id="kYuk">–</div></div>
+    <div class="kart kutu"><div class="etiket">Başlangıçtan beri indirme</div><div class="deger" id="kTopInd">–</div></div>
+    <div class="kart kutu"><div class="etiket">Başlangıçtan beri yükleme</div><div class="deger" id="kTopYuk">–</div></div>
+  </div>
+
+  <section class="kart" style="margin-bottom:16px">
+    <div class="baslik"><h2>Son 2 dakika — toplam hız</h2><div class="lejant"><span><i class="r1"></i>İndirme</span><span><i class="r2"></i>Yükleme</span></div></div>
+    <div id="toplamGrafik"></div>
+  </section>
+
+  <div class="izgara">
+    <section class="kart">
+      <div class="baslik">
+        <h2 id="ilkBaslik">Şu an en çok internet kullanan 20 uygulama</h2>
+        <div class="lejant"><span><i class="r1"></i>İndirme</span><span><i class="r2"></i>Yükleme</span></div>
+      </div>
+      <div id="ilk20"></div>
+      <div class="kucuk" style="margin-top:8px">Bir uygulamaya tıklayın: canlı grafik, ağ kırılımı ve bağlandığı adresler açılır.</div>
+    </section>
+    <section class="kart">
+      <div class="baslik"><h2>Ağlara göre</h2><span class="kucuk">başlangıçtan beri</span></div>
+      <div id="aglar"></div>
+      <div class="kucuk" style="margin-top:8px">Bir ağa tıklayın: o ağa göre süzülür.</div>
+    </section>
+  </div>
+
+  <section class="kart" style="margin-top:16px">
+    <div class="baslik">
+      <h2>Diğer uygulamalar <span class="kucuk" id="digerSayi"></span></h2>
+      <input type="search" id="ara" placeholder="Uygulama ara…" aria-label="Uygulama ara">
+    </div>
+    <div class="kaydir"><table>
+      <thead><tr><th>#</th><th>Uygulama</th><th class="n">↓ Hız</th><th class="n">↑ Hız</th><th class="n">↓ Toplam</th><th class="n">↑ Toplam</th></tr></thead>
+      <tbody id="diger"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<div id="ipucu" role="tooltip"></div>
+
+<div id="detay" aria-hidden="true">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="dAd">
+    <div class="baslik"><h2 id="dAd"></h2><button id="kapat" type="button">✕ Kapat</button></div>
+    <div class="yol" id="dYol"></div>
+    <div class="kutular" style="margin-top:12px">
+      <div class="kart kutu"><div class="etiket"><i class="r1"></i>Şu an indirme</div><div class="deger" id="dHizInd"></div></div>
+      <div class="kart kutu"><div class="etiket"><i class="r2"></i>Şu an yükleme</div><div class="deger" id="dHizYuk"></div></div>
+      <div class="kart kutu"><div class="etiket">Toplam ↓ / ↑</div><div class="deger" id="dTop" style="font-size:18px"></div></div>
+    </div>
+    <div class="baslik"><h2>Son 2 dakika</h2><div class="lejant"><span><i class="r1"></i>İndirme</span><span><i class="r2"></i>Yükleme</span></div></div>
+    <div id="dGrafik"></div>
+    <div class="baslik" style="margin-top:16px"><h2>Ağlara göre</h2></div>
+    <div id="dAglar"></div>
+    <div class="baslik" style="margin-top:16px"><h2>En çok veri alışverişi yaptığı adresler</h2></div>
+    <table><thead><tr><th>Uzak adres : port</th><th class="n">Veri</th></tr></thead><tbody id="dUzak"></tbody></table>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const sayi = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 1 });
+function bayt(b) {
+  if (b >= 1e9) return sayi.format(b / 1e9) + ' GB';
+  if (b >= 1e6) return sayi.format(b / 1e6) + ' MB';
+  if (b >= 1e3) return sayi.format(b / 1e3) + ' KB';
+  return Math.round(b) + ' B';
+}
+const hiz = b => bayt(b) + '/sn';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let V = null, mod = 'hiz', secAg = '', acikDetay = null, fareUstunde = null, sonFare = null;
+
+// Seçili mod/ağa göre bir uygulamanın [indirme, yükleme] değeri
+function deger(u) {
+  if (secAg) return u.ag[secAg] || [0, 0];
+  return mod === 'hiz' ? u.hiz : u.top;
+}
+const bicim = v => (mod === 'hiz' && !secAg) ? hiz(v) : bayt(v);
+
+function cubuk(v, max) {
+  const g = max > 0 ? (v[0] + v[1]) / max * 100 : 0;
+  const p = [];
+  if (v[0] > 0) p.push(`<span class="r1" style="flex:${v[0]}"></span>`);
+  if (v[1] > 0) p.push(`<span class="r2" style="flex:${v[1]}"></span>`);
+  return `<div class="cubuk" style="width:${Math.max(g, 0.5)}%">${p.join('')}</div>`;
+}
+
+function cizgiGrafik(seri, etiket) {
+  const W = 1100, H = 180, sol = 70, sag = 10, ust = 10, alt = 22, n = seri.length;
+  const maxV = Math.max(1024, ...seri.map(x => Math.max(x[0], x[1])));
+  const x = i => sol + i * (W - sol - sag) / (n - 1);
+  const y = b => ust + (H - ust - alt) * (1 - b / maxV);
+  const yol = k => seri.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join('');
+  const izgara = [0, .5, 1].map(f => `<line x1="${sol}" x2="${W - sag}" y1="${y(maxV * f)}" y2="${y(maxV * f)}" stroke="var(--grid)"/><text x="${sol - 6}" y="${y(maxV * f) + 4}" text-anchor="end">${hiz(maxV * f)}</text>`).join('');
+  const eksen = [0, 30, 60, 90, 119].map(i => `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 119 ? 'end' : i === 0 ? 'start' : 'middle'}">${i === 119 ? 'şimdi' : '-' + (119 - i) + ' sn'}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(etiket)}">${izgara}${eksen}
+    <path d="${yol(0)}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>
+    <path d="${yol(1)}" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-linejoin="round"/>
+    <line class="imlec" y1="${ust}" y2="${H - alt}" stroke="var(--text-muted)" stroke-dasharray="3 3" style="display:none"/>
+    <rect class="alan" x="${sol}" y="0" width="${W - sol - sag}" height="${H}" fill="transparent" data-n="${n}" data-sol="${sol}" data-w="${W - sol - sag}" data-W="${W}"/></svg>`;
+}
+// Grafik üstünde artı imleç + ipucu (veri her saniye değiştiği için seri global'den okunur)
+function grafikImlec(kap, seriAl) {
+  kap.onmousemove = e => {
+    const svg = kap.querySelector('svg'), alan = kap.querySelector('.alan'); if (!svg || !alan) return;
+    const r = svg.getBoundingClientRect(), W = +alan.dataset.W, sol = +alan.dataset.sol, w = +alan.dataset.w, n = +alan.dataset.n;
+    const px = (e.clientX - r.left) * W / r.width;
+    if (px < sol) return;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - sol) * (n - 1) / w)));
+    const im = svg.querySelector('.imlec'); im.style.display = ''; im.setAttribute('x1', sol + i * w / (n - 1)); im.setAttribute('x2', sol + i * w / (n - 1));
+    const p = seriAl()[i] || [0, 0];
+    ipucu(e, `<b>${i === n - 1 ? 'şimdi' : (n - 1 - i) + ' sn önce'}</b>↓ ${hiz(p[0])}<br>↑ ${hiz(p[1])}`);
+  };
+  kap.onmouseleave = () => { const im = kap.querySelector('.imlec'); if (im) im.style.display = 'none'; ipucuKapat(); };
+}
+
+function ipucu(e, html) {
+  const t = $('#ipucu'); t.innerHTML = html; t.style.display = 'block';
+  t.style.left = Math.min(e.clientX + 14, innerWidth - t.offsetWidth - 8) + 'px';
+  t.style.top = Math.min(e.clientY + 14, innerHeight - t.offsetHeight - 8) + 'px';
+}
+const ipucuKapat = () => { $('#ipucu').style.display = 'none'; };
+
+function uygIpucu(u) {
+  const ag = Object.entries(u.ag).slice(0, 4).map(([a, x]) => `${esc(a)}: ↓ ${bayt(x[0])} · ↑ ${bayt(x[1])}`).join('<br>');
+  return `<b>${esc(u.ad)}</b>Şu an: ↓ ${hiz(u.hiz[0])} · ↑ ${hiz(u.hiz[1])}<br>Toplam: ↓ ${bayt(u.top[0])} · ↑ ${bayt(u.top[1])}<div class="kucuk" style="margin-top:4px">${ag}</div>`;
+}
+
+function ciz() {
+  if (!V) return;
+  $('#kInd').textContent = hiz(V.hiz[0]);
+  $('#kYuk').textContent = hiz(V.hiz[1]);
+  const top = V.uygulamalar.reduce((s, u) => [s[0] + u.top[0], s[1] + u.top[1]], [0, 0]);
+  $('#kTopInd').textContent = bayt(top[0]);
+  $('#kTopYuk').textContent = bayt(top[1]);
+  $('#toplamGrafik').innerHTML = cizgiGrafik(V.seri, 'Son 2 dakika toplam indirme ve yükleme hızı');
+
+  $('#ilkBaslik').textContent = secAg ? `${secAg} ağında en çok veri kullanan 20 uygulama` :
+    mod === 'hiz' ? 'Şu an en çok internet kullanan 20 uygulama' : 'Başlangıçtan beri en çok internet kullanan 20 uygulama';
+  const liste = V.uygulamalar.map(u => ({ u, v: deger(u) })).filter(x => x.v[0] + x.v[1] > 0 || (mod === 'hiz' && !secAg && x.u.top[0] + x.u.top[1] > 0))
+    .sort((a, b) => (b.v[0] + b.v[1]) - (a.v[0] + a.v[1]) || (b.u.top[0] + b.u.top[1]) - (a.u.top[0] + a.u.top[1]));
+  const ilk = liste.slice(0, 20), diger = liste.slice(20);
+  const max = ilk.length ? Math.max(1, ilk[0].v[0] + ilk[0].v[1]) : 1;
+  $('#ilk20').innerHTML = ilk.map((x, i) => `
+    <div class="satir" data-ad="${esc(x.u.ad)}" tabindex="0" role="button" aria-label="${esc(x.u.ad)}: indirme ${bicim(x.v[0])}, yükleme ${bicim(x.v[1])}">
+      <div class="ad"><span class="sira">${i + 1}</span>${esc(x.u.ad)}</div>${cubuk(x.v, max)}
+      <div class="top">${bicim(x.v[0] + x.v[1])}</div></div>`).join('') || '<div class="alt">Henüz trafik yok…</div>';
+
+  $('#digerSayi').textContent = `(${diger.length})`;
+  const q = $('#ara').value.trim().toLocaleLowerCase('tr');
+  $('#diger').innerHTML = diger.map((x, i) => ({ ...x, s: 21 + i })).filter(x => !q || x.u.ad.toLocaleLowerCase('tr').includes(q))
+    .map(x => `<tr data-ad="${esc(x.u.ad)}"><td class="kucuk">${x.s}</td><td>${esc(x.u.ad)}</td><td class="n">${hiz(x.u.hiz[0])}</td><td class="n">${hiz(x.u.hiz[1])}</td><td class="n">${bayt(x.u.top[0])}</td><td class="n">${bayt(x.u.top[1])}</td></tr>`).join('')
+    || '<tr><td colspan="6" class="alt">—</td></tr>';
+
+  // Ağlar
+  const ag = {};
+  for (const u of V.uygulamalar) for (const [a, v] of Object.entries(u.ag)) { ag[a] = ag[a] || [0, 0]; ag[a][0] += v[0]; ag[a][1] += v[1]; }
+  const agl = Object.entries(ag).sort((a, b) => (b[1][0] + b[1][1]) - (a[1][0] + a[1][1]));
+  const agMax = agl.length ? agl[0][1][0] + agl[0][1][1] : 1;
+  $('#aglar').innerHTML = agl.map(([a, v]) => `
+    <div class="satir ${a === secAg ? 'secili' : ''}" data-ag="${esc(a)}" tabindex="0" role="button" style="grid-template-columns:minmax(80px,130px) 1fr 64px">
+      <div class="ad" title="${esc(a)}">${esc(a)} <span class="kucuk">${esc(V.aglar[a] || '')}</span></div>${cubuk(v, agMax)}
+      <div class="top">${bayt(v[0] + v[1])}</div></div>`).join('') || '<div class="alt">—</div>';
+  const sec = $('#agSec'), mevcut = new Set([...sec.options].map(o => o.value));
+  for (const [a] of agl) if (!mevcut.has(a)) sec.add(new Option(`${a} (${V.aglar[a] || ''})`, a));
+
+  if (fareUstunde && sonFare) { const u = V.uygulamalar.find(x => x.ad === fareUstunde); if (u) ipucu(sonFare, uygIpucu(u)); }
+}
+
+async function yenile() {
+  try {
+    const r = await fetch('/api/anlik', { cache: 'no-store' });
+    V = await r.json();
+    $('#canli').classList.remove('kopuk'); $('#canli span').textContent = 'Canlı · ' + new Date(V.zaman).toLocaleTimeString('tr-TR');
+    $('#uyari').style.display = 'none';
+    $('#baslangic').textContent = 'İzleme başladı: ' + new Date(V.baslangic).toLocaleString('tr-TR') + ' · çekirdek ağ olayları (ETW)';
+    ciz();
+    if (acikDetay) await detayYenile();
+  } catch {
+    $('#canli').classList.add('kopuk'); $('#canli span').textContent = 'Bağlantı yok';
+    $('#uyari').style.display = 'block';
+  }
+}
+
+let dSeri = [];
+async function detayYenile() {
+  const d = await (await fetch('/api/uygulama?ad=' + encodeURIComponent(acikDetay), { cache: 'no-store' })).json();
+  if (!d) return;
+  $('#dAd').textContent = d.ad; $('#dYol').textContent = d.yol;
+  $('#dHizInd').textContent = hiz(d.hiz[0]); $('#dHizYuk').textContent = hiz(d.hiz[1]);
+  $('#dTop').textContent = `↓ ${bayt(d.top[0])} · ↑ ${bayt(d.top[1])}`;
+  dSeri = d.seri;
+  $('#dGrafik').innerHTML = cizgiGrafik(d.seri, d.ad + ' son 2 dakika');
+  const ag = Object.entries(d.ag), max = ag.length ? ag[0][1][0] + ag[0][1][1] : 1;
+  $('#dAglar').innerHTML = ag.map(([a, v]) => `<div class="satir" style="cursor:default;grid-template-columns:minmax(90px,170px) 1fr 150px">
+    <div class="ad">${esc(a)}</div>${cubuk(v, max)}<div class="top">↓ ${bayt(v[0])} · ↑ ${bayt(v[1])}</div></div>`).join('');
+  $('#dUzak').innerHTML = d.uzak.map(x => `<tr><td class="mono">${esc(x.adres)}</td><td class="n">${bayt(x.bayt)}</td></tr>`).join('') || '<tr><td colspan="2" class="alt">—</td></tr>';
+}
+function detayAc(ad) { acikDetay = ad; $('#detay').style.display = 'block'; $('#detay').setAttribute('aria-hidden', 'false'); detayYenile(); $('#kapat').focus(); }
+function detayKapat() { acikDetay = null; $('#detay').style.display = 'none'; $('#detay').setAttribute('aria-hidden', 'true'); ipucuKapat(); }
+
+// Olay yetkilendirme: içerik her saniye yeniden çizildiği için dinleyiciler kapsayıcıda
+$('#ilk20').addEventListener('mousemove', e => {
+  const s = e.target.closest('.satir'); sonFare = e;
+  if (!s) { fareUstunde = null; ipucuKapat(); return; }
+  fareUstunde = s.dataset.ad; const u = V.uygulamalar.find(x => x.ad === fareUstunde); if (u) ipucu(e, uygIpucu(u));
+});
+$('#ilk20').addEventListener('mouseleave', () => { fareUstunde = null; ipucuKapat(); });
+$('#ilk20').addEventListener('click', e => { const s = e.target.closest('.satir'); if (s) detayAc(s.dataset.ad); });
+$('#ilk20').addEventListener('keydown', e => { const s = e.target.closest('.satir'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); detayAc(s.dataset.ad); } });
+$('#diger').addEventListener('click', e => { const tr = e.target.closest('tr[data-ad]'); if (tr) detayAc(tr.dataset.ad); });
+function agSec(a) {
+  secAg = secAg === a ? '' : a; $('#agSec').value = secAg;
+  $('#modHiz').disabled = !!secAg; ciz();
+}
+$('#aglar').addEventListener('click', e => { const s = e.target.closest('.satir'); if (s) agSec(s.dataset.ag); });
+$('#aglar').addEventListener('keydown', e => { const s = e.target.closest('.satir'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); agSec(s.dataset.ag); } });
+$('#agSec').onchange = e => { secAg = ''; agSec(e.target.value); };
+for (const [id, m] of [['#modHiz', 'hiz'], ['#modTop', 'top']])
+  $(id).onclick = () => { mod = m; $('#modHiz').setAttribute('aria-pressed', m === 'hiz'); $('#modTop').setAttribute('aria-pressed', m === 'top'); ciz(); };
+$('#ara').oninput = ciz;
+$('#kapat').onclick = detayKapat;
+$('#detay').onclick = e => { if (e.target.id === 'detay') detayKapat(); };
+addEventListener('keydown', e => { if (e.key === 'Escape') detayKapat(); });
+$('#temaBtn').onclick = () => {
+  const r = document.documentElement;
+  const koyu = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = koyu ? 'light' : 'dark';
+};
+grafikImlec($('#toplamGrafik'), () => V ? V.seri : []);
+grafikImlec($('#dGrafik'), () => dSeri);
+
+yenile();
+setInterval(yenile, 1000);
+</script>
+</body>
+</html>
