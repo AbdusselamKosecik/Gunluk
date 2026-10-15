@@ -163,3 +163,23 @@ ev adreslerinin oradan güncellenmesini istedi. Ek uyarısı: **"PDKS yi guncell
   - Satır 3'teki şablon örneği ("6 - Embroidery") PDKS'ye göre "08 - Line 3" oldu.
 - **Yedek:** Excel'in yazım öncesi kopyası scratchpad'de `DENDATA-yedek-*.xlsx`.
 - Excel git'e eklenmedi (kişisel veri).
+
+### 6. Düzeltme: asıl dosya X:\Yazilim\aaaa'daki DENDATA Excel'i
+- **Ne oldu:** Kullanıcı "departmanlar tutmuyor, işler yazılmamış" dedi. Kullanıcının baktığı dosya `X:\Yazilim\aaaa\DENDATA Employee Information Transfer Template.xlsx`. Bu ayrı bir sürüm:
+  - Arapça başlık satırı ve sicil kolonu silinmiş; veri 2. satırdan başlıyor.
+  - Departmanlar elle ve yalnız adla yazılmış ("Line 4", "line7", "Samble"...).
+  - Job sütunu boş.
+  - Bu dosyada açılır liste yok.
+- **Fark:** Bu dosyadaki departmanlar PDKS ile 359 kişinin 167'sinde farklı (ör. sicil 21: PDKS Bant 3, Excel Line 4).
+- **Kullanıcı kararı:** "DENDATA bizim için baz alacağımız şey".
+- **Ne yapıldı:**
+  - E: Excel'deki mevcut departman korundu, yazımı DENDATA programındaki ada çevrildi:
+    - line7 → Line 7, Samble → Sample, Warehouse → Raw Mat. Warehouse, Final Qc / inspection → Quality Control
+    - Service → Service (Transport), Production → Production Mgmt, Export Warehouse → FG Wh. & Shipping, Ironing → Ironing & Spot Clean
+  - E boş/0 olan 4 kişi (PDKS'de pasif olanlar) ve "Collaret Machine" yazan 1 kişi PDKS departmanıyla dolduruldu.
+  - F: PDKS eşlemesi (5. maddedeki kural).
+  - Eşleme Employee Nr ile yapıldı; isimler 359/359 tuttu.
+  - Kodsuz ad yazıldı.
+- **Yazım:** sheet2.xml E/F hücreleri `inlineStr` olarak değiştirildi; mevcut stil (`s`) korundu. Önce yedek alındı: scratchpad `DENDATA-aaaa-yedek-*.xlsx`.
+- **Sonuç:** E 359/359, F 358/359 (sicil 5343 boş). Tüm departman adları DENDATA'daki 21 addan; tüm işler Jobs List'te.
+- **Not:** ServisPlanlama klasöründeki kopyaya önce "05 - Cutting" biçiminde PDKS departmanları yazılmıştı. O kopya artık asıl dosya değil.
