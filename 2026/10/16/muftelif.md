@@ -104,7 +104,83 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
   .\Deploy-IIS.ps1 -SkipWebBuild -SetupIIS -SiteName SentezPlaning -Port 8090 -PhysicalPath 'C:\inetpub\SentezPlaning'
   ```
 
-## Kararlar
+### 4. Hesap esası sipariş adedine çevrildi (aynı gün, planlamanın isteğiyle)
+
+- **Neden:** Planlama, 3. maddedeki çözümü gördükten sonra *"hesapları kesim adedine
+  göre değil order adetine göre alın"* dedi. İki gerekçe de ölçümle destekli:
+  ERP üretim adedi gün gün değişiyor (144 adet kayma ölçüldü) ve kesim adedinin
+  üstüne bir de `+%Pay` eklemek çift sayım.
+
+- **Ne yapıldı:**
+  - Esas **tek yere** taşındı: `UretimPlanService.PlanlamaAdedi(PlanOrder)`.
+    Aynı mantık `GetKesimWeeks`'te zaten vardı ve gerekçesi kodda yazılıydı;
+    dikim tarafına uygulanmamıştı. Artık iki ekran birbirinden kayamaz.
+  - Esasa bağlananlar: kapasite tablosu plan adedi, **SMV ağırlığı** (Ort. SMV ve
+    SAH, Plan Adet'le tutarsız kalmasın diye), sevk görünümü, özet (toplam +
+    haftalık ortalama plan), order satırlarında toplam SMV ve plan-fiili farkı.
+  - **Değişmedi:** yıkama ve finish aşama planları kesim adedini kullanmaya devam
+    ediyor — yıkamaya fiilen kesilmiş parça giriyor, gerekçesi kodda yazılı.
+    Planlama isterse tek satırla çevrilir.
+  - `CapacityRowDto.SiparisAdet` → `ErpAdet` olarak yeniden adlandırıldı; alan artık
+    ters anlamı taşıyor, eski adı yanlış okunurdu.
+  - Ekran/Excel: **"Plan Adet" = sipariş adedi** (hesap esası), yanındaki
+    **"ERP Kesim"** kolonu bilgi amaçlı ve fark rozetini taşıyor.
+
+- **Dokunulan dosyalar:** `UretimPlanService.cs`, `UretimPlanModels.cs`,
+  `UretimPlanExport.cs`, `web/src/api/uretimPlan.ts`, `web/src/pages/UretimPlanlamaPage.tsx`,
+  `tests/.../UretimPlanImportTests.cs`
+
+- **Sonuç / doğrulama:** 229/229 test, `tsc -b` temiz. Esas **iki kez yön değiştirdiği**
+  için üç nöbetçi test eklendi (`PlanAdetEsasiTests`). Servis altı bağımlılıkla
+  kurulduğu ve fikstür olmadığı için bu testler kaynak metnini yokluyor — zayıf ama
+  sessiz geri dönüşü görünür kılıyor. **Açık borç: `UretimPlanService` için fikstür.**
+
+- **Commit:** `d022431` — feat(uretim-plan): hesap esasi SIPARIS adedi
+
+### 5. Gelmeyen SMV'ler — canlı ERP'de kovalandı
+
+- **Neden:** 28 Ağustos'taki e-postada *"Basic(classic) bantta 1 order SMV'si gelmiyor,
+  oysa orderda SMV girili"* deniyordu. VPN ayaktayken bakmak mantıklıydı.
+
+- **Ne yapıldı / Sonuç:** 15/10 planındaki **203 orderın tamamı** sorgulandı.
+  - 5 CEP'in 68 orderının **hepsinde** dikim SMV'si var — Ağustos'taki şikâyet
+    bu plan için geçerli değil.
+  - **13 orderda SMV sıfır.** Hepsinde tek kalem var ve o kartta
+    `Erp_InventoryWorkStudy`'de **hiç satır yok** (silinmiş/pasif bile değil).
+  - "Başka kalemde olabilir" ihtimali elendi (13/13 tek kalem).
+  - `Erp_Inventory`, `Erp_WorkOrder`, `Erp_WorkOrderItem` tablolarında SMV benzeri
+    **hiçbir kolon yok** — ERP'de SMV'nin tek kaynağı etüt.
+  - Temel koda göre kardeş kart araması: 13'ten **4'ünde** SMV'li kardeş kart var
+    (`2318-1101`→`2318-1617` 21,41 · `9519-2125`→`9519-1359-DARK OLIVE` 60 ·
+    `A9153C-1895`→`A9153C-1554` 19,5 · `A9268-1346`→`A9268-1810` 38,54).
+    **Değerler çok saçılmış, otomatik ikame tahmin olur** — yıkama tarafındaki
+    style varyantı dersinin aynısı.
+
+- **Çıkarım:** Bu bir yazılım hatası değil, **ERP veri eksiği**. Yazılımın
+  yapabileceği şey eksiği *eyleme dönüştürülebilir* hale getirmek: ekran şu an
+  yalnızca `⚠3` gibi bir **sayı** gösteriyor, hangi order olduğunu söylemiyor.
+
+## Kararlar (ek)
+
+- Hesap esası sipariş adedi; yıkama/finish aşamaları kesim adedinde kaldı (fiziksel
+  gerekçe kodda yazılı). Planlama isterse değiştirilir.
+- Eksik SMV'de kardeş kart değeri **otomatik kullanılmayacak** — ölçülen saçılma
+  (19,5 ile 60 arası) buna izin vermiyor.
+
+## Açık kalanlar (güncel)
+
+- **Takvim isteği (16 Ekim):** tatil takvimi, takvimden seçim, **departman departman**.
+  Mevcut durum: `CalismaTakvimi.tsx` zaten aylık takvim ızgarası + resmî tatil
+  gösterimi + uygulama düğmesi sunuyor. Eksik olan **departman boyutu**:
+  `work_days` tablosunun birincil anahtarı yalnızca `tarih`, yani takvim **global**.
+  Departman kırılımı şema değişikliği (`PK (departman, tarih)`) + göç + `WorkDay`
+  tüketen her yer demek. Tasarım kullanıcıya sunulacak, onay bekliyor.
+- **Eksik SMV ekranı:** order numaralarını listeleme + elle SMV girişi
+  (`OverrideSmv` ucu serviste VAR, ekranı yok).
+- Yıkama planlama tarafı (14 Ekim e-postası) hâlâ açık.
+- Kurulu sürümdeki Islak kapasitesi 40.500 — kurulu `sentez-planing.db` lazım.
+
+## Kararlar (ilk tur)
 
 - **`PLAN ADET` ERP üretim adedi olarak KALIR.** Kapasite hesabı gerçekte kesilecek
   adetle yapılmalı; sipariş adedine döndürmek planı gerçeklikten koparırdı. Fark artık
