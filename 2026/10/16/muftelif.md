@@ -380,6 +380,52 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 
 - **Commit:** `f912da8` — feat(yikama): raporun SOL blogu ve SAG talep kolonlari
 
+### 11. Canlıda iki hata yakalandı (ekran görüntüsü + uç cevabı)
+
+- **Neden:** Kurulumdan sonra canlı sistemden ekran görüntüsü alındı; `04-yikama.png`
+  incelenirken `Kısıt` kolonunun boş olduğu fark edildi. Göz kararı bırakmayıp
+  canlı `api/sentez/planning/yikama-ozet` ucunun cevabı çözümlendi.
+
+- **Hata 1 — `Kısıt` kolonu tamamen boş.** WSH-DYE 2, WSH-WHITE 7 olmalıydı;
+  canlıda hepsi 0.
+  - **Sebep:** katalog tohumu **yalnızca katalog boşken** koşuyor
+    (`OperasyonStore`, "tohum YALNIZCA bir kez" kuralı). `grup`/`kisit_adet`
+    kolonları bugün eklendi, yani **çalışan kurulumda varsayılanda kaldı**.
+  - Grup TOPLAM satırları çalışıyordu çünkü onlar `SablonGrup`'tan **doğrudan**
+    okunuyor; kısıt ise katalogtan geliyor ve orada yoktu. Bu ayrım hatayı
+    gizlemişti — ekranda grup satırları göründüğü için iş bitmiş gibi duruyordu.
+  - **Çözüm:** `OperasyonStore.GrupKisitGeriDoldur` — meta bayraklı, bir kerelik.
+    Yalnızca **dokunulmamış** alanlar doldurulur; kullanıcı kısıt girdiyse ya da
+    grubu değiştirdiyse üstüne yazılmaz.
+
+- **Hata 2 — WSH-DYE & WHITE müsait saati 391,5**, planlamanın raporunda **405**.
+  - **Sebep:** şablonun kendi tutarsızlığı. Satır 55'te `$E$5` (7,25) yerine düz
+    `7.5` yazıyor. Ben tutarlı olanı seçmiştim ve kodda not düşmüştüm — ama rapor
+    **yönetime gidiyor** ve bizim sayımız onunla tutmalı.
+  - **Çözüm:** `Grup.GunlukSaatEzme` — yalnızca o grupta şablonun sabiti kullanılır,
+    diğerleri `$E$5`/`$F$5` ile devam eder. Test genişletildi, **405 artık pinli**.
+
+- **Ders:** Ekran görüntüsü almak "iş bitti" demek değil, **ölçüm aracı**. İki hata
+  da yalnızca canlı veriye bakınca göründü; testler 254/254 yeşildi ve ikisini de
+  yakalayamazdı — biri göç senaryosu (boş katalog değil, **mevcut** katalog), diğeri
+  de kaynak dosyadaki bilinçli sapma.
+
+- **Sonuç / doğrulama:** 255/255 test. Paket yenilendi. **Bu commit yalnızca sunucu
+  tarafını değiştiriyor**, web paketi aynı (`index-EfWsXe97.js`) — kurulum
+  doğrulaması JS adıyla değil, `yikama-ozet` cevabındaki `kisitAdet`/`musaitSaat`
+  ile yapılmalı.
+
+- **Commit:** `615aa5d` — fix(yikama): kisit kolonu bos kaliyordu + DYE & WHITE musait saati
+
+### Canlı ekran görüntüleri
+
+`X:\GitlabredericTr\SentezPlaning-ekran-2026-10-16\` — 01-dikim · 02-smv ·
+03-takvim · 04-yikama. Oturum gerektiği için yerel bir **ters vekil** yazıldı
+(`scratchpad/vekil.py`): token `localStorage`'a ancak aynı kökenden yazılabildiği
+için her istek canlıya iletiliyor, yalnızca `index.html`'e token enjekte ediliyor.
+Sekmeler rota değil React durumu olduğu için paketteki tek `useState(\`dikim\`)`
+ifadesi vekil üzerinden değiştirildi.
+
 ## Dersler (gün sonu)
 
 1. **Gerekçeyi koda yazmak onu doğru yapmıyor.** Yıkama/finish'i kesim adedinde
@@ -388,7 +434,9 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 2. **Düşük çözünürlüklü görselden formül çıkarma.** Kaynak dosya depoda duruyordu
    (10. madde). "Formülde yok" ≠ "ölçülemez" dersinin ikizi: *"görselde var"
    ≠ "görselden okunabilir"*.
-3. **Taban oranı kontrol et.** Etütsüz 13 kartın hepsini "176" açmıştı; 176 zaten
+3. **Ekran görüntüsü ölçüm aracıdır, teslim belgesi değil.** Canlıdan alınan
+   görüntü iki hatayı ortaya çıkardı; testler yeşildi (11. madde).
+4. **Taban oranı kontrol et.** Etütsüz 13 kartın hepsini "176" açmıştı; 176 zaten
    203 kartın 169'unu açmıştı (7. madde).
 
 ## Kararlar (ek)
