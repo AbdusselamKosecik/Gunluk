@@ -265,6 +265,35 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 - **Sonraki adım:** Eksik SMV'li orderları numara + model koduyla listeleyen panel
   + elle SMV girişi (`OverrideSmv` ucu serviste var, ekranı yok).
 
+### 8. Eksik SMV'ler ekranda — order + model adıyla
+
+- **Neden:** 7. maddede sebep ölçüldü; eksiklik ERP'de. Yazılımın yapabileceği tek
+  şey eksiği **eyleme dönüştürülebilir** kılmak. Ekran yalnızca `⚠8` sayacı
+  gösteriyordu.
+
+- **Ne yapıldı:**
+  - Yeni uç `GET smv/eksik` → `GetSmvEksikOrderlar()`; dikim çıkış tarihine göre
+    sıralı (en yakın iş üstte), tarihi olmayan sona.
+  - "Ortalama SMV" sekmesine `SmvEksikPanel`: order no, **ERP'den çözülen model
+    kodu** (etüt bu kodla aranır, talebi o kodla açmak gerekir), marka/fit,
+    kategori, `1st cut` rozeti, dikim haftası, adet, not.
+  - **Listeyi kopyala** düğmesi — etüt talebi açmak için panoya tab ayraçlı.
+  - Geçici SMV girişi aynı panelden; değer **model bazında** yazılır
+    (`overrideSmv`), yani aynı modelin diğer order'ları da düzelir.
+  - Plandaki style ile ERP modeli farklıysa ikisi de gösteriliyor.
+  - Dikim sekmesindeki sayacın ipucu artık listenin nerede olduğunu söylüyor.
+
+- **Dokunulan dosyalar:** `api/Sentez/UretimPlan/{UretimPlanModels,UretimPlanService,UretimPlanController}.cs`,
+  `web/src/api/uretimPlan.ts`, `web/src/components/planning/SmvEksikPanel.tsx`,
+  `web/src/pages/UretimPlanlamaPage.tsx`
+
+- **Sonuç / doğrulama:** 244/244 test, `tsc -b` temiz, paket yenilendi ve panel
+  metni minified JS'te doğrulandı. **Dürüst not:** panelin kendi davranış testi
+  yok — tip + derleme ile korunuyor. Sebebi `UretimPlanService` fikstür borcu
+  (4. maddede de yazılı). Gösterdiği veri bugün canlı ERP'de bağımsız doğrulandı.
+
+- **Commit:** `7362d33` — feat(uretim-plan): SMV'si olmayan orderlar ekranda ADIYLA listelenir
+
 ## Kararlar (ek)
 
 - Hesap esası sipariş adedi; yıkama/finish aşamaları kesim adedinde kaldı (fiziksel
@@ -276,8 +305,7 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 
 - ~~Takvim isteği~~ — **yapıldı** (6. madde). Kullanıcı "hat bazlı olsun" dedi,
   aşama değil hat kırılımı seçildi.
-- **Eksik SMV ekranı:** order numaralarını listeleme + elle SMV girişi
-  (`OverrideSmv` ucu serviste VAR, ekranı yok).
+- ~~Eksik SMV ekranı~~ — **yapıldı** (8. madde).
 - Yıkama planlama tarafı (14 Ekim e-postası) hâlâ açık.
 - Kurulu sürümdeki Islak kapasitesi 40.500 — kurulu `sentez-planing.db` lazım.
 
