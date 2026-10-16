@@ -40,3 +40,16 @@ Kullanıcı, son değişikliklerin çekilmesini, bekleyen iş varsa gönderilmes
 ## Açık kalanlar (eklendi)
 - Kullanıcı denemeyi onaylarsa: kurul (CTO + Şüpheci + UX) çalıştırılacak, `dev`'e merge edilecek ve changelog maddesi eklenecek.
 - Üst bardaki "Ara: sipariş, stok, müşteri… ⌘K" kutusu işlevsiz (state'e yazıyor ama hiçbir şey yapmıyor).
+
+### 5. Alt menü düzeni (dal: `feat/iki-panelli-menu`)
+- **Neden:** Kullanıcı alt menülerde daha fazla düzenleme istedi; yapı yine değişmeyecek.
+- **Ne yapıldı:**
+  - Üst bölüm başlıkları açılır-kapanır oldu, kaydırırken üstte sabit kalıyor ve sayfa sayısını gösteriyor. Tercih `Modül>Bölüm` anahtarıyla saklanıyor. Açık sayfanın bölümü daraltılmış olsa bile açık gösteriliyor.
+  - İç içe gruplarda sol kılavuz çizgisi var. Uzun adlar kesilmek yerine iki satıra sarılıyor.
+  - Gruptan sonra gelen gruplanmamış sayfalar için `break` satırı eklendi (Finans'ta "e-Fatura" artık "Hareketler"in altında görünmüyor).
+  - Favoriler: sayfanın yanındaki ☆ ile ekleniyor. Şeridin üstüne "Favoriler" geldi; burada favoriler ve son açılan 8 sayfa listeleniyor (`nav-prefs.ts`, localStorage `vuo.navPrefs`).
+  - Hata düzeltmesi: fiş tipleri `?type=3001` biçiminde sorgu parametresi kullanıyor. Aktif sayfa eşleştirmesi artık sorgu parametresine de bakıyor ve tek bir aktif yol seçiyor (`findActiveLeaf`). Önceden hem "Tüm Fişler" hem "Mal Alım" vurgulanıyordu.
+  - 300 satır sınırı nedeniyle bileşen dosyalara bölündü: `module-rail`, `page-panel`, `panel-rows`, `nav-prefs`.
+- **Testler:** two-panel testleri 24, `src/layouts` toplamı 32/32 geçti. Typecheck temiz.
+- **Görsel doğrulama:** playwright-core ile kontrol edildi: Envanter, daraltma, favori ekleme, yenilemeden sonra favorinin kalması, Finans'ta sabit başlık ve ayraç.
+- **Commit:** `7067062b` (dal `feat/iki-panelli-menu`).
