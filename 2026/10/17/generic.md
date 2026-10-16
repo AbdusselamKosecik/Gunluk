@@ -27,3 +27,8 @@
 
 ## Açık kalanlar
 - Kullanıcı test dosyasını onaylarsa: `video_duzelt.ps1 -Uygula` (kalan 79 dosya).
+
+### 3. Toplu uygulama
+- Kullanıcı test dosyasını (Duman - Manası Yok) Medya Oynatıcı'da onayladı → `video_duzelt.ps1 -Uygula`.
+- Sonuç: **79/79 düzeltildi, 0 hata** (rapor `rapor_20261017_020210.csv`). Yeniden kuru tarama: **0 sorunlu**.
+- Arşiv `D:\Backup\003-Media\_orijinaller\Videos\Abdusselam Kösecik\` : 80 orijinal, 1.714 MB.
