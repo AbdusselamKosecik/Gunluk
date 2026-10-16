@@ -207,6 +207,64 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 
 - **Commit:** `eb4059c` — feat(uretim-plan): calisma takvimi HAT BAZLI + tatil haftasi raporda gorunur
 
+### 7. Eksik SMV'lerin NEDENİ — ölçüldü
+
+- **Neden:** "Gelmeyen SMV'ler neden eksik?" sorusu. 5. maddede eksikliği tespit
+  etmiştim; bu madde sebebini arıyor.
+
+- **Ne yapıldı / Sonuç — dört ölçüm:**
+
+  **(a) Kart yaşı.** Etütü olmayan 13 kartın **hepsi 2026-09-15 ile 2026-10-13
+  arasında** açılmış. Daha eski **190 kartın hepsinde** etüt var.
+
+  **(b) Ama saf zaman gecikmesi DEĞİL.** Kart açılış haftasına göre:
+
+  | Kart haftası | Kart | Etüt yok |
+  |---|---|---|
+  | 2026-09-14 | 9 | 1 (%11) |
+  | 2026-09-21 | 20 | 2 (%10) |
+  | 2026-09-28 | 39 | **0** |
+  | 2026-10-05 | 14 | 2 (%14) |
+  | 2026-10-12 | 32 | 8 (%25) |
+
+  28 Eylül haftasının 39 kartının hepsinde etüt var — yani "son haftalar henüz
+  yapılmadı" açıklaması yetmiyor. Eksiklik **modele özel**.
+
+  **(c) Kategoriye göre — asıl bulgu burada:**
+
+  | Kategori | Order | Etüt yok |
+  |---|---|---|
+  | 5 CEP | 68 | **0** |
+  | NON DENIM | 43 | **0** |
+  | FASHION | 30 | 1 (%3) |
+  | FASHION BASIC | 53 | 4 (%8) |
+  | **GÖMLEK** | **9** | **8 (%89)** |
+
+  Yalnızca Eylül–Ekim kartlarına bakınca da aynı: 5 CEP 0/35, NON DENIM 0/26,
+  GÖMLEK 8/9.
+
+  **(d) Gömlek YENİ bir hat.** Dokuz gömlek kartının hepsi 15 Eylül – 13 Ekim
+  arasında açılmış; yalnızca **biri** (`A7519-1972`, 92 etüt satırı) etüt edilmiş.
+
+- **Elenen yanlış iz:** Etütsüz 13 kartın hepsini "176" numaralı kullanıcı açmış
+  gibi görünüyordu. Kontrol edilince 176 zaten **203 kartın 169'unu** açmış —
+  sinyal değil, taban oran. (Dağılıma bakmasaydım yanlış bir sebep bildirecektim.)
+
+- **Elenen ikinci ihtimal:** Kartların kurulumu eksik değil — sekiz gömlek
+  kartının **hepsinde rota tanımlı** (`01` ya da `04`). Eksik olan yalnızca etüt.
+
+- **Çıkarım:** Yerleşik hatların (5 cep, non-denim) etüt akışı sağlıklı; eksiklik
+  **yeni açılan GÖMLEK hattında yoğunlaşmış** (9 modelden 8'i etüt edilmemiş),
+  yanına da fashion tarafından en yeni birkaç model eklenmiş. Yazılım tarafında
+  yapılacak bir şey yok — veri ERP'de yok. Yapılacak olan, eksiği **eyleme
+  dönüştürülebilir** kılmak.
+
+- **Karar:** Kardeş kart SMV'si otomatik kullanılmayacak (5. maddedeki saçılma:
+  19,5 – 60).
+
+- **Sonraki adım:** Eksik SMV'li orderları numara + model koduyla listeleyen panel
+  + elle SMV girişi (`OverrideSmv` ucu serviste var, ekranı yok).
+
 ## Kararlar (ek)
 
 - Hesap esası sipariş adedi; yıkama/finish aşamaları kesim adedinde kaldı (fiziksel
