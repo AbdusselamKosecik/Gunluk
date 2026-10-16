@@ -73,6 +73,33 @@ rol × ekran tablosu verdi, menüler ona göre ayarlanacak.
   `dotnet format --verify-no-changes` temiz (worktree'de önce Integration build şart).
 - **Commit:** `b21d4173`. Yayın 48 başlatıldı.
 
+### 5. Yayın 48–50: menü matrisi canlıya
+- **Yayın 48 kırmızı (tek kapı):** st44 öz-testi `test_permissionsAll_is_an_AND_condition`
+  vakum oldu — "birincil yetkiyi taşıyıp permissionsAll'dan birini taşımayan rol" artık yoktu
+  (agent konsolu kaybetti). Düzeltme `660fbde3`: test o durumu verinin kopyasında kendisi kurar;
+  üreticinin AND kuralı bozulunca KIRMIZI olduğu doğrulandı.
+- **Yayın 49 kırmızı (Integration 3/1303):** menü değişikliğinin yan etkisi.
+  - `TenantProvisioningDeliveryHttpTests` (2): owner/bayi artık `apikey.manage` taşımıyor.
+    Pin korumasının non-global yolu tenant özel rolüyle (`karar58.apikey`, owner'a ek rol)
+    ölçülür; bayi 403 beklenir; rejected denetim satırı 2→1.
+  - `SessionScopePlatformBoundaryHttpTests` (1): `system.changes.read` platformScopeOnly'den
+    çıktığı için `system.` önek yasağından muaf.
+  - Yerelde 17/17 yeşil. **Commit:** `e6f7e224`.
+- **Yayın 50 yeşil:** `tekbirsoft/pbxtr:demo-e6f7e224da02` (04:48:33Z), push `cf9a72c4..e6f7e224`.
+- **Canlı doğrulama:**
+  - Sunucudaki `/home/vuo/pbxtr-demo/smoke.sh` bayattı (yayın onu güncellemiyor; 8 KALDI hepsi
+    eski beklenti). Depo kopyası `tr -d '\r'` ile kopyalandı (yedek `smoke.sh.bak-20261016`).
+  - Depoda kalan tek bayat satır: menü `demo.agent /live/timeline 0` → 1; ayrıca agent
+    `/console 0`, `/voicemail 0` eklendi (iki kopya: `pbxtr-demo/smoke.sh`, `deploy/demo/smoke-demo.sh`).
+  - Smoke: bir koşuda tek `000` (geçici bağlantı), ardından `Tum makine kontrolleri gecti`.
+  - `/api/v1/me/menu` (betik `scratchpad/menu-olc.sh`): superadmin 29, admin 28, bayi 8,
+    owner 40, supervizor 37, agent 5, wallboard 2 = üretilen `doc/rol-ekran-matrisi.md`.
+- **Sürüm notu** `e6f7e224da02` eklendi, sayfa üretildi; canlı imaja beklemeden
+  `docker cp` + `chmod 644` ile `/app/wwwroot/surum-notlari/index.html` güncellendi
+  (pbxtr.com/surum-notlari/ yeni başlığı gösteriyor).
+- **ClickUp:** BR-FE-135 Bitti (yeni kart), 10 kart complete; `--kuru` fark 0.
+- **Commit'ler:** `b1fcaa2c` (backlog + sürüm notu + smoke), `a324300a` (ClickUp eşlemesi).
+
 ## Kararlar
 - "Super admin tüm yetkili" = platform yönetimi; tenant işletmesi drill-in/taklit ile.
 - Menü gizlemek için yetki silinmez; iş başka ekranda o yetkiyi istiyorsa ekran kendi
@@ -80,7 +107,8 @@ rol × ekran tablosu verdi, menüler ona göre ayarlanacak.
 - Platform kutusu bayiye açılmaz (veri sızıntısı); bayi kendi kutusunu kullanır.
 
 ## Açık kalanlar / sonraki adım
-- Yayın 48 sonucu, canlıda rol menülerinin `/api/v1/me` ile ölçümü, smoke.
+- Sunucu `smoke.sh` yayınla güncellenmiyor — elle kopyalanıyor; yayın betiğine eklenmeli.
+- #62 Platform Destek Kutusu bayiye açılmadı (kullanıcıya bildirildi).
 - KULLANICI: Lark uygulamaya özel SMTP parolası (şu an 535); DKIM selector; Yapilacaklar
   dosyasındaki parolayı silmek.
 - BR-SYS-139: ilk gerçek retention silme koşusunun sayıları.
