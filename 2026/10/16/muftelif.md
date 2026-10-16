@@ -327,6 +327,70 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 - **Sonuç / doğrulama:** 245/245 test, paket yenilendi.
 - **Commit:** `0516e76` — fix(uretim-plan): yikama ve finish de SIPARIS adedinden hesaplanir
 
+### 10. Yıkama raporunun sol bloğu + sağ talep kolonları
+
+- **Neden:** Asiye Hanım'ın 7 Ekim tarihli maili: *"raporun sol kısmını tamamlayalım...
+  en sağda aşağıya kopyaladığım kısım var."*
+
+- **Kritik karar — formülleri görselden çıkarmadım:** Mailin ekindeki ekran
+  görüntüsünün (image002/image004) çözünürlüğü kolon hizasını ayırt etmeye
+  yetmiyordu. Satırları iki görsel arasında eşleştirmeye çalıştım, **dizilim
+  tutmadı** — biri 11 satırda ayrılırken diğeri 4'te ayrılıyordu. Kaynak zaten
+  depoda duruyordu: `Frederic Template v85 week12 PLAN.xlsm`, `Weekly Capacity`
+  sayfası satır 53–74. (image002'nin başlığı da "Week 12" diyordu.)
+
+  Okunan formüller:
+
+  | Kolon | Şablon formülü | Anlamı |
+  |---|---|---|
+  | G | `=E*$E$5*6 + F*$F$5*5` | vardiyalı×7,25×6 + standart×9×5 |
+  | AC `Max Loading` | `=MAX(hafta kolonları)` | en yüksek haftalık yük |
+  | AD `Operators Requirement` | `=AC/43,5` ya da `=AC/45` | kişi başı haftalık saat |
+  | AE `Machine Requirement` | `=ROUNDUP(AD;0)` — **lazerde `=ROUNDUP(AD/3;0)`** | makine 3 vardiya döner |
+
+  **Lazerdeki `/3` görselden çözemediğim şeydi.** 5,6 ÷ 3 = 1,87 → 2,0; raporda
+  yazan değerle birebir. 43,5 = 7,25×6 ve 45 = 9×5 — bir kişinin haftalık saati.
+
+  Not: türettiğim `G` formülü (13 Ekim'de ekran görüntüsünden) şablonla **birebir
+  doğrulandı**. Şablonun kendi tutarsızlığı da görüldü: satır 55 `$E$5` (7,25)
+  yerine sabit `7.5` yazıyor, 405 değeri oradan geliyor.
+
+- **Ne yapıldı:**
+  - Yeni şema kolonları: `operasyon.grup`, `operasyon.kisit_adet` (x1000 units).
+    Kapasite **operasyon başına değil GRUP başına** tanımlı — şablonun yaptığı bu.
+  - `SablonGrup` saf sınıfı: gruplar, sabitler ve üç formül. Tohum buradan dolar,
+    kullanıcı ekrandan değiştirebilir.
+  - Gruplar: DYE & WHITE (9 vardiyalı) · TOTAL LASER (12 vardiyalı, makine 3 vardiya)
+    · TOTAL TOUCH UP LASER (6 standart) · TOTAL TACKING (5 standart) · POTASSIUM (6)
+    · PP SPRAY (6). Her grup tek bir bölümün içinde kalıyor, grup toplamı son
+    üyesinin ardına giriyor.
+  - Yıkama Özeti tablosu: `Kısıt` / `Kadro` / `Müsait sa.` kolonları, **sarı grup
+    toplam satırları**, sağda `Max Yük` / `Operatör` / `Makine`.
+
+- **Dokunulan dosyalar:** `api/Storage/{PlaningDb,OperasyonRepository}.cs`,
+  `api/Sentez/Planning/{SablonGrup,OperasyonKatalog,PlanningModels,PlanningService}.cs`,
+  `web/src/api/planning.ts`, `web/src/components/planning/YikamaOzetTablo.tsx`,
+  `tests/{SablonGrupTests,SemaTests}.cs`
+
+- **Sonuç / doğrulama:** **254/254** test (10 yeni). Dokuz test şablonun sayılarını
+  pinliyor; bu sayılar yönetime giden raporda duruyor ve bir sabit kaydığında
+  (43,5 yerine 45) sonuç yine **makul görünür ama yanlış olur** — ne derleme ne
+  tip sistemi yakalar. Bir test de grup üyelerinin gerçek rapor satırlarıyla
+  eşleştiğini yokluyor; eşleşmezse grup sessizce sıfır gösterirdi.
+
+- **Commit:** `f912da8` — feat(yikama): raporun SOL blogu ve SAG talep kolonlari
+
+## Dersler (gün sonu)
+
+1. **Gerekçeyi koda yazmak onu doğru yapmıyor.** Yıkama/finish'i kesim adedinde
+   bırakma kararımın gerekçesi aşamanın fiziğine bakıyordu, formülün ne yaptığına
+   bakmıyordu (9. madde).
+2. **Düşük çözünürlüklü görselden formül çıkarma.** Kaynak dosya depoda duruyordu
+   (10. madde). "Formülde yok" ≠ "ölçülemez" dersinin ikizi: *"görselde var"
+   ≠ "görselden okunabilir"*.
+3. **Taban oranı kontrol et.** Etütsüz 13 kartın hepsini "176" açmıştı; 176 zaten
+   203 kartın 169'unu açmıştı (7. madde).
+
 ## Kararlar (ek)
 
 - Hesap esası **her aşamada** sipariş adedi (9. madde). Yıkama/finish'i ilk turda
@@ -359,10 +423,7 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
   2. **Tatil haftası raporda hiç görünmüyor** (W37 dikimleri tatil, takvim sıfırlanınca
      hafta listeden düşüyor). İstek: hafta listede sıfırlarla görünsün ki tatil fark
      edilsin.
-- **Yıkama planlama tarafı** (14 Ekim'deki ayrı e-posta) hâlâ açık: kapasite kısıt
-  kolonu (`WEEKLY CAPACITY CONSTRAIN`), grup/TOPLAM satırları, `Max Loading` /
-  `Operators Requirement` / `Machine Requirement` kolonları. Kapsam kullanıcıyla
-  netleşmedi.
+- ~~Yıkama planlama tarafı~~ — **yapıldı** (10. madde).
 - Kurulu sürümdeki Islak bölüm kapasitesi **40.500 saat** görünüyor; muhtemelen
   operasyon parametresine saat yerine dakika girilmiş. Kesinleştirmek için kurulu
   sunucudaki `<site>\data\sentez-planing.db` lazım.
