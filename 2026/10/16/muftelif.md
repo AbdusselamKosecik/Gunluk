@@ -160,6 +160,53 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
   yapabileceği şey eksiği *eyleme dönüştürülebilir* hale getirmek: ekran şu an
   yalnızca `⚠3` gibi bir **sayı** gösteriyor, hangi order olduğunu söylemiyor.
 
+### 6. Çalışma takvimi HAT BAZLI + tatil haftası raporda görünür
+
+- **Neden:** İki ayrı istek aynı işe bakıyordu. (1) 16 Ekim: *"hat bazlı olsun,
+  departman departman"* — bir bant tatil edilirken diğerleri çalışabilmeli.
+  (2) 28 Ağustos: *"W37 dikimler tatil ediliyor... 37. haftaya veri gelmedi.
+  Raporda ilgili haftayı listeye getirip siparişleri sıfır gösterelim."*
+
+- **Ne yapıldı — hat bazlı takvim:**
+  - `work_days` birincil anahtarı `(line_id, tarih)` oldu. `line_id = ''` →
+    **tüm hatlar**; resmî tatiller oraya yazılır, hatlar miras alır.
+  - SQLite `PRIMARY KEY`'i `ALTER` edemediği için tablo **yeniden kuruluyor**
+    (`PlaningDb.WorkDaysHatGocu`). Mevcut günlerin hepsi `''` olur →
+    **göçten sonra davranış aynen korunur.** Göç bayrak yerine **kolon varlığına**
+    bakar, yani idempotent; yarıda kalan çalışma ikinci açılışta tamamlanır.
+  - Çözüm kuralı saf sınıfa çıkarıldı: `HatTakvimi` — *hattın kendi günü tüm
+    hatlar gününü ezer.*
+  - Kapasite tablosu **hattın** takvimini kullanır; aşama planları (kesim/yıkama/
+    finish) hat üstü olduğu için **tüm hatlar** takvimini kullanmaya devam eder.
+  - `calisma-takvimi` uçlarının hepsi (oku/kaydet/export/import) `lineId` taşır.
+  - Ekranda hat seçici; miras alınan gün `takvim-genel` kaynağıyla ayırt edilir.
+
+- **Ne yapıldı — tatil haftası:**
+  - Haftalar artık order'lardan değil, ilk–son arasını **dolduran** diziden geliyor
+    (`HaftaDizisi.Arada`). Order'ı olmayan hafta listeden düşmüyor.
+  - Order'ı olmayan hafta **"sarı" gösterilmiyor**: fark 0 çıkacağı için eski kural
+    tatil haftasını kapasite sorunu gibi okuturdu.
+  - Satırda `tatil` / `plan yok` rozeti.
+  - Dizi yalnızca **ilk–son arasını** doldurur; pencereyi dışarı büyütmek
+    `GetWeeksToplam`'daki "ilk ve son hafta kısmıdır, dışlanır" kuralını bozardı.
+    Bozuk aşama tarihine karşı **120 hafta tavanı** kondu.
+
+- **Yakalanan hata (okuyarak):** Kural serviste dururken `lineId` boşken global
+  takvimin **her günü "miras" işaretleniyordu** — bu resmî tatil işlemeyi bozardı,
+  çünkü tatil mantığı zaten işlenmiş günleri atlıyor. Saf sınıfa çıkarma kararının
+  karşılığı burada geldi; artık regresyon testi var
+  (`Genel_takvim_sorulurken_gunler_MIRAS_sayilmaz`).
+
+- **Dokunulan dosyalar:** `api/Storage/{PlaningDb,UretimPlanRepository}.cs`,
+  `api/Sentez/UretimPlan/{HatTakvimi,HaftaDizisi,UretimPlanService,UretimPlanModels,UretimPlanController}.cs`,
+  `web/src/api/uretimPlan.ts`, `web/src/components/planning/CalismaTakvimi.tsx`,
+  `web/src/pages/UretimPlanlamaPage.tsx`, üç test dosyası
+
+- **Sonuç / doğrulama:** **244/244** test (13 yeni), `tsc -b` temiz. Paket
+  yenilendi; hat seçici ve tatil rozeti metinleri minified JS içinde arandı, bulundu.
+
+- **Commit:** `eb4059c` — feat(uretim-plan): calisma takvimi HAT BAZLI + tatil haftasi raporda gorunur
+
 ## Kararlar (ek)
 
 - Hesap esası sipariş adedi; yıkama/finish aşamaları kesim adedinde kaldı (fiziksel
@@ -169,12 +216,8 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 
 ## Açık kalanlar (güncel)
 
-- **Takvim isteği (16 Ekim):** tatil takvimi, takvimden seçim, **departman departman**.
-  Mevcut durum: `CalismaTakvimi.tsx` zaten aylık takvim ızgarası + resmî tatil
-  gösterimi + uygulama düğmesi sunuyor. Eksik olan **departman boyutu**:
-  `work_days` tablosunun birincil anahtarı yalnızca `tarih`, yani takvim **global**.
-  Departman kırılımı şema değişikliği (`PK (departman, tarih)`) + göç + `WorkDay`
-  tüketen her yer demek. Tasarım kullanıcıya sunulacak, onay bekliyor.
+- ~~Takvim isteği~~ — **yapıldı** (6. madde). Kullanıcı "hat bazlı olsun" dedi,
+  aşama değil hat kırılımı seçildi.
 - **Eksik SMV ekranı:** order numaralarını listeleme + elle SMV girişi
   (`OverrideSmv` ucu serviste VAR, ekranı yok).
 - Yıkama planlama tarafı (14 Ekim e-postası) hâlâ açık.
