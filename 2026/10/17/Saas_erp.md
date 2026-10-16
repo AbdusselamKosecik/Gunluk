@@ -52,3 +52,44 @@
 
 ### Açık kalanlar
 - Diğer modüllerde de `Select → GridifyAsync` sırası olan liste handler'ları olabilir; taranıp aynı desene çekilmesi önerilir.
+
+---
+
+## Ek 2: Stok menüsü ve malzeme kartı kuralları (müşteri listesi)
+
+### Bağlam
+Kullanıcı Stok modülü için 9 maddelik bir liste verdi: menü düzeni (1-6) + malzeme kartı sınıflandırma kuralları (7-9).
+
+### 1. Menü (dal `feat/iki-panelli-menu`, commit `1f10e408`, sonra `ac6644ad`)
+- **Neden:** Hareketler altındaki alt gruplar uzun; referans listeleri (UBL/UNECE/GS1, Kimyasal Maddeler, Varyant Kartları, Birimler) menüde gereksiz; bazı tanımlar yanlış modülde.
+- **Ne yapıldı:**
+  - `two-panel.utils.ts`: başlık satırlarına `key` (modül içi yol, ayraç " › ") eklendi; `applyCollapse` ağaç bilinçli: üst bölümler varsayılan AÇIK, alt gruplar varsayılan KAPALI, `collapsed` listesi = varsayılandan sapan anahtarlar; açık sayfanın grubu ve ataları her zaman açık.
+  - `panel-rows.tsx`: alt grup başlıkları da buton (chevron + sayfa sayısı).
+  - `routes.tsx`: units, variant-cards, unece-unit-codes, ubl-code-lists, chemical-substances, gs1-prefixes → `isNav: false` (route duruyor; iki menüde de gizli).
+  - i18n: InventoryManufacturers "Envanter Üreticileri" → "Üreticiler" (en: "Manufacturers").
+  - `menu-layout.ts`: `MenuPlacement {anchorPath, paths}` — standart sayfayı standart olmayan bir modüle, `anchorPath` sayfasının listesine ekler (başlık dile bağlı olduğu için yol ile hedeflenir; hedef yoksa sayfa yerinde kalır).
+  - `standard-menu-layout.tsx`: Hata Kartları + Kalite Tipleri → Üretim › Tanımlar (anchor /production/machines); Stok Türleri + Stok Cinsleri → Ayarlar (anchor /settings/general); Masraf Tipleri → Finans › Ödemeler; Stok Kartları altına sınıf listeleri.
+- **Test:** `src/layouts` 47 test; Playwright ekran görüntüsü (Stok/Üretim/Ayarlar/Finans).
+
+### 2. Kurul (malzeme kartı kuralları)
+- cto: APPROVE-WITH-CONDITIONS (verisi olan sekme gizlenmesin; Demirbaş→ayrı tip önerisi; ORME/DOKUMA seed; sabitler tek dosyada).
+- skeptic: Faz A APPROVE-WITH-CONDITIONS, **Faz B (InventoryOperationTime tablosu) BLOCK** — rota (RouteItem: OperationId + RunTime) zaten kartla bağlı; ikinci kopya kayar. Alternatif: İş Etüdü'nde rotanın operasyonlarını salt-okunur göster.
+- dba: APPROVE-WITH-CONDITIONS (deterministik Standart tür seçimi; Faz B olursa hard replace-all TenantEntity).
+- product-owner: APPROVE-WITH-CONDITIONS (sınıf değişince uymayan tip temizlenir; Hizmet/Demirbaş/Ticari Mal'da firma tipleri listelenmez; sınıf listeleri; ?class ile Yeni).
+- **Kullanıcı kararı:** Demirbaş → yalnız Ticari Mal (müşteri isteği; CTO itirazı kod yorumuna not edildi).
+
+### 3. Faz A uygulaması (dev, commit `293ef8fc`)
+- **Backend:** `InventoryClass.CommercialGoods = 6`; `SystemInventoryType.Service = 12`; seeder'a ORMEKUMAS/DOKUMAKUMAS/HIZMET; `CreateInventory` KindId boşsa aktif Standart tür (firma kaydı önce, sistem sonra); `GetInventoryTypes`/`GetInventoryKinds` filtre/sıralama entity üzerinde (Select→Gridify 500 hatası).
+- **Frontend:** `inventory-system-classifications.ts` (INVENTORY_CLASS, SYSTEM_TYPE, SYSTEM_KIND, sınıf→tip eşlemesi, `typeFilterForClass`), `inventory-card-rules.ts` (`isTabVisible`, `tabsWithData`), `inventory.detail.tsx` (sınıf seçenekleri, sınıf değişince tip temizleme, filtreli tip lookup wrapper — §3.10 deseni, koşullu sekmeler, ?class + Standart tür varsayılanı), `inventory-kind.api.ts`, tip listesi pageSize 1000, `inventory-class-list.page.tsx` + routes (products, semi-finished, commercial-goods, fixed-assets, services), tip/cins formunda kod boş.
+- **Bulunan eski hata:** `/inventory/inventories/new` route'unda `id` parametresi yok → `isNew` hep false idi; `?type=boya` ön-seçimi hiç çalışmıyordu. `isNew = !id || id === 'new'`.
+- **Bulunan döngü:** yüklenirken her render'da yeni `[]` → efekt formu her seferinde yeniden yazıyordu; değişiklik yoksa `prev` döndürülerek düzeltildi.
+- **Test:** `SqlTranslationCapture` ortak yardımcı (Npgsql çevirisini bağlantısız sınar; Orders testleri buna taşındı). Backend tüm birim testleri 3740 geçti; frontend envanter/app/layout 160 test.
+- **Doğrulama (Playwright):** ?class=4 → sınıf Hizmet, tür Standart, tip lookup'ta yalnız HIZMET, sekmelerde yalnız Hizmet; Mamul/Demirbaş/Ticari Mal sekmeleri doğru; mevcut Dokuma Kumaş kartında Kumaş sekmesi, varyantlı kartta Varyant sekmesi görünüyor.
+- **Not:** Yerel API açılışta yeni sistem tiplerini paylaşılan vuo_dev'e seed etti (idempotent, ekleme).
+
+## Açık kalanlar
+- İş Etüdü: rotanın operasyonlarını (kod, ad, süre, toplam) salt-okunur gösterme — skeptic alternatifi, henüz yapılmadı.
+- Güvenlik: sistem stok tipleri/cinsleri (TenantId = Guid.Empty) her firma tarafından düzenlenip silinebiliyor — ayrı düzeltme önerildi.
+- Firma kendi "Hizmet"/"Örme Kumaş" tipini açtıysa listede iki benzer kayıt görünebilir.
+- ~138 liste handler'ında Select→GridifyAsync sırası (filtrede 500 riski) — taranıp düzeltilmeli (kurul).
+- Menü dalı `dev`'e alınmadı (kurul + kullanıcı onayı bekleniyor).
