@@ -294,10 +294,43 @@ Elimde: iki `.eml` (15 Ekim ve 28 Ağustos), 15 Ekim'in ekinde plan Excel'i
 
 - **Commit:** `7362d33` — feat(uretim-plan): SMV'si olmayan orderlar ekranda ADIYLA listelenir
 
+### 9. Yıkama ve finish de sipariş adedine çevrildi — kendi kararımı düzelttim
+
+- **Neden:** Olcay Bey (WhatsApp, 16 Ekim 12:14): *"zaten %5 ekleyip hesaplıyoruz,
+  kesim adetini alınca üzerine %5 koyuyorsun, sayı uçup gidiyor. Kesim adetleriyle
+  işimiz yok, sen order adetlerini al."*
+
+- **Ne oldu:** 4. maddede dikim tarafını sipariş adedine çevirirken yıkama ve
+  finish'i **bilerek bırakmıştım**; gerekçem "yıkamaya fiilen kesilmiş parça girer"
+  idi ve kodda yazılıydı. **Gerekçem eksikti:** `AsamaWeeks` **her aşamada** kesim
+  payı ekliyor —
+
+  ```csharp
+  decimal plan  = g.Sum(x => adetOf(x.Order));
+  decimal payli = plan * (1 + genel.KesimPayi);
+  ```
+
+  Kesim adedi payı zaten içerdiğinden sonuç `kesim × 1,05` oluyordu. Dahası
+  **"kalan iş" (`payli - fiili`) bu şişmiş sayıdan** hesaplanıyordu; yıkama ve
+  finish fiilen var olmayacak bir adedi açık iş gösteriyordu.
+
+- **Ders:** Bir gerekçeyi kodda yazmak onu doğru yapmıyor. Gerekçe aşamanın
+  *fiziğine* bakıyordu, formülün ne yaptığına bakmıyordu. Esası tek yere
+  (`PlanlamaAdedi`) toplamışken üç aşamadan ikisini dışarıda bırakmak zaten
+  tutarsızlıktı — "bilerek bıraktım" diye not düşmem onu tutarlı yapmadı.
+
+- **Ne yapıldı:** `GetYikamaWeeks` ve `GetFinishWeeks` → `PlanlamaAdedi`.
+  Nöbetçi test genişletildi: **hiçbir aşama ham `Adet`'i esas alamaz**
+  (`Yikama_ve_finish_de_ESASTAN_alir`). Karşılaştırma boşluktan bağımsız yapıldı,
+  satır sarması değişince kırılmasın diye.
+
+- **Sonuç / doğrulama:** 245/245 test, paket yenilendi.
+- **Commit:** `0516e76` — fix(uretim-plan): yikama ve finish de SIPARIS adedinden hesaplanir
+
 ## Kararlar (ek)
 
-- Hesap esası sipariş adedi; yıkama/finish aşamaları kesim adedinde kaldı (fiziksel
-  gerekçe kodda yazılı). Planlama isterse değiştirilir.
+- Hesap esası **her aşamada** sipariş adedi (9. madde). Yıkama/finish'i ilk turda
+  kesim adedinde bırakma kararım **yanlıştı**, aynı gün düzeltildi.
 - Eksik SMV'de kardeş kart değeri **otomatik kullanılmayacak** — ölçülen saçılma
   (19,5 ile 60 arası) buna izin vermiyor.
 
