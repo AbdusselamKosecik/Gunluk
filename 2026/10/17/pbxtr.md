@@ -42,11 +42,48 @@ düzenleyecek), bayi kısıtı için iş kartı.
 - **ClickUp:** yeni kart açıldı, `--kuru` fark 0.
 - **Commit:** `9e81e1c8`.
 
+### 4. Deneme kullanıcıları
+- `POST /api/v1/users` (demo.sahip ile, sunucu parolayı üretir ve bir kez döner):
+  `deneme.agent` (agent), `deneme.supervizor` (supervisor); ikisi de giriş yaptı
+  (`/agent`, `/live/queues`). Parolalar kullanıcıya verildi, depoya/günlüğe yazılmadı.
+- Dahili 1048 açılamadı: `PROVISIONING_BLOCKED extensions.count out-of-range`
+  (`ConfigRenderGuard.AssertAgentQuota`, tenant agent limiti 6). Bunun yerine dahili **1047**
+  "1047" adlı test hesabından `deneme.agent`'a taşındı (`PUT /api/v1/extensions/{id}` + `If-Match` ETag).
+
+### 5. Operatör lab — ikinci Asterisk + masaüstü arayıcı
+- **Neden:** kullanıcı: *"sunucuya baska bir asterisk yukler misin … masa ustunden cagri
+  gonderdigimizde muzik dinletelim … webden alabiliyor muyuz … trunk degerlerini girelim"*.
+- **pbxtr-carrier:** `deploy/carrier-lab/carrier-kur.sh` (sunucuda root, `bash -s`). Aynı imaj
+  `tekbirsoft/pbxtr-asterisk:22-736f570d6557`, `--entrypoint /usr/sbin/asterisk`, kendi config'i
+  `/home/vuo/carrier/etc`; `pbxtr_ic` ağında `172.28.0.13`; SIP `100.106.82.119:5070/udp`,
+  RTP `21000-21049` (yalnız Tailscale). Parola `/home/vuo/carrier/.env` `MASAUSTU_PAROLA`.
+  Dialplan: `600` yerel test; diğerleri `PJSIP/${EXTEN}@to-pbxtr`; arayan `X-Arayan` başlığından.
+- **pbxtr'a girilen değerler (API, demo.sahip):** trunk `operator-lab` host `172.28.0.13`
+  (UDP, register yok, `ulaw,alaw`, `secretRef` zorunlu); DID `02122223344` → kuyruk 8001
+  (`isActive` zorunlu). confd ~15 sn'de `t0007-trunk-operator-lab` + identify `172.28.0.13/32` kurdu.
+- **Masaüstü arayıcı:** `deploy/carrier-lab/masaustu-arayici/` (.NET 10 WinForms, SIPSorcery
+  10.0.17, NAudio 3.2.0; `SIPSorceryMedia.Windows` bu çerçeveyle uyumsuz → gelen ses NAudio ile).
+  Kendi `Directory.Build.props`'u depo kökündekini keser. Yayın:
+  `dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true`
+  → `C:\Users\abdus\Downloads\pbxtr-masaustu-arayici\MasaustuArayici.exe`.
+- **Ölçüm (başsız test kabuğu, aynı `Telefon.cs`):** kayıt OK; `600` cevaplandı; DID çağrısı
+  carrier → trunk → `route-decision=queue,t0007-musteri-hizmetleri` → `Queue(...)`, arayan
+  `05551234567` ulaştı; kuyrukta üye yok → Ring. Hata bulundu ve düzeltildi: çalan çağrıda
+  "Kapat" CANCEL göndermiyordu, çağrı kuyrukta kalıyordu → `SIPUserAgent.Cancel()`; tekrar ölçüldü,
+  kuyruk boş.
+- **Bulgular (kart):** `BR-AST-132` gelen DID→kuyruk çağrısı `[pbxtr-dialer]`'da
+  `__PBXTR_DIR=out` ile eziliyor (`ConfigRenderer.cs:1132`); `BR-AST-133` trunk auth'ta
+  `username` yok.
+- **Commit:** `157e7332`.
+
 ## Kararlar
 - Bayi altındaki tenantları işletmez; işletme kendi tenant'ında owner hesabıyla (kullanıcı).
 
 ## Açık kalanlar / sonraki adım
 - BR-SEC-33 uygulaması.
+- Kullanıcı testi: deneme.agent web'den girip 1047 WebRTC kaydıyla kuyruktan çağrıyı açacak
+  ve müziği duyacak — **henüz ölçülmedi**.
+- BR-AST-132 (yön), BR-AST-133 (trunk kullanıcı adı).
 - Kullanıcının Excel'de yapacağı düzeltmeler → seed/screens'e işlenecek.
 - KULLANICI: Lark uygulama parolası, DKIM kaydı + selector, DMARC; Yapilacaklar dosyasındaki
   parolayı silmek.
