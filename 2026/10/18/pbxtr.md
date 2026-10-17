@@ -74,3 +74,20 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - `deploy/lib/pbxtr-migrate-adimi.sh`'te `MESAI_MUAFIYETI_YASAK` listesi ve ilgili kapılar
   (kapi_53/55/68/86, öz-testler) artık ölü/kırmızı — testler açılınca temizlenecek.
 - Kullanıcı testi: "Kabul et" ile çağrıyı açıp müziği duymak.
+
+## Ek (gece, ikinci tur)
+
+### 8. "Canlı agent satırı yok" — deneme.agent kuyrukta değildi
+- **Neden:** santral yeniden başlatma (22:20Z) + yayın 52 app yeniden yaratması sonrası pbxtr kuyruk
+  üyeliklerini DB'den yeniden kurdu; `deneme.agent` DB'de Müşteri Hizmetleri üyesi değildi (1047'nin
+  önceki üyeliği santralde eski "1047" kullanıcısından kalma izdi).
+- **Ne yapıldı:** `POST /api/v1/queues/11111111-…-11114abdf860/members`
+  `{"userId":"23fba84c-…","penalty":0}` → 201, `Local/1047@pbxtr-t0007-local/n`.
+- **Sonuç:** kadro satırı geldi; kullanıcının çağrısı tarayıcıdan açıldı (`PJSIP/t0007-wrtc-1047` Up,
+  `on_call`) — "Kabul et" düzeltmesi canlıda ölçüldü.
+
+### 9. Konsol hataları
+- `GET /api/v1/sim/scenario` 404: `SimulationProvider` artık yalnız `/me.telephonyMode==='simulated'`
+  iken yokluyor. Commit `1dfb575e` (push edildi, yayın kullanıcı testi bitince).
+- Cloudflare Web Analytics beacon CSP'ye takılıyor: Cloudflare kenarda otomatik enjekte ediyor;
+  öneri panelden kapatmak (CSP gevşetilmedi).
