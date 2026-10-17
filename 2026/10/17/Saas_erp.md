@@ -25,6 +25,16 @@
 ## Kararlar
 - Gruplama `routes.tsx` yerine menü katmanında yapıldı. Sebebi: route adresleri ebeveyn yolundan türetiliyor; öğeleri taşımak adresleri ve linkleri bozardı.
 
+### 4. Sistem kayıt koruması + İş Etüdü rota süreleri (dev, commit )
+- **Neden:** Sistem stok tipi/cinsi (TenantId = Guid.Empty) tüm firmalarda ortak; herhangi bir firma Update/Delete ile değiştirip silebiliyordu. Kullanıcı: "devam et, sistem tiplerinin korunmasını da düzelt" (İş Etüdü'nde skeptic alternatifine devam onayı).
+- **Kurul:** cto + skeptic APPROVE-WITH-CONDITIONS. security-reviewer **BLOCK**: (1) tip/cins/birim seti yazma uçlarında hiç [RequirePermission] yok — PermissionGateMiddleware attribute yoksa geçiriyor, izleyici bile yazabiliyordu; (2) UpdateUnitSet, CreateUnitSetItem, DeleteUnitSetItem'da sistem guard'ı yok; (3) Delete sonucunda Forbidden → 500 eşlemesi. Üçü de giderildi.
+- **Backend:** Update/Delete Type/Kind + UpdateUnitSet + Create/DeleteUnitSetItem:  → Forbidden (, UnitSet mevcut kodu). CreateUnitSetItem önce set varlığını kontrol eder (NotFound). Sonuçlara  (Select içinde SQL). MasterDataController + InventoryController: tip/cins create/edit/delete, birim seti create/edit/delete/save/clone, satır ekle(create)/sil(edit) → [RequirePermission("inventory", ...)]. **ApiKeyScope bilerek eklenmedi** (fail-closed: attribute yoksa API anahtarı erişemez; eklemek entegrasyon anahtarlarına yeni kapı açardı). İki controller'ın HandleDeleteResult'ına Forbidden→403.
+- **Rollout testi:**  tip/cins uçlarını "kapsam dışı" diye sabitliyordu; listeden çıkarıldı, yeni  eklendi.
+- **Frontend:**  (,  — useMe().isSuperAdmin, ); tip/cins formu sistem kaydında kilitli (fieldset disabled + uyarı), listede ; error-messages.ts tr/en.
+- **İş Etüdü:**  + :  (sessiz istek, retry yok). Firmada üretim modülü yoksa sorgu HİÇ atılmaz — axios  gelince kullanıcıyı ana sayfaya atıyor (silent'tan önce çalışıyor). Aktif rota önce/sonra en yeni sürüm; hazırlık/çalışma/bekleme ayrı toplanır (çalışma birim başına olduğu için toplanmaz); makine = effectiveMachineName. : yeni rotada  ile ürün hazır seçili; modül seçimi zaten zorunlu (§3.10). InventoryItem.RouteId'ye dokunulmadı.
+- **Test:** backend tüm birim testleri 3770 geçti (yeni: SystemTypeKindProtectionTests 10, UnitSetSystemProtectionTests 7, permission contract 13); frontend inventory+production 270 test; typecheck temiz.
+- **Doğrulama (Playwright):** tip listesi  dönüyor; dev DB'de karta bağlı rota olmadığı için rota yanıtı page.route ile taklit edildi (paylaşılan DB'ye test verisi yazılmadı) → kart tablo + toplam (25 / 6,15 / 2) + Pasif rozeti doğru; "Rota oluştur" ürünü dolu açıyor. Tenant kullanıcısı gözünden kilitli form görülmedi (elde yalnız süper admin hesabı var). ux-reviewer çalıştırılamadı (chrome-devtools MCP bağlanmadı).
+
 ## Açık kalanlar / sonraki adım
 - Kullanıcı onaylarsa kurul (CTO, Şüpheci, UX, Product Owner) çalıştırılacak, `dev`'e merge edilecek ve changelog maddesi eklenecek.
 - Yeni modül başlıkları sabit Türkçe; i18n anahtarı yok (İngilizce arayüzde de Türkçe görünür).
@@ -88,8 +98,9 @@ Kullanıcı Stok modülü için 9 maddelik bir liste verdi: menü düzeni (1-6) 
 - **Not:** Yerel API açılışta yeni sistem tiplerini paylaşılan vuo_dev'e seed etti (idempotent, ekleme).
 
 ## Açık kalanlar
-- İş Etüdü: rotanın operasyonlarını (kod, ad, süre, toplam) salt-okunur gösterme — skeptic alternatifi, henüz yapılmadı.
-- Güvenlik: sistem stok tipleri/cinsleri (TenantId = Guid.Empty) her firma tarafından düzenlenip silinebiliyor — ayrı düzeltme önerildi.
+- Güvenlik (kalan): MasterDataController/InventoryController'daki diğer stok tanım yazma uçlarında (marka, özellik, özel kod vb.) da [RequirePermission] yok — ayrı tur.
+- Süper admin bir sistem tipini silerse tüm firmalarda kaybolur; kullanımda mı kontrolü yok (CTO teknik borç).
+- UX post-check (ux-reviewer) chrome-devtools MCP bağlanınca yapılmalı.
 - Firma kendi "Hizmet"/"Örme Kumaş" tipini açtıysa listede iki benzer kayıt görünebilir.
 - ~138 liste handler'ında Select→GridifyAsync sırası (filtrede 500 riski) — taranıp düzeltilmeli (kurul).
 - Menü dalı `dev`'e alınmadı (kurul + kullanıcı onayı bekleniyor).
