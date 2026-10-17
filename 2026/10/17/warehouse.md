@@ -80,8 +80,27 @@ sayfası yok; detay sayfası (`/Orders/Detail/{id}`) düzenleme yeri olarak seç
 - Not tek alan, 1000 karakter; ayrı "ilgili sipariş no" alanı açılmadı (müşteri serbest not istedi).
 - `BoxSilRzvYenileWindow` (rezervasyon yenileme) listesine acil/not eklenmedi.
 
+### 5. Canlı DB script'i + yayın paketleri
+- **Neden:** Kullanıcı script'in çalıştırılmasını ve sunucu/terminal paketlerini istedi.
+- **Komutlar:**
+  ```bash
+  # parola appsettings.json'dan okunur, ekrana basılmaz
+  sqlcmd -S 192.168.1.22 -d SentezLive -U sa -P "$PW" -C -b -i sql/add_UZM_Order_Notes_IsUrgent.sql
+  cd src/Warehouse && dotnet publish Warehouse.csproj -p:PublishProfile=FolderProfile -c Release
+  cd src/Warehouse.Terminal && dotnet publish Warehouse.Terminal.csproj -p:PublishProfile=FolderProfile -c Release
+  # zip: Compress-Archive (PowerShell)
+  ```
+- **Sonuç / doğrulama:**
+  - DB: `Notes nvarchar(1000)` (max_length 2000 bayt), `IsUrgent bit NOT NULL`; 548 sipariş, hepsi IsUrgent=0.
+  - Web: `src/Warehouse/bin/Release/net10.0/win-x64/warehouse-web-2026-10-17.zip` (84 MB, 400 dosya,
+    self-contained). i18n.js/indigo-loom.css/Warehouse.dll içinde yeni kod doğrulandı. Paket
+    `appsettings.json` içeriyor — sunucudaki ayar dosyasının üzerine yazılmamalı.
+  - Terminal: `src/Warehouse.Terminal/bin/Release/net10.0-windows/publish/warehouse-terminal-2026-10-17.zip`
+    (61 MB; single-file `Warehouse.Terminal.exe` + 5 native dll). Terminal APK değil, WPF Windows exe.
+    Exe sıkıştırılmış bundle olduğundan doğrulama `obj/.../Warehouse.Terminal.dll` üzerinde UTF-16
+    string araması ile yapıldı ("IsUrgent DESC", "!! ACIL !!" var).
+
 ## Açık kalanlar / sonraki adım
-- `sql/add_UZM_Order_Notes_IsUrgent.sql` canlı DB'de çalıştırılacak (yayından ÖNCE).
-- Web publish + terminal publish; canlıda test: sepet → not/acil, detay düzenleme, liste filtreleri, Excel,
+- Sunucuya web paketi, terminallere exe kurulumu (kullanıcı yapacak); canlıda test: sepet → not/acil, detay düzenleme, liste filtreleri, Excel,
   terminalde kırmızı satır ve bant.
 - Müşteriye cevap yazılacak.
