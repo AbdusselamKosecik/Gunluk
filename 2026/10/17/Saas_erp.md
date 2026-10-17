@@ -25,16 +25,6 @@
 ## Kararlar
 - Gruplama `routes.tsx` yerine menü katmanında yapıldı. Sebebi: route adresleri ebeveyn yolundan türetiliyor; öğeleri taşımak adresleri ve linkleri bozardı.
 
-### 4. Sistem kayıt koruması + İş Etüdü rota süreleri (dev, commit )
-- **Neden:** Sistem stok tipi/cinsi (TenantId = Guid.Empty) tüm firmalarda ortak; herhangi bir firma Update/Delete ile değiştirip silebiliyordu. Kullanıcı: "devam et, sistem tiplerinin korunmasını da düzelt" (İş Etüdü'nde skeptic alternatifine devam onayı).
-- **Kurul:** cto + skeptic APPROVE-WITH-CONDITIONS. security-reviewer **BLOCK**: (1) tip/cins/birim seti yazma uçlarında hiç [RequirePermission] yok — PermissionGateMiddleware attribute yoksa geçiriyor, izleyici bile yazabiliyordu; (2) UpdateUnitSet, CreateUnitSetItem, DeleteUnitSetItem'da sistem guard'ı yok; (3) Delete sonucunda Forbidden → 500 eşlemesi. Üçü de giderildi.
-- **Backend:** Update/Delete Type/Kind + UpdateUnitSet + Create/DeleteUnitSetItem:  → Forbidden (, UnitSet mevcut kodu). CreateUnitSetItem önce set varlığını kontrol eder (NotFound). Sonuçlara  (Select içinde SQL). MasterDataController + InventoryController: tip/cins create/edit/delete, birim seti create/edit/delete/save/clone, satır ekle(create)/sil(edit) → [RequirePermission("inventory", ...)]. **ApiKeyScope bilerek eklenmedi** (fail-closed: attribute yoksa API anahtarı erişemez; eklemek entegrasyon anahtarlarına yeni kapı açardı). İki controller'ın HandleDeleteResult'ına Forbidden→403.
-- **Rollout testi:**  tip/cins uçlarını "kapsam dışı" diye sabitliyordu; listeden çıkarıldı, yeni  eklendi.
-- **Frontend:**  (,  — useMe().isSuperAdmin, ); tip/cins formu sistem kaydında kilitli (fieldset disabled + uyarı), listede ; error-messages.ts tr/en.
-- **İş Etüdü:**  + :  (sessiz istek, retry yok). Firmada üretim modülü yoksa sorgu HİÇ atılmaz — axios  gelince kullanıcıyı ana sayfaya atıyor (silent'tan önce çalışıyor). Aktif rota önce/sonra en yeni sürüm; hazırlık/çalışma/bekleme ayrı toplanır (çalışma birim başına olduğu için toplanmaz); makine = effectiveMachineName. : yeni rotada  ile ürün hazır seçili; modül seçimi zaten zorunlu (§3.10). InventoryItem.RouteId'ye dokunulmadı.
-- **Test:** backend tüm birim testleri 3770 geçti (yeni: SystemTypeKindProtectionTests 10, UnitSetSystemProtectionTests 7, permission contract 13); frontend inventory+production 270 test; typecheck temiz.
-- **Doğrulama (Playwright):** tip listesi  dönüyor; dev DB'de karta bağlı rota olmadığı için rota yanıtı page.route ile taklit edildi (paylaşılan DB'ye test verisi yazılmadı) → kart tablo + toplam (25 / 6,15 / 2) + Pasif rozeti doğru; "Rota oluştur" ürünü dolu açıyor. Tenant kullanıcısı gözünden kilitli form görülmedi (elde yalnız süper admin hesabı var). ux-reviewer çalıştırılamadı (chrome-devtools MCP bağlanmadı).
-
 ## Açık kalanlar / sonraki adım
 - Kullanıcı onaylarsa kurul (CTO, Şüpheci, UX, Product Owner) çalıştırılacak, `dev`'e merge edilecek ve changelog maddesi eklenecek.
 - Yeni modül başlıkları sabit Türkçe; i18n anahtarı yok (İngilizce arayüzde de Türkçe görünür).
@@ -96,6 +86,49 @@ Kullanıcı Stok modülü için 9 maddelik bir liste verdi: menü düzeni (1-6) 
 - **Test:** `SqlTranslationCapture` ortak yardımcı (Npgsql çevirisini bağlantısız sınar; Orders testleri buna taşındı). Backend tüm birim testleri 3740 geçti; frontend envanter/app/layout 160 test.
 - **Doğrulama (Playwright):** ?class=4 → sınıf Hizmet, tür Standart, tip lookup'ta yalnız HIZMET, sekmelerde yalnız Hizmet; Mamul/Demirbaş/Ticari Mal sekmeleri doğru; mevcut Dokuma Kumaş kartında Kumaş sekmesi, varyantlı kartta Varyant sekmesi görünüyor.
 - **Not:** Yerel API açılışta yeni sistem tiplerini paylaşılan vuo_dev'e seed etti (idempotent, ekleme).
+
+### 4. Sistem kayıt koruması + İş Etüdü rota süreleri (dev, commit `dc56f8a4`)
+- **Neden:** Sistem stok tipleri ve cinsleri (`TenantId = Guid.Empty`) tüm firmalarda ortak, ama herhangi bir firma bunları Update/Delete ile değiştirip silebiliyordu. Kullanıcının isteği: "devam et, sistem tiplerinin korunmasını da düzelt". Bu aynı zamanda İş Etüdü için skeptic'in önerdiği yola devam onayı.
+- **Kurul:**
+  - cto ve skeptic: APPROVE-WITH-CONDITIONS.
+  - security-reviewer: **BLOCK**, üç bulguyla (üçü de giderildi):
+    1. Stok tipi, stok cinsi ve birim seti yazma uçlarında hiç `[RequirePermission]` yoktu. PermissionGateMiddleware attribute yoksa isteği geçiriyor, yani izleyici rolü bile yazabiliyordu.
+    2. UpdateUnitSet, CreateUnitSetItem ve DeleteUnitSetItem'da sistem guard'ı yoktu.
+    3. Delete sonucunda Forbidden hatası 500 olarak dönüyordu.
+- **Backend:**
+  - Guard: Update/Delete Type ve Kind, UpdateUnitSet, Create/DeleteUnitSetItem'da `TenantId == SystemTenantId && !IsSuperAdmin` ise Forbidden döner.
+    - Hata kodları: tip/cins için `inventory.type.system_read_only` ve `inventory.kind.system_read_only`; birim seti için mevcut UnitSet kodu.
+    - CreateUnitSetItem önce setin var olduğunu kontrol eder, yoksa NotFound döner.
+  - Sonuçlara `IsSystem` alanı eklendi; Select içinde hesaplandığı için SQL'e çevriliyor.
+  - `[RequirePermission("inventory", ...)]` eklenen uçlar (MasterDataController ve InventoryController):
+    - Stok tipi ve cinsi: create, edit, delete.
+    - Birim seti: create, edit, delete, save, clone.
+    - Birim seti satırı: ekleme `create`, silme `edit`.
+  - **ApiKeyScope bilerek eklenmedi.** Sistem fail-closed çalışıyor: attribute yoksa API anahtarı zaten erişemiyor. Eklemek entegrasyon anahtarlarına yeni bir kapı açardı.
+  - İki controller'ın HandleDeleteResult'ında Forbidden artık 403 döner.
+- **Rollout testi:** `RequirePermissionContractTests.InventoryMasterDataMutations_RemainOutsideThisRollout` tip/cins uçlarını "kapsam dışı" diye sabitliyordu. Bu uçlar listeden çıkarıldı ve yeni `InventorySharedMasterDataPermissionContractTests` eklendi.
+- **Frontend:**
+  - Yeni `features/inventory/utils/system-record.tsx`: `canModifyRecord`, `useCanModifyRecord` (süper admin bilgisini `useMe().isSuperAdmin`'den alır) ve `SystemRecordNotice`.
+  - Tip/cins düzenleme formu sistem kaydında kilitli açılır (fieldset disabled + uyarı); listede Sil düğmesi `canDelete` ile gizlenir.
+  - `error-messages.ts`'e tr/en mesajları eklendi.
+- **İş Etüdü:**
+  - Yeni `work-study-routes.tsx` ve `work-study-routes.utils.ts`. Kart, `GET /production/routes?filter=inventoryId=<id>&pageSize=100` ile karta bağlı rotaları çeker (sessiz istek, yeniden deneme yok).
+  - Firmada üretim modülü yoksa sorgu **hiç atılmaz**. Sebep: axios `Subscription.ModuleNotInPlan` hatasında kullanıcıyı ana sayfaya atıyor ve bu kontrol silent'tan önce çalışıyor.
+  - Aktif rota önce, ardından en yeni sürüm gösterilir; makine adı `effectiveMachineName`'den gelir.
+  - Hazırlık, çalışma ve bekleme süreleri ayrı ayrı toplanır, birbirine eklenmez; çalışma süresi birim başına.
+  - `route_detail.page.tsx`: yeni rota `?inventoryId&inventoryName` ile ürün hazır seçili açılır. Modül seçimi zaten zorunlu (§3.10).
+  - `InventoryItem.RouteId`'ye dokunulmadı.
+- **Test:**
+  - Backend birim testlerinin hepsi geçti (3770). Yeni testler: SystemTypeKindProtectionTests 10, UnitSetSystemProtectionTests 7, permission contract 13.
+  - Frontend inventory ve production testleri geçti (270); typecheck temiz.
+- **Doğrulama (Playwright):**
+  - Tip listesi `isSystem` alanını döndürüyor.
+  - Dev DB'de karta bağlı rota olmadığı için rota yanıtı `page.route` ile taklit edildi; paylaşılan DB'ye test verisi yazılmadı.
+    - Kart, tabloyu ve toplamları (25 / 6,15 / 2) doğru gösterdi; pasif rotada "Pasif" rozeti var.
+    - "Rota oluştur" ürünü dolu açıyor.
+  - Firma kullanıcısının gözünden kilitli form görülmedi; elde yalnız süper admin hesabı var.
+  - ux-reviewer çalıştırılamadı (chrome-devtools MCP bağlanmadı).
+- **Not:** Günlüğe ilk yazımda kabuk, metindeki ters tırnakları komut sandı; bölüm bozuk girdi ve düzeltildi.
 
 ## Açık kalanlar
 - Güvenlik (kalan): MasterDataController/InventoryController'daki diğer stok tanım yazma uçlarında (marka, özellik, özel kod vb.) da [RequirePermission] yok — ayrı tur.
