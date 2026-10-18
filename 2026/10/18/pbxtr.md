@@ -147,3 +147,4 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
   (sunucuda böyle bir engel yok).
 - **Düzeltme:** bu sekmedeki softphone `registered|ringing|in-call` ise engel uygulanmaz.
 - **Kalan:** yalnız masa telefonlu agent için örnekleyici gecikmesi (5 dk) sürüyor.
+- Yayın 55: iki deneme Docker Hub push ağ kopmasıyla düştü (proxy `172.29.0.1:3128` "use of closed network connection"); `docker push` elle geçti, üçüncü koşu yeşil: tekbirsoft/pbxtr:demo-b78821c55c58, push başarılı.
