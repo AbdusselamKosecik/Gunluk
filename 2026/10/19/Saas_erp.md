@@ -75,3 +75,38 @@ Skeptic'in uyarısı üzerine iş dört gruba bölündü:
 - D: Hangfire ile hafta içi 15:45'te TCMB kuru; buton kaldırılacak; kurun tarihi gösterilecek.
 - Faz 2: teklif, sipariş, talep ve fatura ekranları.
 - UX ve güvenlik post-check'leri çalışıyor.
+
+### 6. UX post-check düzeltmeleri — `fdd39787`
+- **Neden:** ux-reviewer post-check sonucu PASS-WITH-NOTES; notlardaki eksikler kapatıldı. (Güvenlik post-check'i tip değiştirme guard'ı için PASS verdi.)
+- **Ne yapıldı:**
+  - Döviz Cinsi SelectTrigger `size="sm"` ile h-8 yapıldı.
+  - Başlık alanlarına `id`/`htmlFor` bağları eklendi.
+  - Tip değiştirme dialog'unda liste Giriş/Çıkış/Transfer/Düzeltme gruplarına ayrıldı ve mevcut tip gösteriliyor.
+  - Başlık text-xl font-semibold yapıldı; butona ikon eklendi.
+- **Kapsam dışı bırakılanlar:**
+  - Grid'deki Birim/Depo hücrelerinin 36px yüksekliği eskiden beri var; ortak grid işi.
+  - Dialog'daki "Close" etiketi ortak bileşenden geliyor.
+  - Onaylı fişte "Güncelle" butonunun aktif kalması eski davranış.
+
+### 7. Dip İndirim ve Masraflar sekmesi — `8e56761a`
+- **Neden:** Kullanıcı "ekranda indirimler sekmesi yok" dedi; C grubu öne alındı.
+- **Ne yapıldı:**
+  - **Migration** `20261018213313_InventoryReceiptDiscount_HeaderCharges`:
+    - Yalnız ekleme: Description varchar(500), CalcType int default 0, VatRate numeric(18,6) default 0, SortOrder int default 0.
+    - `IX_InventoryReceiptDiscount_TenantId_ReceiptId` index'i.
+    - Down adımı var.
+    - Yerel API açılışta bunu ortak dev DB'ye uyguladı ("1 bekleyen migration uygulanıyor").
+  - **`ReceiptHeaderChargeSync`:**
+    - Dip satırları (ReceiptItemId=null; ItemType 100 = indirim, 101 = masraf) Create/Update'te silinip yeniden yazılır.
+    - İki liste de null gelirse satırlara dokunulmaz.
+    - `LoadAsync`, GetReceiptById'de `HeaderCharges` olarak döner.
+  - **FE:**
+    - `receipt-header-charges.ts`: `toHeaderChargePayload` (oran → CalcType 0, tutar → 1) ve `fromHeaderChargeResults`.
+    - `components/receipt-header-charges-tab.tsx`: Tür, Açıklama, Oran, Tutar, KDV (yalnız masrafta), sil; altta sunucunun hesapladığı toplamlar.
+    - Sekme state'i fiş yüklenince doluyor.
+    - Payload, preview-totals isteğine ve "kaydedilmemiş değişiklik" kontrolüne bağlandı.
+- **Test:**
+  - Backend: 5 yeni test (sıralı saklama, iki kez kayıtta çoğalmama, boş liste siler, null liste korur, GetById döner). Receipt filtreli 609 test geçti.
+  - FE: 6 yeni test; inventory testleri 198 geçti.
+  - Playwright: kayıtlı fişte sekmeden %10 indirim ve 250 TL + %20 KDV masraf eklendi. Preview isteği doğru payload'ı gönderdi; dönen toplamlar: masraf 250, genel toplam 300. Kaydetme ekrandan denenmedi; ortak DB'ye test verisi yazılmadı.
+- **Açık kalan:** CloneReceipt dip satırları kopyalamıyor.
