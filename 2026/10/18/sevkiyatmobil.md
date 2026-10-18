@@ -79,3 +79,18 @@ Cihaz: PM66 (adb 39916cf0), 480x800, uygulama Arapça. Ana menü: "Mamul giriş 
   Önce `KoliZatenMamulde` ile kırmızıydı (sahadaki hata), sonra yeşil. 83/83.
 - **Kurulum:** `dagitim/sevkiyatmobil-2026-10-18c.apk` → `adb install -r` Success.
 - **Commit:** `5b6741e`. Push edildi.
+
+### 6. Mamul girişinde "Object reference not set" (Android release budaması)
+- **Kullanıcı:** "object not bilmem ne hatası veriyor."
+- **Teşhis:**
+  - Release APK debuggable değil, `run-as` çalışmıyor.
+  - `dotnet build SevkiyatMobil.Android -c Debug -f net10.0-android -p:EmbedAssembliesIntoApk=true` ile debuggable APK üzerine kuruldu (aynı varsayılan debug imzası, `install -r` veriyi koruyor).
+  - `adb shell run-as com.modfex.sevkiyatmobil cat files/Modfex/sevkiyatmobil/log/2026-10-18.log` ile uygulama günlüğü okundu.
+  - Hata: `NullReferenceException at RuntimeILGenerator.Emit … Dapper.SqlMapper.GenerateValueTupleDeserializer … SevkDeposu.IcerikAsync`.
+  - Aynı koli (PK1-00000002-002) masaüstünde, ROLLBACK'li transaction'da sorunsuz alındı (MamulAlindi). Yani hata yalnız Android'de.
+- **Neden:** Bugün (12c20a3) `IcerikAsync` iş emri alanlarıyla 7'li ValueTuple'a okunur oldu. Android release budaması ValueTuple`7 kurucusunu siliyor; Dapper IL üretirken null ConstructorInfo. 2'li tuple'lar sahada çalışıyor.
+- **Düzeltme:** `IcerikAsync` → `private sealed class IcerikHam` (SQL alias'ları Ori/Oriv/Wi/Wiv). Kodda başka çok elemanlı tuple yok.
+- **Test:** 83/83. Budama masaüstü testinde tekrarlanamıyor; doğrulama sahada okutmayla.
+- **Kurulum:** `dagitim/sevkiyatmobil-2026-10-18d.apk` (Release) → Success; debuggable değil (teşhis sürümünün yerine geçti).
+- **Commit:** `ea79798`. Push edildi.
+- **Ders:** Android'de Dapper'a çok elemanlı ValueTuple verme; sınıf kullan.
