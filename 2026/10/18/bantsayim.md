@@ -149,3 +149,20 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
   - Bu PC'de `%LOCALAPPDATA%\Modfex\bantsayim\ayarlar.json` Sunucu = 192.168.0.2 yapıldı (yedek: `ayarlar.json.yedek-2026-10-18`).
   - `dotnet BantSayim.Desktop.dll` ile açıldı. Canlıda TestModu = 0: doğru barkod okutmak gerçek box açar.
 - **Sonuç:** Siparişe bağlanmamış iş emirleri (4314-2, 4222-2, 4316-2…) bu akışla seçilemez. Kullanıcıya bildirildi.
+
+### 9. Kesim kutucuklarının renkleri (kullanıcı: "okunanları yeşil, eksik okunanları sarı, en son okutulanın çerçevesi kırmızı")
+- **Neden:** Tamamlanan beden kutusu kırmızı görünüyordu (hata gibi algılanıyordu).
+- **Ne yapıldı:**
+  - `KesimSatiriGorunum(s, son)`: `Bitti` (kalan ≤ 0), `Eksik` (0 < okutulan < kesim), `Son`.
+  - VM: `SonVaryantId` başarılı okutma/silmede set ediliyor, iş emri değişince sıfırlanıyor.
+    `OnAktifIsEmriChanged` → `KesimTablosunuYenile()` (açık çağrılar da duruyor).
+  - `OkutmaView.axaml` stilleri:
+    - eksik `#fff1b8` / kenar `#e3c34d`
+    - tamam `#cdeccf` / kenar `#6fbf78`, kalan yazısı `#1f7a2e`
+    - son: kenar `#d32f2f`, kalınlık 3 (iç boşluk 2 px azaltıldı, kutu boyu değişmiyor)
+    - hiç okutulmamış: eski gri
+  - Test projesine Avalonia.Headless + Avalonia.Skia 12.1.2 eklendi (kesimhane ile aynı sürüm).
+    `EkranGoruntusuTestleri.Kesim_kutucuklari_render_edilir`: `MODFEX_TEST_CIKTI` verilirse örnek veriyle PNG üretiyor; görüntü kontrol edildi.
+- **Test:** `KesimKutusuTestleri` (4) önce derlenmedi (kırmızı), sonra yeşil. Toplam 91/91 (DB dahil).
+- **Commit:** `9ef443a`. Push edildi. Yerel deneme uygulaması yeni haliyle yeniden açıldı. Kiosk'a kurulmadı.
+- "dilden geçilerim" ifadesi anlaşılamadı; bu tabloyla ilgili varsayıldı, kullanıcıya soruldu.
