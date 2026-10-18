@@ -136,3 +136,14 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - Yayın 54 (`--yayinla --testsiz`) başlatıldı.
 
 - Yayın 54 yeşil: `tekbirsoft/pbxtr:demo-c10f51708e44`, push `3fe82e4d..047ecd44`. Kullanıcı testi bekleniyor (Kabul et tek dokunuş + ACW → sonuç kodu → müsait).
+
+### 13. Kayıt uyarısı yanlış alarm — "Müsait" kilidi (`b78821c5`)
+- **Kullanıcı:** *"Telefonunuz santralde kayıtlı değil … geliyor"* (çağrı geliyor ama uyarı var).
+- **Ölçüm:** `pbxtr_sys.job_runs` → `registration-sampler` canlıda ~5 dk'da bir (ortak tick).
+  Redis `pbxtr:1111…:telephony:registration` 05:05:49 ölçümünde `t0007-wrtc-1047 false`
+  (yayın 54 uygulamayı yeniden başlatırken tarayıcı yeniden kayıt oluyordu); 05:13:35 → `true`.
+  `pjsip show contacts` aynı anda kaydı gösteriyordu.
+- **Etki:** `HeaderStatusMenu.tsx` `phoneNotRegistered` uyarıyı çizip "Müsait"i de kilitliyordu
+  (sunucuda böyle bir engel yok).
+- **Düzeltme:** bu sekmedeki softphone `registered|ringing|in-call` ise engel uygulanmaz.
+- **Kalan:** yalnız masa telefonlu agent için örnekleyici gecikmesi (5 dk) sürüyor.
