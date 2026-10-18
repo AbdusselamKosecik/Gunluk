@@ -81,7 +81,7 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
   tüm suite 683/683 yeşil.
 - **Canlı doğrulama:** yeni filtre ile 10 kişi raporda, yalnız 24 dışarıda.
 - **Commit:** `ad28b42` — PDKS: emp_code 24 filtresi kalkti; aktif ve is tipi Gecici (emp_type=2) olmayanlar raporlanir. Push edildi.
-- **Yayın:** henüz paket çıkarılmadı / sunucuya (192.168.1.5 MDSMHYPERV, port 81) kurulmadı.
+- **Yayın:** bkz. "Yayın paketi" (sunucu 192.168.1.4, port 81).
 
 ### 2. İkinci PDKS kaynağı: http://192.168.1.3:8095 (açık)
 - **Kullanıcı:** aynı raporu bu ikinci BioTime'dan da, aynı saatlerde, ayrı alıcılara göndermek istiyor (alıcıları kendisi girecek).
@@ -131,6 +131,27 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
 - **Commit:** `26767e6` — PDKS: ikinci kaynak 192.168.1.3:8095 BioTime API raporu (pdks-raporu-2). Push edildi.
 
 ## Açık kalanlar (Modasima)
-- Yayın paketi çıkarılıp 192.168.1.5'e kurulmalı.
+- ~~Yayın paketi~~ çıkarıldı (aşağıda); kullanıcı 192.168.1.4.e kuracak.
 - **Sunucudaki `appsettings.json`'a `SentezServis:PdksApi` bölümü elle eklenmeli** (paket taşımıyor); yoksa iş açık hatayla durur.
 - Arayüzde `pdks-raporu-2` zamanlamasına alıcılar girilecek (kullanıcı). Boşsa genel `Eposta:Alicilar`'a gider.
+
+#### Düzeltme: sunucu 192.168.1.4
+- Önceki yanıtta kurulum sunucusu yanlışlıkla "192.168.1.5" yazıldı (SQL oturumlarında servis 1.5'ten, MDSMHYPERV adıyla
+  görünüyordu; 1.4'ün SQL sunucu adı da MDSMHYPERV, muhtemelen aynı makinenin ikinci adresi). Kullanıcı düzeltti: **kurulum 192.168.1.4**.
+
+### 3. Yayın paketi (kullanıcı: "paket cikartirmisin 1.4 e kuracagim")
+- İlk deneme `dotnet publish` sırasında durdu: `NU1902/NU1903 Warning As Error: System.Security.Cryptography.Pkcs 10.0.0`
+  (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7). modfex deposundaki çözümün aynısı uygulandı:
+  `src/SentezServis.Core/SentezServis.Core.csproj` → `<PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />`.
+  Testler 695/695. **Commit:** `bde9ff9` — "Pkcs 10.0.13'e sabitlendi". Push edildi.
+- Komutlar:
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File deploy\yayinla.ps1
+  .\yayin\SentezServis.exe --paket-dogrula   # arayuzVar true, etiketPdfBayt 144966
+  Compress-Archive -Path yayin\* -DestinationPath SentezServis-2026-10-18-pdks-gecici-ikinci-biotime.zip -Force
+  ```
+- Doğrulama: pakette `appsettings.json` yok; `appsettings.ornek.json`'da `PdksApi.Parola` boş (30 sır boşaltıldı); parola pakette geçmiyor.
+  Arayüz tarihi 2026-10-18 11:59.
+- **Çıktı:** `X:\Gitlab\Modasima\sentezservis\SentezServis-2026-10-18-pdks-gecici-ikinci-biotime.zip` (73,6 MB, repoya eklenmedi).
+- **Kurulum:** zip sunucuya (192.168.1.4) açılır, yönetici olarak `servis-kur.cmd "<hedef klasör>" 81`; sonra
+  `http://192.168.1.4:81/api/surum` → `arayuzTarihi` 2026-10-18 11:59. Sunucudaki `appsettings.json`'a `PdksApi` bölümü elle eklenmeli.
