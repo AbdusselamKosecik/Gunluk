@@ -40,3 +40,20 @@
 - "Tür Standart gelmiyor": yeni kartta Standart geliyor. Tür'ü boş olan eski kartlar için toplu güncelleme kullanıcı onayı bekliyor.
 - Ticari Mal sınıfında firmanın kendi tipleri listelenecek mi: karar bekliyor.
 - 17 Ekim'den devreden açık işler sürüyor.
+
+### 2. Düzeltme: sistem tipi açılışta seçilir, sonra kimse değiştiremez (dev, `3ddab635`)
+- **Neden:** Kullanıcı 1. maddedeki kuralı düzeltti. Firma yeni stok tipi açabilir ama tipin içindeki sistem tipini sonradan kimse değiştiremez. Filtreleme sistem tipine göre yapılacak.
+- **Ne yapıldı:**
+  - `CreateInventoryType`: süper admin kilidi kaldırıldı. Sistem tipi seçimi zorunlu oldu; `None` gelirse `inventory.type.system_type_required` (Validation) döner.
+  - `UpdateInventoryType`: SystemType değişirse herkese, süper admin dahil, `inventory.type.system_type_locked` döner.
+  - Tip formu:
+    - Yeni kayıtta Sistem Tipi zorunlu ve "Yok" seçeneği listede yok.
+    - Düzenlemede alan kilitli, altında "kayıttan sonra değiştirilemez" notu var.
+    - Sistem tipi boş olan eski tipler adı vb. için hâlâ düzenlenebiliyor.
+  - Changelog'daki "Yetki" maddesi "Stok" maddesine çevrildi.
+- **Sonuç:**
+  - Firmanın açtığı tip (ör. Penye → Örme Kumaş) matristeki sınıflarda kendi sistem tipine göre listeleniyor. Böylece Ticari Mal sorusu da kapandı.
+  - Sistem tipi boş eski firma tipleri eskisi gibi Mamul, Hammadde, Yarı Mamul ve Yardımcı'da görünüyor.
+- **Test:** Inventory backend testleri 559 geçti; frontend 170/170 geçti, typecheck temiz.
+- **Tür Standart:** Kullanıcı "standart kalsın" dedi. Eski kartlarda toplu güncelleme yapılmayacak.
+- **Merge:** `092fb9b7`, `feat/iki-panelli-menu` dalına.
