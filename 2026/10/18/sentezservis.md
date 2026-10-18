@@ -102,3 +102,35 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
 - Sonuç: veri BioTime'ın gömülü PostgreSQL'inde, yalnız localhost'ta; ağdan 7496 kapalı. Sunucuda değişiklik yapılmadı.
 - Karar bekleniyor: (1) PostgreSQL'i yalnız 192.168.1.5'e açmak + salt okunur rol (önerilen; tablolar 1.4 ile aynı, sorgu Postgres
   diyalektine çevrilir, Npgsql eklenir) veya (2) BioTime REST API kullanıcısı (emp_type / puantaj çıkışı API'de olmayabilir).
+
+#### 2b. İkinci PDKS raporu BioTime API ile yazıldı (kullanıcı: "admin modasima1234 kullanici adi sifre")
+- **Neden:** veritabanı localhost-only PostgreSQL; sunucuya dokunmadan tek yol BioTime REST API.
+- **API ölçümü (canlı, salt okuma):**
+  - `POST /api-token-auth/` → `{"token": ...}`, başlık `Authorization: Token <...>`. (`/jwt-api-token-auth/` de çalışıyor.)
+  - `GET /personnel/api/employees/?page_size=N` → `{count,next,data}`; 11 aktif; işten ayrılanlar ayrı (`/personnel/api/resigns/`, 10 kayıt).
+    Alanlar: `id`, `emp_code`, `first_name`, `last_name`, `department.dept_name`, `emp_type` (hepsi null).
+  - `GET /iclock/api/transactions/?start_time=..&end_time=..` → `emp` (personel id), `punch_time` "yyyy-MM-dd HH:mm:ss", `punch_state` hep "0".
+  - `/att/api/timeCardReport/`, `firstLastReport/` boş (puantaj hesaplanmıyor). Tek cihaz VGU6244600097 "Genel".
+  - Aynı dakikada çift okutma var; cumartesi 13:05–13:12 çıkışlar var.
+- **Ne yapıldı:**
+  - `Pdks/BioTimeIstemcisi.cs`: token + sayfalı GET (`next` takip), `PersonelSayfasi`/`HareketSayfasi` JSON okuyucuları; `PdksApiAyarlari`
+    (`Adres`, `KullaniciAdi`, `Parola`, `Ad`, `ZamanAsimi`). Token gövdesi `JsonObject` ile (anonim tip + JsonContent, yansıma kapalı
+    derlemede patladı: "Reflection-based serialization has been disabled").
+  - `Pdks/PdksApiHesabi.cs`: Geçici (emp_type 2) dışla; önceki tarih = son 31 günde bugünden önceki son okutma günü; Çıkış = o günün
+    12:00 sonrası son okutması; Giriş = bugünün MAX okutması; ada göre grup, tr-TR sıralama.
+  - `Pdks/PdksApiRaporuJob.cs`: anahtar `pdks-raporu-2`, cron `30 8 * * 1-5`, `JobParameter.Alicilar()`.
+  - `PdksRaporuJob.RaporlaAsync` ortak akış (oku → mail → özet); iki iş de kullanıyor.
+  - `PdksRaporu.Kaynak` → konu/başlık "Personel giriş/çıkış (192.168.1.3)".
+  - `Ayarlar.PdksApi`, `Program.cs` kaydı; yerel (gitignore'daki) `appsettings.json`'a `PdksApi` bölümü eklendi.
+    `yayinla.ps1` `"Parola"` değerini örnek dosyada boşaltıyor.
+- **Dokunulan dosyalar:** yukarıdakiler + `Bildirim/BildirimServisi.cs`, `Bildirim/MahsupRaporu.cs`, `docs/pdks-raporu.md`,
+  `tests/SentezServis.Core.Tests/PdksApiTestleri.cs` (12 test).
+- **Test:** önce derleme kırmızı, sonra 695/695 yeşil.
+- **Canlı deneme:** scratchpad `canli/canli.cs` (`dotnet run`, `#:project` Core) → 16.10 08:30: önceki 15.10, 11 satır, doğru;
+  19.10 08:30: önceki 17.10 (cumartesi), çıkışlar 13:05–16:15.
+- **Commit:** `26767e6` — PDKS: ikinci kaynak 192.168.1.3:8095 BioTime API raporu (pdks-raporu-2). Push edildi.
+
+## Açık kalanlar (Modasima)
+- Yayın paketi çıkarılıp 192.168.1.5'e kurulmalı.
+- **Sunucudaki `appsettings.json`'a `SentezServis:PdksApi` bölümü elle eklenmeli** (paket taşımıyor); yoksa iş açık hatayla durur.
+- Arayüzde `pdks-raporu-2` zamanlamasına alıcılar girilecek (kullanıcı). Boşsa genel `Eposta:Alicilar`'a gider.
