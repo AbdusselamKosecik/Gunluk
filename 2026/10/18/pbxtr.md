@@ -134,3 +134,5 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - **Ders:** depo kökünden `prettier --write` projenin biçimini bozdu (yüzlerce satır) — geri
   alındı; bu projede prettier koşulmuyor.
 - Yayın 54 (`--yayinla --testsiz`) başlatıldı.
+
+- Yayın 54 yeşil: `tekbirsoft/pbxtr:demo-c10f51708e44`, push `3fe82e4d..047ecd44`. Kullanıcı testi bekleniyor (Kabul et tek dokunuş + ACW → sonuç kodu → müsait).
