@@ -242,3 +242,33 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - Dinleme/suflör, aktarma, park: gerçek çağrıda uçtan uca ölçüm (kullanıcı testi).
 - CDR listesinde yön `unknown`, agent/kuyruk boş, cevaplanan çağrıda numara "—" (ekran görüntüsünde görüldü) — kart `BR-BE-256` (`b60a14e0`).
 - 443'te Sınıf B uçları proxy'leniyor (nginx-dogrula.sh gate B) — ölçülmeli.
+
+## Ek (yedinci tur) — kalite kontrol formu ve scripter
+
+### 27. Mevcut durum taraması (iki Explore ajanı)
+- QA: `qa_criteria` (düz soru listesi, weight 1..100), `qa_evaluations`, `qa_evaluation_scores` (0..10), itiraz `tickets.type='qa_objection'` ile zaten vardı. Eksik: cevap seçeneği/puanı, toplam 100 kuralı, form ekranı, QA/süpervizör itiraz yüzü (süpervizör `ticket.respond` olmadığı için itirazı okuyamıyordu bile).
+- Scripter: tasarımcı, sürüm/yayın, agent sayfa sayfa koşucu, cevap kaydı TAM. Eksik: kuyruğa bağlama (yalnız kampanya, kampanya numara→cari eşleşmesinden), `contacts`'ta serbest alan yok (CSV'nin 4 kolon dışı atılıyordu), datadan doldur/geri yaz yok; t0007'de scripter lisansı kapalı.
+
+### 28. Kalite kontrol (`1e851a0c`, BR-FE-140; ajanlar backend-dev-1 + frontend-dev-1 paralel, ortak sözleşme)
+- **Neden:** Kullanıcı: 100 üzerinden form, her cevaba puan, toplam 100 zorunlu, dinleme listesinden seçerek değerlendirme, agent itirazı, QA ve süpervizör itirazları görsün. Yeni tablo YOK şartı.
+- **Ne yapıldı:** Migration `20261018120000_QaFormAnswerOptions`: `qa_criteria.answer_options jsonb`, `qa_evaluation_scores.answer_label`, puan kısıtı 0..100 ve eski 0-10 puanlar `round(score*weight/10)` ile dönüştürülür (canlıda veri 0 satırdı). Puan = soru puanı; toplam = 100·Σpuan/Σağırlık (yanıtlanan sorular).
+- Uçlar: `GET/PUT /api/v1/qa/form` (toplam ≠100 → 400 `qa_form_total_not_100`), `GET /api/v1/qa/objections`, `POST /api/v1/qa/objections/{id}/decision` (karar `tickets.context`, mesaj + kapanış); `TicketEndpoints.CanRead` `qa.read`'e qa_objection biletini açar.
+- Ekran #20: Değerlendir (yalnız kaydı olanlar anahtarı, cevap düğmeleri, X/100) · Form (soru/tam puan/seçenekler, hazır Evet/Hayır, Evet/Kısmen/Hayır, toplam rozeti) · İtirazlar (filtre, detay, kabul/ret notu, "kaydı değerlendirmeye aç"). Agent paneli: seçilen cevap, puan/tam puan, karar.
+
+### 29. Scripter (`1e851a0c` arayüz, `4bd3a97d` sunucu, BR-BE-257; ajanlar frontend-dev-2 → backend-dev-2)
+- Migration `20261018140000_ScripterQueueCampaignAndContactExtra`: `queues.campaign_id` (bileşik FK, ON DELETE SET NULL (campaign_id)), `contacts.extra jsonb NOT NULL DEFAULT '{}'`.
+- Kampanya çözümü: carinin kampanyası, yoksa kuyruğun kampanyası (`OwnedCallResolver`, `RedisLiveOperationsView`).
+- CSV içe aktarma: 4 sabit kolondan sonrakiler ek alan (başlık → ascii anahtar), `updateExisting`; `GET /campaigns/{id}/data-keys`.
+- Script alanı `source` (code/title/city/extra.<k>) + `writeBack`; agent oturumunda `prefill`; adım/kapanışta cariye yazar, `contact.updated` (kaynak script).
+- Arayüz: kuyruk diyaloğunda "Kampanya (script)", veri ekranında ek alan kolonu, tasarımcıda "Datadan doldur / Dataya geri yaz", müşteri kartında "Ek bilgiler".
+
+### 30. Yayın 59 ve canlı kurulum
+- `demo-4bd3a97daa9e`, push `1e851a0c..4bd3a97d`. İki migration canlıda uygulandı.
+- Canlı ölçüm (API, demo.sahip): form 90 puan → 400 `qa_form_total_not_100`; 6 soruluk 100 puanlık örnek form kaydedildi. İtiraz listesi 200.
+- t0007 scripter lisansı açıldı (`PUT /tenants/{id}/license-features/scripter`, demo.superadmin). Örnek kampanya "Müşteri Hizmetleri Gelen" (inbound) oluşturuldu, kuyruk 8001 ona bağlandı (diğer kuyruk ayarları değişmedi), 2 sayfalık script (ad soyad/şehir datadan dolar + geri yazar, talep türü, açıklama) v1 yayınlandı. Ek kolonlu CSV ile iki sahte cari (DEN-001/002, +90555000000x) → `extraKeys: musteri_no, paket_adi`.
+- Ekran görüntüsü (süpervizör): Değerlendir ve Form sekmeleri doğru çiziliyor; telefon 1048 hazır.
+
+### Açık kalanlar
+- Migration uyumluluk kapısı (`deploy/migration-compatibility-guard.py`) iki yeni ham SQL migration için kırmızı; `--testsiz` atlıyor, onay satırı yok.
+- Canlı inbound çağrıda `cdr.queue_id` dolu mu (scripter `GET …/script` 204 riski) — gerçek çağrıda ölçülmeli.
+- QA "kalite uzmanı" sistem rolü yok (tenant özel rolüyle verilir); XLSX içe aktarma yok; dışa aktarma ek alanları taşımıyor.
