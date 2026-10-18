@@ -341,3 +341,35 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - Gerçek inbound çağrıda (8001) scriptin kampanya → script_id ile açıldığı ölçülmedi.
 - Rapor `?campaignId=` filtresinde carisiz (kuyruk kampanyasından açılan) cevaplar düşüyor.
 - Faz 2 düğümler BR-BE-258.
+
+## Ek (on ikinci tur) — #22 hızı, not kaybı, dinleme 502, konferans, #69 Hata Günlüğü
+
+### 36. #22 zaman çizelgesi 13 sn (`73ac3918`, yayın 64)
+- **Neden:** "live/timeline çok yavaş, cancel'lanıyor". Ölçüm (sunucuda curl): 200, 12.9–14.3 sn.
+- **Sebep:** `EfAgentTimelineQuery` `At < windowEnd` ile tenant'ın TÜM `agent_state_events` geçmişini çekiyordu (t0007: 402 bin satır, en eski 2026-08-26).
+- **Düzeltme:** pencere içi satırlar + kullanıcı başına taşıyıcı nokta (`users` üzerinde korelasyonlu alt sorgu, `ix_agent_state_events_tenant_user_at`). Davranış aynı. Canlı süre yeniden ÖLÇÜLMEDİ (yapılacak).
+- Kullanıcı ayrıca kısa blokların (5 sn çalma/müsait) birleştirilmesini istedi → AÇIK.
+
+### 37. Agent masası sekme değişince not siliniyordu (`236ef96f`, yayın 65)
+- `AgentDeskScreen.tsx` CallTab koşullu render → `<div hidden>` (Görevlerim G-04 deseni). `CallTab` `deskActive` prop'u tüm kısayolları (h/m/t/n, DTMF rakamları) ve `ScriptRunner` `hotkeysEnabled` ile script kısayollarını kapatır. Test: `AgentDeskScreen.test.tsx` "sekme degisip donunce gorusme notu korunur".
+
+### 38. Dinleme 502 TELEPHONY_REJECTED — asıl kök (`236ef96f`, yayın 65)
+- Ölçüm: app'e doğrudan istek (`172.28.0.11:5080`) → `502 {"code":"TELEPHONY_REJECTED"}`; uygulama logu sessiz. Aynı ARI isteği elle (`Local/1048@pbxtr-t0007-local`, `pbxtr-t0007-spy`) → santral KABUL.
+- Kök: beaa9e4c servis tarafında dahiliyi çözmüştü ama `AsteriskAriProvider.StartSpyAsync` çıplak "1048"i `endpoint`'e gönderiyordu (yorum "sağlayıcı çevirir" diyordu, kod yoktu). Düzeltme: `/` içermiyorsa `Local/<ext>@pbxtr-<kod>-local`; red artık `LogWarning` (status, endpoint, mode). Canlı uçtan uca dinleme kullanıcı testine kaldı.
+
+### 39. Yayın engelleri (`f097ffa0`, `274e2315`)
+- Docker Hub blob PUT "timeout awaiting response headers" (ev hattı) → `push_tekrarli` 5 deneme.
+- npm audit ucu "audit endpoint returned an error" → yalnız `--testsiz` + yalnız bu çıktıda `UYARI: npm audit OLCULEMEDI` ile devam; gerçek bulgu her kipte kırmızı.
+- Yayın sırasında ana ağaçta commit atıldı (yayın 64 sürerken) — sorun çıkmadı ama kural: ajanlar ağacı kirlettiğinde yayın `X:\GitHub\Pbxtr\pbxtr-yayin` klonundan (`git reset --hard origin/main`) koşturuldu.
+
+### 40. Konferans + #69 Hata Günlüğü (`16672380`, yayın 66)
+- Sözleşmeler: `scratchpad/konferans-sozlesme.md`, `scratchpad/hata-gunlugu-sozlesme.md`.
+- Konferans (backend-dev-2 + frontend-dev-1): actions `conference`/`conference_drop`, `TransferKind.Conference` (yeni TelephonyOperation migration+onay satırı gerektireceği için), dış numarada call-permission fail-closed, `/agent/state.conference`, `TelephonyEventPipelineConference.cs` (üçüncü bacak kapanınca çağrı bitti sanılmasın). 19 bayat köprü testi düzeldi (3f01370c davranışı doğruydu; ikiz 404 dönmeliydi). Gerçek santralde ÖLÇÜLMEDİ.
+- #69 (backend-dev-1 + frontend-dev-2): `SystemErrorCaptureMiddleware` (en dışta, yalnız /api), `SystemErrorScrubber`, `SystemErrorWriter` (Channel 1000), `RedisSystemErrorLogStore` (`ITenantCacheConnection`, LPUSH+LTRIM 5000+TTL 7g), `system.errors.read` yalnız superadmin, WS odası `SystemErrors`. Canlı: `storageAvailable=true`, sayaçlar 0. nginx kaynağı yok → BR-OPS-18.
+- `RoleMatrixEndpointTests` 3 kırmızı (8a5824bf'den beri) → beklenti `RoleVisibility.IsListed`'dan türetildi; superadmin satırı global kapsamlı istemciyle.
+- Doğrulama: build 0; Architecture 857/857; Api Platform 1443 (+2 skip); AgentDesk+Realtime+Access+Scripter+Campaigns 961; web 275 dosya / 2428.
+- Backlog: BR-BE-260, BR-BE-261, BR-OPS-18 + ClickUp (kuru fark 0).
+
+### Açık kalanlar
+- Kullanıcı testi: dinleme (1048), konferans (kuyruk dahil), scripter 8001 çağrısında.
+- #22 kısa blok birleştirme; #22 canlı süre ölçümü.
