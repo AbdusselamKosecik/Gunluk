@@ -287,3 +287,24 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 ### Açık kalanlar
 - Kullanıcı uçtan uca testleri: dinleme/fısıltı (1048), transfer/park, QA değerlendirme+itiraz, 8001 çağrısında scripter.
 - BR-BE-256, migration kapısı onay satırı, UnparkAsync, Excel matris dönüşü.
+
+## Ek (dokuzuncu tur) — Scripter v2 (viasescloud eşdeğeri)
+
+### 32. viasescloud scripter incelemesi
+- **Neden:** Kullanıcı: "D:\SSDM2D\Source\gitlab\Sys\arge\viases\cloud daki gibi birsey yapmamiz lazim — scriptter icin".
+- **Ne yapıldı:** Explore ajanı salt okunur taradı. `viasescloud.scripter.service.core` çalışma ağacı boş, kod `origin/dev` dalında (git show ile okundu); tasarım API'si `viasescloud.ivr.web`'de. Model: jquery-flowchart akış şeması (START/END/PAGE/CONDITION/REST/DB/FUNCTION/SCRIPTER/MAIL/CUSTOM düğümleri), PAGE düğümü 12 kolon Bootstrap şablona bağlı, sayfadaki her buton ayrı çıkış (buton = dal), değişkenler + `{{Var}}`, variableVisible/Enable/Datasource, Required + regex doğrulama, cevaplar Redis'te değişken çantası + sonda `<tablo>_Export`. Eksikleri: geri yok, rapor yok, SQL birleştirme ile sorgu (injection), REST hata dalı yok.
+- **Karar:** pbxtr'da yeni tablo YOK; tanım JSON'una opsiyonel alanlar (schemaVersion 1 kalır, eski scriptler aynı). REST/DB/alt-script/mail/fonksiyon düğümleri faz 2 (BR-BE-258; SSRF + sır yönetimi gerekir).
+- Sözleşme: `scratchpad/scripter-v2-sozlesme.md` (aşağıda özet).
+
+### 33. Scripter v2 (`e6378ec7`, yayın 61, BR-FE-141)
+- **Sözleşme:** alan `display` (textarea/select/radio/buttons/toggle), `width` 1..12, `minLength`, `pattern`+`patternMessage` (.NET Regex 100 ms timeout, yayında derlenir), `readOnly` (writeBack ile olamaz), `visibleWhen`/`enabledWhen` (≤5, başka adımın ya da aynı adımda önceki dallanabilir alan); yeni tipler `multi_choice` (script_answers.value_text'te virgüllü anahtar, value_kind='text' — CHECK değişmedi, migration yok) ve `info`. Adım `actions` ≤6 `{key,label,nextStepKey,style,validate}`; runner `actionKey` gönderir, sunucu sonraki adımı seçer (runner DTO'sunda hedef yok). Yer tutucu `{{field.x}}` (istemci), `{{data.x}}` (zarfta `dataPlaceholders`, telefon yok).
+- **Sunucu (backend-dev-1):** `ScriptDefinition.cs` kapalı şema okuyucu, `ScriptDefinitionValidator.cs` (15 yeni ihlal kodu; buton kenarları döngü/erişilemez/derinlik hesabına girer), `ScriptRunnerRules.cs`, yeni `ScriptStepEvaluator.cs` (gerçek runtime, kapanış ve test ikizi aynı değerlendiriciyi kullanır), `EfScriptRuntime.cs`, `ScriptDtos.cs`, `ScriptAgentEndpoints.cs`; test `ScripterV2Tests.cs` (33). Kararlar: `validate` varsayılan true; zorunlu alan yalnız validate=true butonda reddedilir, biçim kuralları her zaman; görünmeyen alanın cevabı silinir.
+- **Arayüz (frontend-dev-1):** `ScriptFlowChart.tsx` (SVG, kütüphanesiz), `ScriptPageGrid.tsx` (native DnD + genişlik), `ScriptActionsEditor.tsx`, `ScriptConditionEditor.tsx`, `ScriptPlaceholderPicker.tsx`, `scriptFieldText.ts`; `ScriptRunner.tsx` ızgara (<640px tek kolon), Geri, doğrulama; 9 dilde 105 anahtar. HEAD'de kırmızı olan i18n JSX-literal testi (`placeholder="ornek_alan"`) da düzeldi.
+- **Mimari bekçiler (önceki turlardan kırmızı kalan 4):** `AgentDeskTabInventoryTests` Profilim çıkarıldı + `doc/prototip-urun-farklari.md` notu; `CrossTenantScopeSurfaces.cs` → `20261018120000_QaFormAnswerOptions.cs` 0/2; `telephony-path-inventory.json` → `agent-desk.call-result` (`stop_spy`; sonuç kaydı ACW kapanışı → olay akışı → `AgentMonitoringService.SafeStopSpyAsync`, geçici prob testiyle bulundu; pathId sıralı olmak zorunda, TPI001); `doc/ekran-yazma-yollari.md` yeniden üretildi (`dotnet test --filter Ekran_yazma_yollari_belgesini_URET -e PBXTR_WRITE_DOCS=1`).
+- **Doğrulama:** solution 0 hata; Architecture 857/857; Scripter 190/190; web tsc -b 0, vitest campaigns+agent+i18n 45 dosya 421 test. Canlıda `/campaigns/script` Liste/Akış + sayfa düzeni görüldü (Playwright).
+- **Yayın:** ilk deneme Docker Hub oauth zaman aşımı (YAYIN_EXIT=1, ağ), ikinci deneme yeşil, push `c05bee2e..e6378ec7`.
+- **Backlog:** BR-FE-141, BR-BE-258 + ClickUp (yeni 2, kuru fark 0). BR-BE-257 hücresindeki `<built-in function id>` (önceki python f-string hatası) `{id}` yapıldı.
+
+### Açık kalanlar
+- EfScriptRuntime değişiklikleri gerçek PostgreSQL'de ölçülmedi; butonlu adımda yeniden yüklemede basılan buton saklanmıyor; gövde boyutu formülü info/buton metnini saymıyor.
+- Faz 2 düğümler (BR-BE-258). Kullanıcı uçtan uca testleri (dinleme, transfer/park, QA, scripter 8001).
