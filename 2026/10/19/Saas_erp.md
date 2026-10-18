@@ -110,3 +110,32 @@ Skeptic'in uyarısı üzerine iş dört gruba bölündü:
   - FE: 6 yeni test; inventory testleri 198 geçti.
   - Playwright: kayıtlı fişte sekmeden %10 indirim ve 250 TL + %20 KDV masraf eklendi. Preview isteği doğru payload'ı gönderdi; dönen toplamlar: masraf 250, genel toplam 300. Kaydetme ekrandan denenmedi; ortak DB'ye test verisi yazılmadı.
 - **Açık kalan:** CloneReceipt dip satırları kopyalamıyor.
+
+### 8. Menü "bozuldu"
+- **Neden:** Fiş işlerini yaparken yerel çalışma kopyası `dev`'e geçirilmişti. İki panelli menü yalnız `feat/iki-panelli-menu` dalında olduğu için kullanıcı eski menüyü gördü.
+- **Ne yapıldı:** `dev` menü dalına merge edildi (`037b29b4`) ve yerel kopya menü dalına alındı. Vite dev server çalışma ağacından servis ettiği için başka bir şey gerekmedi.
+- **Kural:** Bu oturumda yereli kullanıcıyla birlikte kullanırken menü dalında kal. dev'e iş cherry-pick ile gider, sonra dev menü dalına merge edilir.
+
+### 9. Satır indirim/masraf/ÖTV paneli — `fc9b784c` (menü), `026a52ab` (dev)
+- **Kullanıcının isteği:** "Satır indirimini ayrı eklemek lazım, gridden bağımsız ama satırın altında. Satır indirimini hesaplamıyor; dip indirimle ikisi de hesaplanmalı."
+- **Hata:** `buildPreviewItems`/`pickPair`, alt satır toplamını yalnız discountAmount elle düzenlenmişse ekliyordu. Kayıt `own + subSum` gönderiyordu; use-receipt-totals ise sunucu sonucunu aynı alana geri yazıyordu, bu da çift sayım riski demekti. Ayrıntılar da hiç saklanmıyordu.
+- **Kurul:** cto + skeptic APPROVE-WITH-CONDITIONS. Öneri metni scratchpad'de `satir-indirim-oneri.md`.
+- **Backend:**
+  - `ReceiptTotalCalculator`'a `ReceiptItemCalculationInput.Charges` (`LineChargeInput`: Kind 50/51/52, Rate, Amount, CalcType) eklendi.
+  - Charges null değilse hesap yalnız bu satırlardan yapılır: indirim sırayla kalan tutara, masraf satır tutarına, ÖTV indirimli tutara uygulanır.
+  - Tek hesap yeri burası; preview-totals ve kayıt aynı kodu kullanır.
+  - `LineChargeCommand`, CreateReceiptItemCommand ve PreviewReceiptItemInput'a eklendi.
+  - `ReceiptLineChargeSync`: InventoryReceiptDiscount'a ReceiptItemId ile yazar. Hiçbir kalemde Charges yoksa satırlara dokunulmaz; varsa fişin tüm satır kayıtları silinip yeniden yazılır, böylece silinen kalemlerin kayıtları da temizlenir. Dip satırlarına dokunmaz.
+  - GetReceiptById `items[].charges` döner. Migration gerekmedi: tablo ve kolonlar 7. maddede eklenmişti.
+- **Frontend:**
+  - Grid'e opsiyonel `renderRowFooter` eklendi (detail satırın altında tam genişlik `<tr>`, sticky-left); test yazıldı.
+  - Fiş ekranında `subRows:false` ile grid içi İndirim/Masraf/Vergi alt satırları kalktı.
+  - İndirim/masraf/ÖTV oran ve tutar kolonları salt okunur oldu (yalnız sonucu gösteriyor).
+  - `LineChargesPanel`, aktif satırın veya indirimi olan satırın altında açılıyor.
+  - `receipt-line-charges.ts`: payload üretimi ve yüklenen veriden panel satırı kurma. Eski kalemlerde kayıtlı TUTARLARDAN tek satır kuruluyor, orandan değil; skeptic şartı.
+  - Satır indirimleri "kaydedilmemiş değişiklik" kontrolüne dahil edildi.
+- **Test:**
+  - Backend: hesap için 6 test (sıralı indirim, masraf/ÖTV matrahı, boş liste eski alanları yok sayar, null eski davranışı korur, satır + dip birlikte), sync için 4 test. Receipt filtreli 619 test geçti.
+  - FE: inventory + receipt-detail 228 test geçti; typecheck temiz.
+  - Playwright (kayıt yapılmadan): 750 × 100 = 75.000; satır %10 = 7.500; dip %10 = 6.750; toplam indirim 14.250; genel toplam 60.750.
+- **Not:** Eski fişlerde çift sayım nedeniyle şişmiş DiscountAmount varsa o değer olduğu gibi taşınır, düzeltilmez.
