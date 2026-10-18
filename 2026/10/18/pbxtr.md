@@ -308,3 +308,19 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 ### Açık kalanlar
 - EfScriptRuntime değişiklikleri gerçek PostgreSQL'de ölçülmedi; butonlu adımda yeniden yüklemede basılan buton saklanmıyor; gövde boyutu formülü info/buton metnini saymıyor.
 - Faz 2 düğümler (BR-BE-258). Kullanıcı uçtan uca testleri (dinleme, transfer/park, QA, scripter 8001).
+
+## Ek (onuncu tur) — Bağımsız script (YARIM, PC kapandı)
+
+### 34. Script kampanyadan ayrıldı — WIP dalı `wip/script-bagimsiz` (`49389fe1`)
+- **Neden:** Kullanıcı: "Kampanya bazli degil normal olmasi lazim birden fazla kampanyada kullanabilmem lazim".
+- **Sözleşme:** `scratchpad/script-bagimsiz-sozlesme.md`. Yeni tablo YOK. `campaigns.script_id` (FK (tenant_id,script_id) → scripts ON DELETE SET NULL), geri doldurma `scripts.campaign_id`'den (cross_tenant GUC), `scripts.campaign_id` NULL olabilir + `ux_scripts_tenant_campaign` kalkar. Çalışma anı: çağrının kampanyası → `campaigns.script_id`. API `/api/v1/scripts` (GET liste, POST {name, copyFromScriptId?}, PATCH {name,isActive}, GET/{id}, PUT draft, POST publish, versions, report(+?campaignId), data-keys); eski `/campaigns/{id}/script*` kaldırıldı. Kampanya DTO `scriptId/scriptName`, oluştur/güncelle `scriptId`. Silme yok (pasifleştir).
+- **Arayüz (frontend-dev-1, BİTTİ):** yeni ekran #06.2 Scriptler `/scripts` (screens.json + registry + `SCREEN_LICENSE_FEATURES` ile scripter lisansına göre menü filtresi, AppShell), editör #06.1 `?script=<id>` (eski `?campaign=` yönlendirir), ad PATCH, "Kullanan kampanyalar"; kampanya kartı "Script: <ad>" / "Script bağla"; düzenle penceresinde Script seçimi; `ScriptFieldsPane` raporu kampanyanın scriptId'si ile; `delivery-manifest.json` 5 şablon `/api/v1/scripts/{id:guid}…` + `scripts.load`; generated dosyalar yenilendi.
+- **Önceden kalan web kırmızıları düzeltildi:** `ScriptRunnerV2.test.tsx` vi.mock imzası (signal), #38 `auditView.ts` → `contact.updated`, `qa.form.updated`, `qa.objection.decided`, hedef `QaForm` + 9 dil (`scratchpad/aud_i18n.py`), `ContactTransfer.test.tsx` (updateExisting onay kutusu = 1), `SimulationProvider.test.tsx` (useSession mock, simulated bileşim). Sonuç: vitest 273 dosya / 2402 test yeşil, tsc -b 0.
+- **Sunucu (backend-dev-1, YARIM):** migration `20261018160000_ScriptStandalone.cs` + ModelSnapshot, Campaign/Script domain+EF, `ScriptAdminEndpoints.cs`, `CampaignEndpoints/Dtos`, `EfScriptRuntime/EfScriptAdministration/EfScriptFieldReports`, `EfContactDirectory` (data-keys), AuditActions (`script.created/updated`), testler (`ScriptAdminEndpointTests`, `CampaignEndpointTests`, `ScripterPersistenceTests` …). Ajan bitmeden PC kapandı → derleme/test ÖLÇÜLMEDİ.
+- **Neden ayrı dal:** yarım sunucu kodu main'e/yayına girmesin; disk uçarsa iş kaybolmasın.
+
+### Devam (yarın)
+1. `git checkout wip/script-bagimsiz` → `dotnet build Pbxtr.sln` → hataları kapat.
+2. Architecture tam koşu, Api.Tests Scripter+Campaign filtreli; `doc/ekran-yazma-yollari.md` yeniden üret; `CrossTenantScopeSurfaces.cs`'e ScriptStandalone GUC satırı; screens.json yeni ekran için ekran sayımı/yetki bekçileri.
+3. main'e squash/merge → yayın `--testsiz` → t0007'de "Müşteri Hizmetleri Gelen" scriptinin geri doldurmayla bağlı kaldığını canlıda kontrol et.
+4. Backlog kartı aç (BR-FE-142 / BR-BE-259 — numarayı önce ölç) + ClickUp.
