@@ -40,3 +40,22 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
   (sunucudaki özet metni eski biçimde).
 - **Kurulum:** sunucuda `servis-kur.cmd` yönetici olarak çalıştırılır. Servis `SentezServis`, varsayılan hedef
   `C:\Program Files\SentezServis`, port 81. Betik servisi durdurup dosyaları kopyalıyor ve servisi yeniden başlatıyor.
+
+### PDKS mail özeti satır satır, Türkçe karşılıklı (kullanıcı: "basliktaki bilgileri yan yana degil, satir satir yazdiralim, yanlarina parantez icinde turklerini yazalim")
+- **Neden:** Mailin üstündeki özet tek satırda, "·" ile ayrılmış ve yalnız İngilizceydi; okunması zordu.
+- **Ne yapıldı:** `BildirimServisi.PdksOzetHtml` artık her bilgiyi ayrı bir `<div>` satırına yazıyor ve yanına parantez içinde Türkçesini ekliyor:
+  - `N total (toplam)`
+  - `N checked in today (bugün gelenler)`
+  - `N not checked in today (bugün gelmeyenler)` (kırmızı)
+  - `N no check-out on DD.MM.YYYY (DD.MM.YYYY çıkış yapmayanlar)`
+  - `N absent on DD.MM.YYYY (DD.MM.YYYY gelmeyenler)` (kırmızı)
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Bildirim/BildirimServisi.cs`, `tests/SentezServis.Core.Tests/PdksGunlukTestleri.cs`
+- **Test (TDD):** `Ozet_toplam_giren_girmeyen_cikissiz_dun_gelmeyen` testine Türkçe etiketler, 5 ayrı `<div><b` satırı ve " ·" bulunmaması eklendi.
+  Test önce kırmızıydı, kod değiştikten sonra yeşil. Tüm suite: 276 geçti, 11 atlandı, 0 hata.
+- **Commit:** `c9b3e84`. Push edildi.
+- **Paket yeniden üretildi:**
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File deploy\yayinla.ps1
+  Compress-Archive -Path yayin\* -DestinationPath yayin-pdks-2026-10-18.zip
+  ```
+  Aynı adla (73,1 MB) üretildi, eski 18.10 zip'inin yerini aldı. Kaynak `c9b3e84`, arayuzTarihi 2026-10-18 09:11. Pakette appsettings.json yok.
