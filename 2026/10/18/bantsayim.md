@@ -177,3 +177,13 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
   - Satıra Bant sütunu eklendi; başlık metni güncellendi.
 - **Test:** `Box_listesi_uretim_emrine_gore_suzulur` (DB, salt okuma), önce derlenmedi (kırmızı), sonra yeşil. 92/92.
 - **Commit:** `99890b0`. Push edildi. Yerel uygulama yeniden açıldı. Kiosk'a kurulmadı.
+
+### 11. Kiosk'a kurulum (kullanıcı: "güncelle uzak pc'ye")
+- **Kapsam:** `99890b0`'a kadar her şey: sipariş → üretim emri seçimi, IsEmrindeYok, Erp_Box.WorkOrderReceiptItemId, kesim kutucuğu renkleri, üretim emrine göre etiket listesi.
+- **Kurulum öncesi canlı durum:** PL-002'de açık box URT1-261018-002-0013 (4315-2, 13:56). Açılışta açık box'ın iş emri seçili geldiği için operatör seçim yapmadan devam eder.
+- **Adımlar:** 2. maddedeki gibi (paketle-linux → pscp → sudo install → pkill).
+- **Doğrulama:**
+  - sha256 837ea386… yerel = kiosk = kurulu. Yeni süreç 2958, 20 sn sonra çalışıyordu.
+  - Günlükte yeni hata yok (son kayıt 09:10'daki yazıcı hatası).
+  - Kiosk 13:41'de yeniden başlatılmış (`uptime -s`), bizim dışımızda.
+- **Yedek:** `/opt/modfex/bantsayim/BantSayim.Desktop.2026-10-11` hâlâ yerinde.
