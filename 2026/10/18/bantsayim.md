@@ -117,3 +117,19 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
   - Canlıda bantlar okuttuğu için testlerin örnek barkodu kesimi dolmuş varyanta düşüyordu (`KesimAsildi`). Seçiciler kesimden en az 5 kalan / hiç okutulmamış varyanta sınırlandı.
   - Sonuç: `MODFEX_DB_TEST=1 MODFEX_SUNUCU=192.168.0.2 dotnet test BantSayim.Tests` → 84/84 geçti.
 - **Commit:** `e5cc165`. Push edildi. Linux paketi `dagitim/bantsayim-linux-x64/` hazır; **kiosk'a henüz kurulmadı** (operatör akışını değiştirdiği için kullanıcıya soruldu).
+
+### 7. İş emri doğrudan Erp_WorkOrder'dan, satır barkodun renginden
+- **Kullanıcı:** "Erp_WorkOrder seçsin, okuttuğu barkoddaki renge göre satır seçelim, en mantıklı o."
+  6. maddedeki "sipariş → siparişe bağlı iş emri" kararının yerini aldı. Sebep: 4316-2 gibi siparişe bağlanmamış iş emirleri seçilemiyordu.
+- **Canlı:** Kesimi yapılmış, kapanmamış ve iptal edilmemiş 252 iş emri var. `Erp_WorkOrder.InventoryId` boş; model satırların stok kodundan alınıyor.
+- **Ne yapıldı:**
+  - `IsEmriSecimDeposu.IsEmirleriAsync(companyId, kesimProcessId, arama)`:
+    - Kaynak: kesim üretim kayıtlarından iş emirleri (`MAX(InsertedAt)` = son kesim).
+    - Filtre: `IsDeleted/IsClosed/IsCancelled = 0`; `TOP 40`, en son kesilen önde; `WorkOrderNo LIKE %arama%`.
+    - Sipariş no yalnız bilgi olarak, `UZM_SiparisWorkOrder` varsa eklenir. Tablo yoksa SQL'e hiç konmuyor (ad çözülemezse sorgu derlenmez).
+  - `BulAsync`: Erp_WorkOrder'dan.
+  - Panel: arama kutusu + büyük satırlı liste ("4315-2 · 4731001/2 · kesim 13.10"). Sipariş seçimi kaldırıldı.
+  - Satır (renk) seçilmiyor: okutmada varyant → iş emrindeki satır (6. madde), box başlığı = ilk ürünün satırı.
+- **Testler:** `Kesimli_acik_is_emirleri_listelenir_ve_numarayla_aranir` (DB), `Listede_son_kesim_tarihi_gorunur`, siparişsiz üst bilgi. Önce kırmızı, sonra yeşil.
+  `MODFEX_DB_TEST=1 MODFEX_SUNUCU=192.168.0.2 dotnet test BantSayim.Tests` → 85/85.
+- **Commit:** `5766207`. Push edildi. Paket hazır; **kiosk'a kurulmadı**, kullanıcı onayı bekleniyor.
