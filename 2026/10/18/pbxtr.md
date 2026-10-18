@@ -148,3 +148,35 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - **Düzeltme:** bu sekmedeki softphone `registered|ringing|in-call` ise engel uygulanmaz.
 - **Kalan:** yalnız masa telefonlu agent için örnekleyici gecikmesi (5 dk) sürüyor.
 - Yayın 55: iki deneme Docker Hub push ağ kopmasıyla düştü (proxy `172.29.0.1:3128` "use of closed network connection"); `docker push` elle geçti, üçüncü koşu yeşil: tekbirsoft/pbxtr:demo-b78821c55c58, push başarılı.
+
+## Ek (dördüncü tur)
+
+### 14. ACW alt sonuç kodları seçilemiyordu — `571bbf49` regresyonu (`960d0817`)
+- **Kullanıcı:** *"acw de sonuc kodu altini secemiyorum"*.
+- **Ölçüm:** `result_codes` (t0007) kök düğümler depth 1 (Satış/Destek/Tahsilat), `agent_visible_depth=4`;
+  `/agent/result-codes` ağacı kök düğümü de `nodes` içinde gönderir (id = tree.id).
+- **Neden:** önceki turda kökü listeden atıp çocukları `parentId=null` ile aradım → hiçbiri bulunamadı.
+- **Düzeltme:** `CallTab.treeNodesOf` → `parentId === tree.id` olanlar ilk seviye (null'a eşlenir), kök atılır.
+
+### 15. #51 rozetleri + sürüm rozeti (`960d0817`)
+- Playwright ile canlı ekran görüntüsü (süpervizör): `rc.mjs` betiği scratchpad'de,
+  `node .rc-shot.mjs <user> <pass> <yol-eğiksiz> <png>` (Git Bash `/yol`u Windows yoluna çevirir — eğik
+  çizgisiz ver).
+- Rozetler elle çizilmiş 10 px hap, yükseklik yok → metin çerçeveye taşıyordu. `ui/Badge`
+  (danger/warn/neutral mono) — `ResultCodeTree.tsx`, `ResultCodesScreen.tsx`; ölü CSS silindi.
+- Sol menü sürüm rozeti (`26.10.18+b78821c55c58`) logoya biniyordu → yalnız `+` öncesi, tam sürüm `title`.
+
+### 16. Roller — BR-SEC-34 (`8a5824bf`, ajan)
+- `RoleVisibility.IsListed(scope, roleScope, activeTenantIsDealerHome)`: global olmayan bakan
+  superadmin/admin görmez; `dealer` yalnız `tenants.is_dealer_home`. `/roles`, `/roles/matrix`,
+  `/users/assignable-roles`. `TenantDescriptor.IsDealerHome` (`EfTenantDirectory`).
+- Canlı doğrulama (süpervizör): 4 rol — Tenant Sahibi, Supervizor, Agent, Wallboard.
+- Kırılacak test: `RoleMatrixEndpointTests.The_matrix_is_complete_in_a_single_request`.
+
+### 17. Tenant adı — BR-FE-138 (`8a5824bf`, ajan)
+- Ham GUID'in görünen asıl yeri denetim günlüğü (#38): etiketsiz tenant hedefleri liste ucunda
+  `ITenantDirectory.FindAsync` ile ada çevrilir (sayfa başına ≤20 farklı id); detay `tenantName`.
+- Tenantlar ekranı sütun başlığı "Tenant ID" → "Tenant kodu" (sütun `t0007` gösteriyor).
+- Kalan: sistem sağlığı retention alarm satırı GUID (`pbxtr_sys.call_data_retention_lag()`).
+
+- Yayın 56 yeşil: `tekbirsoft/pbxtr:demo-8a5824bf3e85`, push `b78821c5..3280ebb5`. ClickUp fark 0.
