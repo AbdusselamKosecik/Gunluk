@@ -91,3 +91,46 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
   iken yokluyor. Commit `1dfb575e` (push edildi, yayın kullanıcı testi bitince).
 - Cloudflare Web Analytics beacon CSP'ye takılıyor: Cloudflare kenarda otomatik enjekte ediyor;
   öneri panelden kapatmak (CSP gevşetilmedi).
+
+## Ek (sabah, üçüncü tur)
+
+### 10. Yayın 53 — TreeView yığın taşması, çift answer, 5 sn ICE (`571bbf49`, `3fe82e4d`)
+- **TreeView `Maximum call stack size exceeded`:** sonuç kodu ağacında kök düğüm ağaçla aynı
+  kimliği taşıyınca `childrenByParent.map.get(node.id)` düğümün kendisini çocuk döndürüyordu.
+  `TreeView.tsx` çocukları `depth === item.depth + 1` ile süzer; `CallTab.treeNodesOf` kök
+  kimliğini düğüm listesinden atar.
+- **`sip.Invitation | Invalid session state Establishing`:** aynı çalan çağrıya ikinci `answer()`.
+  `useSoftphone.ts` `answeringRef` ile ilk istek kazanır.
+- **"Kabul et" ile ses arası 5 sn:** SIP.js varsayılan `iceGatheringTimeout` 5000 ms; STUN'a
+  ulaşılamayan ağda tam 5 sn beklenip 200 OK sonra gidiyordu.
+  `sessionDescriptionHandlerFactoryOptions: { iceGatheringTimeout: 500 }`
+  (`session-description-handler-factory-default.js:19` seçeneği okuyor — doğrulandı).
+- Yayın 53 yeşil: `tekbirsoft/pbxtr:demo-3fe82e4d4120`, push `1dfb575e..3fe82e4d` (sim 404 dahil).
+
+### 11. ACW sonuç koduna kadar sürer — BR-BE-255 (`c10f5170`)
+- **Kullanıcı:** *"cagri kapandiginda acw de kalmiyor, sonuc kodu girmemiz lazim"*.
+- **Neden:** gerçek santralde ACW'yi yazan tek olay `AgentComplete`; hemen ardından dahili
+  NOT_INUSE → `QueueMemberStatus available` (`AmiDeviceState.cs:56`) ACW'yi eziyordu. Gerçek
+  kipte `PbxtrAcwEnd` üreten hiçbir şey yoktu (yalnız simülasyon).
+- **Ne yapıldı:**
+  - `TelephonyEventPipeline.UpdateLiveStateAsync`: varlık ölçümü `available` iken kayıtlı durum
+    `acw` ise yazılmaz; satır aynı ACW ile `MeasuredAt` tazelenerek yeniden yazılır (120 sn
+    `LiveStateTtl` dolup agent kadrodan düşmesin). Mola/çevrimdışı ve çağrı kenarları geçer.
+  - Yeni port `Domain/Modules/Live/IAgentAcwCloser.cs`, uygulama
+    `Infrastructure/Telephony/Live/AgentAcwCloser.cs` (Redis'te `acw` ise boş CallId ile
+    `PbxtrAcwEnd` → boru hattı; WS + agent_state aynı yoldan). DI:
+    `TelephonyServiceCollectionExtensions.cs`.
+  - `POST /api/v1/agent/calls/{callId}/result` `Recorded` dalında `acwCloser.CloseAsync`
+    (fail-open, log).
+  - `ChannelResyncWriter.SweepStaleAsync` yalnız on_call/ringing süpürür — ACW'ye dokunmaz (okundu).
+
+### 12. "Kabul et" tek dokunuş — BR-FE-137 (`c10f5170`)
+- **Kullanıcı:** *"butona birkac defa basma oluyor 5 yasindaki cocugun kullanabilecegi sekilde olsun"*.
+- `SoftphoneStatus.answering?` (answer() → true; in-call/hangup/yeni çağrı → false).
+- `IncomingCallModal.tsx` softphone'u kendisi okur: `answering` iken Kabul/Reddet kilitli,
+  "Bağlanıyor…" (`incoming.answering`, 9 dil dosyası); `in-call` olunca pencere kapanır.
+  Masa, konsol ve kabuk bildirimi aynı bileşeni kullandığı için üçü birden.
+- `SoftphoneBadge.tsx`, `HeaderSoftphone.tsx` cevap düğmesi `answering` iken kilitli.
+- **Ders:** depo kökünden `prettier --write` projenin biçimini bozdu (yüzlerce satır) — geri
+  alındı; bu projede prettier koşulmuyor.
+- Yayın 54 (`--yayinla --testsiz`) başlatıldı.
