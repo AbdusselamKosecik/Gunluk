@@ -49,3 +49,16 @@ Cihaz: PM66 (adb 39916cf0), 480x800, uygulama Arapça. Ana menü: "Mamul giriş 
   - Üstteki özet satırı sağdan kırpılıyor ("800 ad…").
   - Barkod kutusu klavye düğmesi yüzünden dar ("Koli…").
 - paketleme henüz kurulmadı. Bu sürüm hem BoxType 1 hem 2 koliyi okuduğu için tek başına kurulması güvenli.
+
+### 4. Yazılar küçültüldü (kullanıcı: "yazıları biraz daha küçültelim, ekrana daha oturaklı olsun, son okutulanlar özellikle")
+- **Ne yapıldı:**
+  - `Stiller.axaml`:
+    - Son okutulanlar: ana satır 17 → 14 px, ayrıntı 15 → 12, saat 14 → 12; satır iç boşluğu 10 → 8,6; nokta 12 → 10.
+    - Sonuç kutusu: 24 → 19, ayrıntı 17 → 14, iç boşluk 16,18 → 12,10, MinHeight 120 → 84.
+    - Barkod kutusu 18 → 16 / 44; Sil düğmesi 15 → 13, iç boşluk 14,6 → 8,4 (barkod kutusuna yer kalsın).
+  - `MamulGirisView.axaml`: sayaç 20 → 16 (cihazda "800 ad…" diye kırpılıyordu); satır aralıkları sıklaştırıldı.
+  - `OkutmaView.axaml` (sevk): üst kart 18 → 16, koli metni 15 → 14; satır aralıkları sıklaştırıldı.
+- **Doğrulama:** Headless görüntüler (TR/AR mamul ve sevk): satırlar tek satıra sığıyor, sayaç kırpılmıyor. `MODFEX_DB_TEST=1 MODFEX_SUNUCU=192.168.0.2 dotnet test` → 82/82.
+- **Derleme:** `dotnet publish SevkiyatMobil.Android -c Release -f net10.0-android` → `dagitim/sevkiyatmobil-2026-10-18b.apk`.
+- **Kurulum:** `adb install -r` → Success. Uygulama giriş ekranında açıldı (oturum yeniden açılınca şifre istiyor).
+- **Commit:** `04fd2a1`. Push edildi.
