@@ -20,3 +20,27 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
 
 ## Açık kalanlar
 - Değişiklik bant sonu bilgisayarındaki uygulama güncellenince görünecek.
+
+### 2. Bant sonu kiosk'u (192.168.0.83) güncellendi
+- **Neden:** Kullanıcı "uygulamayi guncelle" dedi. Kiosk'ta 11.10 tarihli sürüm vardı; 1 haftalık tarih filtresi (`874ea70`) yoktu.
+- **Makine:** Ubuntu 26.04.1, host `pltest`, sudo yetkili kullanıcı `pl-test` (şifre kullanıcıda; günlüğe yazılmaz).
+  Kullanıcılar: root, pl-test (1000), kiosk (1001). Uygulama `/opt/modfex/bantsayim/BantSayim.Desktop`, döngü `/opt/modfex/kiosk/oturum.sh`.
+- **Kiosk PIN kontrolü:** `/etc/modfex/kiosk-pin` kullanıcının söylediği PIN ile eşleşiyor (11.10 15:30'da kurulmuş). PIN değiştirilmedi, günlüğe yazılmadı.
+- **Komutlar:**
+  ```bash
+  bash paketle-linux.sh                                  # dagitim/bantsayim-linux-x64/ (commit 874ea70)
+  pscp -pw … dagitim/bantsayim-linux-x64/BantSayim.Desktop pl-test@192.168.0.83:/tmp/BantSayim.Desktop.yeni
+  # sunucuda (sudo):
+  cp -p /opt/modfex/bantsayim/BantSayim.Desktop /opt/modfex/bantsayim/BantSayim.Desktop.2026-10-11   # yedek
+  install -o root -g root -m 755 /tmp/BantSayim.Desktop.yeni /opt/modfex/bantsayim/BantSayim.Desktop
+  pkill -TERM -f '^/opt/modfex/bantsayim/BantSayim.Desktop'   # oturum.sh çökme sayıp yeniden açar
+  ```
+  Windows'tan şifreyle bağlanmak için PuTTY `plink`/`pscp` kullanıldı. plink argümanları tek komutta birleştiriyor; sudo şifresi stdin'den `read -r P` ile verildi.
+- **Sonuç / doğrulama:** sha256 yerelde ve kiosk'ta aynı (a759fea4…). Eski süreç 6529 kapandı, yeni süreç 7357 açıldı ve 18 sn sonra hâlâ çalışıyordu.
+  Günlükte (`~kiosk/.local/share/Modfex/bantsayim/log/2026-10-18.log`) 09:10:42'de "Etiket basılamadı: URT1-261018-002-0002" var:
+  ZPL yazıcıya TCP bağlantısı kurulamamış. Bu güncellemeden önce, güncellemeyle ilgisiz.
+- **Geri dönüş:** `sudo install -m 755 /opt/modfex/bantsayim/BantSayim.Desktop.2026-10-11 /opt/modfex/bantsayim/BantSayim.Desktop` + pkill.
+
+## Açık kalanlar (ek)
+- 09:10'daki etiket yazıcısı bağlantı hatası: yazıcı o an kapalı mıydı ya da IP mi değişti, bakılmalı.
+- pl-test şifresi sohbette paylaşıldı: değiştirilmesi ve SSH anahtarıyla erişim önerildi.
