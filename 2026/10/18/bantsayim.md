@@ -187,3 +187,25 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
   - Günlükte yeni hata yok (son kayıt 09:10'daki yazıcı hatası).
   - Kiosk 13:41'de yeniden başlatılmış (`uptime -s`), bizim dışımızda.
 - **Yedek:** `/opt/modfex/bantsayim/BantSayim.Desktop.2026-10-11` hâlâ yerinde.
+
+### 12. Fiş 10: WorkOrderReceiptItemId; box kalemlerine fiş bağlantısı yazılmaz
+- **Kullanıcı:**
+  - "BoxItem'de UD_WorkOrderItemId … InventoryReceiptItemId alanlarını doldurmayalım. Sadece Sevkiyatta doldururuz."
+  - "10, 130 ve 17 numaralı fişlerde workorderid ekleyelim … workorderitemid desem."
+- **Canlı bulgular:**
+  - `Erp_InventoryReceiptItem.WorkOrderReceiptItemId` → FK Erp_WorkOrderItem; `WorkOrderId` → FK Erp_WorkOrder.
+  - Dolu sayıları: 10 fişleri 122 kalem, 78'inde WorkOrderId var, WorkOrderReceiptItemId hiç yok. 17 / 120 / 130 fişlerinde ikisi de hiç dolu değil.
+  - Erp_BoxItem'de Sentez'in kendi WorkOrderItemId kolonu yok; yalnız UD_WorkOrderItemId var (bantsayim zaten dolduruyor).
+- **Ne yapıldı (bantsayim):**
+  - `FisSql.KalemEkle`: 125. kolon `WorkOrderReceiptItemId` değeri `null` → `@WorkOrderItemId`. Konumsal değişiklik, 230 kolon/değer eşleşmesi doğrulandı.
+  - `FisYazici.BoxuYazAsync`:
+    - Box satırına `bi.UD_WorkOrderItemId`; kalem anahtarı (BoxItemId, InventoryId, WorkOrderItemId).
+    - Mevcut kalem aramasına `ISNULL(WorkOrderReceiptItemId,0)` eşleşmesi eklendi.
+    - `UPDATE Erp_BoxItem SET InventoryReceiptItemId` ve `UPDATE Erp_BoxItemVariant SET InventoryReceiptItemVariantId` kaldırıldı.
+  - Erp_Box.InventoryReceiptId (box başlığı) kaldı. Kullanıcı yalnız ItemId alanlarını söyledi; raporlar (FisNo) ona bakıyor.
+- **Test:** `Yeni_order_acik_boxlari_kapatir_ve_gunluk_fise_yazar`:
+  - Kalem WorkOrderReceiptItemId = box kaleminin UD_WorkOrderItemId olmalı; önce kırmızıydı (Expected 84352, Actual null).
+  - Box kalem/varyantlarında fiş bağlantısı olmamalı.
+  - Sonra yeşil. 92/92.
+- **Commit:** `71596c7`. Push edildi. Kiosk'a kurulmadı.
+- **Paralel:** paketleme (koli BoxType 1, fiş 10/130/17) ve sevkiyatmobil (koli araması, fiş 17, ekran) ayrı yardımcılarda; günlükleri kendi dosyalarına yazılacak.
