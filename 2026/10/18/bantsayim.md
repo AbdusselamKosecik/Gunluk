@@ -44,3 +44,19 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
 ## Açık kalanlar (ek)
 - 09:10'daki etiket yazıcısı bağlantı hatası: yazıcı o an kapalı mıydı ya da IP mi değişti, bakılmalı.
 - pl-test şifresi sohbette paylaşıldı: değiştirilmesi ve SSH anahtarıyla erişim önerildi.
+
+### 3. Asıl istenen yer: bant ekranındaki "tekrar yazdır" box listesi 2 gün → 1 hafta
+- **Neden:** Kurulumdan sonra kullanıcı "simdi degismemiz gozukuyor" dedi. 1. maddede değiştirilen yer Yönetim → Raporlar ekranıydı.
+  Bant sonundaki kişinin kullandığı liste ise bant (okutma) ekranındaki "🖨 Son 2 gün" düğmesi. Bu listenin sınırı
+  `OkutmaViewModel.TekrarYazdirGun = 2` sabitinden geliyor (11.10'da `4e0c9ee` ile eklenmişti). Yanlış ekranı değiştirmiştim.
+- **Ne yapıldı:**
+  - `TekrarYazdirGun = 7` (`UretimKurallari.SonGunler`: bugün dahil son 7 gün).
+  - `UygulamaMetinleri`: SonBoxlar / SonBoxlarBaslik / SonBoxlarBos metinleri "1 hafta" oldu (TR/EN/AR).
+  - `OkutmaView.axaml` yorumu güncellendi.
+  - Yönetim ekranındaki 1. madde değişikliği de kaldı (zararsız).
+- **Dokunulan dosyalar:** `BantSayim/Ekranlar/OkutmaViewModel.cs`, `BantSayim/Ekranlar/OkutmaView.axaml`, `BantSayim/Ekranlar/UygulamaMetinleri.cs`, `BantSayim.Tests/YonetimFiltreTestleri.cs`
+- **Test (TDD):** yeni `TekrarYazdirListesiTestleri` (4 test: 7 gün sınırı, 12.10–18.10 aralığı, üç metin "1 hafta" diyor). Önce 4'ü de kırmızıydı, sonra yeşil. Suite: 58 geçti, 20 atlandı.
+- **Commit:** `529c77d`. Push edildi.
+- **Kiosk'a kurulum:** 2. maddedeki adımlar (pscp → sudo install → pkill). Yedek dosya `BantSayim.Desktop.2026-10-11` yerinde duruyor.
+  sha256 yerelde ve kiosk'ta aynı: bddc1b34… Yeni süreç 7760, 15 sn sonra çalışıyordu.
+- **Ders:** "Bant sonunda etiket basma" = bant ekranındaki tekrar yazdır listesi. Yönetim raporu değil.
