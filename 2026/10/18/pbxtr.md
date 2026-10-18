@@ -373,3 +373,8 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 ### Açık kalanlar
 - Kullanıcı testi: dinleme (1048), konferans (kuyruk dahil), scripter 8001 çağrısında.
 - #22 kısa blok birleştirme; #22 canlı süre ölçümü.
+
+### 41. #22 kısa blok birleştirme (`84e1422c`, yayın 67)
+- **Neden:** "Çok sayıdaki kısa bloklar diyorum bu kadar render etmesi zor".
+- **Ne yapıldı:** `AgentTimelineRules.CoalesceShortRuns` — art arda ≥2 blok, her biri < 60 sn → tek `mixed` blok, `Parts` (durum → sn). Tekil kısa blok kalır; saatlik kutular ham noktalardan (etkilenmez). Web: `blockMixed` tarama deseni, title'da döküm; `timeline.block.mixed` 9 dil. Test `Ardisik_kisa_bloklar_tek_karisik_blokta_toplanir_tekil_kisa_kalir`.
+- **Canlı ölçüm:** Deneme Agent bugün 80'e yakın blok → 34 blok (9 mixed). #22 yanıt süresi 1,7 sn (önceden 13 sn).
