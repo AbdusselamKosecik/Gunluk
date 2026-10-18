@@ -272,3 +272,18 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - Migration uyumluluk kapısı (`deploy/migration-compatibility-guard.py`) iki yeni ham SQL migration için kırmızı; `--testsiz` atlıyor, onay satırı yok.
 - Canlı inbound çağrıda `cdr.queue_id` dolu mu (scripter `GET …/script` 204 riski) — gerçek çağrıda ölçülmeli.
 - QA "kalite uzmanı" sistem rolü yok (tenant özel rolüyle verilir); XLSX içe aktarma yok; dışa aktarma ek alanları taşımıyor.
+
+## Ek (sekizinci tur) — scripter nereden eklenir + kampanya ekranı kusurları
+
+### 31. Kural kutusu düzeni ve kampanya metinleri (`c05bee2e`, yayın 60)
+- **Neden:** Kullanıcı "scripter i nereden ekleyecegiz" diye sordu. Cevap: 06 Kampanyalar → kart → **Script** (tasarımcı, yayınla) → 03 Kuyruk Yönetimi'nde kuyruğa "Kampanya (script)" → 05 Veri Yönetimi CSV (ilk 4 kolondan sonrası ek alan). Bu ekranın Playwright görüntüsünde üç kusur çıktı: "window undefined", açıklama kutusunda metnin sütunlara bölünmesi, "kampanya-kuyruk bağı yok" diyen bayat açıklama.
+- **Ne yapıldı:**
+  - `.ruleLine` `display:flex`; içine doğrudan konan `<T k=…/>` çevirisi `<b>`/`<code>` parçalarına bölünüp her parça ayrı flex sütunu oluyordu. Metin tek `<span>` içine sarıldı — 14 ekranda 58 satır (betik `scratchpad/rule_wrap.py`: `ruleTag}>` satırından sonraki tek satırlık `<T …/>` sarılır; ApiKeysScreen'deki çok satırlı karışık satır elle).
+  - 9 dilde `camp.windowUnset` → "tarih aralığı yok"; `camp.ruleProgress` ve `camp.ruleNotDrawn` güncel duruma göre yeniden yazıldı (ilerleme `contacts.campaign_id`'den sayılıyor; kuyruk-script bağı 03'te kuruluyor); `camp.ruleNotDrawnTag` → "kuyruk ve script".
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/i18n/messages/*.json` (9), `CampaignsScreen.tsx`, `CampaignReportDialog.tsx`, `QueuesScreen.tsx`, `LossScreen.tsx`, `TargetsScreen.tsx`, `DialerScreen.tsx`, `NetworkQualityScreen.tsx`, `ReportsScreen.tsx`, `ApiKeysScreen.tsx`, `StorageScreen.tsx`, `NetworkInterfacesScreen.tsx`, `ServicesScreen.tsx`, `BlacklistScreen.tsx`, `ExtensionsScreen.tsx`, `TrunksScreen.tsx`.
+- **Sonuç / doğrulama:** `tsc -b` temiz; vitest campaigns/security/queues 12 dosya 104 test yeşil. Yayın `--yayinla --testsiz` ile 60. koşu.
+- **Commit:** `c05bee2e` — Kampanyalar: tarih araligi metni, kural kutusu duzeni (14 ekran), kuyruk-script aciklamasi guncel
+
+### Açık kalanlar
+- Kullanıcı uçtan uca testleri: dinleme/fısıltı (1048), transfer/park, QA değerlendirme+itiraz, 8001 çağrısında scripter.
+- BR-BE-256, migration kapısı onay satırı, UnparkAsync, Excel matris dönüşü.
