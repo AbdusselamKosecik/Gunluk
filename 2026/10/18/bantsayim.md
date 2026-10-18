@@ -80,3 +80,40 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
   - `Erp_Box.WorkOrderReceiptItemId` kolonu `FK_Erp_Box_Erp_WorkOrderItem` ile Erp_WorkOrderItem'a bağlı; 13.914 box'ın hiçbirinde dolu değil.
   - Bantta çalışılan iş emirlerinde 3–4 kalem var (4315-2: 3, 4316-2: 4).
 - Kullanıcıya seçim düzeyi ve uymayan barkod davranışı soruldu.
+
+### 6. Sipariş + iş emri seçimi, box başlığına work order item
+- **Kullanıcı kararları:**
+  - Seçim: önce sipariş, sonra seçili siparişe bağlı iş emri. Kalem seçilmez ("zaten tek satır iş emirleri").
+  - Seçili iş emrinde olmayan barkod: hata ver, okutma.
+  - Box'ta renkler karışık olabilir; başlığa tek work order item yazılır, varyantlar satırlarda (WorkOrderItemVariant).
+- **Canlı bulgular:**
+  - 4315-2'de aslında 3 Erp_WorkOrderItem satırı var (EKRU/PUDRA/SİYAH, her biri 12 varyant, ortak varyant yok).
+    Kural ("ilk okutulan ürünün kalemi") iki durumda da doğru çalışır.
+  - 75 bant box'ının 11'inde iki kalem karışık.
+  - Sipariş↔iş emri bağı yalnız `UZM_SiparisWorkOrder`'da: 2 sipariş, 4 iş emri. Sentez'in kendi `OrderItemId` bağı son 29 kalemin hiçbirinde dolu değil.
+    Bu yüzden 4316-2 / Test-002 gibi bağlanmamış iş emirleri seçilemez.
+  - Bugün bant 4315-2'de çalışıyor (sipariş 00000002'ye bağlı); açık box yok.
+- **Ne yapıldı:**
+  - `BantSayim/Ekranlar/Veri/IsEmriSecimi.cs` (yeni) — `IsEmriSecimDeposu`:
+    - `SiparislerAsync`: UZM_SiparisWorkOrder'da iş emri olan, silinmemiş/iptal edilmemiş siparişler.
+    - `IsEmirleriAsync`: iş emri numarası Sentez'den, `ISNULL(w.WorkOrderNo, sw.WorkOrderNo)`.
+    - `BulAsync`: açık box'ın iş emri; siparişe bağlı değilse yalnız iş emri bilgisi döner.
+  - `UretimDeposu.OkutAsync(..., isEmriId)`:
+    - Kesim yalnız seçili iş emrinde aranır (`SonKesimAsync` + `@isEmriId` filtresi). Bellekten gelen çözüm başka iş emrindeyse kullanılmaz.
+    - Bulunamazsa: varyant iş emrinde yoksa `IsEmrindeYok`, varsa ama kesilmemişse `KesimYok`.
+  - `BoxAcAsync`: `Erp_Box.WorkOrderReceiptItemId` (FK Erp_WorkOrderItem) = box'a okutulan ilk ürünün kalemi.
+  - `OkutmaViewModel`:
+    - "YENİ ORDER" onayı yerine "İŞ EMRİ SEÇ" paneli: sipariş ve iş emri ComboBox'ları; tek iş emri varsa otomatik seçilir.
+    - İş emri değişince açık box'lar `YeniOrderAsync` ile kapanır ve etiketleri basılır; yeni iş emrinin kesim tablosu hemen yüklenir.
+    - Seçim yoksa okutma `IsEmriSecin` hatası verir (silme serbest).
+    - Açılışta açık box varsa onun iş emri seçili gelir; yoksa panel kendiliğinden açılır.
+    - Üstte büyük yazıyla "Sipariş X · İş emri Y · model".
+  - Metinler: SecimBaslik, SecimYok, IsEmriSecin, IsEmrindeYok, IsEmriSecildi… `BaskaOrder` metni artık "İŞ EMRİ SEÇ"e yönlendiriyor.
+- **Testler:**
+  - DB'siz: `IsEmriSecimiTestleri` (okutma engeli, üst bilgi metni).
+  - DB (ROLLBACK): `Secili_is_emri_disindaki_urun_reddedilir_box_acilmaz`, `Box_basligina_ilk_urunun_work_order_itemi_yazilir`, `Siparise_bagli_is_emirleri_listelenir`.
+  - Önce derlenmedi (kırmızı), sonra yeşil.
+  - `TestOrtami.AyarYukle()`: `MODFEX_SUNUCU` ile sunucu yalnız bellekte değişir (ayar dosyası 100.119… gösteriyor).
+  - Canlıda bantlar okuttuğu için testlerin örnek barkodu kesimi dolmuş varyanta düşüyordu (`KesimAsildi`). Seçiciler kesimden en az 5 kalan / hiç okutulmamış varyanta sınırlandı.
+  - Sonuç: `MODFEX_DB_TEST=1 MODFEX_SUNUCU=192.168.0.2 dotnet test BantSayim.Tests` → 84/84 geçti.
+- **Commit:** `e5cc165`. Push edildi. Linux paketi `dagitim/bantsayim-linux-x64/` hazır; **kiosk'a henüz kurulmadı** (operatör akışını değiştirdiği için kullanıcıya soruldu).
