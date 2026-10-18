@@ -324,3 +324,20 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 2. Architecture tam koşu, Api.Tests Scripter+Campaign filtreli; `doc/ekran-yazma-yollari.md` yeniden üret; `CrossTenantScopeSurfaces.cs`'e ScriptStandalone GUC satırı; screens.json yeni ekran için ekran sayımı/yetki bekçileri.
 3. main'e squash/merge → yayın `--testsiz` → t0007'de "Müşteri Hizmetleri Gelen" scriptinin geri doldurmayla bağlı kaldığını canlıda kontrol et.
 4. Backlog kartı aç (BR-FE-142 / BR-BE-259 — numarayı önce ölç) + ClickUp.
+
+## Ek (on birinci tur, eve dönüş) — Bağımsız script tamamlandı
+
+### 35. WIP dalı bitirildi, main'e alındı (`9800ce47`, yayın 62; `e4f4e8c6`, yayın 63)
+- **Neden:** "geldim eve devam edelim scripter ile calisiyorduk" — `wip/script-bagimsiz` dalı yarımdı.
+- **Ne yapıldı:**
+  - Dalda `dotnet build` 0 hata. Sunucu ajanı (backend-dev-1) kaldığı yerden devam ettirildi: iş zaten bitmişti, doğrulamada Architecture 857/857, Api Scripter+Campaigns+Contacts 367/367, Platform 1430 (+2 skip), format temiz, `ekran-yazma-yollari.md` değişmedi. Ajanın ek notları: `ScreenRegistryTests` 06.2'yi menüde noktalı kodlu ilk ekran istisnası sayar; `deploy/nginx.conf` + demo nginx 10 MB taslak sınırı `/api/v1/scripts/{id}/draft`; eski 2-admin ilk-taslak yarış testi silindi (unique indeks yok); yeni `T2_kampanyasi_T1_scriptine_baglanamaz…` entegrasyon testi.
+  - `AgentMonitoringTests` 16 kırmızı (beaa9e4c'den beri: supervizör dahilisi zorunlu) → harness'e `SabitDahiliDizini("1099")`; 19/19.
+  - Docker Desktop kapalıydı: `C:\Users\abdus\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe` ile açıldı (Program Files'ta YOK). `docker pull postgres:16-alpine` gerekti; sonra `dotnet test tests/Pbxtr.Integration.Tests --filter Scripter` → 24/24 gerçek PostgreSQL'de yeşil.
+  - Backlog BR-BE-259 + ClickUp (ilk koşu ECONNRESET, ikinci koşu temiz, kuru fark 0).
+  - `git merge --squash wip/script-bagimsiz` → `9800ce47`; WIP dalı yerel ve uzakta silindi.
+  - Canlı kontrol (Playwright, deneme.supervizor): #06.2 Scriptler'de "Müşteri Hizmetleri Gelen" aktif, v1, kullanan kampanya rozeti — geri doldurma bağı korudu; kampanya kartında "Script: Müşteri Hizmetleri Gelen". Kusur: menüde "06.2" adın üstüne biniyordu (`SidebarNav.module.css` `.code` width:16px → min-width) ve kampanya notu eski "Kuyruklar (script)" anlatımı → 9 dilde yeniden yazıldı (`scratchpad/camp_i18n2.py`). Yayın 63.
+
+### Açık kalanlar
+- Gerçek inbound çağrıda (8001) scriptin kampanya → script_id ile açıldığı ölçülmedi.
+- Rapor `?campaignId=` filtresinde carisiz (kuyruk kampanyasından açılan) cevaplar düşüyor.
+- Faz 2 düğümler BR-BE-258.
