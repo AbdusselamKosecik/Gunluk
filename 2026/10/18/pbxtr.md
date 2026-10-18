@@ -180,3 +180,34 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - Kalan: sistem sağlığı retention alarm satırı GUID (`pbxtr_sys.call_data_retention_lag()`).
 
 - Yayın 56 yeşil: `tekbirsoft/pbxtr:demo-8a5824bf3e85`, push `b78821c5..3280ebb5`. ClickUp fark 0.
+
+## Ek (beşinci tur) — dinleme/suflör, aktarma, park
+
+### 18. Dinleme/suflör (`bf3c2728`)
+- **Kullanıcı:** dinleme "bad request", süflör de olmuyor (yapıştırılan fetch: gövde `"\"{\\\"targetUserId…\"}"`).
+- **Neden 1 (400):** `api/ops.ts startMonitorSession` gövdeyi `JSON.stringify` ediyordu; `client.ts:523` zaten
+  çeviriyor → sunucuya JSON METNİ gidiyordu. Depoda tek örnek (`grep "body: JSON.stringify"`).
+- **Neden 2 (502, gövde düzelince API'yi elle denedim):** log `Canli durumdaki kanal adi TAM DEGIL`.
+  Redis `live:call:1792302663.26` → `agentChannelId = Local/1047@pbxtr-t0007-local-00000007;1`;
+  `ChanSpyInvocation.IsExactChannelName` `@`/`;` reddeder (Karar #23 §S23-4a).
+- **Düzeltme:** `TelephonyEventPipeline.AgentDeviceChannelOf`: AgentConnect anında agent bacağı Local üye ise
+  ve çağrının son doğan bacağı (`ChannelId`) aynı tenant kodu + dahilinin `PJSIP/{kod}-[wrtc-]{ext}-{hex}`
+  cihaz kanalıysa hedef odur; değilse fail-closed.
+
+### 19. Kör/danışmalı aktarma ve park — BR-AST-135 (`3f01370c`, ajan backend-dev-2)
+- Canlı ölçüm (06:04–06:11Z, ajanın kendi Local test oturumları, sonunda 0 kanal):
+  - Kör: ARI'ye kanal ADI gidiyordu (404 Channel not found); hedef `-in` DID bağlamı.
+  - Danışmalı: `8002@pbxtr-t0007-inbound` → `NO_DID_MATCH` → Congestion.
+  - Park: Asterisk 22.10.1 ARI'de `/channels/{id}/park` YOK (404); `PARKING_SPACE` yazılmıyor.
+- Çözüm: üçü de talep anında devralma (`ControlTargetOrTakeoverAsync` / yeni `ControlledSessionAsync`).
+  Kör = `continue` → `pbxtr-{kod}-local` + `DIALPLAN_EXISTS`; danışmalı = müşteri `-hold` köprüsü + `-xfer`
+  bacağı, agent kapatınca tamamlanır; park = `PARKINGLOT=t0007-tut`, `BLINDTRANSFER`, `continue` →
+  `pbxtr-{kod}-park,700`, slot AMI `ParkedCalls` (call sınıfı, yeni yetki yok).
+- Dosyalar: `AsteriskAriProvider.cs`, `AriCallBridge.cs`, `AmiCommandChannel.cs`.
+- Ölçülmeyen: tarayıcı agent ile uçtan uca; `UnparkAsync` muhtemelen bozuk (`tutN` exten'i yok).
+- Kırılacak test: `AsteriskAriProviderControlTargetTests.cs:162`.
+
+### 20. Yayın 57
+- İlk koşu `tag does not exist: tekbirsoft/pbxtr:demo-3f01370cec0f` — yayın sürerken ClickUp eşlemesi commit'lendi,
+  HEAD değişti. Hafıza `iki-yayin-kosusu-ust-uste-binmez` güncellendi.
+- Yeniden koşu yeşil: `tekbirsoft/pbxtr:demo-58d83bdf63fd`, push `3280ebb5..58d83bdf`.
