@@ -59,3 +59,35 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
   Compress-Archive -Path yayin\* -DestinationPath yayin-pdks-2026-10-18.zip
   ```
   Aynı adla (73,1 MB) üretildi, eski 18.10 zip'inin yerini aldı. Kaynak `c9b3e84`, arayuzTarihi 2026-10-18 09:11. Pakette appsettings.json yok.
+
+---
+
+## Modasima sentezservis (`X:\Gitlab\Modasima\sentezservis`, gitlab.com/modasima/sentezservis)
+
+> Not: Yukarıdaki bölümler modfex-apparel deposundaki sentezservis içindi. Bu bölüm Modasima deposudur.
+
+### 1. PDKS filtresi: emp_code 24 yerine "aktif ve iş tipi Geçici olmayan"
+- **Kullanıcı:** "Serviste pdks cekerken filtreyi es gec sadece aktifleri ve is tipi Geçici olmayanlari (ornek 24 abdusselam kosecik) getirir misin"
+- **İnceleme (salt okuma, 192.168.1.4/zkbiotime):**
+  - `personnel_employee` kolonları: `status`, `emp_type`. `personnel_employment.employment_type = 2` → 24 numaralı kayıt.
+  - 24 Abdusselam Kosecik: `status 0`, `emp_type 2` → Geçici = 2.
+  - Dağılım: aktif (status 0) 11 kişi; 10'unda `emp_type` NULL, 1'inde 2.
+- **Ne yapıldı:** `PdksDeposu` üç sorgu bacağında `p.emp_code <> @haricEmpCode` → `ISNULL(p.emp_type, 0) <> @geciciEmpType`;
+  `HaricEmpCode = "24"` sabiti kaldırıldı, yerine `GeciciEmpType = 2`.
+  **ISNULL şart:** düz `emp_type <> 2` NULL'ları da düşürür, rapor neredeyse boşalırdı.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Pdks/PdksDeposu.cs`, `tests/SentezServis.Core.Tests/PdksSinirTestleri.cs`, `docs/pdks-raporu.md`
+- **Test (TDD):** `Kullanicinin_filtreleri_korunur`, `Personel_filtreleri_UNIONun_IKI_bacaginda_da_vardir` güncellendi; yeni
+  `Gecici_personel_is_tipinden_dislanir_sabit_kod_filtresi_yoktur` (emp_code geçmez, düz `p.emp_type <> ` geçmez). Önce 3 kırmızı, sonra
+  tüm suite 683/683 yeşil.
+- **Canlı doğrulama:** yeni filtre ile 10 kişi raporda, yalnız 24 dışarıda.
+- **Commit:** `ad28b42` — PDKS: emp_code 24 filtresi kalkti; aktif ve is tipi Gecici (emp_type=2) olmayanlar raporlanir. Push edildi.
+- **Yayın:** henüz paket çıkarılmadı / sunucuya (192.168.1.5 MDSMHYPERV, port 81) kurulmadı.
+
+### 2. İkinci PDKS kaynağı: http://192.168.1.3:8095 (açık)
+- **Kullanıcı:** aynı raporu bu ikinci BioTime'dan da, aynı saatlerde, ayrı alıcılara göndermek istiyor (alıcıları kendisi girecek).
+- **Bulgular:**
+  - 8095 bir ZKBioTime web arayüzü (Apache + Django, `/login/`).
+  - 192.168.1.3'ün SQL Server'ında (ADAOSRV, tek instance MSSQLSERVER:1433) **zkbiotime veritabanı yok**; o BioTime'dan
+    gelen oturum da yok. 5432/7496 kapalı, `\192.168.1.3\c$` erişilemez.
+  - Muhtemelen BioTime'ın kendi gömülü PostgreSQL'i, yalnız localhost'ta dinliyor.
+- **Sonraki adım:** veritabanı erişimi (PostgreSQL'i ağa açmak + kimlik) ya da BioTime REST API kullanıcısı gerekiyor; kullanıcıya soruldu.
