@@ -133,3 +133,19 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
 - **Testler:** `Kesimli_acik_is_emirleri_listelenir_ve_numarayla_aranir` (DB), `Listede_son_kesim_tarihi_gorunur`, siparişsiz üst bilgi. Önce kırmızı, sonra yeşil.
   `MODFEX_DB_TEST=1 MODFEX_SUNUCU=192.168.0.2 dotnet test BantSayim.Tests` → 85/85.
 - **Commit:** `5766207`. Push edildi. Paket hazır; **kiosk'a kurulmadı**, kullanıcı onayı bekleniyor.
+
+### 8. Önce açık sipariş, sonra üretim emri (kullanıcı: "once acik siparis secelim sonra uretim emri secelim")
+- 7. maddedeki "doğrudan Erp_WorkOrder" listesinin üstüne sipariş adımı geri geldi.
+- **Canlı:** Şirket 2'de yalnız 2 satış siparişi var (ReceiptType 2): 00000001 (TEST-10), 00000002 (4731001/2-2); ikisi de açık.
+  Sipariş stok kartı iş emrininkinden farklı (4731001/2-2 ↔ 4731001/2), yani model eşleştirmesi bağ olamaz. Bağ yalnız `UZM_SiparisWorkOrder`.
+- **Ne yapıldı:**
+  - `SiparislerAsync`: ReceiptType 2, `IsClosed/IsCancelled/IsDeleted = 0`, en yeni önce, müşteri adıyla.
+  - `IsEmirleriAsync(companyId, kesimProcessId, orderReceiptId)`: UZM_SiparisWorkOrder'dan, iş emri açık; son kesim tarihi (yoksa boş), WorkOrderNo sırasıyla.
+  - `BulAsync`: OrderReceiptId'yi de döner; panel yeniden açılınca sipariş seçili gelir.
+  - Panel: sipariş ComboBox'ı, altında üretim emri listesi. Tek sipariş / tek iş emri varsa otomatik seçilir. Arama kutusu kaldırıldı.
+- **Test:** `Acik_siparisler_ve_siparise_bagli_acik_is_emirleri_listelenir` (DB), `Siparis_musteriyle_gorunur`, kesimsiz görünüm. Önce kırmızı, sonra yeşil. 86/86.
+- **Commit:** `ffd979e`. Push edildi. Kiosk'a kurulmadı.
+- **Yerel deneme:**
+  - Bu PC'de `%LOCALAPPDATA%\Modfex\bantsayim\ayarlar.json` Sunucu = 192.168.0.2 yapıldı (yedek: `ayarlar.json.yedek-2026-10-18`).
+  - `dotnet BantSayim.Desktop.dll` ile açıldı. Canlıda TestModu = 0: doğru barkod okutmak gerçek box açar.
+- **Sonuç:** Siparişe bağlanmamış iş emirleri (4314-2, 4222-2, 4316-2…) bu akışla seçilemez. Kullanıcıya bildirildi.
