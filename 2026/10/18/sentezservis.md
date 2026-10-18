@@ -29,3 +29,14 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
 
 ## Açık kalanlar
 - sentezservis'in güncel sürümünün modfexsrv'ye yayını (onay bekliyor).
+
+### Yayın paketi (kullanıcı: "paket cikartirmisin")
+- `deploy/yayinla.ps1` çalıştırıldı: arayüz derlendi, `dotnet publish` yapıldı, kurulum betikleri kopyalandı, ayar dosyası temizlendi.
+  Doğrulama `SentezServis.exe --paket-dogrula` ile yapıldı: arayuzVar true, etiketPdfBayt 27447.
+- Pakette `appsettings.json` yok; sunucudaki ayar korunuyor.
+- **Çıktı:** `yayin-pdks-2026-10-18.zip` (73,1 MB, gitignore'da). Kaynak commit `e363870`
+  (PDKS düzeltmesi 5b0f6ef + iş emri no + Pkcs 10.0.13 dahil).
+- Not: 13.10 paketi (`yayin-pdks-2026-10-13.zip`) düzeltmeden bir dakika sonra üretilmişti ama sunucuya kurulmamış görünüyor
+  (sunucudaki özet metni eski biçimde).
+- **Kurulum:** sunucuda `servis-kur.cmd` yönetici olarak çalıştırılır. Servis `SentezServis`, varsayılan hedef
+  `C:\Program Files\SentezServis`, port 81. Betik servisi durdurup dosyaları kopyalıyor ve servisi yeniden başlatıyor.
