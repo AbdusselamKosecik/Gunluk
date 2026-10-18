@@ -62,3 +62,20 @@ Cihaz: PM66 (adb 39916cf0), 480x800, uygulama Arapça. Ana menü: "Mamul giriş 
 - **Derleme:** `dotnet publish SevkiyatMobil.Android -c Release -f net10.0-android` → `dagitim/sevkiyatmobil-2026-10-18b.apk`.
 - **Kurulum:** `adb install -r` → Success. Uygulama giriş ekranında açıldı (oturum yeniden açılınca şifre istiyor).
 - **Commit:** `04fd2a1`. Push edildi.
+
+### 5. Sentez'de silinen 17 fişinin kolileri yeniden okutulamıyordu
+- **Kullanıcı:** "El terminali okutulup okutulmadığını nereden anlıyor. 17 numaralı fişi sildim ama gene okutamıyorum."
+- **Neden:**
+  - "Alınmış" kararı `UZM_PaketKoli.MamulFisId`'den, "sevk edilmiş" kararı `Erp_Box.InventoryReceiptId`'den veriliyor.
+  - Sentez fişi tamamen (hard delete) siliyor, bizim tablo silinen fişi göstermeye devam ediyor → `KoliZatenMamulde`.
+- **Canlı:**
+  - 16 koli (PK1-00000002-001…017) bugün silinen 738593'e bağlıydı; 2 koli 14.10'da silinen 738045 / 738049'a bağlıydı.
+  - PK1-00000001-001'in Erp_Box.InventoryReceiptId'si 738046.
+- **Ne yapıldı:**
+  - `SevkDeposu.KoliAsync`: Erp_InventoryReceipt'e LEFT JOIN. Fiş yoksa ya da IsDeleted=1 ise `MamulFisId`, `MamulAt`, `InventoryReceiptId` NULL okunur.
+    Koli hiç alınmamış / sevk edilmemiş gibi davranır; yeniden okutmada MamulFisId yeni fişle üzerine yazılır. Veriye elle dokunulmadı.
+  - `SevkSorgulari` (bugün sayacı + son mamul kolileri): fişi olmayan koli sayılmıyor.
+- **Test:** `Mamul_fisi_Sentezde_silinmisse_koli_yeniden_okutulur`: MamulFisId olmayan bir fişe çevrilip yeniden okutuluyor.
+  Önce `KoliZatenMamulde` ile kırmızıydı (sahadaki hata), sonra yeşil. 83/83.
+- **Kurulum:** `dagitim/sevkiyatmobil-2026-10-18c.apk` → `adb install -r` Success.
+- **Commit:** `5b6741e`. Push edildi.
