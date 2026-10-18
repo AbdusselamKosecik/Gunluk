@@ -211,3 +211,34 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - İlk koşu `tag does not exist: tekbirsoft/pbxtr:demo-3f01370cec0f` — yayın sürerken ClickUp eşlemesi commit'lendi,
   HEAD değişti. Hafıza `iki-yayin-kosusu-ust-uste-binmez` güncellendi.
 - Yeniden koşu yeşil: `tekbirsoft/pbxtr:demo-58d83bdf63fd`, push `3280ebb5..58d83bdf`.
+
+## Ek (altıncı tur) — dinleme hâlâ 502, ses kaydı, dalga formu, profil sekmesi
+
+### 21. Dinleme/suflör 502 — süpervizörün ucu GUID'di (`beaa9e4c`, BR-AST-136)
+- **Neden:** Kullanıcı 07:43Z'de yine 502 aldı. `audit_log` satırları `failureReason=TELEPHONY_REJECTED`. `AgentMonitoringService` `SpyRequest.SupervisorEndpoint`'e `_tenantContext.UserId.ToString("D")` veriyordu; ARI `POST channels` `endpoint` alanı kanal adresi bekler → red.
+- **Ne yapıldı:** Süpervizörün dahilisi `IAgentExtensionDirectory.ResolveExtensionAsync` ile çözülür (opsiyonel ctor parametresi, testler kırılmasın diye), sağlayıcı çıplak numarayı `Local/<dahili>@pbxtr-<kod>-local` yapar. Dahili yoksa 409 `SUPERVISOR_NO_EXTENSION` (`MonitorEndpoints.FailureResult`, `monitorErrors.ts`, 9 dil `mon.supervisorNoExtension`).
+- **Test ortamı verisi (ürün API'siyle):** `deneme.supervizor`'un dahilisi yoktu. t0007 agent kotası 6 doluydu → `PUT /api/v1/tenant` (demo.superadmin + `X-Tenant-Id`) agentLimit 10; `POST /api/v1/extensions` (demo.sahip) 1048 → süpervizör; `POST /api/v1/users/extensions/{id}/webrtc` → santralde `t0007-1048` ve `t0007-wrtc-1048` oluştu.
+- **Sonuç:** Gerçek çağrıda dinleme sesi ölçülmedi.
+
+### 22. Ses kayıtları yoktu — `record_all_calls=false` (ayar, kod değil)
+- **Ölçüm:** `tenant_settings.record_all_calls` bütün tenantlarda `f`; dialplan'de MixMonitor yok; `/var/spool/asterisk/recording/t0007` altında yalnız Eylül'den bir dosya.
+- **Ne yapıldı:** #49 Ayarlar → Telefon & Ses'ten (demo.sahip, Playwright) açıldı → yeni revizyon, `t0007-dialplan.conf` -in/-out bağlamlarında MixMonitor. Test: `channel originate Local/905551112233@pbxtr-t0007-out application Wait 4` → MixMonitor `t0007/2026/10/` dizinini kendisi açıp dosya yazdı (D-14'ün açık sorusu: açıyor). Test dosyası silindi.
+
+### 23. #20 Kalite Kontrol gerçek dalga formu (`beaa9e4c`, BR-FE-139)
+- `ui/RecordingPlayer`: `waveformHint` prop'u → bağlantı alınınca (yalnız ▶ ile; her alım denetime "dinlendi" yazar) aynı imzalı URL `fetch` + `AudioContext.decodeAudioData`, 160 çubuk tepe genliği, normalize; çalınan kısım amber, tıklayınca konum. Ölçülemezse oynatıcı etkilenmez. `QaScreen` "dalga formu yok" notunu kaldırdı, `qa.waveformHint` 9 dil.
+
+### 24. Agent masası (`beaa9e4c`)
+- Sol dikey sekmelerdeki "Profilim" kaldırıldı (`AgentDeskScreen.tsx`; `AgentProfileTab.tsx` dosyası duruyor).
+- Durum kartındaki kuyruk rozeti GUID gösteriyordu (`me.QueueIds`) → `/agent/state` `snapshot.Queues` ile ada çevirir. Canlı: `["Müşteri Hizmetleri"]`.
+
+### 25. `/telephony/*` ekranları yenilemede nginx 404
+- Demo nginx'inde çıplak `location /telephony/ { return 404; }` vardı (Sınıf B'nin gerçek rotası `/api/v1/telephony/`, hiçbir ucu kapatmıyordu). Kaynak `pbxtr-demo/nginx/pbxtr.conf` — yayın `nginx/.rev/<ts>-<sha>/conf.d/default.conf` olarak üretip `current` symlink'ler; elle düzeltme bir sonraki yayında ezilirdi. Satır kaldırıldı. Not: 443 bloğunda `/api/v1/telephony/*` tam eşleşme 404'leri YOK (`deploy/nginx.conf`'ta var) — dokunulmadı, edge'in yolu ölçülmeden kapatılmaz.
+
+### 26. Yayın 58
+- `demo-beaa9e4cb653`, YAYIN_EXIT=0, push `58d83bdf..beaa9e4c`. Canlı: `/telephony/monitor` 200, kuyruk adı görünüyor.
+- ClickUp: 2 yeni kart, `--kuru` fark 0.
+
+### Açık kalanlar
+- Dinleme/suflör, aktarma, park: gerçek çağrıda uçtan uca ölçüm (kullanıcı testi).
+- CDR listesinde yön `unknown`, agent/kuyruk boş, cevaplanan çağrıda numara "—" (ekran görüntüsünde görüldü) — ayrı kart açılmalı.
+- 443'te Sınıf B uçları proxy'leniyor (nginx-dogrula.sh gate B) — ölçülmeli.
