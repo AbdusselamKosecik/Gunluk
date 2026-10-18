@@ -166,3 +166,14 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
 - **Test:** `KesimKutusuTestleri` (4) önce derlenmedi (kırmızı), sonra yeşil. Toplam 91/91 (DB dahil).
 - **Commit:** `9ef443a`. Push edildi. Yerel deneme uygulaması yeni haliyle yeniden açıldı. Kiosk'a kurulmadı.
 - "dilden geçilerim" ifadesi anlaşılamadı; bu tabloyla ilgili varsayıldı, kullanıcıya soruldu.
+
+### 10. Etiket tekrar yazdır listesi seçili üretim emrine göre
+- **Kullanıcı:** "Üretim emri seçiyorum ama bana test-5 üretim emrinin barkodlarını getiriyorsun yazdırmada."
+- **Neden:** Liste bandın kendi box'larını (BantUserId) getiriyordu, seçili üretim emrine bakmıyordu.
+  Yerel denemede PL-001 ile girildi; PL-001'in son 1 haftada yalnız Test-005-2'den 2 box'ı var (13.10). 4315-2'nin 66 box'ı PL-002'de.
+- **Ne yapıldı:**
+  - `UretimRaporlari.BoxlarAsync(..., workOrderId)`: `AND (@workOrderId IS NULL OR x.WorkOrderId = @workOrderId)`.
+  - Bant ekranı listesi: üretim emri seçiliyse `bantUserId: null, workOrderId: seçili` (bütün bantlar); seçim yoksa eskisi gibi bandın kendi box'ları.
+  - Satıra Bant sütunu eklendi; başlık metni güncellendi.
+- **Test:** `Box_listesi_uretim_emrine_gore_suzulur` (DB, salt okuma), önce derlenmedi (kırmızı), sonra yeşil. 92/92.
+- **Commit:** `99890b0`. Push edildi. Yerel uygulama yeniden açıldı. Kiosk'a kurulmadı.
