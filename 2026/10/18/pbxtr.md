@@ -378,3 +378,21 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 - **Neden:** "Çok sayıdaki kısa bloklar diyorum bu kadar render etmesi zor".
 - **Ne yapıldı:** `AgentTimelineRules.CoalesceShortRuns` — art arda ≥2 blok, her biri < 60 sn → tek `mixed` blok, `Parts` (durum → sn). Tekil kısa blok kalır; saatlik kutular ham noktalardan (etkilenmez). Web: `blockMixed` tarama deseni, title'da döküm; `timeline.block.mixed` 9 dil. Test `Ardisik_kisa_bloklar_tek_karisik_blokta_toplanir_tekil_kisa_kalir`.
 - **Canlı ölçüm:** Deneme Agent bugün 80'e yakın blok → 34 blok (9 mixed). #22 yanıt süresi 1,7 sn (önceden 13 sn).
+
+## Ek (on üçüncü tur, gece) — sufle şeridi, taşmalar, #22 kapsamı, arayan numarası, canlı kuyruk → script
+
+### 42. Ekran düzeltmeleri (`2c26652b`, `7d634174`; yayın 70)
+- Sufle/dinleme şeridi yanda sıkışıyordu: `.screen` flex-wrap, şerit eski `grid-column` taşıyordu → `flex: 1 0 100%`.
+- Aktarma/konferans formu düğme satırını paylaşıp taşıyordu (96px etiket içinde geniş girdi) → `.transferGroup` tam genişlik satır + wrap, `.transferField` esnek, iç düğmeler `flex: 0 0 auto`.
+- Not: yayın 68 sürerken klondan 69 başlatıldı (üst üste binme); 68 docker build adımında `kill` ile durduruldu, sunucuya gitmemişti. 69 NuGet ağ hatası (NU1301) → 70 temiz.
+
+### 43. #22 agent yalnız kendini görür (`2b07e1e7`, yayın 70)
+- `TimelineEndpoints`: `live.agent.read` yoksa satırlar `tenantContext.UserId`'e süzülür (sunucuda). Ayrıca `AgentTimelineBlockDto` `Parts` taşımıyordu (yayın 67'deki mixed dökümü istemciye hiç ulaşmıyordu) → eklendi. Test `TimelineEndpointScopeTests` (3).
+
+### 44. Arayan numarası + canlı kuyruk → script (`fcce3ee1`, `ccfb7e22`; yayın 71) — backend-dev-2
+- Kök 1: `LiveCallState` numara taşımıyordu; telefon yalnız eşleşen cariden geliyordu, canlı yolda `contact_id` hiç set edilmiyordu → "Bilinmeyen arayan —". Düzeltme: trunk Newchannel `CallerIDNum` → `CallerNumber` (yalnız ilk bacak), yalnız inbound gösterim, `default_country` ile E.164, tek cari eşleşirse kart dolar.
+- Kök 2: AMI yalnız kuyruk ADI taşır → `QueueKey` boş, `cdr.queue_id` canlıda 0/390. `CallQueueIdEnricher` (QueueMetricDeriver haritası) + pipeline QueueKey doldurma + Hangup satırına son queue_id.
+- Kök 3: `OwnedCallResolver` yalnız `cdr` okur; görüşme sırasında cdr yok → script ucu 404. `includeLive`: yalnız kendi `CurrentCallId`'im ise Redis'ten.
+- Testler: `InboundCallerScreenPopTests` (14), `LiveQueueCallScriptTests` (7, ölçülen olay dizisi → Ready zarf). Telephony 1557, AgentDesk 291, Realtime 159, Scripter 228, Architecture 857.
+- Yan bulgu → BR-BE-262 (çağrı başına 7 cdr satırı, yön/arayan tutarsız).
+- Canlı doğrulama kullanıcı çağrısına kaldı (8001'e çağrı → maskeli numara + script).
