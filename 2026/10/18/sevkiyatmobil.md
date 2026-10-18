@@ -41,3 +41,11 @@ Cihaz: PM66 (adb 39916cf0), 480x800, uygulama Arapça. Ana menü: "Mamul giriş 
 - Set ürünlü kolilerde WorkOrderReceiptItemId boş. Set ↔ tekli eşleme kuralı (renk bileşenleri) gerekirse ayrıca yapılacak.
 - Yeni APK cihazda görsel olarak kontrol edilmedi.
 - paketleme (koli BoxType 1) ile birlikte yayınlanmalı.
+
+### 3. Cihaza kurulum (kullanıcı: "cihaza kurar mısın")
+- **Komut:** `adb install -r dagitim/sevkiyatmobil-2026-10-18.apk` → Success (lastUpdateTime 2026-10-18 15:56:08; önceki 2026-10-14). Ayarlar korundu.
+- **Kontrol:** Uygulama açıldı (Türkçe). Mamul giriş ekranında "Bugün: 16 koli · 800 adet"; son okutulanlarda "PK1-00000002-012 · 50 adet / Model 4731001/2-2 · Üretim emri 4315-2 · Sipariş 00000002" görünüyor.
+- **Cihazda görülen küçük düzen sorunları:**
+  - Üstteki özet satırı sağdan kırpılıyor ("800 ad…").
+  - Barkod kutusu klavye düğmesi yüzünden dar ("Koli…").
+- paketleme henüz kurulmadı. Bu sürüm hem BoxType 1 hem 2 koliyi okuduğu için tek başına kurulması güvenli.
