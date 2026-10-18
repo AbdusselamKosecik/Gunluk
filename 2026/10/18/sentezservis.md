@@ -91,3 +91,14 @@ Scratchpad `sorgu2.ps1` ile `MODFEX_SUNUCU` / `MODFEX_DB` ortam değişkenleri k
     gelen oturum da yok. 5432/7496 kapalı, `\192.168.1.3\c$` erişilemez.
   - Muhtemelen BioTime'ın kendi gömülü PostgreSQL'i, yalnız localhost'ta dinliyor.
 - **Sonraki adım:** veritabanı erişimi (PostgreSQL'i ağa açmak + kimlik) ya da BioTime REST API kullanıcısı gerekiyor; kullanıcıya soruldu.
+
+#### 2a. İkinci BioTime'ın veritabanı bulundu (kullanıcı: "192.168.1.3 sql var")
+- 1.3 SQL Server (ADAMOSRV, MSSQLSERVER) sa ile sysadmin; 11 veritabanının hiçbirinde `iclock_transaction` yok
+  (`sp_MSforeachdb` + `OBJECT_ID` taraması).
+- Kayıt defteri (`xp_regenumkeys ...\Services`, salt okuma): `bio-apache0`, `bio-pgsql`, `bio-redis`, `bio-server` servisleri var.
+  `bio-pgsql` ImagePath: `C:\ZKBioTime\pgsql\bin\pg_ctl.exe ... -D C:\ZKBioTime\pgsql\data`.
+- `C:\ZKBioTime\attsite.ini` (`OPENROWSET(BULK ..., SINGLE_BLOB)` ile okundu): `ENGINE=postgresql`, `NAME=biotime`,
+  `USER=postgres`, `PORT=7496`, `HOST=127.0.0.1`, parola BioTime tarafından şifreli (`DB_PWD=1`). Web portu 8095.
+- Sonuç: veri BioTime'ın gömülü PostgreSQL'inde, yalnız localhost'ta; ağdan 7496 kapalı. Sunucuda değişiklik yapılmadı.
+- Karar bekleniyor: (1) PostgreSQL'i yalnız 192.168.1.5'e açmak + salt okunur rol (önerilen; tablolar 1.4 ile aynı, sorgu Postgres
+  diyalektine çevrilir, Npgsql eklenir) veya (2) BioTime REST API kullanıcısı (emp_type / puantaj çıkışı API'de olmayabilir).
