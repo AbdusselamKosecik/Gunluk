@@ -240,5 +240,5 @@ yok, (3) "Kabul et" 502. Ardından: telefon çipindeki Aç/Kapat tasarımı, hop
 
 ### Açık kalanlar
 - Dinleme/suflör, aktarma, park: gerçek çağrıda uçtan uca ölçüm (kullanıcı testi).
-- CDR listesinde yön `unknown`, agent/kuyruk boş, cevaplanan çağrıda numara "—" (ekran görüntüsünde görüldü) — ayrı kart açılmalı.
+- CDR listesinde yön `unknown`, agent/kuyruk boş, cevaplanan çağrıda numara "—" (ekran görüntüsünde görüldü) — kart `BR-BE-256` (`b60a14e0`).
 - 443'te Sınıf B uçları proxy'leniyor (nginx-dogrula.sh gate B) — ölçülmeli.
