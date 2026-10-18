@@ -60,3 +60,23 @@ Kullanıcı: "bant sonu na etiket basmada tarih fitresini 1 haftaya cikartirmisi
 - **Kiosk'a kurulum:** 2. maddedeki adımlar (pscp → sudo install → pkill). Yedek dosya `BantSayim.Desktop.2026-10-11` yerinde duruyor.
   sha256 yerelde ve kiosk'ta aynı: bddc1b34… Yeni süreç 7760, 15 sn sonra çalışıyordu.
 - **Ders:** "Bant sonunda etiket basma" = bant ekranındaki tekrar yazdır listesi. Yönetim raporu değil.
+
+### 4. Etiket tekrar yazdır ayrı sekme (kullanıcı: "bunu ayri bir tab olarak yapabilirmisin")
+- **Ne yapıldı:**
+  - Bant ekranının üstüne iki sekme eklendi: **Okutma** ve **🖨 Etiket tekrar yazdır — son 1 hafta** (Yönetim ekranındaki `Button.sekme` stili).
+  - Eski "Son 1 hafta" düğmesi ve listenin "Kapat"ı kaldırıldı. Listede "Yenile" düğmesi var; sekme her açılışta liste yeniden yükleniyor. Listedeki 360 px yükseklik sınırı kaldırıldı, sayfa kayıyor.
+  - Okutma kutusu iki sekmede de üstte duruyor. `Okut` ilk iş `Sekme = 0` yapıyor: liste açıkken okutulan barkod kaybolmuyor, ekran okutmaya dönüyor.
+  - Okutma sekmesinin içeriği (hata, sil modu, kalite kartları, kesim, son okutmalar) `IsVisible=OkutmaSecili` StackPanel'inde.
+- **Dokunulan dosyalar:** `BantSayim/Ekranlar/OkutmaViewModel.cs` (Sekme, OkutmaSecili, BoxlarSecili, SekmeSec, BoxListesiYenile; BoxListesiAcik kalktı), `OkutmaView.axaml`, `UygulamaMetinleri.cs` (OkutmaSekme, SonBoxlar), `BantSayim.Tests/YonetimFiltreTestleri.cs`
+- **Test:** `Bant_ekrani_iki_sekme_okutma_ve_etiket_listesi` önce derlenmedi (kırmızı), sonra yeşil. Suite: 59 geçti, 20 atlandı. Derleme hatasız (yalnız eski Pkcs 9.0.11 NU190x uyarıları).
+- **Commit:** `bb7518e`. Push edildi. Kiosk'a 2. maddedeki adımlarla kuruldu: sha256 7d693ef5…, yeni süreç 7920.
+- Görsel kontrol yapılmadı: ekran görüntüsü testi yok, kiosk ekranı görülemiyor. Kullanıcıdan bakması istendi.
+
+### 5. Yeni istek (tasarım aşamasında): iş emri seçimi + box başlığına work order item
+- Kullanıcı: "birde bunun ustune hangi workorder de calistigini secelim, paketin usune workorder item ekleyelim".
+- **Bugünkü durum:** İş emri otomatik seçiliyor: `UretimDeposu.SonKesimAsync`, varyantın en son kesim (ProcessId = KesimProcessId) üretim kaydının iş emri.
+  Box satırları (`Erp_BoxItem.UD_WorkOrderItemId`, `Erp_BoxItemVariant.UD_WorkOrderItemVariantId`) dolu. Box başlığına (`Erp_Box`) yalnız WorkOrderId yazılıyor.
+- **Canlı bulgu (192.168.0.2):**
+  - `Erp_Box.WorkOrderReceiptItemId` kolonu `FK_Erp_Box_Erp_WorkOrderItem` ile Erp_WorkOrderItem'a bağlı; 13.914 box'ın hiçbirinde dolu değil.
+  - Bantta çalışılan iş emirlerinde 3–4 kalem var (4315-2: 3, 4316-2: 4).
+- Kullanıcıya seçim düzeyi ve uymayan barkod davranışı soruldu.
