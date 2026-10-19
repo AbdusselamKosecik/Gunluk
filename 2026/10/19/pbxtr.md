@@ -20,3 +20,9 @@ Yayın 71 (arayan numarası + canlı kuyruk → script) sahada. Kullanıcı test
 
 ## Açık kalanlar / sonraki adım
 - BR-BE-262: alt bacak Hangup'ları hâlâ `call.ended` yayınlıyor ve CDR satırı yazıyor (çağrı başına 7 satır). Aynı kök sebep sınıfında; sıradaki iş bu.
+
+### 2. Asterisk yapılandırma değişiklik kaydı (belge)
+- **Neden:** Kullanıcı: "Asterisk configlerinde neleri degisitirdin bir dokuman cikarabilirmisin?"
+- **Ne yapıldı:** Günlük (09-23…10-19) + `git log` (ConfigRenderer, deploy/asterisk-lab, carrier-lab, pbxtr-edge) + sunucu ölçümü (10:50Z: `/etc/asterisk` mtime, host↔depo md5/diff, AMI read/write, netns dinleyenleri) → `doc/mimari/asterisk-config-degisiklik-kaydi.md`.
+- **Bulgu:** host ↔ depo farkı yalnız açıklama + lab include'ları; değer farkı yok. 10-18 elle `username` yaması confd üretimiyle örtüldü, yedek silinebilir.
+- **Commit:** pbxtr `doc: Asterisk yapilandirma degisiklik kaydi`.
