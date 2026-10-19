@@ -54,12 +54,27 @@ Hedef: SentezSelvedge, modfex-apparel/selvedge gibi tamamen Sentez'den çalışa
 - **Doğrulama:** uzm_selvedge_app ile: Erp_Mark okuma OK, UZM_Selvedge_OrderQc INSERT OK (rollback), Erp_Mark UPDATE "izin reddedildi". 9001 doğrulama sorgusu boş.
 - **Commit:** `cccb77b` — chore(sentez-selvedge): kullanim disi Firm/Brand tablolarini silen elle script (9002)
 
+### 4. Deploy paketi (SentezSelvedge-IIS-192.168.3.228-91)
+- **Neden:** Kullanıcı: "paketi hazırla deploy için". Veritabanı yeni şemada, eski uygulama çalışmaz.
+- **Komutlar:**
+  ```powershell
+  .\Deploy-IIS.ps1 -OutputDir 'X:\GitlabredericTr\muftelif\SentezSelvedge-IIS-192.168.3.228-91\site'   # npm build + dotnet publish
+  ```
+  ```bash
+  rm -rf $PK/sema && dotnet publish SentezSelvedge/db-tool -c Release -o $PK/sema
+  cp SentezSelvedge/db/*.sql $PK/sema/db/; cp SentezSelvedge/db/elle/*.sql $PK/sema/elle/; cp SentezSelvedge/Deploy-IIS.ps1 $PK/
+  ```
+- `IIS-KURULUM.txt` güncellendi (gitignore'lu; eski hali scratchpad'e yedeklendi): başa "2026-10-19'da ne değişti" bölümü (DB zaten hazır, sunucuda yalnız ortam değişkeni + paket kurulumu), şema listesine 0006/9002, doğrulama adımları (Siparişler filtre/panel, Firmalar salt okunur), "VAR" listesi.
+- Zip: `SentezSelvedge-IIS-192.168.3.228-91.zip` (128 dosya, 12,7 MB; eskisiyle aynı kök düzeni). Kontrol: site dll/web.config/wwwroot, sema exe + 0006 + 9002 var; appsettings.Development.json, logs, files YOK.
+- Paketteki 0006 SHA256 = DB'deki kayıt → sunucuda db-tool "Degisiklik yok" der.
+- **Doğrulanamayan:** paket yerelde canlı DB'ye karşı çalıştırılamadı (bu makinede .NET → SQL TCP zaman aşımı).
+
 ## Kararlar
 - Sipariş listesi tip 15; tek sipariş okuma tipe göre süzmez (eski raporlar açılsın).
 - Firm/Brand tabloları silinmez, kullanım dışı.
 - Sipariş KK durumları: Acik/Kontrolde/Tamamlandi/Beklemede; final karar KK kararlarıyla aynı.
 
 ## Açık kalanlar / sonraki adım
-- Şema canlıda (0006 + 9002 + 9001). ESKİ uygulama sürümü artık çalışmaz (FirmId/BrandId/Firm/Brand arıyor) → yeni paket 192.168.3.228:91'e kurulmalı (buradan sunucuya erişilemedi).
+- Şema canlıda (0006 + 9002 + 9001). Paket hazır: `SentezSelvedge-IIS-192.168.3.228-91.zip` → sunucuda `.\Deploy-IIS.ps1 -SkipBuild -OutputDir '.\site' -SetupIIS -Port 91` (buradan sunucuya erişilemedi).
 - Sunucuda `ConnectionStrings__Sentez` → uzm_selvedge_app + yeni parola (parola depoya YAZILMADI; kullanıcıya iletildi).
 - Eski test verisi: AKIN TEKSTIL firmasına bağlı 1 anket cevabının firma bağı düşecek.
