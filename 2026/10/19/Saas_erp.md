@@ -144,3 +144,23 @@ Skeptic'in uyarısı üzerine iş dört gruba bölündü:
 - **Neden:** Kullanıcı "menü geçmemiş dev'e" dedi; menü yalnız `feat/iki-panelli-menu` dalındaydı, DEV ortamında görünmüyordu.
 - **Ne yapıldı:** `git checkout dev && git pull --ff-only && git merge feat/iki-panelli-menu` → `934479c6`; typecheck temiz. `src/common` testlerinde 2 kırık (`data-table-search.test.tsx`) — origin/dev'de de kırık, birleştirmeyle ilgisiz. Yenilikler'e "iki panelli menü" maddesi `b94c9970`. Menü dalı dev'e ff ile eşitlendi, ikisi push edildi.
 - **Açık:** `data-table-search.test.tsx` 2 test önceden kırık, ayrıca bakılmalı.
+
+### 11. CI derlemesi 33 dk → hızlı; tüm warning/notice temizliği
+- **Neden:** Kullanıcı DEV Deploy logunu yapıştırdı (run #103, 33m44s): "tüm warning ve infoları düzelt, 33 dk derleme olmaz".
+- **Kök neden (ölçüldü):** logda `VuoApp.Migrator` derlemesi 130.5s → 1689.2s (~26 dk). `src/backend/VuoApp.Migrator/Migrations` = 159 MB; 109 migration'ın her `.Designer.cs`'i ~1.5 MB tam model kopyası (`BuildTargetModel`). Bu yüzden Dockerfile'a OOM önlemleri (`-m:1`, `UseSharedCompilation=false`) eklenmişti → daha da yavaş.
+- **Kurul:** cto + skeptic APPROVE-WITH-CONDITIONS (Up/Down/idempotent script önce/sonra aynı; son 3 Designer + snapshot dokunulmaz; ayrı commit'ler; script idempotent + dokümante). security-reviewer (KnownIPNetworks + paketler) PASS-WITH-NOTES.
+- **Ne yapıldı:**
+  1. `tools/strip-migration-designers.mjs` (yeni): son 3 hariç Designer'larda ilk `modelBuilder.Entity(` ile `#pragma warning restore` arası silinir; öznitelikler + ProductVersion/identity annotation kalır. 159 MB → 8.5 MB. Kural `src/backend/VuoApp.Migrator/CLAUDE.md`'ye yazıldı (her yeni migration sonrası çalıştır; arka arkaya en fazla 2 `migrations remove`).
+     ```bash
+     cd src/backend/VuoApp.Migrator; export ConnectionStrings__DefaultConnection="Host=localhost;Database=design_only;Username=x;Password=x"
+     dotnet ef migrations script --idempotent ... ; dotnet ef migrations script 0 <son> ; dotnet ef migrations script <son> 0   # önce/sonra cmp → AYNI
+     node tools/strip-migration-designers.mjs ; dotnet ef migrations has-pending-model-changes ...   # No changes
+     ```
+     Yerel Migrator derlemesi 6 sn; tüm solution Release --no-incremental 13 sn.
+  2. NuGet açıkları: MailKit 4.18.1, OpenTelemetry 1.20, Swashbuckle 10.3.0, Testcontainers 4.16.0; pin Pkcs 10.0.13 (Infrastructure*), MessagePack 2.5.307 (Api). `dotnet list package --vulnerable` temiz.
+  3. C# uyarıları 0: OrderReceipt IncludeProperties nameof; GetDemandDashboard `(avgRating ?? 0)` (gerçek null patlaması); CreateScanMovement ToDictionary null anahtar → Guid.Empty (gerçek patlama riski); Program.cs KnownIPNetworks; EmailService eksik SMTP ayarında açık hata; AmiEventPumpTests EnumeratorCancellation.
+  4. Ön yüz: barrel döngüsü (page-title/dialog/confirm-dialog-reverse/data-table → doğrudan ui modülleri) → "reexported ... circular chunk" uyarıları bitti; data-table-search 2 kırık test düzeldi. exceljs dinamik import, kullanılmayan moment-timezone kaldırıldı (convertToTRTime Intl + test), vendor manualChunks, signalr PURE onwarn, chunkSizeWarningLimit 1000 (yalnız tembel exceljs). Ana paket 2.0 MB → 380 kB. shadcn/add/drawer/root (kullanılmayan) kaldırıldı, npm audit fix, `overrides.exceljs.uuid ^11.1.1` → 33 açık → 0.
+  5. CI: actions/checkout v7, setup-buildx v4, login v4, build-push v7 (Node 24); API Dockerfile'a Identity + Migrator csproj COPY; SPA Dockerfile NPM_CONFIG_UPDATE_NOTIFIER/FUND=false.
+- **Doğrulama:** unit 3814 geçti; FE typecheck temiz, vite build 0 uyarı; production preview (port 3131, config.js apiUrl=localhost:5240) giriş + fiş listesi + fiş ekranı konsol hatasız.
+- **Commit:** `96f326df` (designer), `73d692a6` (frontend), `dcf60f7e` (ci), `48a6cb91` (backend).
+- **Açık:** Dockerfile OOM önlemleri (-m:1 vb.) CI süresi ölçüldükten sonra ayrı commit'te kaldırılacak (CTO koşulu). exceljs'in eski bağımlılıkları (glob7/inflight/rimraf2/fstream/lodash.isequal) npm deprecation uyarısı vermeye devam eder (3. parti). Önceden kırık FE testleri: i18n parity (22 tr-only anahtar), login (jsdom SVG), orders worklist contract.
