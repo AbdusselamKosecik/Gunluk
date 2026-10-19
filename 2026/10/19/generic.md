@@ -22,3 +22,8 @@ Yeni indirilen `D:\Backup\003-Media\Videolarım\turkce` (26 mp4) videoları Wind
 ## Açık kalanlar
 - Kullanıcı Mirkelam'ı onaylarsa kalan 20 dosya: `video_duzelt.ps1 -Klasorler 'D:\Backup\003-Media\Videolarım' -Uygula`.
 - İndirme aracının ayarı (remux/merge) düzeltilirse sorun tekrar etmez.
+
+### 3. Toplu uygulama
+- Kullanıcı "yaptın mı" → kalan 20 dosya `-Uygula`: **20/20 düzeltildi, 0 hata** (rapor `rapor_20261019_213906.csv`).
+- Yeniden tarama Videolarım: **0 sorunlu**. Orijinaller `_orijinaller\Videolarım\turkce\` (21 dosya).
+- Laubali yine sessiz (kaynak eksik) — yeniden indirilmeli.
