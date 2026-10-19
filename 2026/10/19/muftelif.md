@@ -58,7 +58,7 @@ Hedef: SentezSelvedge, modfex-apparel/selvedge gibi tamamen Sentez'den çalışa
 - **Neden:** Kullanıcı: "paketi hazırla deploy için". Veritabanı yeni şemada, eski uygulama çalışmaz.
 - **Komutlar:**
   ```powershell
-  .\Deploy-IIS.ps1 -OutputDir 'X:\GitlabredericTr\muftelif\SentezSelvedge-IIS-192.168.3.228-91\site'   # npm build + dotnet publish
+  .\Deploy-IIS.ps1 -OutputDir 'X:\Gitlab\fredericTr\muftelif\SentezSelvedge-IIS-192.168.3.228-91\site'   # npm build + dotnet publish
   ```
   ```bash
   rm -rf $PK/sema && dotnet publish SentezSelvedge/db-tool -c Release -o $PK/sema
