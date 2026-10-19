@@ -36,7 +36,13 @@ www.pbxtr.com'u tanıtım (landing) sayfasına ayırmak; landing için Claude De
   güvenlik/uyum, demo formu, erişilebilirlik/SEO, YAPMA listesi (uydurma logo/rakam/AI yok).
 - **Commit:** `20ebfa31`
 
+### 3. DNS + yayın 73
+- Kullanıcı Cloudflare'de `app` kaydını ekledi (172.67.149.176 / 104.21.71.217).
+- Yayın: `bash deploy/yerel-yayin.sh --yayinla --testsiz` → `YAYIN_EXIT=0`, imaj `demo-20ebfa31cc63`.
+- **Ölçüm:** `https://app.pbxtr.com/` 200 · `https://pbxtr.com/login` 302 → `https://app.pbxtr.com/login`
+  · `https://www.pbxtr.com/x` 302 → app · `http://app.pbxtr.com/` 301 → https · CSP
+  `connect-src 'self' wss://app.pbxtr.com` · login API token döndü · `/sip-ws` upgrade 101 ·
+  konteynerde `ResetUrlBase=https://app.pbxtr.com`.
+
 ## Açık kalanlar / sonraki adım
-- Kullanıcı Cloudflare'de `app` kaydını ekleyecek → yayın 73 (`--yayinla --testsiz`) →
-  `https://app.pbxtr.com` 200, `https://pbxtr.com` 302, WebSocket + SIP-WS + şifre sıfırlama ölçülür.
 - Landing hazır olunca: apex+www 302 kaldırılır, www için ayrı statik server bloğu.
