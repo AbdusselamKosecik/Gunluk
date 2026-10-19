@@ -154,3 +154,19 @@ Kurallar:
   - Testler: `TabloMetniTestleri` (5), çevirici (2), komut (4) → `dotnet test` 186 geçti, 7 atlandı.
 - **Commit:** `35e1d89` — /ai Excel/CSV analizi; /sor reçete-stok eğitimi ve llama kilitlenmesi düzeltmesi
 - **Dağıtım:** zip → `C:\Server\Sentez_Onaymerkezi`, `/api/surum` = 35e1d89. yzsorgu `kur.ps1` ile güncellendi (26 örnek).
+
+### 8. Reçete sorularında takma ad karışıklığı
+- **Belirti:** Doğru tablolar kullanıldı ama:
+  - Model `i`/`m` takma adlarını karıştırdı ve kumaş yerine mamulün adını gösterdi.
+  - "6202 stokta olmayan aksesuarlar" sorusu 0 satır döndü (eski birim yolu ve eksik stok kuralı).
+- **Düzeltme:**
+  - Reçete örnekleri `model`/`kumas`/`aksesuar`/`birim` takma adlarıyla yeniden yazıldı.
+  - "Stokta olmayan aksesuarlar" örneği eklendi (toplam 27).
+  - Sabit isteme kural eklendi: aynı anlamdaki örneğin SQL'i aynen kullanılır, yalnız kodlar değiştirilir; aynı tablo iki kez bağlanırsa anlamlı takma ad verilir.
+- **Deneme sonuçları (sırayla, 140–167 sn):**
+  - "6224 un kumaşlarından ne kadar var" → KMS-0034/0035 Kg 0, KMS-0082 Mt 0 ✔.
+  - "6224 reçetesindeki kumaşlar" → 4 kumaş, sarf ve birim ✔.
+  - Örneklerde birebir olmayan "6202'nin kumaşları ve stokları" → KMS-0214 95.165 Mt, KMS-0140 0, KMS-0298 0 ✔.
+- **Kalan küçük sorun:** Reçetede aynı kumaş iki satırsa, sonuçta da iki kez görünüyor.
+- **Commit:** `0460446`
+- **Hız:** Soru başı ~2,5 dk; çoğu üretimde geçiyor (~4–8 token/sn). Daha hızlısı için llama `-t 6` artırılabilir ya da GPU kullanılabilir; bu sunucu ayarı, kullanıcıya soruldu.
