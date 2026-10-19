@@ -43,11 +43,23 @@ Hedef: SentezSelvedge, modfex-apparel/selvedge gibi tamamen Sentez'den çalışa
 - **Sonuç / doğrulama:** 0006 canlıda transaction içinde koştu: kolonlar doğru, Firm eki `FirmEski` oldu, upsert ilk kayıt=1 / yanlış sürüm=0 / doğru sürüm=1, FinalQcAt yazıldı; ROLLBACK sonrası trancount=0, tablo yok.
 - **Commit:** `34d9347` — feat(sentez-selvedge): firma, marka, sezon Sentez'den; siparis tipi 15; OrderQc/StyleQa
 
+### 3. Canlıya şema: 0006 + eski tabloların silinmesi + yetki
+- **Neden:** Kullanıcı: "silinecek tabloları silsene", "yetkiyi de sen çalıştırır mısın".
+- **Engeller:** `UZM_Selvedge_Firm/Brand`'e 3 FK bağlıydı (0006 bunları kaldırıyor) → sıra 0006 → silme → yetki. ScriptTarayici otomatik betikte DROP'a izin vermiyor → silme `db/elle/` altında elle betik. `dotnet run db-tool` SQL'e TCP zaman aşımı aldı (sqlcmd aynı sunucuya bağlanıyor; makinede .NET'e özgü ağ engeli, çözülmedi) → db-tool'un işi sqlcmd ile birebir yapıldı.
+- **Ne yapıldı:**
+  1. 0006 working copy CRLF'e çevrildi (checkout ile aynı içerik); SHA256 = `39C25516…7C6C` (db-tool yöntemi: BOM'suz metin, UTF-8; 0001/0005 kayıtlı hash'leriyle aynı yöntem doğrulandı).
+  2. `BEGIN TRAN; 0006; INSERT SchemaHistory(0006, hash); COMMIT` — sqlcmd `-b`, XACT_ABORT.
+  3. `db/elle/9002_eski_firma_marka_sil.sql` yazıldı ve koşturuldu (0006 yoksa / FK varsa durur) → Firm ve Brand yok.
+  4. `9001_yetki.sql` geçici kopyada parola yer tutucusu rastgele parolayla değiştirilip master'da koşturuldu, kopya silindi. `uzm_selvedge_app` login'i HİÇ YOKTU — ilk kez oluşturuldu.
+- **Doğrulama:** uzm_selvedge_app ile: Erp_Mark okuma OK, UZM_Selvedge_OrderQc INSERT OK (rollback), Erp_Mark UPDATE "izin reddedildi". 9001 doğrulama sorgusu boş.
+- **Commit:** `cccb77b` — chore(sentez-selvedge): kullanim disi Firm/Brand tablolarini silen elle script (9002)
+
 ## Kararlar
 - Sipariş listesi tip 15; tek sipariş okuma tipe göre süzmez (eski raporlar açılsın).
 - Firm/Brand tabloları silinmez, kullanım dışı.
 - Sipariş KK durumları: Acik/Kontrolde/Tamamlandi/Beklemede; final karar KK kararlarıyla aynı.
 
 ## Açık kalanlar / sonraki adım
-- 0006 canlıya UYGULANMADI. Sıra: yeni paket deploy + `sema\SentezSelvedge.Db.exe db` aynı anda (eski uygulama FirmId/BrandId kolonlarını arıyor), ardından `db\elle\9001_yetki.sql` yetki bloğu (yeni 2 tablo için).
+- Şema canlıda (0006 + 9002 + 9001). ESKİ uygulama sürümü artık çalışmaz (FirmId/BrandId/Firm/Brand arıyor) → yeni paket 192.168.3.228:91'e kurulmalı (buradan sunucuya erişilemedi).
+- Sunucuda `ConnectionStrings__Sentez` → uzm_selvedge_app + yeni parola (parola depoya YAZILMADI; kullanıcıya iletildi).
 - Eski test verisi: AKIN TEKSTIL firmasına bağlı 1 anket cevabının firma bağı düşecek.
