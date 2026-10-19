@@ -102,3 +102,55 @@ Kurallar:
 - Kullanıcının Telegram'dan `/sor` denemesi; yanlış cevap veren soruları örneklere eklemek.
 - "kaç metre" gibi birim içeren sorularda model tüm birimleri topluyordu; birim bazında gruplayan örnek eklendi, gözlenecek.
 - İstenirse: bot mesajına "✅ doğru" düğmesi → `/dogru`; llama-server `-t 6` artırılırsa hız artar, ama sunucu SQL Server ile paylaşılıyor, kullanıcıya sorulmalı.
+
+---
+
+## Öğleden sonra: kullanıcının ilk denemeleri
+
+### 5. /sor reçete ve stok sorularına cevap veremiyordu
+- **Belirti (Telegram, tekbirsoft, 13:08–13:16):**
+  - "6224'ün kumaşlarından ne kadar var" sorusuna seri kartında 6224 kodlu stok aradı, "Sonuç yok" döndü.
+  - "6224 reçetesindeki kumaşlar" sorusunda "reçete ilişkisi tanımlı değil" dedi.
+  - "erp_receiptitem OnverId" sorusunu da anlamadı. Kullanıcının kastettiği `Erp_RecipeItem.OwnerInventoryId`.
+- **Sebep:** Eğitimde reçete ve stok tabloları yoktu; "X'in kumaşları = X'in reçetesi" kuralı yazılmamıştı.
+- **Yapılan:**
+  - `ddl-uret.ps1` listesine `Erp_RecipeItem`, `Erp_InventoryTotal`, `Erp_InventoryUnitItemSize` eklendi.
+  - `Erp_InventoryTotal`'daki tutar, fiyat ve konsinye kolonları sabit istemden atıldı.
+  - `belgeler.md`'ye iki bölüm eklendi:
+    - **Reçete:** `OwnerInventoryId` = mamul; `RecipeType` 1 kumaş, 2 aksesuar; birim çevirisi `UnitDivisor/UnitFactor`. Kaynak: depo `ReceteSorgulari.cs`.
+    - **Stok:** `TotalDate IS NULL` güncel bakiye. Kartın toplamı `InventoryVariantId IS NULL`, varyant kırılımı `IS NOT NULL`; ikisi birlikte toplanırsa çift sayılır. Doğrulama: 1582'nin varyant toplamı 5.471,67 = kart satırı.
+  - **Birim düzeltmesi:**
+    - `Erp_Inventory.UnitId` birim SETİdir (1 adet, 2 ağırlık, 3 uzunluk). Ana birim `Erp_InventoryUnitItemSize.IsMainUnit = 1`'den gelir. Önceki yol danteller için "Deste", kumaşlar için "Çift" veriyordu.
+    - Sipariş ve fiş satırlarının `UnitId`'si doğrudan `Meta_UnitSetItem`'dır (Mt/Kg), Mal Kabul doğru.
+  - Aynı kodla birden çok stok kartı var (6224'ün 3 kartı: 1289, 14808, 15691).
+  - 6 yeni örnek (toplam 26), hepsi DB'de çalıştırıldı.
+  - **Gerçek cevap:** 6224'ün reçetesindeki 4 kumaşın (KMS-0082, KMS-0129, KMS-0035, KMS-0034) stoğu 0.
+
+### 6. YZ Sorgu llama yuvalarını kilitliyordu
+- **Belirti:** Yeniden kurulumdan sonraki denemelerde ilk soru 600 sn'de dönmedi. 25 dk boyunca tek soru tamamlanmadı; servis.log'da `openai.APITimeoutError`.
+- **Sebep:**
+  - OpenAI istemcisi 180 sn zaman aşımı + varsayılan 2 yeniden deneme.
+  - `/ai` gibi başka istekler bir yuvayı kullanınca o yuvadaki önbellek siliniyor. ~5.6k token önek, ikinci yuva da meşgulken ~20–25 token/sn → 220+ sn.
+  - Zaman aşımında yeniden deneme aynı istemi tekrar gönderiyor, iki yuva sürekli dolu kalıyor.
+- **Düzeltme:**
+  - `OpenAI(timeout=600, max_retries=0)`.
+  - `/sor` soruları `threading.Lock` ile sırayla işleniyor.
+  - `n_results_sql` 4 → 3.
+- **Not:** llama-server (build 11541) `--cache-ram 8192` varsayılan açık; llama ayarına dokunulmadı.
+
+### 7. /ai'ye gönderilen Excel hiç okunmuyordu
+- **Sebep:** `GuncellemeCevirici` yalnız `m.Text` okuyordu. Dosyalı mesajda açıklama `Caption`'da geldiği için bot "/ai"yi hiç görmüyordu; dosya indirme de yoktu.
+- **Yapılan:**
+  - `GelenMesaj`: `Metin = Text ?? Caption`; yeni alanlar `Dosya`, `YanitlananDosya` (`GelenDosya`: Id, Ad, Boyut).
+  - `ITelegramIstemci.DosyaIndirAsync`: `Bot.GetInfoAndDownloadFile`.
+  - `Komut/TabloMetni.cs`:
+    - xlsx/xlsm (ClosedXML) ve csv okur. CSV'de `;` ya da sekme ayıracında ondalık virgül, `,` ayıracında nokta kabul edilir; tırnaklı alanlar desteklenir.
+    - Çıktı: sayfa başına satır/kolon sayısı ve kolon istatistikleri (sayı: adet/toplam/en az/en çok; tarih aralığı; metin: farklı değer sayısı). İstatistikler tüm satırlardan hesaplanır.
+    - Satır dökümü 12.000 karakter bütçeyle, en çok 5 sayfa.
+  - `/ai`:
+    - Dosyanın açıklamasında ya da dosyaya yanıt olarak çalışır.
+    - Soru yoksa varsayılan "Bu dosyayı analiz et…" sorusu kullanılır.
+    - .xls/.pdf için uyarı; 10 MB üstü ve okunamayan dosya için mesaj.
+  - Testler: `TabloMetniTestleri` (5), çevirici (2), komut (4) → `dotnet test` 186 geçti, 7 atlandı.
+- **Commit:** `35e1d89` — /ai Excel/CSV analizi; /sor reçete-stok eğitimi ve llama kilitlenmesi düzeltmesi
+- **Dağıtım:** zip → `C:\Server\Sentez_Onaymerkezi`, `/api/surum` = 35e1d89. yzsorgu `kur.ps1` ile güncellendi (26 örnek).
