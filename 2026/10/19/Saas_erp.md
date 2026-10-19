@@ -139,3 +139,8 @@ Skeptic'in uyarısı üzerine iş dört gruba bölündü:
   - FE: inventory + receipt-detail 228 test geçti; typecheck temiz.
   - Playwright (kayıt yapılmadan): 750 × 100 = 75.000; satır %10 = 7.500; dip %10 = 6.750; toplam indirim 14.250; genel toplam 60.750.
 - **Not:** Eski fişlerde çift sayım nedeniyle şişmiş DiscountAmount varsa o değer olduğu gibi taşınır, düzeltilmez.
+
+### 10. İki panelli menü dev'e birleştirildi
+- **Neden:** Kullanıcı "menü geçmemiş dev'e" dedi; menü yalnız `feat/iki-panelli-menu` dalındaydı, DEV ortamında görünmüyordu.
+- **Ne yapıldı:** `git checkout dev && git pull --ff-only && git merge feat/iki-panelli-menu` → `934479c6`; typecheck temiz. `src/common` testlerinde 2 kırık (`data-table-search.test.tsx`) — origin/dev'de de kırık, birleştirmeyle ilgisiz. Yenilikler'e "iki panelli menü" maddesi `b94c9970`. Menü dalı dev'e ff ile eşitlendi, ikisi push edildi.
+- **Açık:** `data-table-search.test.tsx` 2 test önceden kırık, ayrıca bakılmalı.
