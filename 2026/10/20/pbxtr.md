@@ -60,7 +60,16 @@ www.pbxtr.com'u tanıtım (landing) sayfasına ayırmak; landing için Claude De
 - **Doğrulama (canlı, yayın 76):** 9 dil × 3 metin açılıyor, unvan dolu, yer tutucu yok, 4xx kaynak yok.
 - **Commit:** `1554b68f`
 
+### 6. Demo formu e-postası (Brevo)
+- **Neden:** form tasarımdan beri hiçbir yere göndermiyordu; kullanıcı Brevo API anahtarı ve 4 alıcı verdi (info@uzmanadres.com, info@kosecik.com, a.kosecik@uzmanadres.com, abdusselam.kosecik@gmail.com), gönderici info@kosecik.com (Brevo'da doğrulu).
+- **Ne yapıldı:** `POST /api/v1/public/demo-request` (`src/Pbxtr.Api/Modules/PublicSite/`), anonim, tenant/DB yok, kapalı anonim listeye gerekçeli. Brevo HTTP API (`/v3/smtp/email`), bal küpü, alan bazlı 400, 503 `DEMO_MAIL_NOT_CONFIGURED`, 502 `DEMO_MAIL_FAILED`, IP başına 5/10 dk + nginx 6/dk. Telefon `PhoneInput` (MaskedPhoneContractTests); form +ülke kodu ipucu + özel hata (9 dil). www nginx `/api/demo-request` → app proxy. Permissions-Policy `microphone=(self)` (PermissionsPolicyTests).
+- **Sır:** anahtar sunucu `.env` (`PBXTR_Mail__Brevo__ApiKey`) + sifreler deposu `GitHub/Pbxtr/pbxtr/.brevo-api-key`. Brevo'da IP kısıtı var — kullanıcı 176.88.41.220'yi yetkilendirdi.
+- **Tuzak (ölçüldü):** `yerel-yayin.sh` docker-compose.yml'i SUNUCUYA GÖNDERMEZ → yeni env değişkenleri konteynere ulaşmadı (anahtar_YOK). Sunucu compose'u depodakiyle farkı yalnız bu iş olduğu ölçülüp kopyalandı (yedek `/root/docker-compose.yml.bak-20261020`), `docker compose up -d app`.
+- **Doğrulama:** canlıdan `www.pbxtr.com/api/demo-request` → 202; Brevo olayları: 4 alıcıya `delivered`. Testler: Architecture 857/857, PublicSite 42/42.
+- **Commit:** `497b6c2a`
+
 ## Açık kalanlar / sonraki adım
-- Demo formu hiçbir yere göndermiyor (tasarımdan); alıcı e-posta adresi gelince SMTP'ye bağlanacak.
+- Yayın betiği compose'u taşımıyor: compose'a env eklenen her işte sunucu compose'u elle güncellenmeli (kalıcı çözüm: yayına compose taşıma).
+- Brevo anahtarı sohbette açık paylaşıldı — kullanıcıya yenilemesi önerildi.
 - Cloudflare Web Analytics zone'da açık (CSP engelliyor) — kullanıcı panelden kapatabilir.
 - i18n dosyası elle düzenlenirse `python -I deploy/www-uret.py` yeniden koşulmalı (?v= özetleri).
