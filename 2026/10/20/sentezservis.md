@@ -67,3 +67,30 @@ tutulduğu ve nasıl geri alınacağı araştırıldı. Kod değişikliği yapı
 
 ## Açık kalanlar (güncel)
 - Canlıda teşhis sorgusu çalıştırılacak, ERP yazma (InvoiceId=NULL) için B-10 istisna kararı.
+
+### 4. Kontrol ekranına "CRS'ten faturaları çek" düğmesi
+- **Neden:** Kullanıcı, ModaSimaModule `GET /EFautra/GetCrsInvoice?companyCode=` ucunun mutabakat
+  ekranından seçili şirket için çalıştırılabilmesini istedi.
+- **Ne yapıldı:**
+  - `EfaturaTetikleyici.CrsFaturalariniCekAsync(sirketKodu)` — kök adres `EfaturaTetik:Adres`
+    (`http://192.168.1.4:3132/EFautra`), zaman aşımı yok, yanıt gövdesi `true`/`false` okunur,
+    hata fırlatmaz → `CrsCekmeSonucu(Adres, Sure, HttpDurum, Basarili, Hata)`.
+  - `POST /api/fatura/crs-cek?sirketId=` — `MudahaleIster` (rol + CSRF), şirket kodu
+    `Erp_Company`'den, denetim eylemi `crs-fatura-cekme` (ayrıntıda başarı/süre/hata).
+  - `FaturaSayfasi.tsx` — müdahale yetkilisine düğme, `window.confirm` onayı, sonuç kutusu.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/Fatura/EfaturaTetikleyici.cs`,
+  `src/SentezServis.Core/Modeller.cs`, `src/SentezServis.Host/Api/FaturaUclari.cs`,
+  `web/src/api/fatura.ts`, `web/src/pages/FaturaSayfasi.tsx`
+- **Komutlar:**
+  ```bash
+  dotnet build src/SentezServis.Host -c Release   # 0 uyarı
+  dotnet test tests/SentezServis.Core.Tests       # 695/695
+  cd web && npx tsc -b && npx vitest run && npm run build   # 72/72
+  ```
+- **Sonuç:** Canlıda denenmedi (modül ucu buradan erişilemez). Modül tarih aralığını kendisi
+  sabitler (son 30 gün +10); `true` yalnızca turun bittiğini söyler, modül tekil hataları yutar.
+- **Commit:** `b206b9c` — E-fatura mutabakati: secili sirket icin "CRS'ten faturalari cek" dugmesi
+
+## Açık kalanlar (ek)
+- Yayın paketi alınıp canlıya kurulmalı; ilk kullanımda süre ve denetim kaydı kontrol edilmeli.
+- 30 günden eski eşleşmeyenler için modüle tarih parametresi eklenmesi gerekir (modül kodu).
