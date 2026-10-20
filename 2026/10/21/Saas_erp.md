@@ -46,12 +46,27 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Test verisi (dev DB, MitoTex A.Ş.):** emir UX-231161 (1000 m), KA-0001 kumaş analizi, 20 çözgü leventi.
 - **Commit:** `8d88f022` — feat(production,frontend): Dokuma F2 cozgu planlama (dev'e push)
 
+### 4. Dokuma F3 — İndigo / Haşıl (çözgü leventlerinden dokuma leventi)
+- **Neden:** Kullanıcı isteği "İndigo/Kimyasal: çözgü leventlerini birleştirip dokuma leventi (≈6000 tel)".
+- **Kurul (cto/skeptic/dba/po — hepsi APPROVE-WITH-CONDITIONS):** Skeptic'in itirazı kabul edildi: gerçek haşıl hattında bir çözgü partisi birden çok dokuma leventine kesilir → `ParentBeamId` yerine bağlantı tablosu `BeamProcessInput(BeamProcessId, WarpBeamId, UsedLength)`; çözgü leventi kısmi kullanılır, kalan 0 olunca `consumed`. Kimyasal satırları yalnız kayıt (stoktan düşmez, `PostedAt` null, UI notu; stok düşümü sonraki fazda Outbox `BeamProcessCompleted`). Proses tipi İndigo=1/Haşıl=2/İndigo+Haşıl=3 ("Kimyasal" tip değil). Ip boyama (rope dyeing) kapsam dışı. Tam karar listesi tasarım §3.10.
+- **Ne yapıldı:**
+  - `WeavingCalculator.MergeBeams` (tel=toplam, uzunluk ≤ en küçük kalan, varsayılan MIN; hedef tel = emir kopyası WarpTotalEnds; uyuşmazlık `acceptEndsMismatch` olmadan 400, kabulde Expected/Actual/AcceptedBy kaydı).
+  - Entity'ler: `BeamProcess` (BP- serisi `BeamProcessNumberSequence` row-locked UPSERT), `BeamProcessInput`, `BeamProcessChemical` (ad/birim kopyası, `IInventoryMrpQueryService.GetInventoryNamesAsync` ile doğrulama). WarpBeam: `consumed` durumu (`ManualTransitions` dışında), CHECK UsedLength ≤ TotalLength.
+  - API (`WeavingController`): POST/GET/GET{id}/DELETE `weaving/beam-processes` (idempotent; emir satırı `FOR UPDATE`; xmin/23505 → 409; dokuma leventi no `{emirNo}-D{nn}`, geri al sonrası numara yeniden kullanılabilir — bilinçli). Geri al: kaydedilen metre birebir iade, soft delete (girdi satırları iz olarak kalır).
+  - F2 uçları kilitlendi: prosesli / dokuma leventi `DELETE warp-beams` → 409; `consumed` elle atanamaz.
+  - UI: `pages/weaving/beam_processes/*` (emir seç, hazır leventler çoklu seçim + canlı özet, uzunluk, proses tipi, makine [Dokuma'ya sabit], tarih, haşıl alma %, kimyasal satırları + "Bu satırlar stoktan düşmez", uyuşmazlık onay kutusu, proses listesi/detay, geri al). Çözgü planlamada "Tüketildi" rozeti.
+  - Migration `20261020230917_WeavingBeamProcessF3` (API açılışında dev DB'ye uygulandı).
+- **Doğrulama:** backend 4080 test geçti / 0 hata; frontend tsc temiz, production vitest 218 geçti. Security PASS (tek Low: sıra tablosu CreatedBy=tenantId — tüm number service'lerde ortak mevcut desen, ayrı iş). UX PASS-WITH-FIXES → uzunluk hatası iki kez/düğme açık, detayda güncel değerler (kolonlar "Bu proseste kullanılan / Güncel kalan / Güncel durum"), kayıt sonrası haşıl % korunur, "%12", alan hizaları, "En az 2 levent seçin" ipucu — düzeltildi. 375 px = 445.
+- **Test verisi (dev DB, MitoTex, emir UX-231161):** BP-0001 (300 m, D01), BP-0003 (290 m, D02) → C01–C10 tüketildi. BP-0002 oluşturulup geri alındı.
+- **Commit:** `e3c86224` — feat(production,frontend): Dokuma F3 indigo/hasil (dev'e push)
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
 
 ## Açık kalanlar / sonraki adım
-- F3 İndigo/Haşıl: seçili çözgü leventlerinden dokuma leventi (uzunluk=MIN, tel=SUM, hedef tel kontrolü), ParentBeamId, BeamProcess + kimyasal sarf — kurul (dba zorunlu).
+- F4 Tezgah: levent bağlama/sökme, başlat/durdur (duruş nedeni), atkı sayacı okuması, dok kesme (FabricRoll), kalan metre/süre, tahar değişim beklemesi — kurul.
+- F3 borç: kimyasal sarfın stoktan düşümü (Outbox), sıra tabloları CreatedBy=tenantId (ortak desen), detayda makine kodu (DTO'da yok).
 - F2 öncesinden kalan borç: CreateWarpBeam/UpdateWarpBeamStatus aynı-tenant kontrolü yapmadan MountedOnMachineId/ProductionOrderId/YarnInventoryId yazıyor (security Low).
 - F2 nit: kalan levent için önerilen parti no P04 (mevcut P01/P02).
 - Frontend tam suite'te F2 dışı 7 kırık test: en.json'da FreeStockReport/KoliListesi/ChemicalStockOut/SystemParameters anahtarları eksik (i18n parity), login.test.tsx (5), worklist-routes.contract (1).
