@@ -191,3 +191,22 @@ olsun (firma listesi, kullanıcıları görme, kullanıcıya bürünme, yeni kul
 - Program.cs ForwardedHeaders yalnız `Proxy:TrustForwardedHeaders=true` iken; proxy arkasında gerçek IP için ayar kontrol.
 
 - **Düzeltme:** Brevo göndericisi `info@kosecik.com` yapıldı (kullanıcı: Brevo’da doğrulanmış adres bu). Commit `bcf0d895`.
+
+### 11. DEV yayını + www.vuo.app (2026-10-21 gece)
+- **Sunucu tespiti:** DNS Cloudflare (brad/janet). `.57` = DEV ("dev" hostu; app-dev.vuo.app, api-dev.vuo.app, www.vuo.app,
+  vuo.app), `.59` = PROD (app.vuo.app, api.vuo.app). DEV stack `/home/vuo/dev/docker-compose.yml` (traefik + vuoapp-api/spa
+  `-dev:latest` + portainer + astor). `vuo` docker grubunda değil; deploy servisi root olarak `/home/vuo/dev`'de
+  `docker compose pull && up -d` yapar: `http://217.131.14.57:56806/abdusselam.kosecik/<sürüm>` (repo'daki
+  `vuoapp-deploy.py` ile AYNI DEĞİL — sunucudaki sürüm imaj etiketine dokunmaz, `latest` çeker).
+- **Compose değişikliği** (yedek: `docker-compose.yml.bak-20261020`): spa router'larına `|| Host(\`www.vuo.app\`)`,
+  api env'e `Brevo__ApiKey`. Sertifika `*.vuo.app` www'yi kapsıyor. SPA `apiUrl: ""` → `/api` nginx ile api'ye gider,
+  CORS gerekmez.
+- **İmaj:** `scratchpad/publish-dev.sh` ile HEAD `3f228179`'dan `vuoapp-{api,spa}-dev:1.0.2.1021` + latest. Yerel ağ
+  çok yavaştı (istek başı 12-15 sn), ilk iki deneme NuGet/mcr kopması ve Docker Desktop çökmesiyle düştü; yeniden
+  başlatıp tekrarla geçti.
+- **Kullanıcı ERR_TOO_MANY_REDIRECTS:** Cloudflare proxy + SSL "Flexible" kaynaklı; SSL modu Full önerildi, sonra 404'e
+  döndü (yani döngü çözüldü).
+- **Sonuç:** www.vuo.app → /tanitim 200 (headless Chrome'da landing render), app-dev.vuo.app 200, API 401 (ayakta).
+  Demo uç noktası www üzerinden çalışıyor (doğrulama 400); gerçek test talebi Brevo'ya gitti ama **503** — sunucu çıkış
+  IP'si 217.131.14.57 Brevo "Authorised IPs" listesinde değil. Ziyaretçi bu sürede mailto yoluna düşer.
+- **Açık:** Brevo'ya 217.131.14.57 eklenmeli; sonra test talebi tekrar gönderilecek.
