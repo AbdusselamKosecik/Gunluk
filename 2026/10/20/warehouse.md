@@ -21,5 +21,14 @@ işlem düğmeleri (Görüntüle / Siparişi Onayla / İptal Et) ekranı taşıy
   (`Warehouse.dll`, `Warehouse.pdb`, `wwwroot/css/indigo-loom.css`); appsettings içermez, sitenin üzerine kopyalanır.
 - **Commit:** bkz. warehouse `git log` — fix(web): siparis/kullanici listesinde islem dugmeleri tasmasi
 
+### 2. Sipariş notu alt satıra alındı
+- **Neden:** Kullanıcı "sipariş notunu alt satıra alsak" dedi; önizleme (statik sayfa, sitenin CSS'i) onaylandı.
+- **Ne yapıldı:** `Orders/Index.cshtml`'de her sipariş `<tbody class="il-order">` (v-for tbody'de):
+  ana satır + `v-if="o.notes"` not satırı (`colspan=8`, sticky_note_2 ikonu). "Sipariş Notu" sütunu kalktı;
+  not filtresi işlem sütunu başlığında (`.il-actions` içinde, temizle düğmesiyle); alt toplamdaki acil sayısı
+  durum sütununa kaydı. CSS: zebra/hover `tbody.il-order:nth-of-type` ile sipariş bazında (satır bazında
+  boyayınca notsuz/notlu sıralar karışıyordu — önizlemede görüldü). Excel çıkışı aynı.
+- **Paket:** aynı yama zip'i yeniden üretildi (her iki düzeltmeyi içerir).
+
 ## Açık kalanlar
 - Yamayı sunucuya kopyalamak (kullanıcı); CSS `asp-append-version` ile bağlı, tarayıcı önbelleği sorun olmaz.
