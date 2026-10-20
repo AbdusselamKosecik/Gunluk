@@ -114,7 +114,7 @@ tablo/formdu; eski Selvedge'in PDF raporları ve sipariş satırı işlevleri ta
   ```
   (veya web: `POST /api/yetki/ata {sentezUserId, roleId}`)
 - **Sonuç / doğrulama:** APK `sentez-selvedge-2.0.0.2.apk` (75 MB) derlendi. Sunucu log klasörüne
-  (\192.168.3.228\c$) erişim yok, AuditLog'da da telefon kullanıcısı izi yok → rol ataması kullanıcı kodu
+  (192.168.3.228 C$ paylaşımı) erişim yok, AuditLog'da da telefon kullanıcısı izi yok → rol ataması kullanıcı kodu
   bekliyor. Kullanıcı rol olarak "Admin" seçti.
 - **Commit:** `c7014ee` — fix(sentez-selvedge/mobile): 2xx disi yanit hataya cevrilir (403'te Map->List cokmesi) - 2.0.0.2
 
