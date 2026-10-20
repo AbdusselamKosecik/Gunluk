@@ -44,5 +44,23 @@ www.pbxtr.com'u tanıtım (landing) sayfasına ayırmak; landing için Claude De
   `connect-src 'self' wss://app.pbxtr.com` · login API token döndü · `/sip-ws` upgrade 101 ·
   konteynerde `ResetUrlBase=https://app.pbxtr.com`.
 
+### 4. www.pbxtr.com tanıtım sayfası (Claude Design → statik site, 9 dil)
+- **Neden:** kullanıcı `doc/pbxtr Tanıtım Sayfası – Landing.html` (Claude Design paketi) www için ayarlansın, pbxtr'ın 9 dili olsun istedi.
+- **Ne yapıldı:** `deploy/www-uret.py` paketi açar (manifest base64/gzip → dc-runtime, React UMD, hero.webp), `pbxtr-demo/www/` üretir. React/fontlar/bayraklar YEREL (Google Fonts dahil dış istek yok). TR/EN anahtarı → 9 dilli seçici (bayrak = ürünün `Flag.tsx` şekilleri, dilin kendi adı); `?lang=` > localStorage `pbxtr.www.lang` > tarayıcı dili. Arapça `dir=rtl`, hero görseli LTR sabit. Menü 1100px altında hamburgere döner (ka/hy/fr'de taşma ölçüldü, 0'a indi).
+- **Çeviri:** tr/en tasarımdan; fr/de/bg/az/ar/ka/hy paralel ajanlarla, yapı en.js'e karşı node ile doğrulandı.
+- **nginx:** `pbxtr.com/` → 301 www; apex diğer yollar → 302 app (eski yer imleri); www statik (`.rev/<rev>/www`), dosya yoksa 302 app. CSP `'unsafe-eval'` yalnız www bloğunda (dc-runtime `new Function`).
+- **Yayın:** `yerel-yayin.sh` www'yi scp eder; CRLF `sed`'i www/'yi HARİÇ tutar (woff2/webp bozulurdu — canlı md5 = yerel md5 ölçüldü). `staging-yayin.sh` www'yi revizyona kopyalar, izinleri 0755/0644.
+- **Ölçülen tuzaklar:** (1) Docker Desktop kapalıydı → yayın 74 imaj adımında düştü, başlatılıp tekrarlandı. (2) yayın www'yi ÇALIŞMA AĞACINDAN alır, commit'ten değil — yarım dosya canlıya çıktı. (3) Cloudflare statiği 4 sa tutar (max-age=14400) → eski legal-config ve 404'ler servis edildi; çözüm `?v=<sha256[:10]>` önbellek kırıcı. (4) Cloudflare Web Analytics beacon'ı zone'da açık; CSP engelliyor.
+- **Commit:** `246f2906`, `ba6a9866`
+
+### 5. Yasal metinler modal (Gizlilik / KVKK Aydınlatma / Çerez), 9 dil
+- Alt bilgideki 3 bağlantı + demo formundaki KVKK bağlantısı modal açar; sekmeler, Escape/arka plan/kapat, odak geri döner, kaydırma kilidi. Derin bağlantı `#gizlilik`, `#kvkk`, `#cerez`.
+- Metin `i18n/legal-<dil>.js`; şirket bilgisi tek yerde `i18n/legal-config.js` (kullanıcıdan: Abdusselam Kösecik, Gençosman Mah. Doğancılar Sok. No: 20 Güngören/İstanbul, info@uzmanadres.com). Saklama 2 yıl.
+- Hata bulundu/düzeltildi: dc-runtime `componentDidUpdate`'e önceki state geçirmiyor → kaydırma kilidi kalıyordu; durum elle izleniyor.
+- **Doğrulama (canlı, yayın 76):** 9 dil × 3 metin açılıyor, unvan dolu, yer tutucu yok, 4xx kaynak yok.
+- **Commit:** `1554b68f`
+
 ## Açık kalanlar / sonraki adım
-- Landing hazır olunca: apex+www 302 kaldırılır, www için ayrı statik server bloğu.
+- Demo formu hiçbir yere göndermiyor (tasarımdan); alıcı e-posta adresi gelince SMTP'ye bağlanacak.
+- Cloudflare Web Analytics zone'da açık (CSP engelliyor) — kullanıcı panelden kapatabilir.
+- i18n dosyası elle düzenlenirse `python -I deploy/www-uret.py` yeniden koşulmalı (?v= özetleri).
