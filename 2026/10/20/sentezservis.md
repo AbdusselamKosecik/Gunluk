@@ -43,3 +43,27 @@ tutulduğu ve nasıl geri alınacağı araştırıldı. Kod değişikliği yapı
   bir eşleşen + bir eşleşmeyen ETTN için `Erp_EInvoice` satırları.
 - Bayrak Sentez'deyse: `/api/fatura/aktarim-temizle` (yönetici, denetim kaydı, önce önizleme)
   + karşılaştırma ekranında "Sentez'de yok" satırlar için buton.
+
+## Ek: ModaSimaModule incelemesi (`X:\GitHub\Sentez-Core\ModaSimaModule`)
+
+### 3. Gelen e-fatura akışı kodda
+- **Dosyalar:** `Controllers/EFautraController.cs`, `Services/IncomingEInvoiceGetControlService.cs`,
+  `Services/EInvoiceInsert.cs`.
+- **Çekme (`ModaSimaIncomingEInvoiceGetControlService`, StartCrsInvoiceImport / GetCrsInvoice):**
+  CRS `GetInboxInvoiceList`, son 30 gün (+10), `OnlyNewestInvoices=false`, SetTaken verilmiyor
+  (WCF varsayılanı false). Yani CRS "alındı" bayrağı bu akışta neyin çekileceğini ETKİLEMEZ.
+  Tekrar kontrolü `Erp_EInvoice.UUID` varlığıyla. Yeni kayıt:
+  `INSERT Erp_EInvoice (..., TransactionType=1, ApprovedStatus=1, ...)`.
+- **Okundu bilgisi:** `IncomingEInvoiceSendReadInfoAfterCreate == 0` ise her yeni UUID için
+  `instance.ReceivedInvoice(uuid)` (Sentez CrsSoft sağlayıcısı → CRS `SetInvoicesTaken`). Geri alınamaz.
+- **Aktarım:** `GET /EFautra/GetInvoice` = `Erp_EInvoice WHERE InvoiceId IS NULL AND ReceiverName=@ad`
+  (varsayılan "DSM Grup ..."); `POST /EFautra/Insert` → `EInvoiceInsert.OnApproveCommand`,
+  faturaya `EInvoiceGuid=UUID` yazar. `Erp_EInvoice.InvoiceId`'yi modül yazmıyor (Sentez çekirdeği).
+- **"Webservisten alınmış" etiketi:** Sentez DLL'lerinde (UTF-16 tarandı) bu metin yok; büyük
+  olasılıkla `TransactionType=1`'in ekran karşılığı → kaynağı anlatır, aktarım durumu değildir.
+  Canlıda doğrulanmadı.
+- **Aktarım durumu = `Erp_EInvoice.InvoiceId`.** Eşleşmeyenin takılma nedenleri: InvoiceId dolu ama
+  fatura silinmiş (yetim) / ReceiverName DSM değil / 30 günden eski ve hiç çekilmemiş / Insert hata.
+
+## Açık kalanlar (güncel)
+- Canlıda teşhis sorgusu çalıştırılacak, ERP yazma (InvoiceId=NULL) için B-10 istisna kararı.
