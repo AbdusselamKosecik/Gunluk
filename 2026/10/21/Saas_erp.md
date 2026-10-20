@@ -35,12 +35,26 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
   8. Levent no `{emirNo}-C{nn}` (en yüksek ek+1, transaction), 23505 → 409, idempotent, ≤200.
   9. Satır başına iplik; 10. silme yalnız prepared/UsedLength=0/bağlı değil; 11. endpoint'ler mevcut `warp-beams` altında + yetki; 12. Çözgü planlama ekranı + mevcut warp_beams sayfasına BeamKind kolonu.
 
+### 3. Dokuma F2 — Çözgü planlama (uygulama)
+- **Neden:** Çözgü sorumlusu emrin kumaş analizinden kaç çözgü leventi (≈500 tel) gerektiğini görüp leventleri toplu oluşturabilmeli.
+- **Ne yapıldı (§2'deki kurul kararları birebir):**
+  - Backend: `Features/Weaving/WeavingCalculator.WarpPlan.cs` (PlanWarp / PlanWarpFromMeters; eşit dağıtım, parti), `Features/Weaving/{WarpPlanning,WarpPlanSupport}.cs` (PUT `weaving/orders/{id}/analysis` → emre kopya; GET `weaving/warp-plans/{orderId}?capacityM=&endsPerBeam=`), `Features/WarpBeams/{CreateWarpBeamBatch,DeleteWarpBeam}.cs` (POST `warp-beams/batch` idempotent ≤200, numara `{emirNo}-C{nn}` en yüksek ek+1, 23505→409; DELETE yalnız hazırlandı/kullanılmamış/makineye bağlı değil), GetWarpBeams `beamKind` filtresi + Gridify hatası 400 + sayfa ≤500, analiz silmede 409 (kullanımda), `Entities/WarpBeamStatuses.cs`, `Domain/Enums/WarpBeamKind.cs`. Tüm warp-beam aksiyonlarına `[RequirePermission("production", …)]` (öncesinde yoktu).
+  - Migration `20261020223449_WeavingWarpPlanningF2` — yerel API açılışında paylaşımlı dev DB'ye uygulandı.
+  - Frontend: `features/production/pages/weaving/warp_planning/*` (emir seçici Dokuma tipine sabit, analiz bağla, öneri kartı + formül notu, kapasite/levent teli girdileri emir bazında saklanır ve mevcut leventlerden doldurulur, önizleme ızgarası, fazla planlamada onay, mevcut leventler + silme). Oluştur/bağla sonrası plan yenilenene kadar düğmeler kilitli (çift oluşturma önlemi). Çözgü Leventleri sayfasına Tür + Parti No kolonu ve tür filtresi. Tablo kapları `w-0 min-w-full overflow-x-auto` → 375 px'te sayfa genişliği referans sayfayla aynı (445).
+- **Uygulama kararları:** ProductionOrder'da güvenilir birim yok → PlannedQuantity metre kabul edilir, yalnız >0 kontrolü (tasarım dokümanında not). Parti no kısa etiket (P01..). Kopya yalnız sayıları dondurur; iplik satırları bağlı analizden canlı okunur.
+- **Doğrulama:** backend 4026 test geçti / 0 hata; frontend tsc temiz, production vitest 197 geçti. Security PASS-WITH-FIXES (sayı sınırları, Gridify 400, IsDeleted filtresi uygulandı). UX ilk tur PASS-WITH-FIXES (eski ekran 3–6 sn → çift oluşturma riski, çift 409 mesajı, girdi kaybı, birincil düğme, 375 px) → düzeltildi; ikinci turda 3 hızlı tıklamada tek istek, 19→20 levent doğrulandı; 375 px'i Chrome'da elle ölçtüm (445).
+- **Test verisi (dev DB, MitoTex A.Ş.):** emir UX-231161 (1000 m), KA-0001 kumaş analizi, 20 çözgü leventi.
+- **Commit:** `8d88f022` — feat(production,frontend): Dokuma F2 cozgu planlama (dev'e push)
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
 
 ## Açık kalanlar / sonraki adım
-- F2'yi yukarıdaki kararlarla TDD uygula (calculator PlanWarp golden testleri → handler testleri → migration → UI → UX/security post-check).
+- F3 İndigo/Haşıl: seçili çözgü leventlerinden dokuma leventi (uzunluk=MIN, tel=SUM, hedef tel kontrolü), ParentBeamId, BeamProcess + kimyasal sarf — kurul (dba zorunlu).
+- F2 öncesinden kalan borç: CreateWarpBeam/UpdateWarpBeamStatus aynı-tenant kontrolü yapmadan MountedOnMachineId/ProductionOrderId/YarnInventoryId yazıyor (security Low).
+- F2 nit: kalan levent için önerilen parti no P04 (mevcut P01/P02).
+- Frontend tam suite'te F2 dışı 7 kırık test: en.json'da FreeStockReport/KoliListesi/ChemicalStockOut/SystemParameters anahtarları eksik (i18n parity), login.test.tsx (5), worklist-routes.contract (1).
 - UX nit'leri (F1): zorunlu alan işareti, paylaşılan malzeme seçici diyaloğunda Türkçe karakter eksikleri (mevcut, F1 kaynaklı değil).
 - Brevo: kullanıcı 217.131.14.57'yi yetkili IP'ye ekleyince test demo talebi tekrar gönderilecek.
 - Dev imajlarını F1 ile yeniden build/deploy (opsiyonel).
