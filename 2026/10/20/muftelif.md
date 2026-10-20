@@ -105,7 +105,7 @@ tablo/formdu; eski Selvedge'in PDF raporları ve sipariş satırı işlevleri ta
   `pubspec.yaml`, `build-apk.ps1`
 - **Komutlar:**
   ```powershell
-  powershell -ExecutionPolicy Bypass -File SentezSelvedge\mobileuild-apk.ps1 -Surum 2.0.0.2
+  powershell -ExecutionPolicy Bypass -File SentezSelvedge\mobile\build-apk.ps1 -Surum 2.0.0.2
   ```
   ```sql
   -- rol atama (kullanıcı kodu belli olunca); RoleId: 1 Admin, 2 QA, 3 Olcumcu, 4 Anketor, 5 Izleyici
