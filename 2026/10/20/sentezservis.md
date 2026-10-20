@@ -94,3 +94,20 @@ tutulduğu ve nasıl geri alınacağı araştırıldı. Kod değişikliği yapı
 ## Açık kalanlar (ek)
 - Yayın paketi alınıp canlıya kurulmalı; ilk kullanımda süre ve denetim kaydı kontrol edilmeli.
 - 30 günden eski eşleşmeyenler için modüle tarih parametresi eklenmesi gerekir (modül kodu).
+
+### 5. Yayın paketi (kullanıcı: "paket cikartirmisin")
+- **Kaynak:** HEAD `b206b9c`; çalışma klasöründe src/web temiz (yalnızca eski zip silmeleri ve
+  `docs/sql/depo_yeri_000_kurulum.sql`, pakete girmez).
+- **Komutlar:**
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File deploy\yayinla.ps1
+  .\yayin\SentezServis.exe --paket-dogrula   # arayuzVar true, etiketPdfBayt 144966
+  Compress-Archive -Path yayin\* -DestinationPath SentezServis-2026-10-20-crs-fatura-cek.zip -Force
+  ```
+- **Önceki paketle (18.10 pdks-gecici-ikinci-biotime) karşılaştırma** (python zipfile; bash `tr '\'`
+  yanlış sonuç veriyor, `chr(92)` kullan): 18/18 girdi aynı, app.js'te 73/73 yol aynı, `crs-cek`
+  yalnız yenisinde. `appsettings.json` pakette yok; 30 sır `appsettings.ornek.json`'da boşaltıldı.
+- **Çıktı:** `X:\Gitlab\Modasima\sentezservis\SentezServis-2026-10-20-crs-fatura-cek.zip` (77,2 MB, repoya eklenmedi).
+  Arayüz tarihi 2026-10-20 11:34.
+- **Kurulum:** sunucuda (192.168.1.4) yönetici olarak `servis-kur.cmd "<hedef klasör>" 81`; sonra
+  `http://192.168.1.4:81/api/surum` → `arayuzTarihi` 2026-10-20 11:34. Yeni ayar anahtarı yok.
