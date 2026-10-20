@@ -87,6 +87,37 @@ tablo/formdu; eski Selvedge'in PDF raporları ve sipariş satırı işlevleri ta
   APK: `X:\Gitlab\fredericTr\muftelif\sentez-selvedge-2.0.0.1.apk` (75 MB, repoya girmez). IIS paketi yeniden üretildi ve ziplendi (152 dosya, 21,9 MB).
 - **Commit:** `4058b19` (kopya), `7ae436c` — feat(sentez-selvedge/mobile): mobil uygulama SentezSelvedge API'sine cevrildi
 
+### 5. APK'da "firmaları getir" çökmesi — 2.0.0.2
+- **Neden:** Kullanıcı telefonda: `DioException [unknown]: null / type '_Map<String, dynamic>' is not a subtype
+  of type 'List<dynamic>?'`.
+- **Kök neden (iki katman):**
+  1. Sunucu 403 `{hata, gerekenIzin, rolleriniz}` döndü. Dio'da `validateStatus` <500'ü başarılı sayıyordu
+     (401 hariç) → gövde (Map) çağıranın beklediği `List`'e çevrilmeye çalışıldı → çöktü, sunucu mesajı kayboldu.
+  2. 403'ün sebebi: `UZM_Selvedge_UserRole` tablosu **boş**. Yalnız appsettings `Selvedge:Yoneticiler`
+     (`["UZM"]`, Meta_User RecId 78) otomatik Admin; diğer 293 Sentez kullanıcısının hiçbir izni yok.
+- **Ne yapıldı:**
+  - `api_client.dart` `onResponse`: 2xx dışı yanıt `DioException(badResponse)`'a çevrilir; mesaj sunucunun
+    `hata` metni, 403'te `(gerekenIzin)` eklenir → ekranda "Bu işlem için yetkiniz yok. (kk.oku)" görünür.
+  - `build-apk.ps1`: sürüm yazarken Windows PowerShell 5.1 `Get-Content` (ANSI okur) + `Set-Content -Encoding utf8`
+    (BOM ekler) dosyaları bozuyordu ("—" → "â€”", başa BOM). `[IO.File]::ReadAllText/WriteAllText` +
+    `UTF8Encoding($false)` ile düzeltildi; bozuk sürüm dosyaları geri alınıp temiz yazıldı.
+- **Dokunulan dosyalar:** `SentezSelvedge/mobile/lib/data/api/api_client.dart`, `lib/core/version.dart`,
+  `pubspec.yaml`, `build-apk.ps1`
+- **Komutlar:**
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File SentezSelvedge\mobileuild-apk.ps1 -Surum 2.0.0.2
+  ```
+  ```sql
+  -- rol atama (kullanıcı kodu belli olunca); RoleId: 1 Admin, 2 QA, 3 Olcumcu, 4 Anketor, 5 Izleyici
+  INSERT dbo.UZM_Selvedge_UserRole (SentezUserId, RoleId, CreatedBy)
+  SELECT RecId, 1, 78 FROM dbo.Meta_User WHERE UserCode = '<KOD>';
+  ```
+  (veya web: `POST /api/yetki/ata {sentezUserId, roleId}`)
+- **Sonuç / doğrulama:** APK `sentez-selvedge-2.0.0.2.apk` (75 MB) derlendi. Sunucu log klasörüne
+  (\192.168.3.228\c$) erişim yok, AuditLog'da da telefon kullanıcısı izi yok → rol ataması kullanıcı kodu
+  bekliyor. Kullanıcı rol olarak "Admin" seçti.
+- **Commit:** `c7014ee` — fix(sentez-selvedge/mobile): 2xx disi yanit hataya cevrilir (403'te Map->List cokmesi) - 2.0.0.2
+
 ## Kararlar
 - PDF'te resimler link'siz (fotoğraflar açık adreste durmaz).
 - Sipariş raporunun sonucu = Sipariş KK paneli "Final KK kararı".
@@ -94,6 +125,7 @@ tablo/formdu; eski Selvedge'in PDF raporları ve sipariş satırı işlevleri ta
 - Ölçüm ↔ rapor bağı 1-N kaldı (ölçüm başına bir rapor); eski N-N'e geçilmedi.
 
 ## Açık kalanlar / sonraki adım (eski Selvedge'de olup henüz yok)
+- **Rol ataması bekliyor:** `UZM_Selvedge_UserRole` boş; telefonda girecek Sentez kullanıcı kod(lar)ına Admin (RoleId 1) verilecek.
 - Dashboard (KPI/grafikler), e-posta ile rapor gönderme, listelerde Excel'e aktarma, anket cevapları sayfası +
   Excel, hata kataloğu ekranı, kullanıcı/rol yönetim ekranı, Final QC onay/sıfırlama akışı (kısmen Sipariş KK'da).
 - Mobil: telefonda gerçek sunucuya karşı uçtan uca deneme yapılmadı (giriş, QC kaydı, ölçüm, PDF).
