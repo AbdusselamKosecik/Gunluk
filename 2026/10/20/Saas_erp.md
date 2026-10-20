@@ -108,3 +108,50 @@ olsun (firma listesi, kullanıcıları görme, kullanıcıya bürünme, yeni kul
 - Önceden var olan: `VuoApp.Api/Hubs/NotificationHub.SendToTenant` herhangi bir girişli kullanıcının herhangi bir tenant
   grubuna mesaj göndermesine izin veriyor (yetki kontrolü yok) — ayrı iş olarak ele alınmalı.
 - Tailscale üzerinden dev sunucuya ping ~1.1 sn idi (yerelde sayfalar 20-30 sn yükleniyordu) — ağ kaynaklı.
+
+---
+
+## Akşam turu — Tanıtım (landing) sayfası
+
+### 9. Claude Design çıktısından tanıtım sayfası (/tanitim), 10 dil
+- **Neden:** Kullanıcı Claude Design'da hazırladığı landing'in (`docs/VuoApp Landing – Landing.html`, ayrıca
+  `~/Downloads`) uygulamaya yazılmasını istedi; ardından dil seçici (tr, en, fr, bg, ar, de, ka, az, hy) + Urduca
+  (Pakistan) eklenmesini ve KVKK veri sorumlusu bilgilerini verdi.
+- **Tasarım dosyasını açma:** Çıktı bir "bundler" HTML: `<script type="__bundler/template">` JSON-string, manifest'te
+  gzip+base64 JS/font. Node ile `JSON.parse(template)` → HTML, font-face'ler atıldı; CSS bir betikle `.vuo-landing`
+  altına alındı, animation/transition bildirimleri `@media (prefers-reduced-motion:no-preference)` bloğuna taşındı,
+  keyframe adlarına `vl-` öneki (global çakışma yok), `.dark` → `.is-dark` (Tailwind dark varyantıyla çakışmasın).
+  Betik: scratchpad `landing/css.cjs` (tek seferlik; çıktı repo'da `landing.css`).
+- **Ne yapıldı:**
+  - `src/frontend/src/features/landing/`: `pages/landing.page.tsx` (dil/tema durumu, localStorage try/catch,
+    `<html lang/dir>` ve başlık sayfadan çıkınca geri alınır), `components/*` (header, hero [fare ile ışık/paralaks],
+    kart ızgarası, örnek ekranlı yetenek satırları, SSS, demo bölümü+formu, KVKK/Gizlilik modalı [odak tuzağı, Esc,
+    scroll kilidi], footer, dil seçici + SVG bayraklar), `landing.data.ts` (dilden bağımsız ikon/rakam/iletişim,
+    `DATA_CONTROLLER`), `landing.utils.ts` (`buildDemoMailto`, 1800 karakter sınırı, not kısaltılır).
+  - `i18n/`: `landing-text.types.ts` sözleşme, `tr.ts` kaynak, 9 çeviri (3 paralel ajan; ar/ur RTL). Yasal metinlerde
+    `{controller} {address} {kvkkEmail} {email} {phone}` belirteçleri render'da doldurulur.
+  - Yönlendirme: `app.tsx` public lazy `/tanitim`; `private-route.tsx` girişsiz + `pathname === "/"` → `/tanitim`,
+    diğer korumalı yollar yine `/auth/login`. Giriş sayfasına "VuoApp'i tanıyın, demo talep edin" bağlantısı.
+  - Demo formu sunucuya yazmaz: `mailto:info@vuo.app` hazır ileti; teşekkür metni "e-posta uygulamanız açıldı" der.
+    Üretim alanı değerleri hangi dil seçilirse seçilsin Türkçe gönderilir (ekip okusun).
+  - KVKK veri sorumlusu (kullanıcı verdi): Abdusselam Kösecik, Gençosman Mah. Doğancılar Sok. No: 20, Güngören /
+    İstanbul; KVKK başvuru e-postası info@uzmanadres.com.
+- **Kurul:** cto APPROVE-WITH-CONDITIONS (lazy chunk, CDN yok, kapsamlı CSS istisnası + başlık yorumu, KVKK onay kutusu,
+  mailto encode/uzunluk, PrivateRoute testi zorunlu, takip işleri ClickUp'a); skeptic APPROVE-WITH-CONDITIONS
+  (ham `[..]` yer tutucu gösterilmez, harici CDN yok, yönlendirme yalnız `!isAuthenticated` dalında). UX son kontrolü
+  PASS-WITH-NOTES → uygulandı: modal odak tuzağı + body scroll kilidi, dil seçicide listbox rolleri yerine
+  `aria-current`, `<html lang/dir>`. Uygulanmadı: hero eğrisinin alt yazının arkasından geçmesi (tasarımın kendisi).
+- **Doğrulama:** vitest landing+route+changelog 42/42; tam takım 864 geçti, 7 kırmızı önceden var (aynı liste);
+  `tsc --noEmit` temiz. Headless Chrome: `/` → `/tanitim`, 1440/375'te yatay kaydırma yok, Urduca RTL, koyu tema.
+  Not: ESLint yapılandırması `src/features/landing`'i kapsamıyor (eslint "ignored" diyor) — lint koşulamadı.
+- **Commit:** `7868bd89` — feat(landing): herkese acik tanitim sayfasi (/tanitim), 10 dil + RTL, demo talep formu
+  (origin/dev'e rebase; changelog çakışması iki taraf korunarak çözüldü; dev + feat/iki-panelli-menu push).
+- **Repo'ya alınmayan:** `docs/VuoApp Landing – Landing.html` (378 KB tasarım çıktısı; CTO şartı — brief
+  `docs/design/landing-claude-design-prompt.md` yeterli). Kopyası `~/Downloads`'ta.
+
+### Açık kalanlar (landing)
+- Demo talepleri için sunucu uç noktası (ClickUp backlog açıldı).
+- SEO ön render + KVKK metninin hukuk onayı + çevirilerin anadil kontrolü (ClickUp backlog).
+- Güven şeridi/rakamlar ("Türkiye'de barındırılan veri", "Günlük yedek", "100+ fiş türü") kullanıcının tasarımından
+  alındı — doğruluğu kullanıcı teyit etmeli.
+- DEV/PROD yayını hâlâ bekliyor (SSH anahtarı / DEV deploy URL'si; önceki bölüm).
