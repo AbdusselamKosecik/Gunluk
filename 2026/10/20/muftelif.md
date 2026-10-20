@@ -40,11 +40,63 @@ tablo/formdu; eski Selvedge'in PDF raporları ve sipariş satırı işlevleri ta
   kütüphaneleri paketi 50 MB yapıyordu → 23,6 MB). Commit `2203f19`.
 - `SentezSelvedge-IIS-192.168.3.228-91.zip` yeniden üretildi (152 dosya); `IIS-KURULUM.txt`'e 2026-10-20 ekleri.
 
+### 4. Mobil uygulama (APK) SentezSelvedge uçlarına çevrildi
+- **Neden:** Kullanıcı "buna göre apk'yı da ayarla, endpointlerini" dedi. Eski MFG Selvedge Flutter
+  uygulaması (`Selvedge/src/selvedge_mobil`, 1.0.4.77) eski Selvedge API'sine (`/api/customer-orders`,
+  `/api/qa-reports`, `/api/measures`…) gidiyordu; yeni API'de bunların hiçbiri yok.
+- **Ne yapıldı:**
+  - Uygulama `SentezSelvedge/mobile` altına kopyalandı (yalnız Android; ios/web/windows yok). Önce değişmemiş
+    kopya ayrı commit (`4058b19`), sonra uyarlama (`7ae436c`) — fark okunur olsun diye.
+  - Yalnız veri katmanı (`lib/data/api/*`) yeniden yazıldı; ekranlar eski sözleşmeyi görmeye devam ediyor
+    (adaptör: `QaReportsApi.get` sunucunun baslik+detay'ını eski tek parça haritaya çevirir, `update` geri böler).
+  - Eşleme tablosu `SentezSelvedge/mobile/README.md`'de. Özet: firma = siparişin yerel tedarikçisi, yoksa
+    Sentez carisi (modfex selvedge 0029 ile aynı kural); sipariş = Sentez iş emri tip 15; QC = `/api/kk`;
+    ölçü tablosu = Sentez iş emrinin Excel eki; TP = iş emrinin PDF eki.
+  - **API'ye mobil için eklenenler:** `/api/sentez/order?firmaId` + sorguya yerel KK satırı (TedarikciId/Adi,
+    KkDurumu, FinalQcResult); `/api/hata-katalog`; `/api/olcum/spec?isEmri&ek` (bedenler, satırlar,
+    `ciftOlculer`); `PUT /api/olcum/{id}/kk` (rapor bağı, aynı iş emri şartı); `PUT /api/files/{id}`
+    (başlık); `/api/sentez/order/{id}/ek/{ekId}` (ek o iş emrine ait değilse 404); ölçüm listesinde
+    `SatirSayisi`. `KkDeger.Asamalar`'a mobilin QC tipleri (Kumas Kalite … Finish/Paket Final QC) eklendi
+    (web `DENETIM_ASAMALARI` de; `ArayuzSozlukTests` ikisini eşit tutar).
+  - **Yakalanan hata:** ölçüm açılınca sunucu satırları 1..n numaralar, ekran ise Excel'in 1. sütundaki sıra
+    no'su ile dizer → değer başka POM'a yazılabilirdi. `satirEsle` (konum + POM kodu) ile eşleniyor; 4 birim testi.
+  - Hata kataloğu canlıda **0 satır** → QC girişinde aranan metin "… hatasını ekle" ile serbest hata olur.
+  - Anket cevabı sonradan rapora bağlanamıyor (uç yok) → QC sihirbazında anketler rapor oluşunca `qaReportId`
+    ile gönderiliyor; QC detayında anketler salt okunur özet.
+  - E-posta düğmeleri kaldırıldı (API'de yok). Sunucu ayarlarındaki sahte "bağlantı testi" (1,5 sn sonra hep
+    başarılı) gerçek istek oldu (`/api/auth/me` → 401 = ayakta). "Daha Fazla"daki sabit örnek kullanıcı
+    ("Ayşe Yılmaz #4471") yerine oturumdaki Sentez kullanıcısı.
+  - Kimlik `com.mfg.sentezselvedge`, ad "Selvedge Sentez", sürüm 2.0.0.1 → eski uygulamayla yan yana kurulur.
+    Varsayılan sunucu `http://192.168.3.228:91`, giriş ekranı → Sunucu Ayarları'ndan değişir.
+- **Dokunulan dosyalar:** `SentezSelvedge/mobile/**`, `api/Sentez/SentezSql.cs|SentezReader.cs|SentezController.cs|SentezModeller.cs`,
+  `api/Selvedge/Kk/HataKatalog.cs|KkModeller.cs`, `api/Selvedge/Olcum/OlcumStore.cs|OlcumController.cs|OlcumModeller.cs`,
+  `api/Dosya/DosyaDeposu.cs|DosyaController.cs`, `tests/.../MobilUcTests.cs`, `web/src/api/kk.ts`, spec §12 notu.
+- **Komutlar:**
+  ```powershell
+  # APK (C:\flutter 3.47.2, JDK 21, Android SDK) — çıktı muftelif kökünde, repoya girmez
+  powershell -ExecutionPolicy Bypass -File SentezSelvedge\mobile\build-apk.ps1 [-Surum 2.0.0.2]
+  # IIS paketi (yalnız site klasörü; kurulum notları korunur) + zip
+  .\SentezSelvedge\Deploy-IIS.ps1 -OutputDir '...\SentezSelvedge-IIS-192.168.3.228-91\site'
+  ```
+- **Sonuç / doğrulama:** `dotnet test` 480/480, `tsc -b` temiz, `flutter analyze` 0 hata/uyarı, `flutter test` 7/7.
+  Yeni SQL'ler canlıda salt okunur denendi (OrderAra firma süzgeçli/süzgeçsiz, OrderById, ölçüm listesi,
+  katalog, ek listesi; KkBagla UPDATE'i BEGIN TRAN/ROLLBACK ile). Not: sqlcmd varsayılanı QUOTED_IDENTIFIER OFF —
+  filtreli indeksli tabloya UPDATE denerken `SET QUOTED_IDENTIFIER ON` şart (.NET istemcisi zaten ON).
+  İlk APK derlemesi, derleme sürerken paralel `flutter analyze/test` çalıştırdığım için bozuldu
+  (GeneratedPluginRegistrant debug modda dev bağımlılığıyla yeniden üretildi) → `flutter clean` + tek başına derleme.
+  APK: `X:\Gitlab\fredericTr\muftelif\sentez-selvedge-2.0.0.1.apk` (75 MB, repoya girmez). IIS paketi yeniden üretildi ve ziplendi (152 dosya, 21,9 MB).
+- **Commit:** `4058b19` (kopya), `7ae436c` — feat(sentez-selvedge/mobile): mobil uygulama SentezSelvedge API'sine cevrildi
+
 ## Kararlar
 - PDF'te resimler link'siz (fotoğraflar açık adreste durmaz).
 - Sipariş raporunun sonucu = Sipariş KK paneli "Final KK kararı".
+- Mobil, eski uygulamanın yerine değil yanına kurulur (ayrı applicationId); geçiş bitince eskisi kaldırılır.
+- Ölçüm ↔ rapor bağı 1-N kaldı (ölçüm başına bir rapor); eski N-N'e geçilmedi.
 
 ## Açık kalanlar / sonraki adım (eski Selvedge'de olup henüz yok)
 - Dashboard (KPI/grafikler), e-posta ile rapor gönderme, listelerde Excel'e aktarma, anket cevapları sayfası +
   Excel, hata kataloğu ekranı, kullanıcı/rol yönetim ekranı, Final QC onay/sıfırlama akışı (kısmen Sipariş KK'da).
+- Mobil: telefonda gerçek sunucuya karşı uçtan uca deneme yapılmadı (giriş, QC kaydı, ölçüm, PDF).
+  Hata kataloğu boş — eski Selvedge'deki hata listesi taşınmalı ya da web'e katalog ekranı eklenmeli.
+  "Raporlar" sekmesi eski uygulamadaki gibi örnek (seed) veri gösteriyor.
 - Gerçek veriyle uçtan uca deneme sunucuda yapılmalı (bu makinede .NET → SQL bağlantısı zaman aşımı).
