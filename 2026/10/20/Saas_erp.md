@@ -189,3 +189,5 @@ olsun (firma listesi, kullanıcıları görme, kullanıcıya bürünme, yeni kul
 - `noreply@uzmanadres.com` Brevo'da doğrulanmış gönderici/alan adı olmalı (SPF/DKIM).
 - Sunucu env: `Brevo__ApiKey` (DEV + PROD). Anahtar döndürülmeli.
 - Program.cs ForwardedHeaders yalnız `Proxy:TrustForwardedHeaders=true` iken; proxy arkasında gerçek IP için ayar kontrol.
+
+- **Düzeltme:** Brevo göndericisi `info@kosecik.com` yapıldı (kullanıcı: Brevo’da doğrulanmış adres bu). Commit `bcf0d895`.
