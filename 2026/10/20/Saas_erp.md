@@ -155,3 +155,37 @@ olsun (firma listesi, kullanıcıları görme, kullanıcıya bürünme, yeni kul
 - Güven şeridi/rakamlar ("Türkiye'de barındırılan veri", "Günlük yedek", "100+ fiş türü") kullanıcının tasarımından
   alındı — doğruluğu kullanıcı teyit etmeli.
 - DEV/PROD yayını hâlâ bekliyor (SSH anahtarı / DEV deploy URL'si; önceki bölüm).
+
+### 10. Demo talepleri Brevo ile ekibe e-posta
+- **Neden:** Kullanıcı Brevo API anahtarı verdi; demo talepleri info@uzmanadres.com, info@kosecik.com,
+  a.kosecik@uzmanadres.com, abdusselam.kosecik@gmail.com adreslerine gitsin. (Anahtar sohbete yapıştırıldı →
+  döndürülmesi önerildi; repoya/günlüğe YAZILMADI.)
+- **Keşif:** Mevcut e-posta SMTP (MailKit, `Smtp:*`). Verilen anahtar `xkeysib-` = Brevo HTTP API anahtarı (SMTP şifresi
+  değil) → `POST https://api.brevo.com/v3/smtp/email`. Brevo hesabında **IP izin listesi açık**: yerel IP 401 aldı.
+- **Kurul:** cto + skeptic APPROVE-WITH-CONDITIONS, security PASS-WITH-FIXES → ortak karar: Brevo YALNIZ demo talepleri
+  için (`IDemoRequestMailer`); auth/davet mailleri SMTP'de kalır (IP listesi yüzünden hepsi kırılmasın). Tüm girdiler
+  HTML-encode (pipeline encode etmiyor), konu CR/LF'siz, replyTo JSON alanı, loglarda kişisel veri/Brevo gövdesi yok.
+  Güvenlik son kontrolü PASS-WITH-NOTES.
+- **Ne yapıldı:**
+  - `VuoApp.Domain/Interfaces/IDemoRequestMailer.cs`, `Infrastructure.Common/Email/BrevoDemoRequestMailer.cs`
+    (typed HttpClient "Brevo", 15 sn), `EmailSetup.cs` kayıt.
+  - `Modules.Saas/Features/DemoRequests/SubmitDemoRequest.cs` (command+validator+handler; alan/çalışan beyaz liste,
+    KVKK onayı zorunlu, bal küpü `website` doluysa sessizce 200) + `DemoRequestController.cs`
+    (`POST api/v1/public/demo-requests`, `[AllowAnonymous]`, `[TenantFree]` metotta — sınıfta derlenmiyor; 202/400/503).
+  - `RateLimitingExtensions.cs`: "demo-request" IP başına 3 / 15 dk.
+  - Config: `Brevo:{ApiKey,SenderEmail=noreply@uzmanadres.com,SenderName}`, `DemoRequests:Recipients` (appsettings.json,
+    .example); anahtar yalnız gitignore'daki `appsettings.Development.json`'da. Sunucuda `Brevo__ApiKey` env.
+  - Ön yüz: `landing.api.ts` (fetch, credentials omit), `demo-form.tsx` önce API, başarısızsa mailto; yeni metinler
+    (sending/sentTitle/sentText) ve Gizlilik "Gönderim" maddesi 10 dilde.
+- **Hata/ders:** `WebUtility.HtmlEncode` Türkçe harfleri `&#214;` yapıyor → `HtmlEncoder.Create(UnicodeRanges.All)`.
+  Git Bash curl Türkçe karakteri bozuk gönderiyor → JSON'da `\u00d6` kaçışı.
+- **Doğrulama:** unit 3912 geçti (yeni 16); integration Docker yok (ortam). Vitest landing 39/39, tsc temiz. Yerel API ile
+  elle: X-Tenant-Id'siz erişim OK, doğrulama 400, Brevo 401 (IP listesi) → 503 (ön yüz mailto'ya düşer), 4. istekte 429.
+- **Commit:** `dd1cb2cd` — feat(landing): demo talepleri Brevo ile ekibe e-postalanir; gonderilemezse mailto
+
+### Açık kalanlar (Brevo)
+- Brevo → Security → Authorised IPs: DEV/PROD sunucu çıkış IP'leri eklenmeli (veya IP kısıtı kapatılmalı); yoksa
+  canlıda da 401 → ziyaretçi mailto yoluna düşer.
+- `noreply@uzmanadres.com` Brevo'da doğrulanmış gönderici/alan adı olmalı (SPF/DKIM).
+- Sunucu env: `Brevo__ApiKey` (DEV + PROD). Anahtar döndürülmeli.
+- Program.cs ForwardedHeaders yalnız `Proxy:TrustForwardedHeaders=true` iken; proxy arkasında gerçek IP için ayar kontrol.
