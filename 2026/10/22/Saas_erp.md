@@ -17,6 +17,21 @@
 ### 2. Tarih/sayı biçimlerini aktif dile bağlama (devam ediyor)
 - ~200 dosyada sabit 'tr-TR'. Ajan: `formatLocale()` + `useFormatLocale()` yardımcısı, gösterim amaçlı kullanımları değiştirme; API'ye giden/parse edilen/karşılaştırılan/resmi Türkçe belge çıktıları hariç; date picker'a date-fns dil eşlemesi.
 
+### 3. Tarih/sayı biçimleri aktif dile göre
+- `core/lib/i18n/format-locale.ts`: `formatLocale()` / `useFormatLocale()` (tr→tr-TR, en→en-GB, de-DE, fr-FR, it-IT, bg-BG, az-Latn-AZ, ka-GE, hy-AM, ar, ur), 6 test (Türkçe çıktı birebir: `1.234.567,89`, `05.10.2026`).
+- Codemod: 201 dosyada gösterim amaçlı `'tr-TR'` → `formatLocale()`; import anında kurulan 10 biçimleyici fonksiyona çevrildi. `date-fns-locale.ts` + `date-comp.tsx` (ur yok → enGB; en artık enGB).
+- Dokunulmayan: `toLocaleLower/UpperCase('tr-TR')` (veri eşleştirme, ~32), kiracı dil ayarı değeri.
+- Dev'e merge (başka geliştiricinin "gerçekleşen maliyet" commit'leri; hata mesajı ajanı aynı ağaçta çalıştığı için stash yerine merge). Yeni "Gerçekleşen Maliyet" ekranı 9 dile (`d02.json`) — `0dc2d546`.
+
+### 4. Sunucu hata mesajları seçili dilde (9 dil)
+- **Kurul:** CTO APPROVE-WITH-CONDITIONS; Şüpheci önce **BLOCK** (katalog `ErrorMessages.cs` aslında İngilizce; 36 kod çok mesajlı; 91 `$""` mesaj; doğrulama hataları PropertyName kodlu; mevcut el haritası ASCII Türkçe ve dil vermeden hep tr). Şartlar uygulandı → yeniden inceleme APPROVE-WITH-CONDITIONS; ek bulgu: `ModuleEntitlementGateMiddleware` `Subscription.ModuleNotInPlan` genel mesajı yerine üretim emrine özgü metin gösterilecekti → "ayrıştırılmayan kullanım yeri" istisnası.
+- **Yapı:** `scripts/extract-api-errors.mjs` (ErrorCodes.cs + ErrorMessages.cs + satır içi Error.X/WithErrorCode), `assets/api-errors/<dil>.json` düz anahtar (i18next derin birleşme dışı), `core/lib/i18n/api-errors.ts` (aktif dil → en → sunucu → kod; `kod:Alan` son eki), `api-errors.{inscope,excluded}.json` fikstür. 823 kapsamda, 252 istisna (145 ayrıştırılmayan yer, 63 değer gömülü, 37 çok mesajlı, 3 dinamik, 3 kaynaksız, 1 yer tutucu) → sunucu mesajı.
+- **Test:** kapsamdaki her kod tüm dillerde, istisna yok, yetim yok, HTML yok, kaynak metin değişince kırılır (yalnız YEREL; CI'da test adımı yok), `ModuleNotInPlan` istisna. Eski el haritası silindi; `apiErrorMessage` + axios toast aktif dil; giriş ekranı `auth.invalid_credentials` için UI anahtarı.
+- **Backend:** `ErrorMessages.cs` 7 gölgelenen çift satır silindi (çalışma anında kazanan metin korundu → sunucu çıktısı değişmedi).
+- **Çeviri:** de/fr/it, bg/az, ka/hy ajanları. fr "locataire" (kiracı) → "société" düzeltildi. Sözlük: bg/az/ka/hy levent/çözgü/atkı/top/dok düzeltmeleri (`0d445ba5`).
+- **Not:** hook, cwd `assets/api-errors` iken oraya `production/session-logs/` yazdı → klasör testi kırıldı → silindi. cwd'yi proje köküne almak gerekir.
+- **Commit:** `f10e9634` (+ dev merge). **DEV:** 1.0.2.1028 pull_rc 0 / up_rc 0. Ağ bir süre github.com'u çözemedi; push sonra geçti.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
