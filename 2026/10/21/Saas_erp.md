@@ -76,12 +76,29 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Test verisi (dev DB, MitoTex):** MKN001 makinesinin tipi boştu → UX kontrolü Dokuma yaptı; dok UX-231161-K001 (LC-000001).
 - **Commit:** `9cf11659` — feat(production,frontend): Dokuma F4 tezgah (dev'e push)
 
+### 6. Dokuma F5 — Dok kontrol / Direkt kumaş hata girişi
+- **Neden:** Kullanıcı isteği "Direk kumaş hata girişi; Dok kontrol hata girişi" (legacy §5.7–5.8).
+- **Kurul (cto/skeptic/dba/po — hepsi APPROVE-WITH-CONDITIONS), kararlar (tasarım §3.13):**
+  - Puan standardı (legacy açık soru #10, ben karar verdim): standart 4 puan — metre bandı başına en fazla 4, sürekli hata kapladığı her bant için 4; birincil puan/100 m², legacy "100 m başına" ikinci değer. Ham puan (1–4) satırda saklanır, kırpma yalnız hesapta (F6 optimum kesim ham puan ister — skeptic).
+  - FabricInspection genişletildi (yeni tablo yok); mevcut FinishedWidth = giriş eni, PointsPer100SqM kullanıldı (cto/dba: çift kolon yok); durum sözlüğü mevcut (in_progress → completed); Grade yeni modlarda null ("Kalite atanmadı", kalite F6).
+  - LoomCut'a yeni durum EKLENMEDİ (skeptic); muayene, F4 sayılarını değiştirmez (PO); muayenesi olan dok F4'te iptal edilemez.
+  - Direkt kumaş: her muayene bir top, `{emirNo}-T{nnn}`; stok girişi F6 (Outbox) — devir sözleşmesi §3.14.
+  - Hata kataloğu = inventory.FaultyCard (okuma portu `IFaultyCardQueryService`); quality.QualityDefectCatalog ile birleşme teknik borç.
+  - Etiket: tarayıcı yazdırma (Code128, yeni paket yok).
+- **Ne yapıldı:** `Entities/FabricInspection{,Defect,TopSequence}.cs`, `Features/FabricInspections/{InspectionModels,StartInspection,InspectionDefectCommands,InspectionLifecycle,InspectionQueries}.cs`, `Features/FabricInspectionController.cs`, `Features/Weaving/WeavingCalculator.Inspection.cs`, Shared port + Inventory `FaultyCardQueryService`, eski `UpdateFabricInspectionResult` Mode≠null → 409, `LoomCancelLastCommand` muayeneli dok → 409. UI `pages/weaving/inspection/*` (tek sayfa iki mod, dokunmatik hata butonları, kod kutusu + Enter/barkod, açık sürekli hatalar sabit, Ctrl+B/Enter/F6/F8/Ctrl+M/Ctrl+Enter/Esc, anlık kayıt + otomatik yeniden deneme, kaydedilmemiş satır varken "Top sonu" kapalı, Code128 etiket, Muayeneler listesi). Migration `20261021002459_WeavingInspectionF5`.
+- **Gerçek Postgres'te bulunan hata (UX BLOCK):** `loom-cuts?filter=status=1` → 500. Neden: Gridify filtresi konumsal DTO projeksiyonundan SONRA uygulanıyordu; EF çeviremiyor, in-memory unit testler yakalamaz. Düzeltme: GridifyMapper<Entity> + AddMap ile filtre/sıralama entity üzerinde, sonra Count/Skip/Take/Select — doklar (F4), muayeneler (F5), indigo/haşıl prosesleri (F3), çözgü leventleri (F2) listelerinde. **Ders:** Gridify'ı asla `Select(new Dto(...))` sonrasına koyma.
+- **375 px taşması (672 px):** tablo başlığındaki `sr-only` (absolute) etiket, konumlandırılmamış `overflow-x-auto` kabının dışına taşıyordu → tüm dokuma kaydırma kaplarına `relative` eklendi; dok-control/direct-control/muayeneler 445 (ölçtüm).
+- **Doğrulama:** backend 4183 test / 0 hata (39 yeni), frontend tsc temiz, production vitest 325 geçti. Security PASS (Low: eski fabric-inspections uçlarında yetki yok — eklemeyi denedim ama `RequirePermissionContractTests` bu ucu bilinçli olarak rollout dışında tutuyor → geri aldım, ayrı iş). UX: tam akış (16 puan bant hesabı, puan/100 m 307,69, /100 m² 192,31; kısayollar; kapanış doğrulaması; etiket; T001 top; iptal) doğrulandı, düzeltmeler (liste yenilenmiyordu, Ctrl+B yan menüyü kapatıyordu, boş dok mesajı, "Sürekli" yazımı, kapanış doğrulama metni) uygulandı.
+- **Test verisi (dev DB, MitoTex):** hata kartları UX-P1 (1 puan noktasal), UX-P4 (4 puan noktasal), UX-C1 (sürekli); muayeneler K001 (kapalı — dok tekrar seçilemez, yeniden açılmazsa), T001 (kapalı), T002 (iptal).
+- **Commit:** `bd041bd2` — feat(production,frontend): Dokuma F5 (dev'e push)
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
 
 ## Açık kalanlar / sonraki adım
-- F5 Hata girişi: direkt kumaş ve dok kontrol ekranı (FaultyCard butonları, noktasal/süreksel hata, puan/100 m²) — LoomCut'a bağlı — kurul.
+- F6 Kumaş kontrol: Dok → Top (hataları ters çevirme start' = Q − end, metre ilerledikçe topa aktarma), optimum kesim (legacy golden test önce), kalite tipi eşikleri (1./2. kalite), topların stok girişi (Outbox, Inventory FabricRoll) + direkt kumaş toplarının stok girişi — kurul.
+- F5 borç: etikette kontrolör adı yok (yalnız Id), eski fabric-inspections uçlarında RequirePermission yok (contract test rollout dışı tutuyor), FaultyCard.IsPointDefects varsayılanı false ise kartlar sürekli sayılır (kart tanımları kontrol edilmeli), hata kataloğu birleşmesi.
 - F4 borç: yönetici yetkisi ayrı değil (iptal/kuyruk/tanım = production.delete), IdempotencyBehavior anahtarı tenant/kullanıcı içermiyor (mevcut kod), paylaşılan GridLookupDialog'da DialogDescription uyarısı, levent kalan yalnız dok kesiminde güncellenir.
 - F3 borç: kimyasal sarfın stoktan düşümü (Outbox), sıra tabloları CreatedBy=tenantId (ortak desen), detayda makine kodu (DTO'da yok).
 - F2 öncesinden kalan borç: CreateWarpBeam/UpdateWarpBeamStatus aynı-tenant kontrolü yapmadan MountedOnMachineId/ProductionOrderId/YarnInventoryId yazıyor (security Low).
