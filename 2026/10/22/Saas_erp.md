@@ -14,7 +14,7 @@
 - **Commitler:** `a6906c73` (yenileme), `493b5d88` (diğer bulgular).
 - **DEV yayını:** 1.0.2.1027 (temiz worktree, 3 denemeli derleme) pull_rc 0 / up_rc 0. Chrome'da doğrulandı: localStorage 'de' + yenileme → html lang=de, başlık "Lagerumbuchungsbeleg", sütunlar "Kartencode, Name, Beschreibung…", alt bilgi "Alle Rechte vorbehalten"; seçiciden Türkçe → "Depo Transfer Fişi", sütunlar "Kart Kodu, Adı, Açıklama…".
 
-### 2. Tarih/sayı biçimlerini aktif dile bağlama (devam ediyor)
+### 2. Tarih/sayı biçimlerini aktif dile bağlama (başlangıç — sonucu madde 3)
 - ~200 dosyada sabit 'tr-TR'. Ajan: `formatLocale()` + `useFormatLocale()` yardımcısı, gösterim amaçlı kullanımları değiştirme; API'ye giden/parse edilen/karşılaştırılan/resmi Türkçe belge çıktıları hariç; date picker'a date-fns dil eşlemesi.
 
 ### 3. Tarih/sayı biçimleri aktif dile göre
@@ -37,6 +37,6 @@
 
 ## Açık kalanlar / sonraki adım
 - ar/ur: RTL geçişi (~795 fiziksel yön sınıfı → mantıksal) + çeviri; ayrı kurul + UX.
-- Backend hata/doğrulama mesajları Türkçe.
+- Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
 - Dokuma eksik listesi: levent hataları, kumaş kontrol tartım/en, dok kontrol alanları, küçükler, büyükler (F8).
