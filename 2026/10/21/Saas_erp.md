@@ -142,6 +142,16 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Bellek:** `memory/dev-deploy-manual.md` (tarif).
 - **Açık:** Kullanıcı GitHub → Settings → Billing & plans'ı düzeltmeli; düzelene kadar her `dev` push'undan sonra elle yayın gerekir.
 
+### 12. Eksik analizi (kullanıcının özgün listesine göre) + G1 "Parçaları tek topa sar"
+- **Neden:** Kullanıcı özgün dokuma listesini tekrar yapıştırıp "eksik bir şey kaldı mı" diye sordu; "sırayla yapalım" dedi.
+- **Eksik analizi (iki salt-okuma denetim, legacy XAML/PM ile alan alan):** her madde için ekran var; eksikler alan/iş akışında. Öncelik sırası: (1) parçaları tek 2. kalite topa sar, (2) analiz formunda satır renk/varyant + iplik başına ihtiyaç tablosu, (3) çözgü/dokuma leventi hataları (F2→F5 arasında kaybolmuş), (4) kumaş kontrolde top başına tartım/en + sarım sırasında yeni hata, (5) dok kontrol alanları (dara/brüt/net, gramaj, müşteri/parti, operatör, kesim metresi, çoklu en), (6) küçükler (UseOrderWidth ölü alan, çözgü formunda en/gramaj, 3 açıklama alanı, gizli iplik alanları, rapor sütunları, levent/dok etiketi, kısayollar), (7) büyükler (Sipariş Bilgileri + Ekler sekmeleri, tezgahlar arası planlama = F8). Kullanıcıya açık sorular: "3 büküm" kat mı (Ply karşılıyor) yoksa büküm sınıfı mı; atkı ihtiyacı legacy gibi mamul atkı sıklığıyla mı.
+- **G1 kurulu (cto/skeptic/po APPROVE-WITH-CONDITIONS, doc §3.20):** sunucu çok aralıklı topu zaten destekliyor (aynı RollNo = tek top) → yalnız frontend + pinleme testi. Çelişki kararları: varsayılan kalite = optimizer'ın `Secondary` kuralı (PO'nun "en yüksek MaxPoints"i 3. kalite/defo seçebilirdi), birincil asla; v1 yalnız "tüm parçalar" (seçerek sarma backlog).
+- **Ne yapıldı:** `fabric_cut.logic.ts` (`defaultWrapGrade`, `wrapAllParts` — yeni RollNo = max+1, `wrapInfo`, `warningsForRoll`), `cut_editor.tsx` (düğme + pencere + satır uyarıları), `roll_create_dialog.tsx` ("Uyarılar", çok parçalı top satırı), `fabric_cut.page.tsx` ("Öneriye dön" onayı), `WovenRollBuilderTests.cs` (+ Production csproj `InternalsVisibleTo VuoApp.UnitTests`), changelog.
+- **UX (PASS-WITH-FIXES):** uçtan uca çalıştı — K002 (80 m, 6 delik + 1 sürekli hata) → T005 2K 25 m "14,00 + 4,00 + 6,00 + 1,00" 3 ek, T006 2K 24 m, T007 1A 31 m, fiş INV-2026-3010-000015. 375 px'te 515 genişlik bulundu: kesim şeridinde segment sayısı artınca flex min-content sayfayı itiyordu → `cut_segment_bar.tsx` şerit `w-0 min-w-full` (+ kapsayıcıya `relative`) → 445 (taban). Nit'ler (açık): sarılan top ekranda "Top 1" görünüyor, diğerleri yeniden numaralanıyor (sunucu dok sırasına göre numaralıyor; birleşme yok); "Öneriye dön" yalnız editör kapalıyken görünüyor.
+- **Doğrulama:** backend 4373 test / 0 hata; production vitest 374/374; tam vitest 7 bilinen eski kırık.
+- **Commit:** `14381149` — feat(production,frontend): Dokuma - parçaları tek 2. kalite topa sar (dev'e push; rebase'de changelog çakışması iki madde birden tutularak çözüldü).
+- **DEV yayını (elle, Actions hâlâ billing):** `1.0.2.1023` → pull_rc 0 / up_rc 0; app-dev API 401, sayfa 200.
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
