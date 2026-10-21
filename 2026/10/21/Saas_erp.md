@@ -152,11 +152,39 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Commit:** `14381149` — feat(production,frontend): Dokuma - parçaları tek 2. kalite topa sar (dev'e push; rebase'de changelog çakışması iki madde birden tutularak çözüldü).
 - **DEV yayını (elle, Actions hâlâ billing):** `1.0.2.1023` → pull_rc 0 / up_rc 0; app-dev API 401, sayfa 200.
 
+### 13. G2 analiz satırı renk/varyant + iplik ihtiyaç tabloları; tezgah kuyruğunda kurulum süreleri
+- **Neden:** Eksik listesi madde 2; kullanıcı: "tahar değiştiğinde 4 saat, çözgü değiştiğinde 1 saat bekleme koy".
+- **Ne yapıldı:** `IInventoryVariantResolver` slot üyeliği kontrolü (`26e49b64`, `inventory.variant.invalid_value`). Analiz satırına `YarnVariant` kombinasyonu + etiket; hesap çıktısına `GramsPerSquareMeterWithWastage` (hesaplanan, saklanmaz), `LineTotalEnds`, `WeftMetersPerFabricMeter`; UI `yarn_variant_cell.tsx`, `weaving_needs_tables.tsx`. Kuyruk: `WeavingCalculator.QueueSetup.cs` (ekleyici `ChangeoverMinutes`), ayarlar `production.weaving.draftChangeSetupMinutes`=240 / `warpChangeSetupMinutes`=60; çözgü bilinmiyorsa "varsayılan değişim" (WarpChangeAssumed), tezgahta emir yoksa kurulum eklenmez. DTO: `WarpChangeRequired/Assumed`, `SetupMinutes`, `DraftSetupMinutes`, `WarpSetupMinutes`; `setup_label.ts`, `loom_queue.tsx`. Tasarım dokümanı §3.21–3.22.
+- **Commit:** `c3ec5dbd`.
+
+### 14. Landing'e İtalyanca
+- **Ne yapıldı:** `features/landing/i18n/it.ts`, `languages.ts`, `language-flag.tsx`, testler. **Commit:** `8854db8a`.
+
+### 15. İplik numarası yalnız malzeme kartından
+- **Neden:** Kullanıcı: "iplik numarasını İplik tab'ında malzeme kartında girelim, diğer yerlerde seçtirmeyelim".
+- **Ne yapıldı:** `WeavingAnalysisModels.cs` PrepareAsync istemciden gelen CountSystem/CountValue'yu yok sayar, her zaman iplik kartından alır; uyarı "İplik kartında numara tanımlı değil (Malzeme kartı > İplik)". `weaving_lines_grid.tsx` salt okunur + "Numara yok" → `/inventory/inventories/:id?tab=iplik`; `inventory.detail.tsx` `?tab=` desteği. 4 yeni backend testi; 157 Weaving/Yarn testi yeşil.
+
+### 16. Uygulama i18n: ~4300 sabit Türkçe metin çeviriye taşındı
+- **Neden:** Kullanıcı: "dilden geçmeyen alanlar var tek tek dolaşabilir misin".
+- **Altyapı:** `core/lib/i18n/locale-registry.ts` modül parçalarını (`assets/i18n/<dil>/<paket>.json`) `tr-TR.json`/`en.json` üzerine derin birleştirir; aynı yaprak farklı değerle → hata (sessiz ezme yok). Böylece 27 paralel ajan birbirinin JSON'una dokunmadan çalıştı. `en/parity-backfill.json` (22 eksik EN anahtarı), `shared-filters.json` (filtre etiketleri), `lazy-labels.ts` (modül düzeyi etiket haritası → okunurken çevir).
+- **Yöntem:** Tarayıcı `scratchpad/i18n-scan.mjs` (4637 metin / 547 dosya) → 27 paket (b01–b25, b21a/b/c) + menü (routes.tsx 151 başlık → `Menu.*`, `production-module-sub-items.ts` titleKey eşleşmesi korunarak; gizleme listesi kodla saklandığı için kayıtlı veriler bozulmadı) + b26 ortak sabitler (durum/seçenek/doğrulama mesajları; getter'larla, API'ye giden değerler değişmedi). Kurallar `i18n-rules.md`: Türkçe görünüm birebir, modül düzeyinde import anında çeviri yok, API değerleri/birimler/marka adları taşınmaz.
+- **Sonuç:** Tarama 4637 → 329 (286'sı otel/PMS, kapsam dışı bırakılmıştı). Typecheck temiz; vitest 1151 testten 1145 geçti — 6 kırık (login.test ×5 SVG data URI, worklist-routes.contract ×1) HEAD koduyla da kırık, doğrulandı. Backend build + 157 Weaving/Yarn testi yeşil.
+- **Rebase:** dev'e gelen "konfeksiyon sevkiyat dilim 2" ile 3 çakışma: `changelog.data.ts` (iki tarafın maddeleri tutuldu), `konfeksiyon_sevkiyat.page.tsx` (upstream mantığı alındı, "Kaydet - Yeni Koli" anahtara bağlandı), `sevkiyat_menu.page.tsx` (anahtarlı menü + yeni "Paketleme Talimatı" maddesi, b17.json'a eklendi).
+- **Commit:** `ccf0887c` — feat(frontend,production): i18n - sabit metinler çeviriye taşındı; iplik numarası yalnız malzeme kartından (dev'e push).
+- **DEV yayını:** 1.0.2.1025 — ilk deneme Docker Desktop kapalı olduğu için düştü (exit 107); Docker başlatılıp yeniden çalıştırıldı.
+
+### 17. Tur 2 + uygulamaya 9 yeni dil (devam ediyor)
+- **Kullanıcı:** "/loop 10m dilleri başta olmak üzere elindeki maddeleri bitir", "dilden geçmemiş ekranları da geçir".
+- **Geniş tarama** (`i18n-scan2.mjs`, Türkçe karaktersiz metinleri de yakalar): 1408 aday / 215 dosya (≈600 PMS). 6 paket c01–c06 (3 PMS + 3 kalan) başlatıldı.
+- **Kurul (dil ekleme):** CTO + şüpheci APPROVE-WITH-CONDITIONS. Koşullar: eager glob yalnız tr/en (yeni diller lazy, `addResourceBundle` → `changeLanguage`; ilk bundle büyümemeli), yedek dil yalnız yeni diller için en (tr kullanıcısı değişmez), yenilemede yanlış dil yanıp sönmesi yok, yeni diller için test (bilinmeyen anahtar yok + aynı `{{yer tutucu}}`), seçicide "(beta)" makine çevirisi işareti, `GLOSSARY.md` tekstil sözlüğü, ar/ur RTL düzeltmesi yapılana kadar seçicide gizli (795 fiziksel yön sınıfı), tarih/sayı 'tr-TR' ve backend Türkçe hata mesajları bilinen boşluk, changelog maddesi.
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
 
 ## Açık kalanlar / sonraki adım
+- i18n: tarih/sayı biçimleri 206 dosyada sabit 'tr-TR'; backend hata mesajları Türkçe; ASCII yazılmış Türkçe metinler (Aciklama, Iptal…) için yazım düzeltme turu; inventory_item_edit_form b10/b11 karışıklığı (b10.json'daki InventoryItemEditForm anahtarları kullanılmıyor).
+- Dil ekleme: içerik çevirisi (de, fr, it, bg, az, ka, hy; ar/ur gizli) + RTL turu + native gözden geçirme.
 - F6b borç: etikette kontrolör adı yok (muayenede yalnız InspectorId); onay penceresinde kod aralığı yalnız başlangıç + adet; Stok > Kumaş Topları sil ikonu işlevsiz (backend silme ucu zaten yok); writeback ile iyileşen sette fiş no sonraki retry'a kadar boş; immutability trigger'ları yalnız Postgres'te (unit test yok); direkt kumaş tek top akışı tarayıcıda yeniden denenmedi; "Kalite Tipleri > Top deposu" ifadesi ve kaydet toast'u UX'te doğrulanmadı.
 - F6c iplik sarfı, F6d top yeniden sınıflama (ClickUp backlog, kurul gerekir).
 - F7 borç: yeni davranışlara (boş durum, Bekleme kartı, Direkt kumaş, tahar çifti atlama, dokunan görünümde kumaş çözümü) test eklenmedi; tahar önceki/sonraki tahar test verisinde null (emir → analiz → WeaveDraft zinciri boş); kullanıcı adı portu yok; MKN001'de nominal RPM yok → verim boş (analiz RPM'i fallback olarak eklenebilir); Üretilen Kumaş'ta kumaş/kalite/emir seçici filtre yok; DBA'nın istediği EXPLAIN (yeni index kullanımı) dev DB'de çalıştırılmadı; Tahar/Üretilen 366 gün hâlâ bellekte eşleştirme (security Low).
