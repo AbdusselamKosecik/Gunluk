@@ -130,6 +130,18 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Doğrulama:** backend 4372 test / 0 hata; frontend tsc temiz, tam vitest 1097 geçti / 7 kırık (bilinen eski); 5 rapor gerçek DB'de 200; 375 px = 445.
 - **Commit:** `880fba12` — feat(production,frontend): Dokuma F7 raporları (dev'e push)
 
+### 11. DEV yayını elle — "teknik analiz formları yok"
+- **Neden:** Kullanıcı dev'de teknik analiz formlarını göremedi. Formlar F1'den beri kodda (Dokuma > Tanımlar > Çözgü Analiz Formları / Kumaş Analiz Formları). Sebep: GitHub Actions faturalandırma hatası — 2026-10-19 13:02'den beri her `dev` push'unda DEV Deploy 4 sn'de "recent account payments have failed or your spending limit needs to be increased" ile başlamadan düşüyor; dev sunucusu 19 Ekim öğlen imajında kalmıştı (F1–F7'nin hiçbiri yoktu).
+- **Ne yapıldı:** Docker Desktop (`%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe`) açıldı; `dev` HEAD `4c3ba6ee`'den scratchpad `publish-dev.sh` ile `tekbirsoft/vuoapp-{api,spa}-dev:1.0.2.1022` + `latest` derlenip Docker Hub'a itildi (~5 dk); deploy tetiklendi.
+- **Komutlar:**
+  ```bash
+  bash scratchpad/publish-dev.sh          # V=1.0.2.1022
+  curl http://217.131.14.57:56806/abdusselam.kosecik/1.0.2.1022   # pull_rc 0, up_rc 0, api+spa Recreated
+  ```
+- **Doğrulama:** app-dev.vuo.app 200, `/production/weaving/fabric-analyses` 200, www.vuo.app 200; dev API üzerinden (app-dev.vuo.app/api) F7 raporları `draft-changes` ve `produced-fabric` 200. Not: api-dev.vuo.app host'u her yola 404 dönüyor (önceden var olan yönlendirme durumu; API'ye SPA proxy'si `/api` üzerinden erişiliyor).
+- **Bellek:** `memory/dev-deploy-manual.md` (tarif).
+- **Açık:** Kullanıcı GitHub → Settings → Billing & plans'ı düzeltmeli; düzelene kadar her `dev` push'undan sonra elle yayın gerekir.
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
