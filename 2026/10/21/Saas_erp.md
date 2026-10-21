@@ -178,6 +178,16 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Geniş tarama** (`i18n-scan2.mjs`, Türkçe karaktersiz metinleri de yakalar): 1408 aday / 215 dosya (≈600 PMS). 6 paket c01–c06 (3 PMS + 3 kalan) başlatıldı.
 - **Kurul (dil ekleme):** CTO + şüpheci APPROVE-WITH-CONDITIONS. Koşullar: eager glob yalnız tr/en (yeni diller lazy, `addResourceBundle` → `changeLanguage`; ilk bundle büyümemeli), yedek dil yalnız yeni diller için en (tr kullanıcısı değişmez), yenilemede yanlış dil yanıp sönmesi yok, yeni diller için test (bilinmeyen anahtar yok + aynı `{{yer tutucu}}`), seçicide "(beta)" makine çevirisi işareti, `GLOSSARY.md` tekstil sözlüğü, ar/ur RTL düzeltmesi yapılana kadar seçicide gizli (795 fiziksel yön sınıfı), tarih/sayı 'tr-TR' ve backend Türkçe hata mesajları bilinen boşluk, changelog maddesi.
 
+### 18. i18n tur 2 + çoklu dil altyapısı + 7 yeni dil (yayında)
+- **Tur 2 (c01–c06):** geniş tarama  (Türkçe karaktersiz metinleri de yakalar) → otel/PMS 30 ekran (~615 metin) + kalan 137 dosya (~690 metin). Bu turda ASCII yazılmış Türkçe yeni anahtarlarda düzeltildi (Aciklama→Açıklama). Görünür Türkçe değişiklik: gün seçici artık Türkçe gün adları, webhook günlüğü 'Event'→'Olay'.
+- **Altyapı (kurul koşulları):**  eager glob yalnız tr/en; de/fr/it/bg/az/ka/hy/ar/ur tembel ( →  → ),  (main.tsx render öncesi bekler), ,  (beta etiketi, ar/ur gizli), html lang/dir. .
+- **Hata + düzeltme:** nesne biçimli fallbackLng, kayıtlı tercih yokken açılış dilini en yaptı → 47+ test İngilizce render etti. 'e  (tanınmayan/boş → tr) + test 'opens in Turkish when no preference is stored'. Kırılgan 'en'e düşüş' testi geçici en-yalnız anahtarla yeniden yazıldı.
+- **Sözlük hatası:** 'dok' sözlükte yükleme rampası diye girilmişti → tezgahtan kesilen kumaş parçası olarak düzeltildi, çevirmenlere bildirildi (it: pezza, de: Warenstück, fr: pièce, bg: отрез, hy: կտրվածք, ka: ნაჭერი, az: Dok).
+- **Çeviri:** dil başına bir ajan (bazıları alt ajanlarla), kaynak en + tr bağlam, . Her dil 13.500 anahtarın tamamı; anahtar/yer tutucu testleri yeşil. Ana paket 1,29 MB (yalnız tr/en eklerinden büyüdü), diğer diller ayrı chunk.
+- **Commitler:**  (tur 2 + altyapı; rebase'de paketleme_talimati/konfeksiyon_sevkiyat çakışması — upstream mantığı + anahtarlar; rebase --continue takıldı → commit elle,  + ),  (it/bg/de/hy),  (fr; en.json 'Tema'→'Theme'),  (ka),  (az + yenilikler maddesi).
+- **DEV yayını:** 1.0.2.1025 () ve 1.0.2.1026 () — temiz  kopyasından derlendi (çalışma ağacındaki yarım çeviri dosyaları imaja girmesin). Docker Desktop kapalıydı (exit 107); npm ci / dotnet restore / apt-get adımları ağdan ara ara düştü → derleme 3 deneme döngüsüyle.
+- **Anadil kontrolü gereken terimler:** cari/fiş/irsaliye karşılıkları (it: anagrafica/documento/DDT; fr: compte tiers/bon/pièce; de: Lieferavis/Konnossement/Laufkarte), ÖTV/ÖİV kısaltmaları, 'adat', parçalı cümleler (b10 InventoryUnitTab/VariantTab, b09 HrmTimeCards.confirm*, b08 FinanceTermDifference.movements*, b23 card13).
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
