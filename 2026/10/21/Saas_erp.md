@@ -60,12 +60,29 @@ Landing (www.vuo.app, dev sunucusu) bitmişti; demo e-postası Brevo IP allow-li
 - **Test verisi (dev DB, MitoTex, emir UX-231161):** BP-0001 (300 m, D01), BP-0003 (290 m, D02) → C01–C10 tüketildi. BP-0002 oluşturulup geri alındı.
 - **Commit:** `e3c86224` — feat(production,frontend): Dokuma F3 indigo/hasil (dev'e push)
 
+### 5. Dokuma F4 — Tezgah (levent bağla/sök, başlat/durdur, atkı sayacı, dok kesme, tahar değişimi, kuyruk, pano)
+- **Neden:** Kullanıcı isteği "Dokuma makine planlama/başlat/durdur/levent bağlama/kesme seri, atılan atkı, RPM, kalan miktar, tahar değişikliği bekleme". Legacy'de tezgah MES'i yoktu (sıfırdan tasarım).
+- **Kurul (cto/skeptic/dba/po — hepsi APPROVE-WITH-CONDITIONS), önemli kararlar (tasarım §3.12):**
+  - Skeptic: önerilen verim formülü ölçülen RPM'le her zaman %100 çıkıyordu → iki etiketli verim, ikisi de **nominal RPM** (emir kopyası LoomRpm, yoksa LoomSpecification.MaxRPM): genel verim (geçen süre − tahar − planlı duruş) ve çalışma verimi.
+  - Atkı sıklığı canlı analizden değil emir kopyasından (`ProductionOrder.LoomWeftDensityPerCm` + `LoomRpm`, F2 bind'de dondurulur).
+  - Yeni duruş nedeni tablosu YOK → mevcut `LostTimeType` (+IsPlanned/IsSystem), dokuma nedenleri her tenant'a seed (migration'da ON CONFLICT DO NOTHING + `OnTenantCreated_SeedWeavingLostTimes`).
+  - Tahar değişimi tek temsil: DraftChangeStart/End + DraftChange durumu (duruş nedeni olarak değil).
+  - `LoomState` (tezgah başı tek satır; FOR UPDATE hedefi, pano kaynağı), `LoomEvent` yalnız-ekle (DB tetikleyicisi: DELETE yok, yalnız iptal alanları güncellenir).
+  - Dok = production `LoomCut` (Inventory FabricRoll DEĞİL; F6 stok girişi Outbox ile) — tasarım §3.1/§3.7 #12 güncellendi.
+  - Planlama: PO isteğiyle asgari tezgah kuyruğu (`LoomQueueItem`, tahmini başlangıç/bitiş, tahar uyarısı); Gantt yok.
+  - Sayaç geri gidemez (counterReset açık), doğrudan metre girişi, çözgü tüketimi = metre × (1+çekme), levent kalanını aşarsa kırpılır + BeamOverrun; kısmi sökme (kalan metreyle başka tezgaha).
+- **Ne yapıldı:** `Entities/Loom{State,Event,Cut,CutNumberSequence,QueueItem}.cs`, `Features/Weaving/{LoomStateMachine,WeavingCalculator.LoomMetrics,Loom*Commands,LoomBoardQueries,LoomViewBuilder,LoomOpsContext,LoomOperationModels,LostTimeTypes}.cs`, `Features/LoomOperationsController.cs`, `EventHandlers/OnTenantCreated_SeedWeavingLostTimes.cs`, migration `20261020234507_WeavingLoomF4` (trigger + seed). UI: `pages/weaving/{loom_board,loom_cuts,stop_reasons}/*`, `api/loom-operations.api.ts` (mevcut `loom.api.ts` tanım sayfasına ait olduğu için ayrı ad).
+- **Doğrulama:** backend 4144 test / 0 hata (67 yeni); frontend tsc temiz, production vitest 285 geçti. Migration gerçek Postgres'te (dev) sorunsuz uygulandı (trigger + seed dahil — unit testler in-memory olduğu için bu kısım yalnız burada sınandı). Security PASS (Low: kuyruk ItemIds null → 500, düzeltildi; mevcut kod: IdempotencyBehavior anahtarı tenant/kullanıcı içermiyor — ayrı iş). UX PASS-WITH-FIXES: tam akış (kuyruk→bağla→başlat→okuma→durdur/neden sonradan→dok kes 80000 atkı/20 cm = 40 m, çözgü 43,2 m, levent 300→256,8→tahar sürerken başlat 409→son olayı iptal→sök "kalan var") doğrulandı; düzeltilenler: kuyruk hatası silinmiyordu, boş pano mesajı yanlış nedeni söylüyordu, iptal penceresi olayı adlandırmıyordu, dok başarı penceresinde etiketsiz ikinci kod, Doklar biçim tutarsızlığı, etiketler/odak.
+- **Test verisi (dev DB, MitoTex):** MKN001 makinesinin tipi boştu → UX kontrolü Dokuma yaptı; dok UX-231161-K001 (LC-000001).
+- **Commit:** `9cf11659` — feat(production,frontend): Dokuma F4 tezgah (dev'e push)
+
 ## Kararlar
 - F2 kodlamasına F1 ayrı commit olarak push edildikten sonra başlanır (CTO koşulu) — yapıldı.
 - Çözgü hataları F2'den F5'e taşındı.
 
 ## Açık kalanlar / sonraki adım
-- F4 Tezgah: levent bağlama/sökme, başlat/durdur (duruş nedeni), atkı sayacı okuması, dok kesme (FabricRoll), kalan metre/süre, tahar değişim beklemesi — kurul.
+- F5 Hata girişi: direkt kumaş ve dok kontrol ekranı (FaultyCard butonları, noktasal/süreksel hata, puan/100 m²) — LoomCut'a bağlı — kurul.
+- F4 borç: yönetici yetkisi ayrı değil (iptal/kuyruk/tanım = production.delete), IdempotencyBehavior anahtarı tenant/kullanıcı içermiyor (mevcut kod), paylaşılan GridLookupDialog'da DialogDescription uyarısı, levent kalan yalnız dok kesiminde güncellenir.
 - F3 borç: kimyasal sarfın stoktan düşümü (Outbox), sıra tabloları CreatedBy=tenantId (ortak desen), detayda makine kodu (DTO'da yok).
 - F2 öncesinden kalan borç: CreateWarpBeam/UpdateWarpBeamStatus aynı-tenant kontrolü yapmadan MountedOnMachineId/ProductionOrderId/YarnInventoryId yazıyor (security Low).
 - F2 nit: kalan levent için önerilen parti no P04 (mevcut P01/P02).
