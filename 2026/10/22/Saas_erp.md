@@ -212,6 +212,31 @@
 - **Bulgu → düzeltme:** `ConfirmDialog`/`ConfirmDialogReverse` varsayılan başlık/açıklama/düğmeler İngilizce sabitti ("Are you sure? This action cannot be undone." — Türkçede de İngilizce görünüyordu). Varsayılanlar kaldırıldı, `tSafe('UiDefaults.confirm.*')` + `UiDefaults.cancel`; `uifix.json` 11 dil. Test `confirm-dialog.i18n.test.tsx` (tr + `setLocale('ar')` ile tembel dil; global `@/common/components` taklidi testte gerçek UI parçalarıyla ezildi). İlgili 34 dosya / 218 test yeşil.
 - **Not:** diğer oturum dev'deki `cae8b917`/`1dd06e9b`'yi bana ait sandı; bunlar ARK'ın — dağıtılmadı, karar kullanıcıda.
 
+### 29. MRP: malzeme listesi doğru kaynaktan + tenant geneli çift sayım (ClickUp 86eyp9dgb, `b793d3a6`)
+- **Neden:** ClickUp KRİTİK görev (to do kuyruğunun başı); kullanıcı "devam edelim".
+- **Komutlar:** `dotnet build src/backend/VuoApp.slnx`; `dotnet test tests/unit/VuoApp.UnitTests --filter "FullyQualifiedName~Mrp|...ConsumeChemicals|...WeavingReport|...DemandMrp"`; `npx tsc --noEmit`; `npx vitest run src/features/production src/core/lib/i18n src/features/changelog`.
+- **Commit:** `b793d3a6` — fix(production): MRP malzeme listesi dogru kaynaktan + emir bazli durum
+- **Ne bulundu:**
+1. **Asıl P0 (skeptic, kurul R1):** `GetMrp.cs` malzeme listesini eski `Recipe/RecipeItem` tablosundan okuyordu; `ProductionOrder.RecipeId` 2026-07-18 migration'ından beri **ProductionRecipe**'e bağlı → MRP gerçek emirlerde HİÇ malzeme göstermiyordu (DEV: reçeteli emir 1, eski tabloyla eşleşen 0). Testler InMemory FK zorlamadığı için yeşildi.
+2. **Çift sayım (bu ticket):** "Sipariş verilen" ve "Gelen" malzeme bazında tenant geneli toplanıyordu; ayrıca sipariş sayımı satış taleplerini (5002) de katıyor, gerçek satın alma siparişlerini (5201, Orders) hiç saymıyor, kapanmış talepleri düşmüyordu.
+3. Talep/sipariş belgelerini üretim emrine bağlayan HİÇBİR yazma yolu yok (link entity'ler var ama kullanılmıyor). Emir bazlı tek arz kaydı StockAllocation (yalnız kumaş). DEV'de emre ayrılmış iplik kaydı 0; kimyasal sarf fişi emre bağlanmıyor (SourceRefId=null).
+
+- **Ne yapıldı (dilim 1, migration yok):**
+- **Malzeme kaynağı:** Dokuma → analizdeki iplikler (çözgü kg = g/m × WarpCalcMeters, atkı kg = g/m × emir miktarı; fire dahil; `WeavingYarnKg` tek kaynak, İplik Sarfiyatı raporu da kullanır). Boyahane → ProductionRecipe → DyeingRecipe kimyasalları × emir miktarı (`DyeingChemicalDoses` tek kaynak, ConsumeChemicals davranışı değişmedi). Kaynak yoksa neden anahtarı: type-no-source / weaving-no-analysis / dyeing-no-recipe.
+- **Tenant bağlamı ayrı, durumu etkilemez:** "Serbest stok (tüm emirlerle ortak)", "Açık satın alma talebi (tüm emirlerle ortak)" (5001, iptal/kapalı/silinmiş hariç; onay şartı yok — ADR'de). Tenant geneli "Gelen" kaldırıldı (port metodu kaldırıldı, başka çağıranı yoktu). Tedarik geçmişi aynı.
+- **Durum merdiveni** tek tablo (xUnit `MrpStatusLadderTests` + Vitest aynı 22 vaka): default / emir-kapandi / hesaplanamadi / takip-yok / fazla / tamam / kismi / yok. 1. dilimde emir bazlı arz takibi olmadığından satırlar "Takip yok" (kırmızı "eksik" yok). Eski anahtarlar (eksik-siparis vb.) kaldırıldı; "karşılanabilir" yok.
+- **Tedarik ekranı (Örme/Dokuma):** kaynaksız emirler ayrı bölümde bir kez; sayaçlar kaynaksız/takip-yok/kapalı emirleri saymaz; bağlam sütunları sayaca girmez.
+- 11 dil (`mrpv2.json`), changelog 2 madde, ADR-0005 eki.
+
+- **Kurul:**
+R1: cto, dba, product-owner APPROVE-WITH-CONDITIONS; skeptic BLOCK (malzeme kaynağı). R2: cto, skeptic, product-owner APPROVE-WITH-CONDITIONS. Çatışma (iplik formülü) teknik → CTO kararı (mevcut rapora uyumlu).
+
+- **Testler:**
+Backend: tam unit 5002 geçti (MRP ilgili 96). Frontend: production+i18n+changelog vitest 771 geçti; typecheck temiz.
+
+- **Kalan borç (backlog):**
+z8v9xnjajh dilim 2 (kimyasal+iplik sarfı emre bağ → takip), z8v9xnjajj batch endpoint, z8v9xnjajk Örme/İplik kaynağı, z8v9xnjajm 5201 portu, z8v9xnjajn seçenek B, z8v9xnjajq eski Reçete menüsü, z8v9xnjajr pegging; ayrıca maliyet portu hatası z8v9xnjaj0. UX post-check DEV yayınından sonra.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
