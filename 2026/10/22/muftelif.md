@@ -140,3 +140,9 @@ SentezSelvedge'de fotoğraf tipi yoktu → kullanıcı "Fotoğraf tipini ekle" s
   `set KAYNAK_SIFRE=...& set HEDEF_SIFRE=...& python SentezSelvedge\araclar\anket_aktar.py --hedef-kullanici <kod>`
 - Eski 233 anket CEVABI aktarılmadı (yalnız tanımlar istendi).
 - APK 2.0.0.3 cihazda denenmedi; foto yüklemesi canlıda denenmedi.
+### 4. Aktarım çalıştırıldı (deploy sonrası)
+- Kullanıcı paketi sunucuya kurdu; doğrulama: yayındaki bundle `index-DRdw7sbi.js` = yerel paket, içinde `'Fotograf'`.
+- `python SentezSelvedge\araclar\anket_aktar.py --hedef-kullanici UZM` (şifreler env) →
+  EKLENDI FINISH → RecId 3 (6 soru), FINISHLASTSTATUS → 4 (3), Genel → 5 (4; kod sunucuda `GENEL`'e normalize).
+- Geri okuma: 13 sorunun tipi, zorunluluğu, TR/EN metni, seçenekleri (FAIL/PASS), qcStage ve tarihleri kaynakla aynı.
+- Hedefte önceden duran test anketleri `FASON01` (RecId 1) ve `TIPTEST` (RecId 2) aktif; dokunulmadı.
