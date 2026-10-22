@@ -72,6 +72,22 @@
 - **Commit:** `df5a0f59` — feat(production): G4. DEV: 1.0.2.1034.
 - **Açık:** G4 UX post-check (Chrome) dağıtım sonrası; etiket DTO'sunda weightSource yok.
 
+### 10. G4 UX post-check (Chrome, 1.0.2.1034) → PASS-WITH-FIXES, düzeltildi
+- Bulgular: 375 px'te sayfa 445 px (header arama kutusu + ikonlar, içerik sarmalayıcısında min-w-0 yok) → diyaloglar sağdan kesik; yeniden açılışta önceki kg "9.6" (nokta); canlı metre son hata metresinden başlıyordu → sahte "−18 m / %−60" uyarısı; tartım tablosunda en için görünür * yok; hata sonrası odak; tezgah kesimi sonrası Dok Kontrol listesi yenilenmiyordu (G4 öncesi de vardı).
+- Şüphe: yeniden açılan muayeneye eklenen 2. hata DB'de yok (yalnız 1 kayıt; POST hiç gelmemiş). Testle yeniden üretilemedi — sayfa mantığı sağlam (2 yeni test POST'u doğruluyor); muhtemel neden 375 px taşmasında tıklamanın hedefi kaçırması. Taşma düzeltildi; tarayıcıda tekrar denenmeli.
+- Düzeltme: header `min-w-0`, dar ekranda arama + Mesaj/Ayar ikonları gizli; `fmtInput` yerel ondalık; canlı metre önceki bitişten; `*`; ilk hatalı alana odak; `cut`/`cancel-last` → `INSPECTABLE_CUTS_KEY` invalidate. Frontend 1507/1507. — `baec409b`.
+- Test verisi (DEV, UX-231161): dok UX-231161-K003, muayenesi, Posted top seti INV-2026-3010-000016 (T008 9,9 kg/158,5 cm, T009 0,3 kg).
+
+### 11. G5 — Dok kontrol: brüt/dara → net kg, ölçülen gramaj, etikette müşteri/kontrolör
+- **Bulgu (öneri):** G5'in çoğu zaten var ya da sipariş kopyası: kesim metresi = fire segmenti/WasteM, çoklu en = yalnız gösterim gridi, müşteri/lot = sipariş verisi. Eski Sentez'de Create ekranında dara kutusu bağlı değil (hiç kaydedilmiyor), net yalnız örmede stoğa etki ediyor.
+- **Kurul:** CTO/şüpheci/ürün sahibi APPROVE-WITH-CONDITIONS. Çatışmalar: dara yardımcısı kaldı (ürün kararı → PO; şüpheci "gereksiz" demişti); hedef gramaj YALNIZ analiz GreigeGsm (şüpheci: teorik formül doğrulanmamış, sipariş FabricGramaj'da birim karışıklığı); oransal kg'dan gramaj yok; müşteri adı `useGetCurrentAccountById` (şüpheci: liste kancası yalnız ilk 20 kaydı getiriyor → çoğu siparişte boş kalırdı); kontrolör = oturumdaki kullanıcıysa adı, değilse boş (üye listesi admin uç noktası).
+- **Ne yapıldı:** ayar `production.weaving.defaultTareKg` (0..100, mevcut quality-settings uç noktası, `defaultTareIsDefault`); Brüt/Dara modu (kayıt yok, yalnız net gider; ayar >0 ise açık); kg alanları "Net kg"; `WeavingCalculator.MeasuredGsm` C#+TS aynı altın testler (50/100/160 → 312,5); ±%5 uyarı (engellemez); muayene/etikette müşteri, kontrolör, hedef gramaj; rapor ve top seti detayında gramaj. Migration yok. — `d273b8cd`.
+- **Doğrulama:** backend birim 4594 geçti; frontend 1497/1497.
+- DEV: 1.0.2.1035 (G5 + G4 düzeltmeleri), health 200.
+
+### 12. G6 — Küçük kalemler (kurul onayı, uygulamada)
+- Kurul (CTO/şüpheci/DBA/PO, APPROVE-WITH-CONDITIONS). Kararlar: UseOrderWidth → hesap eni boşsa ham en (tek yardımcı, DTO yolu dahil), kutu gizli, kolon kalır; çözgü sekmesinde ham/mamul en+gramaj, aktarım yalnız boşları doldurur (eski F11 üzerine yazıyordu — bilinçli fark); notlar: çözgü analizinde Description = "Çözgü açıklaması", WarpNotes/WeftNotes yalnız kumaş analizinde (CHECK `CK_WeavingAnalysis_NotesKind`, migration `WeavingAnalysisNotesG6`); gizli iplik alanları düşürüldü (teknik borç); rapora En/Puan/100 m²/Ek sayısı; levent/dok etiketi mevcut verilerle (kumaş/iplik adı yok — PO istemişti, backlog; son söz kullanıcıda); kısayollar G6 dışı (PO, backlog; CTO'nun AltGr kuralları not edildi).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
@@ -80,4 +96,4 @@
 - Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
-- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), dok kontrol alanları (G5 sıradaki), küçükler, büyükler (F8).
+- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), ~~dok kontrol alanları~~ (G5 tamam, madde 11), küçükler (G6 uygulamada), büyükler (F8).
