@@ -154,6 +154,13 @@
 - **Şirket adı (`3b6819ee`):** `GetUserDetail` — bazı üyeliklerde `TenantName` null (davet/elle ekleme yolları); aynı tenantın diğer üyeliklerinden `Max(TenantName)` ile dolduruluyor (tenant listesiyle aynı mantık). Test `GetUserDetail_MembershipWithoutTenantName_UsesNameFromOtherMembers`; AdminUserManagementTests 15/15.
 - İkisi sonraki DEV dağıtımına bırakıldı (diğer oturuma bildirildi).
 
+### 23. Tanım listelerinde Türkçe sabit sütun başlıkları → 11 dil (`52167c03`)
+- **Neden:** `ColumnBuilder.addTemplateColumn('Kaynak', …)` gibi düz metin başlıklar çevrilmiyordu (boyahane raporundaki sorunun aynısı, 16 dosyada 19 başlık).
+- **Ne yapıldı:** ortak ad alanı `ColumnHeaders.*` (`assets/i18n/<dil>/colfix.json`, 16 anahtar: source, category, dataType, systemKind, systemType, type, transportMode, transporterType, vehicleType, kind, view, module, operationCount, status, print, general). Yapıcıların çoğu `translationKey` parametresi aldığı için entity ad alanı yerine sabit ortak ad alanı seçildi. Değiştirilenler: kur, ödeme tipi, stok özelliği/türü/tipi, varyant grubu, taşıyıcı, nakliyeci, araç, sipariş listesi durum, koli listesi yazdır, kayıp zaman, makine, imalat tipi, operasyon/rota (modül + "Genel" yedeği). Betik: scratchpad `colrepl.mjs`.
+- **Test:** `common/utils/generic-data-table/__tests__/template-column-headers.test.ts` (en'de Türkçe başlık/ham anahtar yok; tr değişmedi). Tam koşu 1607/1609 — 2 zaman aşımı makinedeki bellek baskısından (tek başına uzun zaman aşımıyla geçiyor).
+- **Dağıtım:** diğer oturumun 1.0.2.1043 derlemesi bellek yetersizliğinden kesildi; DEV 1.0.2.1042'de. `1dc4b619`, `3b6819ee`, `52167c03` bekliyor — kullanıcı isteyene kadar derleme başlatılmıyor.
+- **Kalan:** bazı etiket sözlükleri hâlâ Türkçe sabit (ör. `RATE_SOURCE_LABELS` "Manuel"); hücre değerleri ayrı tarama gerektirir.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
