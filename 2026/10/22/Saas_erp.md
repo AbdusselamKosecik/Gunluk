@@ -57,6 +57,21 @@
 - **Commit:** `a8de9ed9` — feat(production): G3 levent hataları; `68e6cae2` — test(frontend): eskimiş login ve worklist testleri. DEV: 1.0.2.1033.
 - **Açık:** UX post-check (Chrome, 375 px) dağıtım sonrası; fault silme `production:update` ile (güvenlik: bilinçli tercih, belgelendi); İndigo/Haşıl girdisi başka emre aitse rozet 0 gösterebilir (diyalog doğru veriyi gösterir).
 
+### 8. G3 UX post-check (Chrome, app-dev 1.0.2.1033) → PASS-WITH-FIXES, düzeltildi
+- Bulgular: yeni hata kartı oluşturunca pencere eski listeyi gösteriyordu (form doğrudan api.post kullanıyor, cache geçersizlenmiyordu); dokuma silme onayı biçimsiz (düğmeler bitişik, Sil kırmızı değil); en "1 faults"; 375 px'te hata adı 6 satır; boş durum linki düz metin; tip adları küçük harf.
+- Düzeltme: `useInvalidateFaultyCards` + pencere açılışta yeniden çeker; `weaving_confirm_dialog` outline/destructive (4 silme çağrısı kırmızı); `_one/_other` çoğul (ar için ek biçimler en'de olmadığı için düz anahtar geri dönüşü); tablo yatay kaydırma, `pe-8`; link stili; "Çözgü Hatası"; odak kart seçimine döner. — `35c6e432`.
+- Test verisi: DEV'de "UX-CZ1 UX Çözgü kopuk tel" (Çözgü tipi) kartı bırakıldı.
+
+### 9. G4 — Dok kesiminde top başına tartım/en + kesim ekranından yeni hata
+- **Neden:** Sentez Dok→Top'ta her top ayrı tartılıyor, giriş eni zorunlu. VuoApp'te kumaş→top zaten kapanışta kg/en alıyordu; dok→top'ta kg metreye oranlanıp dok eni yazılıyordu. Yeni hata yolu (reopen) vardı ama kesim ekranından erişilemiyordu.
+- **Kurul:** CTO/şüpheci/DBA/ürün sahibi APPROVE-WITH-CONDITIONS. Çatışmalar: WeightSource eklendi (CTO+PO+DBA); geriye dönük doldurma YOK (Posted toplar TR_WovenRoll_PostedImmutable ile kilitli, UPDATE migration'ı düşürür — PO isteği CTO/DBA ile reddedildi); karışık tartım = hep-ya-hiç (şüpheci; PO "kg opsiyonel" set düzeyinde korunur); en zorunlu, ön dolu.
+- **Kritik risk (şüpheci):** `FabricCutOptimizer.Build` kesimleri sıralayıp top numaralarını yeniden veriyor → değer yanlış topa gidebilirdi. Çözüm: kg/en `CreateRollCutRequest → CutPlanItem → CutSegment` alanlarıyla taşınır; doğrulama istek numaralarıyla, renumber öncesi.
+- **Ne yapıldı:** `WovenRoll.WeightSource smallint` (1 oransal, 2 tartılan, null eski) + `CK_WovenRoll_WeightSource`; migration `20261022012346_WeavingRollWeighG4` (üretildi, uygulanmadı). Raporlar: tartılan = `WeightSource==2 || (null && kg!=null)`. Frontend: kesim diyaloğunda tartım tablosu (birim anahtarlı, Σ kg vs dok kg, %5 üstü uyarı, 44 px, virgül), oransal kg "≈"; kesim ekranında "Yeni hata ekle" → reopen → muayene (returnTo + önceki bitiş/en/kg dolu, bitiş değişirse fark) → kesime dönüş. 11 dil (`g4.json`), changelog, doküman §3.24.
+- **Sapmalar:** ölçüm kontrolleri FluentValidation kuralı değil, handler'dan çağrılan statik metot (ValidationBehavior kodu `validation.invalid_format`'a çeviriyordu); reopen sunucuda `production.delete` istiyor (D9'da update yazıyordu, değiştirilmedi); muayene ekranında ters çevirme kavramı yok → sabit uyarı.
+- **Doğrulama:** frontend 1441/1441, typecheck temiz; backend birim 4566 geçti/0 kaldı; yeni Postgres entegrasyon testi `WovenRollWeightSourceCheckTests` 7/7 (ajan çalıştırdı).
+- **Commit:** `df5a0f59` — feat(production): G4. DEV: 1.0.2.1034.
+- **Açık:** G4 UX post-check (Chrome) dağıtım sonrası; etiket DTO'sunda weightSource yok.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
@@ -65,4 +80,4 @@
 - Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
-- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), kumaş kontrol tartım/en (G4 sıradaki), dok kontrol alanları, küçükler, büyükler (F8).
+- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), dok kontrol alanları (G5 sıradaki), küçükler, büyükler (F8).
