@@ -133,6 +133,13 @@
 - **Doğrulama:** backend birim 4913 geçti; güvenlik post-check PASS (149 yazma ucunun tamamı kontrollü). Frontend'de 4 kırmızı test diğer oturumun yarım RTL etiket işinde.
 - **İki oturum:** diğer oturum (saas-erp-fd) RTL bulgularını düzeltiyor (axios-instance genel toast dalı, etiket sayfaları, 404, header, rtlfix.json); dosyalar ayrıştırıldı. 1.0.2.1041 ikisini birlikte çıkaracak.
 
+### 20. RTL/i18n ekran kontrolü bulguları düzeltildi — 1.0.2.1041 (`7c7c2aca`)
+- **Neden:** ar/ur post-check (UX, Chrome) bulguları: ipuçlarında "soldan" gibi yön ifadeleri, Arapça etiket sayfasında tarih/değerlerin karışması, 404 sabit Türkçe, axios genel hata toast'unda İngilizce sunucu metni, 375 px'te tablo alt satırı/arama taşması, mobil çekmece Esc ile kapanmıyor, klasik menü RTL'de ters kayıyor, şirket/kullanıcı adlarında noktalama ters.
+- **Ne yapıldı:** ar `b10/b14/b20/b25/c06` + ur `b04/b10/b14/b20/b25/c06` ipuçları yönsüz ("listeden"); etiket sayfalarında (`inspection_label`, `beam_label`, `cut_label`, `label_print_shell`) `dir=ltr` yalnız etiket kartında + değerler `<bdi>`; `404.tsx` i18n (`assets/i18n/<dil>/rtlfix.json`, 11 dil); `axios-instance.ts` yedek toast `ApiFallback.generic`; `data-table.tsx` duyarlı alt satır/arama; `admin_user_detail.page.tsx`; `sidebar.tsx` Esc + RTL kayma; header/user-menu/TenantSwitcher/TenantPickerModal `<bdi>`; testler + changelog satırı.
+- **Komutlar:** `cd src/frontend && npm run test` → 209 dosya / 1601 test yeşil; `git push origin HEAD:dev`.
+- **Dağıtım:** diğer oturum 1.0.2.1041'i `7c7c2aca` üzerinde (TD-020 `cb6c2dcf` dahil) çıkarıyor.
+- **Açık:** 375 px düzeltmeleri kod analiziyle yapıldı, canlıda yeniden ölçülecek (stok listesi, kullanıcı detayı, boyahane raporu, Arapça etiket, 404, çekmece Esc). `401.tsx` de sabit Türkçe — dokunulmadı.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
