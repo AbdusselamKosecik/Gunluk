@@ -146,3 +146,25 @@ SentezSelvedge'de fotoğraf tipi yoktu → kullanıcı "Fotoğraf tipini ekle" s
   EKLENDI FINISH → RecId 3 (6 soru), FINISHLASTSTATUS → 4 (3), Genel → 5 (4; kod sunucuda `GENEL`'e normalize).
 - Geri okuma: 13 sorunun tipi, zorunluluğu, TR/EN metni, seçenekleri (FAIL/PASS), qcStage ve tarihleri kaynakla aynı.
 - Hedefte önceden duran test anketleri `FASON01` (RecId 1) ve `TIPTEST` (RecId 2) aktif; dokunulmadı.
+### 5. Yetkiler sayfası + anket silme + hata kartları (paket hazır, kurulum bekliyor)
+- **İstek:** "yetkilendirmeyi nereden yapacağız" → ekran yoktu (yalnız `POST /api/yetki/ata|kaldir`,
+  SentezUserId ister; Admin ayrıca `appsettings Selvedge:Yoneticiler`). "Yetkiler sayfasını yap, Sentez ve
+  UZM görsün"; "FASON01 ve TIPTEST'i sil"; "hata kartlarını da ekle".
+- **Yetkiler:** `GET /api/yetki/kullanicilar?q=` (`YetkiController`): q boş → rolü olanlar + yönetici
+  listesindekiler; dolu → Meta_User kod/ad LIKE (Turkish_CI_AS), TOP 50; roller ikinci sorguyla.
+  `YoneticiListesi.Kodlar` eklendi. Web `pages/YetkiPage.tsx` + `api/yetki.ts`, rota `/yetki`
+  (`Izin.YetkiYonet`), menü "Yonetim > Yetkiler". Rol başına kutu; sabit yöneticinin Admin kutusu kilitli.
+  Roller token'a girişte yazıldığı için değişiklik bir SONRAKİ girişte geçerli.
+- **"Sentez" kullanıcısı:** login denemesi `SENTEZ`/`Sentez`/`sentez` → "Kullanici adi bulunamadi".
+  Yönetici listesine eklenmedi; kod bulunamadı (kurulumdan sonra Yetkiler'de adla aranacak).
+- **Anket silme:** `DELETE /api/anket/{id}` (anket.yaz) → `AnketStore.SilAsync`: Survey + SurveyResponse
+  IsDeleted=1 (SiparisListe ve PDF anketin IsDeleted'ına bakmıyor; cevaplar da kapanmalı) + AuditLog.
+  Liste ekranında Sil düğmesi (confirm). FASON01 (RecId 1) ve TIPTEST (2) ikişer test cevaplı.
+- **Hata kartları:** eski `/api/defects` = 193 kayıt (Yıkama 73, Dikim 67, Finish 43, Kesim 10; severity
+  hep null). Hedef `UZM_Selvedge_Defect` boş ve API salt okunurdu → `POST /api/hata-katalog/toplu`
+  (YetkiYonet; aynı Code varsa atlar, UPDLOCK/HOLDLOCK; `HataKatalogDogrulama` kod boş/tekrar + kolon
+  boyları) + `HataKatalogDogrulamaTests` (5). `araclar/hata_aktar.py` (anket_aktar'ın `giris/istek`'ini
+  kullanır). `--dene`: 193 hata, sınır aşan/tekrar yok.
+- **Doğrulama:** `dotnet test` 491/491, `npm run build` temiz. Paket + zip yenilendi (bundle `index-BTmf8gfG.js`).
+- **Commit:** `079107a` — feat(sentez-selvedge): Yetkiler sayfasi, anket silme, hata katalogu toplu aktarim
+- **Sonraki:** kullanıcı paketi kurar → bundle kontrol → `DELETE /api/anket/1`, `/2` → `hata_aktar.py --hedef-kullanici UZM`.
