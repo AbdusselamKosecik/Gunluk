@@ -85,3 +85,58 @@ olacakmış. Frederic Template v85 week12 PLAN.xlsm"*. Şablon dosyası 10-05'te
   ya da zip `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-22-5bf314f.zip`.
 - VPN açıkken `yikama-ozet` ve Parametreler ekranı canlı kontrol edilmeli.
 - Haftalık Kapasite'deki Lazer bölümü de çalışan esaslı olsun istenirse `CapacityCalc` ayrıca değişmeli.
+
+
+---
+
+## Devam: SentezSelvedge — eski Selvedge anketleri + Fotoğraf soru tipi
+
+### Bağlam
+Kullanıcı: "https://mfg.nasilbu.com/surveys'deki anketleri http://192.168.3.228:91/anket'e ekle"
+(kaynak girişi admin / kullanıcının verdiği şifre). Kaynakta 3 anket var: Genel (4 soru),
+FINISH (6), FINISHLASTSTATUS "Karar Sorulari" (3 TekSecim FAIL/PASS). 2 soru `Photo` tipinde;
+SentezSelvedge'de fotoğraf tipi yoktu → kullanıcı "Fotoğraf tipini ekle" seçti.
+
+### 1. Fotograf soru tipi
+- **Ne yapıldı:**
+  - `api/Selvedge/Anket/AnketModeller.cs`: `SoruTipi.Fotograf` (`Hepsi`'ye eklendi, seçeneksiz).
+  - `AnketPuan.Dolu`: Fotograf → `int.TryParse(TextValue) > 0`. Fotoğraflar cevap kaydından SONRA
+    yüklendiği için sunucu zorunluluğu istemcinin bildirdiği foto adedine (`textValue`) bakar.
+  - `api/Rapor/RaporServisi.cs` `Cevap()`: Fotograf → "N fotograf / photo(s)" (resimler zaten
+    "Anket fotograflari" bölümünde `SurveyResponse` eklerinden basılıyordu).
+  - Testler: `AnketPuanTests` (+6: adet 2/1 geçer, 0/null/"foto" geçmez; tip kanonik + seçenek almaz).
+  - Web `api/anket.ts` `SORU_TIPLERI` += 'Fotograf' (tasarım ekranındaki açılır liste buradan gelir).
+    `AnketDoldurPage.tsx`: çoklu `<input type=file>`; kaydet → `cevapApi.kaydet` → her foto
+    `dosyaApi.yukle('SurveyResponse', r.id, f, 'foto', soruMetni)`; başarısız foto sayısı toast.
+  - Mobil: `survey_models.dart` 'Fotograf' → photo; `toJson` photo → `textValue = adet`.
+    `survey_fill_screen.dart`: yükleme `SurveyAnswer`/`answers[].id` (sunucu dönmüyordu → foto HİÇ
+    yüklenmiyordu) yerine `SurveyResponse` + `result['id']`, caption = soru metni. Sürüm 2.0.0.3.
+  - İzin: AnketDoldur olan her rolde DosyaYaz var (QA, Anketor, Admin) — ek değişiklik yok.
+  - Şema değişmedi (`[Type] NVARCHAR(32)`).
+- **Doğrulama:** `dotnet test` 486/486; `npm run build` temiz; `build-apk.ps1 -Surum 2.0.0.3` → 
+  `sentez-selvedge-2.0.0.3.apk` (75 MB; analyze yalnız info).
+
+### 2. Aktarım betiği
+- `SentezSelvedge/araclar/anket_aktar.py`: kaynak `/api/surveys` (+detay) → hedef `POST /api/anket`.
+  Tip eşlemesi Text→Metin, Number→Sayi, YesNo→EvetHayir, Date→Tarih, SingleChoice→TekSecim,
+  MultipleChoice→CokSecim, Photo→Fotograf. TextEn/NameEn/tarih/qcStage/target korunur, puan null.
+  Aynı Code hedefte varsa atlar. Şifreler env: `KAYNAK_SIFRE`, `HEDEF_SIFRE`. `--dene` = yalnız göster.
+- **Tuzak:** mfg.nasilbu.com Cloudflare arkasında; Python-urllib User-Agent'ı `403 error code: 1010`
+  → `User-Agent: Mozilla/5.0 anket-aktar` eklendi (curl'de sorun yoktu).
+- `--dene` çıktısı doğrulandı (3 anket, tipler doğru).
+- **Hedefe henüz YAZILMADI:** (a) Sentez'de `admin` kullanıcısı yok ("Kullanici adi bulunamadi");
+  anket.yaz izinli bir Sentez kullanıcı kodu/şifresi gerekiyor. (b) Canlıdaki eski sürüm 'Fotograf'
+  tipini 400 ile reddeder → önce deploy.
+
+### 3. IIS paketi
+- `.\SentezSelvedge\Deploy-IIS.ps1 -OutputDir '...\SentezSelvedge-IIS-192.168.3.228-91\site'`, Deploy-IIS.ps1
+  pakete kopyalandı, `SentezSelvedge-IIS-192.168.3.228-91.zip` (21,9 MB) yeniden üretildi.
+  Buradan `\\192.168.3.228` paylaşımına erişim yok → kurulum kullanıcıda:
+  `.\Deploy-IIS.ps1 -SkipBuild -OutputDir '.\site' -SetupIIS -SiteName SentezSelvedge -Port 91 -PhysicalPath 'C:\inetpub\SentezSelvedge'`
+- **Commit:** `3e2e01d` — feat(sentez-selvedge/anket): Fotograf soru tipi + eski Selvedge anket aktarim betigi
+
+### Açık kalanlar
+- Sunucuya paket kur → Sentez kullanıcısıyla:
+  `set KAYNAK_SIFRE=...& set HEDEF_SIFRE=...& python SentezSelvedge\araclar\anket_aktar.py --hedef-kullanici <kod>`
+- Eski 233 anket CEVABI aktarılmadı (yalnız tanımlar istendi).
+- APK 2.0.0.3 cihazda denenmedi; foto yüklemesi canlıda denenmedi.
