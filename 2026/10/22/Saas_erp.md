@@ -106,6 +106,14 @@
 - `ceb6e650`: `IOrderLineQueryService` (Shared port, Orders uygulaması; yalnız satış siparişi tipleri 1/5202/5206), uç `GET production/weaving/analyses/{id}/orders?status=` (production:read + handler'da order:read → 403; çözgü → 400). Fiyat/tutar yok; metre toplamları tüm filtreli kümeden; 500 satır + truncated. Eski Sentez "Kapalı" toplam hatası düzeltildi. Index `IX_OrderReceiptItem_TenantId_InventoryId` (migration `20261022030557_OrderItemInventoryIndexG7`). Güvenlik post-check PASS.
 - Sınırlama: sipariş miktarı birim dönüşümsüz metre kabul edildi; Orders sevk miktarı yazmadığı için "Sevk" 0.
 
+### 17. Çok tezgahta aynı emrin kalan/bitiş çift sayımı düzeltildi — 1.0.2.1039
+- **Neden:** G7 F8a'yı bloklarken şüphecinin bulduğu gerçek hata: aynı emir birden çok tezgaha takılabiliyor (takma yalnız leventi kontrol ediyor) ve `LoomViewBuilder` her tezgaha emrin TÜM kalanını yazıyordu → N tezgahta yük/bitiş ~N kat, arkadaki kuyruklar kayıyordu.
+- **Kurul:** CTO/şüpheci/ürün sahibi APPROVE-WITH-CONDITIONS. Kritik düzeltmeler: kuyruk kuralında aynı tezgahın kendi leventi de düşülür (aynı emir A'da takılı + A kuyruğunda olabiliyor); "takılı" kaynağı `LoomState.CurrentBeamId` (elle Mounted yapılan levent sayılmaz); levent kartının bitişi kumaş metresiyle.
+- **Ne yapıldı (`db65cf28`):** takılı: kalan = min(emir kalanı, levent kalanı/(1+çekme)); kuyruk: max(0, emir kalanı − tüm takılı dokuma leventlerindeki kumaş); tek `ShrinkFactor` yardımcısı; DTO'ya ek `orderRemainingM`; kartta "Kalan (bu tezgah, tahmini)" + "Sipariş kalanı", "Diğer tezgahlarda karşılanıyor", "Levent bitti"; pano/kuyruk/tezgah durum raporu (ekran + Excel) aynı etiket; 11 dil (`loomfix.json`). Şema yok.
+- **Doğrulama:** backend birim 4771 geçti; frontend 1569/1569 (altın senaryolar 1000 m emir, A/B levent 600/400, A 100 m kesince A 500, B 400, kuyruk C 0).
+- **İki oturum çakışması:** Yeniden başlatma sonrası aynı konuşma iki pencerede (saas-erp-c2 ve saas-erp-fd) devam etti; iki ajan aynı dosyalara yazdı. Oturumlar arası mesajla iş bölümü: bu oturum çift sayım düzeltmesi, diğeri G7 Ekler (`e6fc32ae`). Tek dağıtım: 1.0.2.1039 (Docker Desktop yeniden başlatma sonrası kapalıydı, açılıp tekrar denendi).
+- **Açık:** UX post-check (pano/kuyruk/rapor) sürüyor; G7 Ekler post-check'leri diğer oturumda.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
