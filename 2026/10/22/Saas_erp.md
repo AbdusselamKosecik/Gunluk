@@ -180,6 +180,26 @@
 - **İki oturum:** diğer oturum aynı üç dosyaya başlamış, benim kaydedilmemiş değişikliğimi görünce durdu, hiçbir dosyama dokunmadı; sabit metin taraması bu oturumda kaldı.
 - **Doğrulama:** typecheck temiz; ilgili 7 dosya / 90 test yeşil.
 
+### 27. F8a v2 — Tezgahlar arası planlama (`07487438`)
+- **Neden:** Kullanıcı "F8a yap" dedi → §3.27'deki skeptic BLOCK'u bilerek kaldırdı. Skeptic'in v1 itirazları (tahsis bağlamada siliniyor, çift sayım, formül kesimi iki kez düşüyor, Σ kontrolü yarışıyor, leventler zaten fiziksel tahsis) tek tek yanıtlanarak yeniden tasarlandı (öneri: scratchpad `f8a-v2-proposal.md`).
+- **Kurul:** cto, skeptic, dba, product-owner APPROVE-WITH-CONDITIONS; security PASS-WITH-CONDITIONS. Çatışma: DBA yeni indeks istedi, skeptic `IX_LoomQueueItem_ProductionOrderId`'nin zaten var olduğunu gösterdi (doğrulandı) → indeks yok. Skeptic'in kümülatif paylaşım formülü per-item min(p, serbest) yerine geçti (fazla atamada çift sayımı önlüyor).
+- **Ne yapıldı:**
+  - `LoomQueueItem.PlannedQuantityM numeric(12,2) NULL` + CHECK; migration `20261022111824_WeavingLoomPlanF8a` (üretildi, UYGULANMADI; designer strip scripti G6 designer'ını da sıyırdı — prosedür gereği).
+  - `WeavingCalculator.QueueShares` tek kaynak: metreli kayıtlar (CreatedAt, Id) sırasıyla min(p, kalan); metresizler kalanın tümü (≥2 metresiz → uyarı); fazla atama = max(0, Σp − serbest).
+  - `LoomViewBuilder` emrin TÜM tezgahlardaki kuyruk kayıtlarını yükler (tek tezgah GET = pano).
+  - Yeni uçlar: `PATCH looms/{id}/queue/{itemId}`, `POST …/move` (iki tezgah Guid sırasıyla + `ILoomOperationService.LockOrderAsync` TenantId koşullu), `GET planning/unplanned-orders`; POST queue'ya `plannedQuantityM`. Fazla atama kuralı tek yönlü (yalnız artıran reddedilir).
+  - Ön yüz: "Tezgah planlama" sayfası (`features/production/pages/weaving/loom_planning/`), `loom_queue.tsx`'te metre/uyarı/rozet + "Metreyi değiştir"; 11 dil `f8a.json`; changelog Üretim/new.
+  - Doküman §3.28, D11 güncellemesi, TD-022 (BeamProcess emir kilidinde TenantId yok).
+- **Komutlar:**
+  ```bash
+  dotnet build src/backend/VuoApp.slnx -c Debug
+  dotnet test tests/unit/VuoApp.UnitTests --filter "FullyQualifiedName~Loom|FullyQualifiedName~PermissionContract|FullyQualifiedName~ProductionWritePermission"
+  cd src/frontend && npx tsc --noEmit -p . && npx vitest run src/features/production/pages/weaving src/core/lib/i18n src/common/utils
+  ```
+- **Sonuç / doğrulama:** Build 0 hata; ilgili 531 unit test yeşil (tam koşu 4947 geçti, 1 zamanlama testi yük altında düştü, tek başına geçiyor); 4 Testcontainers Postgres eşzamanlılık testi yeşil (paralel ekleme → tek 400, A→B/B→A taşıma kilitlenmesiz, taşıma × bağlama, başka tenant → 404 + LoomState oluşmaz); vitest 572/573 (tek düşen `formatLocale` yük zaman aşımı, tek başına geçiyor); typecheck temiz. Not: repo ESLint ayarı yalnız .js/.jsx dosyalarını kapsıyor, TS dosyaları lint edilmiyor (F8a'ya özgü değil).
+- **Commit:** `07487438` — feat(production): F8a v2 tezgahlar arasi planlama
+- **Açık:** DEV'e yayınlanmadı (kullanıcı "deploy et" demedi) → UX post-check (1024×768, 375 px) yayından sonra; migration DEV açılışında uygulanacak.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
@@ -188,4 +208,4 @@
 - Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
-- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), ~~dok kontrol alanları~~ (G5 tamam, madde 11), ~~küçükler~~ (G6 tamam), büyükler G7: Sipariş Bilgileri tamam, Ekler uygulamada, F8a BLOCK (madde 14-16)
+- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), ~~dok kontrol alanları~~ (G5 tamam, madde 11), ~~küçükler~~ (G6 tamam), büyükler G7: Sipariş Bilgileri tamam, Ekler uygulamada, F8a BLOCK (madde 14-16) → kullanıcı override, F8a v2 yapıldı (madde 27)
