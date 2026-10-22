@@ -122,6 +122,17 @@
 - **Koordinasyon:** aynı depoda ikinci oturum (saas-erp-c2) çift sayım düzeltmesini aldı (madde 17); dosya sahipliği bölündü, ortak dosyalarda (changelog, tasarım dokümanı) yalnız kendi satırlarımız stage edildi (`git update-index --cacheinfo`), tek dağıtım 1039 c2 tarafından.
 - **Not:** `api-errors.test.ts` git worktree içinde SyntaxError ile düşüyor (ortam; önceki commit'te de aynı), ana ağaçta 35/35 geçiyor.
 
+### 18. Dil artıkları + tezgah panosu UX notları — 1.0.2.1040
+- `461233b2`: ar için 37 çoğul anahtara _zero/_two/_few/_many (i18n testi CLDR eklerine en `_one/_other` tabanına göre izin verir); takvim gün etiketleri ("Today, …", "…, selected") 11 dilde; tezgah kartı/detayında dokunma+klavye ile açılan bilgi düğmesi (44 px, kart `article` + uzanan başlık linki), levent satırı "kalan (çözgü)", açıklamaya çekme dönüşümü; tezgah durum raporuna (ekran+Excel) "Sipariş kalanı". Frontend 1579/1579.
+- Çift sayım UX post-check: PASS-WITH-NITS (DEV'de tek tezgah → çok tezgah, "Levent bitti", kuyruk satırı canlıda görülemedi; birim testlerle kapsandı). Notlar bu maddede kapatıldı.
+
+### 19. TD-020 — ProductionController'daki 88 kontrolsüz yazma ucu (izleyici dahil herkese açıktı)
+- **Kurul:** CTO/şüpheci/ürün sahibi APPROVE-WITH-CONDITIONS, güvenlik PASS-WITH-CONDITIONS. Şüpheci: audit log yalnız API-key yazımlarını tutuyor → "son 30 günde izleyici yazdı mı" kontrolü yerine üyelik tablosu sorgusu. Dev: izleyici/tanımsız rol yok (owner 13, admin 2, user 2). **Canlıda aynı kontrol kullanıcıda (T6) — canlıya dokunulmadı.**
+- **PO kararları:** ön maliyet, BOM reçeteleri, laboratuvar deneme onayı → manage; emir durumu → update (kullanıcı iptal edebilir, kısıtlama backlog); fason sevk/iade → create.
+- **Ne yapıldı (`cb6c2dcf`):** yöntem adına göre manage 29, delete 16, create 21, update 21, read 1 (salt okuma POST); `ProductionEndpointPermissionContractTests` (Production derlemesindeki her yazma ucu yöntem düzeyinde [RequirePermission], eylem `DefaultPermissionSeeder`'dan, 100 uçluk sabit tablo, boş istisna listesi); barkod ekranında 403 ayrı mesaj ("okutma kaydedilmedi"); genel "yetkiniz yok" metni 11 dil (`CommonLabels.forbidden`); TD-020 kapandı + TD-020a..f; kiracı yöneticilerine sürüm notu.
+- **Doğrulama:** backend birim 4913 geçti; güvenlik post-check PASS (149 yazma ucunun tamamı kontrollü). Frontend'de 4 kırmızı test diğer oturumun yarım RTL etiket işinde.
+- **İki oturum:** diğer oturum (saas-erp-fd) RTL bulgularını düzeltiyor (axios-instance genel toast dalı, etiket sayfaları, 404, header, rtlfix.json); dosyalar ayrıştırıldı. 1.0.2.1041 ikisini birlikte çıkaracak.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
