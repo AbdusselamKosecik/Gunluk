@@ -168,6 +168,12 @@
 - **Doğrulama:** typecheck temiz; yeni test 3/3; ilgili 58 dosya / 567 test (i18n parite dahil) yeşil. ar/ur/ka/hy/az/bg makine çevirisi — anadili kontrolü önerilir.
 - **Dağıtım:** bekliyor (bellek baskısı, kullanıcı isteyince).
 
+### 25. Genel arayüz varsayılanları → 11 dil (`03b2b9ad`)
+- **Ne yapıldı:** `assets/i18n/<dil>/uifix.json` (`UiDefaults.*`): swal onay penceresi varsayılan "İptal" (`common/components/feedback/swal.tsx`), `core/services/notify.service.tsx` varsayılan bildirimleri (başarılı/dikkat/hata/bilgi), `dropdown-comp.tsx` "{{label}} seçin" ipucu, barkodlu hareket çoklu emir kuyruğunda "Önce sicil, makine, operasyon ve yön okutulmalı." uyarısı.
+- **Atlanan:** `fabric_batching.page.tsx` 'Kumaş partileme' — sunucuya yazılan açıklama (veri).
+- **Test:** `common/components/__tests__/ui-defaults-i18n.test.tsx` (sonner taklit; en'de çeviri, tr değişmedi). İlgili 48 dosya / 292 test yeşil, typecheck temiz.
+- **Dağıtım:** bekliyor (`1dc4b619`, `3b6819ee`, `52167c03`, `f491f85b`, `03b2b9ad`).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
