@@ -161,6 +161,13 @@
 - **Dağıtım:** diğer oturumun 1.0.2.1043 derlemesi bellek yetersizliğinden kesildi; DEV 1.0.2.1042'de. `1dc4b619`, `3b6819ee`, `52167c03` bekliyor — kullanıcı isteyene kadar derleme başlatılmıyor.
 - **Kalan:** bazı etiket sözlükleri hâlâ Türkçe sabit (ör. `RATE_SOURCE_LABELS` "Manuel"); hücre değerleri ayrı tarama gerektirir.
 
+### 24. Türkçe sabit enum/etiket sözlükleri → 11 dil (`f491f85b`)
+- **Ne yapıldı (frontend-dev ajanı, ben gözden geçirip commit ettim):** 13 sözlük `tSafe` ile okunur oldu — getter deseni (`get 0() { return tSafe('EnumLabels.…') }`, `production-order.api.ts` emsali); `Object.entries` ile modül yüklenirken donan `*_OPTIONS` dizileri de tembel `get label()`. Kapsam: kur kaynağı (Manuel; TCMB/ECB kısaltma), ödeme tipi (EFT kısaltma), demirbaş masraf türü, çek durumu/enstrüman/yön, özellik veri tipi, varyant grup tip/veri tipi, varyant tanım modeli, varyant matris değer üyesi, AST DID tipleri. Yeni parça `assets/i18n/<dil>/enumfix.json` (53 anahtar, `EnumLabels.*`). Türkçe düzeltme: Sayi→Sayı, Ondalikli→Ondalıklı, Mantiksal→Mantıksal.
+- **Bilerek atlanan:** veritabanına yazılan metinler (folio açıklaması, lab test kataloğu değerleri, `calcMethod`), Türkçe veri değeriyle anahtarlanan durum renk haritaları, zaten anahtarlı listeler, demo/seed veriler.
+- **Kapsam dışı bulunan:** swal 'İptal', notify toast varsayılanları, dropdown 'Seçenek', çoklu emir kuyruğu mesajı, fabric_batching açıklaması — sonraki tur.
+- **Doğrulama:** typecheck temiz; yeni test 3/3; ilgili 58 dosya / 567 test (i18n parite dahil) yeşil. ar/ur/ka/hy/az/bg makine çevirisi — anadili kontrolü önerilir.
+- **Dağıtım:** bekliyor (bellek baskısı, kullanıcı isteyince).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
