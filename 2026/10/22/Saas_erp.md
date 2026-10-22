@@ -114,6 +114,14 @@
 - **İki oturum çakışması:** Yeniden başlatma sonrası aynı konuşma iki pencerede (saas-erp-c2 ve saas-erp-fd) devam etti; iki ajan aynı dosyalara yazdı. Oturumlar arası mesajla iş bölümü: bu oturum çift sayım düzeltmesi, diğeri G7 Ekler (`e6fc32ae`). Tek dağıtım: 1.0.2.1039 (Docker Desktop yeniden başlatma sonrası kapalıydı, açılıp tekrar denendi).
 - **Açık:** UX post-check (pano/kuyruk/rapor) sürüyor; G7 Ekler post-check'leri diğer oturumda.
 
+### 18. G7 dilim 2 — Ekler (dokuma analizi + dokuma emri) — 1.0.2.1039
+- **Neden:** Sentez analiz formunda ve dokuma emrinde "Ekler" sekmesi (numune fotoğrafı, teknik çizim, talimat). VuoApp'te yoktu.
+- **Kurul:** CTO/PO/DBA APPROVE-WITH-CONDITIONS, güvenlik PASS-WITH-CONDITIONS (ön), skeptic (a2) onay. Kota servisi hiç uygulanmamış → 25 MB + sahip başına 50 dosya (TD-021).
+- **Ne yapıldı (`e6fc32ae`):** `production.WeavingAttachment` (hard delete, tek sahip CHECK; migration `20261022033250_WeavingAttachmentsG7`); ortak yükleme politikası `VuoApp.Shared/Files/AttachmentUploadPolicy` (uzantı + magic bytes, sunucu ContentType, svg/html/xml/js red, dosya adı temizleme); yazma `production:manage`, okuma `production:read`; yanıtta ObjectKey yok; 15 dk imzalı URL (görsel inline, diğerleri attachment); silme önce depolama (yok = başarı); silinmiş sahibin ekleri erişilemez; `EntityAttachmentsTab` analiz + kayıtlı Dokuma emri (emirde analiz ekleri salt okunur); 9 hata kodu 11 dil. `MinioFileService.DeleteAsync` artık yalnız "nesne/bucket yok"u başarı sayar.
+- **Güvenlik post-check:** PASS; Low-3 (kilit SQL'inde TenantId) uygulandı `f5f0ba33`. Low-1 (imzalı URL'de bucket/anahtar görünür, aynı tenant) kabul; Low-2 (açıklamada & → &amp; görünümü, genel SanitizationBehavior) ayrı iş.
+- **Koordinasyon:** aynı depoda ikinci oturum (saas-erp-c2) çift sayım düzeltmesini aldı (madde 17); dosya sahipliği bölündü, ortak dosyalarda (changelog, tasarım dokümanı) yalnız kendi satırlarımız stage edildi (`git update-index --cacheinfo`), tek dağıtım 1039 c2 tarafından.
+- **Not:** `api-errors.test.ts` git worktree içinde SyntaxError ile düşüyor (ortam; önceki commit'te de aynı), ana ağaçta 35/35 geçiyor.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
