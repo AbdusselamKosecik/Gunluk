@@ -140,6 +140,14 @@
 - **Dağıtım:** diğer oturum 1.0.2.1041'i `7c7c2aca` üzerinde (TD-020 `cb6c2dcf` dahil) çıkarıyor.
 - **Açık:** 375 px düzeltmeleri kod analiziyle yapıldı, canlıda yeniden ölçülecek (stok listesi, kullanıcı detayı, boyahane raporu, Arapça etiket, 404, çekmece Esc). `401.tsx` de sabit Türkçe — dokunulmadı.
 
+### 21. 1.0.2.1041 RTL yeniden ölçüm + düzeltmeler (`a4602608`, `3b6141a3`)
+- **UX yeniden kontrol (headless Chrome/Playwright, salt okuma):** stok listesi 375/375 (tr+ar) PASS; boyahane raporu 375/375 PASS (başlıklar ar'da Türkçe kalmış); 404 ar PASS; mobil çekmece Esc + RTL'de sağdan açılma PASS; header `<bdi>` PASS. FAIL: kullanıcı detayı 375 px'te 636–638 px (üyelik tablosundaki kırılmayan tenant ID'si sayfayı genişletiyor); Arapça etikette "النقاط / 100 m²" gibi alan adları ltr kartta ters.
+- **Not:** ajanın "tarih ve gramaj ters" bulgusu ekran görüntüsünde incelendi: `<bdi>` içinde Arapça doğru sağdan sola okunuyor (yanlış alarm). Gerçek sorun yalnız `<dt>` alan adlarıydı.
+- **Ne yapıldı:** `401.tsx` 11 dil (`rtlfix.json` → `UnauthorizedPage`), görsel `max-w-full`; etiketlerde (`inspection_label`, `beam_label`, `cut_label`) tüm `<dt>` içerikleri `<bdi>`; `admin_user_detail.page.tsx` üyelik kartı `w-0 min-w-full` (tablo kendi kaydırma kabında kalır) + tenant hücresi `[overflow-wrap:anywhere]`; `production_report.columns.ts` 7 şablon başlığı + "Termin geçti"/"(gecikmiş)" → `tSafe('ProductionReport.*')`, 11 dil (`rtlfix.json`). Testler: `401.test.tsx`, `production_report.columns.test.ts` (en'de çevrili başlık), etiket testlerinde her `dt` için `bdi`.
+- **Doğrulama:** typecheck temiz; vitest 211 dosya / 1605 test yeşil.
+- **Dağıtım:** diğer oturumdan 1.0.2.1042 istendi; sonra kullanıcı detayı + Arapça etiket yeniden ölçülecek.
+- **Kalan nit:** kullanıcı detayında tenant adı yerine ham ID görünüyor (`tenantName` boş geliyor) — backend tarafı, ayrı iş.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
