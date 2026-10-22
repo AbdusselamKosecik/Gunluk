@@ -88,6 +88,24 @@
 ### 12. G6 — Küçük kalemler (kurul onayı, uygulamada)
 - Kurul (CTO/şüpheci/DBA/PO, APPROVE-WITH-CONDITIONS). Kararlar: UseOrderWidth → hesap eni boşsa ham en (tek yardımcı, DTO yolu dahil), kutu gizli, kolon kalır; çözgü sekmesinde ham/mamul en+gramaj, aktarım yalnız boşları doldurur (eski F11 üzerine yazıyordu — bilinçli fark); notlar: çözgü analizinde Description = "Çözgü açıklaması", WarpNotes/WeftNotes yalnız kumaş analizinde (CHECK `CK_WeavingAnalysis_NotesKind`, migration `WeavingAnalysisNotesG6`); gizli iplik alanları düşürüldü (teknik borç); rapora En/Puan/100 m²/Ek sayısı; levent/dok etiketi mevcut verilerle (kumaş/iplik adı yok — PO istemişti, backlog; son söz kullanıcıda); kısayollar G6 dışı (PO, backlog; CTO'nun AltGr kuralları not edildi).
 
+### 13. G6 uygulandı + G5 UX düzeltmeleri — 1.0.2.1036
+- G6 (`2730187f`): `EffectiveCalcWidth` (hesap eni boşsa ham en; DTO yolu dahil), UseOrderWidth kutusu gizli (TD-019), çözgü analizinde ham/mamul en+gramaj, `WarpNotes/WeftNotes` yalnız kumaş analizinde (`CK_WeavingAnalysis_NotesKind`, migration `20261022023250_WeavingAnalysisNotesG6`), rapora En/Puan/100 m²/Ek sayısı + "Kontrol tarihi", levent ve dok etiketi (mevcut liste uçları `filter=id=` ile; gerçek sunucuda 200 doğrulandı). Kısayollar backlog.
+- G5 UX (`496205dc`): ana sayfa 375 px (`max-sm:overflow-x-clip` — hidden yapışkan header'ı bozuyordu), etikette ölçülen gramaj (hedef: x), top seti olan muayenede "Yeniden aç" kapalı, rapor dok görünümünde muayene kg/gramajı (aynı SQL'de LEFT JOIN).
+- UX post-check G6: PASS. Not: açık kalmış eski sekme eski bundle'ı çalıştırır (normal SPA davranışı).
+
+### 14. Yetki: üretim create/update/delete varsayılanları eksikti — 1.0.2.1037
+- **Bulgu (G7 güvenlik incelemesi):** `DefaultPermissionSeeder` üretim için yalnız read/manage/scan-correct içeriyordu; 25 update + 16 delete + 7 create ucu 10-21 dokuma commit'lerinden beri süper admin dışında 403. Tüm UX kontrolleri admin@vuo.app (süper admin) ile yapıldığı için görünmedi. Dev DB `public.default_role_permissions` ile doğrulandı.
+- **Kurul:** CTO/şüpheci APPROVE-WITH-CONDITIONS, güvenlik PASS-WITH-FIXES. Şüpheci ek buldu: ProductionController'da ~100 yazma ucunun yalnız ~12'si yetki kontrolü yapıyor (TD-020, ayrı iş).
+- **Ne yapıldı (`2baa8b01`):** production create/update → owner/admin/manager/user, delete → owner/admin/manager; şirket geneli ayarlar (top deposu, kesim/kalite ayarları) ve kalite sınıfı tanımları → manage; muayene hatası ve levent hatası silme → delete. API-key kataloğu değişmedi. 10 dk izin önbelleği kabul. Açılışta seeder eksik satırları ekledi (dev: create 4, update 4, delete 3 rol).
+- **Açık:** süper admin olmayan hesapla tarayıcı doğrulaması yapılamadı (şifre yok); birim testleri kapsıyor.
+
+### 15. G7 — kurul: (a1) Sipariş Bilgileri + (a2) Ekler onaylı, F8a (tezgahlar arası planlama) BLOCK
+- Şüpheci F8a'yı blokladı: tahsis kuyruk kaydında tutuluyordu ama tezgaha takınca kuyruk kaydı siliniyor → tahsis dokuma başlarken kayboluyor; formül kesimleri iki kez düşüyor; levent boyu zaten fiziksel tahsis; eski Sentez'de dokumaya özel karşılığı yok. G7'den çıkarıldı (kullanıcı isterse override + yeniden tasarım). Çok tezgahta aynı emrin yükünün iki kez sayılması ayrı düzeltme (levent kalanıyla sınırlama, şemasız).
+
+### 16. G7 dilim 1 — Sipariş Bilgileri sekmesi — 1.0.2.1038
+- `ceb6e650`: `IOrderLineQueryService` (Shared port, Orders uygulaması; yalnız satış siparişi tipleri 1/5202/5206), uç `GET production/weaving/analyses/{id}/orders?status=` (production:read + handler'da order:read → 403; çözgü → 400). Fiyat/tutar yok; metre toplamları tüm filtreli kümeden; 500 satır + truncated. Eski Sentez "Kapalı" toplam hatası düzeltildi. Index `IX_OrderReceiptItem_TenantId_InventoryId` (migration `20261022030557_OrderItemInventoryIndexG7`). Güvenlik post-check PASS.
+- Sınırlama: sipariş miktarı birim dönüşümsüz metre kabul edildi; Orders sevk miktarı yazmadığı için "Sevk" 0.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
@@ -96,4 +114,4 @@
 - Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
-- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), ~~dok kontrol alanları~~ (G5 tamam, madde 11), küçükler (G6 uygulamada), büyükler (F8).
+- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), ~~kumaş kontrol tartım/en~~ (G4 tamam, madde 9), ~~dok kontrol alanları~~ (G5 tamam, madde 11), ~~küçükler~~ (G6 tamam), büyükler G7: Sipariş Bilgileri tamam, Ekler uygulamada, F8a BLOCK (madde 14-16)
