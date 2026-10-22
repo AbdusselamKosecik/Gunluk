@@ -32,11 +32,27 @@
 - **Not:** hook, cwd `assets/api-errors` iken oraya `production/session-logs/` yazdı → klasör testi kırıldı → silindi. cwd'yi proje köküne almak gerekir.
 - **Commit:** `f10e9634` (+ dev merge). **DEV:** 1.0.2.1028 pull_rc 0 / up_rc 0. Ağ bir süre github.com'u çözemedi; push sonra geçti.
 
+### 5. Arapça ve Urduca (sağdan sola) — yayında
+- **Kurul:** CTO + Şüpheci APPROVE-WITH-CONDITIONS. Kapsam notu: ar/ur için adı geçen müşteri yok; kullanıcı açıkça istedi ("landing'deki diller"), kalıcı bakım yükü kabul edildi.
+- **Önce görüntüsü:** dev 261022.0059, 10 Türkçe ekran (`scratchpad/rtl-baseline`, index.md ile yeniden çekilebilir).
+- **Sınıf dönüşümü** (`abbac09a`, ayrı commit): `scripts/rtl-codemod.mjs` yalnız className/cn/clsx/cva/twMerge dizgelerinde 2179 fiziksel yön sınıfı → mantıksal (ms/me/ps/pe/start/end/text-start/end/border-s/e/rounded-s/e…), 467 dosya; landing/test/yazdırma hariç. tailwind-merge çakışma grupları genişletildi (px→ps/pe ezmesi; yoksa LTR değişirdi) + 24 test.
+- **Altyapı** (`00090d38`): koruma testi (yeni fiziksel sınıf / paddingLeft vb. npm test'te kırılır, allowlist), Radix DirectionProvider, calendar/sonner/vaul dir, satır içi stiller mantıksal, 205 navigasyon ikonu `rtl:rotate-180`, fiş grid sütun genişletme RTL'de ters delta, ar/ur `-u-nu-latn` (Latin rakam) + `parse-number.ts` gidiş-dönüş testi, `<bdi>` sayı/tarih hücreleri, yazdırma pencereleri/etiketler `dir=ltr`, Excel `rightToLeft` (değerler ham).
+- **Sonra görüntüsü** (dev 261022.0136): 6 ekran 0 piksel; 01/03 kenar yumuşatma (≤1 seviye), 09 hover geçiş zamanı, 10 canlı "… önce" metni → **PASS**, sonra push.
+- **Çeviri** (`34043be5`): ar 13.549 + 823 hata (koli=كرتون; صندوق kasa ile karışıyordu), ur 13.549 + 823.
+- **RTL UX 1. tur → BLOCK:** stok listesinde kod/ad karışıyordu ("20/1 PAMUK" → "PAMUK 20/1"), kaydedilmemiş değişiklik onayı sabit Türkçe, takvim gün adları üst üste, barkod yer tutucu.
+- **Düzeltmeler** (`759b50ae`): metin hücreleri `<bdi dir=auto>`, kod/tarih/sayı `dir=ltr` (ColumnBuilder kod benzeri sütunlara `meta.bidi`); onay + takvim etiketleri 11 dilde (`d03.json`); ar'da tek harf gün adları; barkod yer tutucu. **Ayrıca gerçek hata:** fiş grid'de boş satıra ilk tuş yeni satır id'si ile hücreyi yeniden kuruyordu, odak düşüyordu ("1234,5" → "1"; dilden bağımsız) → yeni satır boş satırın id'sini korur, user-event testi.
+- **RTL 2. kontrol** (dev 1.0.2.1031, Chrome'da kendim): ar stok listesi kod/ad doğru, Arap-Hint rakamı yok; takvim tek harf + Arapça nav etiketleri; ur fiş ekranı başlık/sütun/alt bilgi Urduca, ham anahtar yok → seçicide açıldı (`02a280f6`, test önce kırmızı sonra yeşil).
+- **DEV:** 1.0.2.1029 (önce/sonra karşılaştırması için, push öncesi), 1.0.2.1030 (ar/ur çeviri), 1.0.2.1031 (düzeltmeler + Türkçe karakter), **1.0.2.1032 (ar/ur açık)**.
+
+### 6. Türkçe karakter düzeltmesi
+- 1.205 metin (tr-TR.json + 19 tr parçası): Aciklama→Açıklama, Iptal→İptal, Guncelle→Güncelle, Disa/Ice aktar… Kelime haritası + büyük/küçük harf korunur; barkod komut kodları GIRIS/CIKIS bilerek aynı. 6 test güncellendi. en: Bon Type→Voucher Type, Kadro→Staff, RetailCustomer, GV Type (tahmin — doğrulanmalı), b12 yinelenen anahtar. Kaynak kodda ~100 ASCII Türkçe metin (diyalog başlıkları, durum etiketleri) listelendi, değiştirilmedi (bazıları sunucu değeriyle karşılaştırılıyor olabilir). — `2b0d9817`.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
 ## Açık kalanlar / sonraki adım
-- ar/ur: RTL geçişi (~795 fiziksel yön sınıfı → mantıksal) + çeviri; ayrı kurul + UX.
+- ar/ur yayında (beta). Kalan: 375 px / çekmece / bildirim / yazdırma önizlemesi RTL kontrolü yapılmadı; takvim gün etiketinde "Today" İngilizce; ar için _few/_many çoğul biçimleri (test şu an yalnız en anahtarlarına izin veriyor).
+- Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
 - Dokuma eksik listesi: levent hataları, kumaş kontrol tartım/en, dok kontrol alanları, küçükler, büyükler (F8).
