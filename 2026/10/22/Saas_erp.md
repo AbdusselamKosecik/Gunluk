@@ -148,6 +148,12 @@
 - **Dağıtım:** diğer oturumdan 1.0.2.1042 istendi; sonra kullanıcı detayı + Arapça etiket yeniden ölçülecek.
 - **Kalan nit:** kullanıcı detayında tenant adı yerine ham ID görünüyor (`tenantName` boş geliyor) — backend tarafı, ayrı iş.
 
+### 22. 1.0.2.1042 yeniden ölçüm PASS + rol adı/şirket adı düzeltmeleri (`1dc4b619`, `3b6819ee`)
+- **1042 ölçümü (Playwright, salt okuma):** kullanıcı detayı 375/375 tr+ar (önce 638/636), tablo kendi kabında kayıyor; Arapça etiket alan adları doğru; boyahane raporu 12 başlığın hepsi Arapça; 404 ve 401 Arapça, 375/375. Ajanın "tarih/gramaj ters" notu tekrar geldi — `<bdi>` içinde sağdan sola doğru okunuyor, bilinçli olarak dokunulmadı.
+- **Rol adları (`1dc4b619`):** `/api/v1/roles` Türkçe etiket döndürüyor; `features/tenant/api/index.ts` → `localizeRoles` + `useGetRoles({ select })`, `TenantPicker.roles.<kod>` anahtarı varsa çeviri, yoksa sunucu etiketi. Test `localize-roles.test.ts`; vitest 212/1607.
+- **Şirket adı (`3b6819ee`):** `GetUserDetail` — bazı üyeliklerde `TenantName` null (davet/elle ekleme yolları); aynı tenantın diğer üyeliklerinden `Max(TenantName)` ile dolduruluyor (tenant listesiyle aynı mantık). Test `GetUserDetail_MembershipWithoutTenantName_UsesNameFromOtherMembers`; AdminUserManagementTests 15/15.
+- İkisi sonraki DEV dağıtımına bırakıldı (diğer oturuma bildirildi).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
