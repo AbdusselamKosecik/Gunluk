@@ -47,6 +47,16 @@
 ### 6. Türkçe karakter düzeltmesi
 - 1.205 metin (tr-TR.json + 19 tr parçası): Aciklama→Açıklama, Iptal→İptal, Guncelle→Güncelle, Disa/Ice aktar… Kelime haritası + büyük/küçük harf korunur; barkod komut kodları GIRIS/CIKIS bilerek aynı. 6 test güncellendi. en: Bon Type→Voucher Type, Kadro→Staff, RetailCustomer, GV Type (tahmin — doğrulanmalı), b12 yinelenen anahtar. Kaynak kodda ~100 ASCII Türkçe metin (diyalog başlıkları, durum etiketleri) listelendi, değiştirilmedi (bazıları sunucu değeriyle karşılaştırılıyor olabilir). — `2b0d9817`.
 
+### 7. G3 — Çözgü/dokuma leventi hataları
+- **Neden:** Sentez "Çözgü Parti Çalışma Formu"ndaki levent hata gridi VuoApp'te yoktu; tasarım dokümanı §3.9 #13 bunu F5'e taşımış, F5 kapsamı düşürmüştü (dokuma eksik listesi G3).
+- **Kurul:** CTO, şüpheci, DBA, ürün sahibi → APPROVE-WITH-CONDITIONS; güvenlik → PASS. Ana şartlar: 6/7 tipleri kumaş muayenesinde sunucu tarafında da engellenir; hata kartı tipi 0..7 doğrulaması; WarpBeam'e navigation koleksiyonu yok (EF istemci cascade tuzağı, levent soft-delete); emre göre GET leventin silinme filtresiyle tek sorgu; kumaş kontrolünde salt okunur "Levent hataları (n)".
+- **Ön kontrol:** dev DB `SELECT FaultyType, count(*) FROM inventory."FaultyCard"` → yalnız 1 (3 satır); 6/7 boş.
+- **Ne yapıldı:** `production.WarpBeamFault` (kart kodu/adı/tipi kopyalanır, adet 1..9999 CHECK, not 500, hard delete), migration `20261022004929_WeavingBeamFaultsG3` (üretildi, uygulanmadı; has-pending temiz). Endpoint: GET `warp-beams/faults?productionOrderId|warpBeamId`, POST `warp-beams/{id}/faults`, PUT/DELETE `warp-beams/faults/{faultId}`. `VuoApp.Shared.Constants.FaultyTypes` (6 Çözgü, 7 İndigo/Haşıl). Frontend: `BeamFaultsDialog` (Kod–Ad, Adet, Açıklama, alt toplam "n hata, Σ adet"), Çözgü planlama "Hatalar" sütunu, İndigo/Haşıl levent satırında buton, kumaş kontrolünde salt okunur grup görünümü; muayene butonları + barkod araması 6/7'yi dışlar. 11 dil (`assets/i18n/<dil>/g3.json`) + 5 yeni hata kodu çevirisi; changelog; tasarım dokümanı §3.23.
+- **Ek düzeltme:** G3'ten önce de kırık olan 6 test: vitest'e `svgr()` eklendi (`?react` svg'ler bileşen değildi), login testi gerçek Türkçe çeviriyle, teklif listesi kontratından kaldırılmış rozet beklentisi silindi.
+- **Doğrulama:** frontend tam test 1397/1397 (düzeltmeden sonra kırık yok), typecheck temiz; backend ilgili 408 birim testi yeşil (ajan: tüm birim 4540 geçti).
+- **Commit:** `a8de9ed9` — feat(production): G3 levent hataları; `68e6cae2` — test(frontend): eskimiş login ve worklist testleri. DEV: 1.0.2.1033.
+- **Açık:** UX post-check (Chrome, 375 px) dağıtım sonrası; fault silme `production:update` ile (güvenlik: bilinçli tercih, belgelendi); İndigo/Haşıl girdisi başka emre aitse rozet 0 gösterebilir (diyalog doğru veriyi gösterir).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
@@ -55,4 +65,4 @@
 - Menüde iki adres aynı Projeler sayfasını açıyor (/finance/project ve /finance/projects) — birini kaldırma kararı kullanıcıda.
 - Sunucu mesajları: 823 kod çevrildi; 252 istisna + doğrulama (FluentValidation, PropertyName kodlu) mesajları hâlâ sunucu dilinde → backend'de MapErrorCode/parametreli hata (ayrı kurul).
 - Anadil kontrolü: cari/fiş/irsaliye karşılıkları, ÖTV/ÖİV kısaltmaları, parçalı cümleler.
-- Dokuma eksik listesi: levent hataları, kumaş kontrol tartım/en, dok kontrol alanları, küçükler, büyükler (F8).
+- Dokuma eksik listesi: ~~levent hataları~~ (G3 tamam, madde 7), kumaş kontrol tartım/en (G4 sıradaki), dok kontrol alanları, küçükler, büyükler (F8).
