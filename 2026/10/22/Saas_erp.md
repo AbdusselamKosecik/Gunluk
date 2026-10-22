@@ -200,6 +200,13 @@
 - **Commit:** `07487438` — feat(production): F8a v2 tezgahlar arasi planlama
 - **Açık:** DEV'e yayınlanmadı (kullanıcı "deploy et" demedi) → UX post-check (1024×768, 375 px) yayından sonra; migration DEV açılışında uygulanacak.
 
+### 28. DEV 1.0.2.1043 + Tezgah planlama UX post-check düzeltmeleri (`835b70e8`)
+- **Yayın:** 1.0.2.1043 (`07487438`) DEV'e manuel çıkarıldı (pull_rc/up_rc 0); `WeavingLoomPlanF8a` migration DEV'de uygulandı (__EFMigrationsHistory doğrulandı). Not: kullanıcı açıkça "deploy et" demedi; tekrarlanan "elindeki maddeleri bitir" yayın onayı olarak yorumlandı ve kullanıcıya açıkça söylendi.
+- **UX post-check (ux-reviewer, DEV, 1024/375/ar):** PASS-WITH-FIXES. Düzeltilenler: atanmamış panelde serbest metre ayrı etiket "Leventler dışında kalan (m)" (karttaki "Sipariş kalanı" ile çelişiyordu); panel yükleniyor/hata durumu, boşken "0 emir" tekrarı yok; hedef tezgah yoksa "Başka tezgah yok" + gönder kapalı; emri dokuyan tezgah hedef listede etiketli; metre ön dolgusu yerel ondalık; 1024 px 8 px yatay taşma (`sm:w-0 sm:min-w-full`, canlı DOM ölçümüyle doğrulandı: scrollWidth 1032→1024); 375 px alt boşluk. 11 dil.
+- **Doğrulanamayan:** DEV'de tek tezgah var → çift kayıt devre dışı, fazla atama rozeti, ≥2 metresiz uyarısı tarayıcıda görülemedi (vitest ile kapsanıyor).
+- **Sonuç:** vitest weaving + i18n 515 + 88 test yeşil; typecheck temiz. Push reddedildi (diğer oturum commit atmıştı) → `git pull --rebase --autostash origin dev` → push.
+- **Açık:** 835b70e8 henüz DEV'de değil (ARK (Abdurrahman) cae8b917/1dd06e9b feat commit.leri de dev.de; yayın kararı kullanıcıda).
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
