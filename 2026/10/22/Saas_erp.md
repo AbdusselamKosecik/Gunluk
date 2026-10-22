@@ -174,6 +174,12 @@
 - **Test:** `common/components/__tests__/ui-defaults-i18n.test.tsx` (sonner taklit; en'de çeviri, tr değişmedi). İlgili 48 dosya / 292 test yeşil, typecheck temiz.
 - **Dağıtım:** bekliyor (`1dc4b619`, `3b6819ee`, `52167c03`, `f491f85b`, `03b2b9ad`).
 
+### 26. Son sabit Türkçe JSX metinleri (`90cbae61`) — tarama kapandı
+- **Tarama:** `>…Türkçe…<` JSX metni ve `placeholder/title/aria-label="…"` öznitelikleri tarandı; kalanların çoğu yorum satırı. Gerçek olanlar: konfeksiyon siparişi "Siparişten Ekle" bloğu (`apparel_order_detail.page.tsx` 4 metin + toast), çeki listesi `model-source-picker.tsx` (3), konfeksiyon sevkiyat emir seçimi başlığı (1). `uifix.json` → `ApparelSourcePick.*`, 11 dil; test `model-source-picker.test.tsx` (en/tr).
+- **Bilerek bırakılan:** "Yılmaz" soyadı örnek ipucu, "N. Çalışma", fabric_batching açıklamaları (veritabanına yazılan veri).
+- **İki oturum:** diğer oturum aynı üç dosyaya başlamış, benim kaydedilmemiş değişikliğimi görünce durdu, hiçbir dosyama dokunmadı; sabit metin taraması bu oturumda kaldı.
+- **Doğrulama:** typecheck temiz; ilgili 7 dosya / 90 test yeşil.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
