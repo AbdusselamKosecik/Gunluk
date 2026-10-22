@@ -168,3 +168,11 @@ SentezSelvedge'de fotoğraf tipi yoktu → kullanıcı "Fotoğraf tipini ekle" s
 - **Doğrulama:** `dotnet test` 491/491, `npm run build` temiz. Paket + zip yenilendi (bundle `index-BTmf8gfG.js`).
 - **Commit:** `079107a` — feat(sentez-selvedge): Yetkiler sayfasi, anket silme, hata katalogu toplu aktarim
 - **Sonraki:** kullanıcı paketi kurar → bundle kontrol → `DELETE /api/anket/1`, `/2` → `hata_aktar.py --hedef-kullanici UZM`.
+### 6. Kurulum sonrası uygulandı
+- Bundle `index-BTmf8gfG.js` = yerel paket (kullanıcı kurdu).
+- `hata_aktar.py --hedef-kullanici UZM` → 193 eklendi, 0 atlandı. Katalog geri okuma: Yıkama 73, Dikim 67,
+  Finish 43, Kesim 10; TR/EN ad + operation doğru.
+- `DELETE /api/anket/1` (FASON01), `/2` (TIPTEST) → kalan: FINISH(3), GENEL(5), FINISHLASTSTATUS(4).
+- `GET /api/yetki/kullanicilar` çalışıyor. "Sentez" kullanıcısının kodu **`SentezY`** ("Sentez Yönetici").
+  `POST /api/yetki/ata` ile SentezY'ye Admin rolü verildi (DB kaydı; appsettings'e eklenmedi).
+  Liste: SentezY [Admin], UZM (sabit yönetici).
