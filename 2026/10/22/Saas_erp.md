@@ -207,6 +207,11 @@
 - **Sonuç:** vitest weaving + i18n 515 + 88 test yeşil; typecheck temiz. Push reddedildi (diğer oturum commit atmıştı) → `git pull --rebase --autostash origin dev` → push.
 - **Açık:** 835b70e8 henüz DEV'de değil (ARK (Abdurrahman) cae8b917/1dd06e9b feat commit.leri de dev.de; yayın kararı kullanıcıda).
 
+### 29. 1.0.2.1043 dil kontrolü (ar/en) + onay penceresi varsayılanları (`a95e7aff`)
+- **Kontrol (Playwright, salt okuma, kayıt/silme yok):** kullanıcı detayında rol adları en/ar çevrili, tenant sütununda "MitoTex A.Ş." (önce ham ID) — PASS; makine/kayıp zaman/rota/operasyon/kur/ödeme tipi/özellik başlıkları ve açılır değerleri İngilizce (Manual, Cash, Text…) — PASS; onay penceresi düğmeleri çevrili — PASS; 375 px ar 375/375 — PASS. DEV'de bazı listeler boş olduğu için değerler yeni kayıt formundaki açılır listelerden doğrulandı.
+- **Bulgu → düzeltme:** `ConfirmDialog`/`ConfirmDialogReverse` varsayılan başlık/açıklama/düğmeler İngilizce sabitti ("Are you sure? This action cannot be undone." — Türkçede de İngilizce görünüyordu). Varsayılanlar kaldırıldı, `tSafe('UiDefaults.confirm.*')` + `UiDefaults.cancel`; `uifix.json` 11 dil. Test `confirm-dialog.i18n.test.tsx` (tr + `setLocale('ar')` ile tembel dil; global `@/common/components` taklidi testte gerçek UI parçalarıyla ezildi). İlgili 34 dosya / 218 test yeşil.
+- **Not:** diğer oturum dev'deki `cae8b917`/`1dd06e9b`'yi bana ait sandı; bunlar ARK'ın — dağıtılmadı, karar kullanıcıda.
+
 ## Kararlar
 - Düşük öncelikli UX bulguları bırakıldı: dil yüklenirken gösterge yok (1–4 sn), de'de stok listesi araç çubuğu 1440'ta 2 satır, 375'te taşma (önceden de var), landing dil menüsü uygulamadan ayrı (ar/ur orada görünür).
 
