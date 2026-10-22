@@ -176,3 +176,11 @@ SentezSelvedge'de fotoğraf tipi yoktu → kullanıcı "Fotoğraf tipini ekle" s
 - `GET /api/yetki/kullanicilar` çalışıyor. "Sentez" kullanıcısının kodu **`SentezY`** ("Sentez Yönetici").
   `POST /api/yetki/ata` ile SentezY'ye Admin rolü verildi (DB kaydı; appsettings'e eklenmedi).
   Liste: SentezY [Admin], UZM (sabit yönetici).
+### 7. Hata Kartları web sayfası
+- `web/src/pages/HataKatalogPage.tsx` + `api/hataKatalog.ts`; rota `/hata-katalog` (`Izin.KkOku`, API ile aynı),
+  menü Anketler'in altında ("Hata Kartlari", Bug ikonu). Salt okunur; arama kod/TR/EN (`toLocaleLowerCase('tr')`),
+  bölüm süzgeci adetli, istemcide süzme (~193 satır).
+- `npm run build` temiz. Görsel kontrol YAPILAMADI: chrome-devtools MCP profili başka oturumda kilitli
+  ("browser is already running"). Geçici `vite.canli.config.ts` (proxy → canlı) silindi.
+- Paket + zip yenilendi (bundle `index-B-U9Jday.js`). Kurulum kullanıcıda.
+- **Commit:** `693e0c5` — feat(sentez-selvedge/web): Hata Kartlari sayfasi (salt okunur katalog)
