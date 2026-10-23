@@ -18,3 +18,38 @@ Dünkü tema/akordeon menü işinin devamı; kullanıcı menünün kategori/mod�
 ## Açık kalanlar / sonraki adım
 - Kullanıcı önerinin ne kadarını onaylıyor? Onay gelirse kurul (cto, skeptic, product-owner, ux), sonra `standard-menu-layout.tsx` ve sol şerit kategorileri.
 - Karar bekleyenler: iki 'Projeler' sayfası, 'Ekstreler' adı, kalite tanımlarının tekleştirilmesi.
+
+### Yeni sol menü düzeni uygulandı + DEV 1.0.2.1050
+- **Neden:** Kullanıcı Excel önerisine "yap paket çık bakalım nasıl olacak" dedi.
+- **Kurul:**
+  - cto ve skeptic: APPROVE-WITH-CONDITIONS. Koşullar uygulandı:
+    - sayfalar kaynak modüle göre aranıyor;
+    - modül kimliği çeviriden bağımsız `key`;
+    - aynı sayfa iki modüldeyse kullanıcının geldiği modül korunuyor;
+    - tam / yalnız Örme / raporlamasız lisans testleri;
+    - 11 dil;
+    - changelog;
+    - dosyalar 300 satırın altında.
+  - ux-reviewer: PASS-WITH-NOTES. Düzeltilenler: İngilizcede şerit etiketinin kelime ortasından bölünmesi, Konfeksiyon grup sırası, kesilen "Otomasyon & Entegrasyon" (tr: "Otomasyon & API").
+  - product-owner çağrılmadı: kullanıcı öneriyi doğrudan onayladı.
+- **Teknik:**
+  - `menu-layout.ts` `applyMenuLayout` artık tüm modülleri kapsıyor. Yeni alanlar: `sources` (modül yalnız kaynak modül görünürse kurulur ve sayfaları yalnız oradan alır), `from`, `fallback` (ikinci geçişte sahipsiz sayfayı alır), sayfa `title`. Yerleşmeyen sayfa eski modülünde kalıyor. `MenuPlacement` ve `STANDARD_PATH_PREFIXES` kaldırıldı.
+  - Düzen verisi dosyalara bölündü: `menu-layout.commercial.tsx`, `menu-layout.production.ts`, `menu-layout.finance-system.tsx`.
+  - `NavItem.key` ve `NavItem.category` eklendi.
+  - Yeni `findActiveModuleKey(…, preferKey)`; eski `findActiveModuleTitle` kaldırıldı.
+  - Şeritte kategori başlıkları var. Açık bölüm tercihleri artık modül key'iyle saklanıyor; mevcut tercihler bir kez sıfırlanır.
+  - Çeviri: 55 yeni anahtar, 11 dil (`b25.json`). `ExportFiles.menu` eklendi. tr `f8a` "Tezgah Planlama" yazımı düzeltildi.
+- **Kapı tamiri (ayrı commit):** Abdurrahman'ın `5efef44c` (Makine Panosu) commit'i kapıyı kırmıştı:
+  - `border-l-*` → `border-s-*` (RTL kuralı);
+  - `node scripts/extract-api-errors.mjs --write`;
+  - `api-errors` tr/en'e 10 `machine_ops.*` mesajı. Diğer 9 dil İngilizceye düşüyor.
+- **Doğrulama:** `bash tools/verify.sh frontend` rc=0, 1872 test. Chrome'da yerel kontrol: Dokuma grupları doğru; Örme › Reçeteler'e gidince Örme'de kalınıyor.
+- **Commit'ler:**
+  - `b9058d03` fix(frontend): kalite kapısı (machine_ops)
+  - `f184d66a` feat(menu): yeni sol menü düzeni
+- **DEV:** 1.0.2.1050 elle derlendi ve deploy edildi. Kontroller: deploy cevabı `status ok`, spa 200, api 200, robots `Disallow`, yeni paket `catStockLogistics` içeriyor.
+- **UX notlarından açık kalanlar:**
+  - mobilde seçili modül şeritte görünür alana kaydırılmıyor;
+  - mobil ana panelde modüller kategorisiz listeleniyor;
+  - açık sayfanın bölümü akordeonda açık kalıyor (bilinçli);
+  - "İnsan Kaynakları" kategorisinde tek modül var.
