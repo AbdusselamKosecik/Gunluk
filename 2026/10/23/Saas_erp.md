@@ -62,3 +62,19 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
 - **Doğrulama:** vitest production+i18n 771 yeşil, typecheck temiz, backend MRP 51 test yeşil.
 - **Commit:** `b9d63a26` — fix(production): MRP UX post-check
 - **Açık:** b9d63a26 DEV'e henüz çıkmadı (sonraki yayın).
+
+### İnceleme listesi #4 #5 #8 — şirket izolasyonu, şirket listesi hatası, veri tazeliği (`df238607`)
+- **Neden:** Kullanıcının 12 maddelik inceleme listesi; saas-erp-6d ile iş bölümü (bende #4/#5/#8; ClickUp z8v9xnjcy3/4/7).
+- **Keşif:** ~1100 sorgu anahtarından ~12'si tenant içeriyor; önbellek hiç temizlenmiyordu; seçim penceresi/uygulama içi giriş önbelleğe dokunmuyordu; geç gelen A cevabı B'de aynı anahtara yazılabiliyordu; başka sekmedeki tenant yazımı bu sekmenin isteklerine anında sızıyordu (interceptor localStorage'ı her istekte okuyor). #5: TenantContext hata sonrası tekrar istek atmıyordu (effect bağımlılıkları değişmiyor) → sonsuz spinner.
+- **Kurul:** R1 skeptic BLOCK (global queryKeyHashFn gereksiz/tutarsız; axios "tenant yoksa istek yok" koruması /auth/*, onboarding, davet, /tenants/switch'i kırardı). R2 sade tasarım: cto, skeptic, product-owner APPROVE-WITH-CONDITIONS; security PASS-WITH-CONDITIONS.
+- **Ne yapıldı:**
+  - Şirket geçişi = `switchToTenant` → tenant yaz + flash + `location.assign('/')` (bürünmenin kullandığı yöntem; önbellek, yoldaki istekler ve geç mutation yazımları tek seferde gider). Yalnız `POST /tenants/switch` başarılıysa; işlem sürerken değiştirici kapalı.
+  - Tenant sekme bazlı sabitlendi (`session.ts` tabTenantId; tek yazıcı, statik test); tüm `api.defaults` X-Tenant-Id yazımları kaldırıldı.
+  - Sekmeler arası `storage` dinleyici: başka sekmede şirket değişince bu sekme de geçer (kalıcı uyarı); `auth_token` silinirse girişe, farklı kullanıcı (`sub`) girerse yenile; bürünmede yok sayılır.
+  - Oturum sonu temizliği (fatura taslakları + aktif tenant) çıkış/401/oturum düşüşünde; şirket geçişinde taslaklar korunur. Uygulama içi girişte `queryClient.clear()`.
+  - #5: 1/2/4 sn geri çekilmeli 3 deneme, sonra hata paneli ("Şirket bilgileri yüklenemedi", "Tekrar dene"/"Çıkış yap"); 401/403 tekrar denenmez; boş liste ≠ hata.
+  - #8: global `refetchOnMount: true` (yalnız bayatsa → tanım listeleri en geç 5 dk'da bir); canlı katman (30 sn + odak) bakiye/cari/kasa-banka/yetki/onay anahtarları; finans F3: kasa fişi listesi ve hesap seçici geçersiz kılma eksikleri düzeltildi. `docs/design/frontend-data-freshness.md` (kullanıcı bölümü dahil).
+- **Komutlar:** `npx tsc --noEmit`; `npx vitest run` (tam: 230 dosya / 1781 test yeşil).
+- **Commit:** `df238607`
+- **Kararlar:** global hash/axios guard yerine tam yenileme (skeptic), tenant sekmede sabit (cto/security); "fresh" finans katmanı ertelendi (backlog P3).
+- **Açık:** DEV UX post-check (iki sekme, başarısız geçiş, hata paneli, 375 px) yayından sonra; çeviriler ana dil kontrolü ister; TenantSwitcher bileşeni uygulamada monte edilmemiş (üst menüde şirket değiştirici yok — ürün kararı).
