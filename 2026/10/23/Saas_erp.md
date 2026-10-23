@@ -83,3 +83,28 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
 - **Commit:** `df238607`
 - **Kararlar:** global hash/axios guard yerine tam yenileme (skeptic), tenant sekmede sabit (cto/security); "fresh" finans katmanı ertelendi (backlog P3).
 - **Açık:** DEV UX post-check (iki sekme, başarısız geçiş, hata paneli, 375 px) yayından sonra; çeviriler ana dil kontrolü ister; TenantSwitcher bileşeni uygulamada monte edilmemiş (üst menüde şirket değiştirici yok — ürün kararı).
+
+### [fe] R12 #10 — Yük altında kararsız testler (ClickUp z8v9xnjcy9)
+- **Neden:** Testler yük altında rastgele kırmızı veriyordu. #6 CI gate'te (6d) bypass yok; kararsız test deploy'u durdurur.
+- **Repro:** Frontend `npx vitest run` ile backend `dotnet test tests/unit/VuoApp.UnitTests --no-build` eşzamanlı koşturuldu, 3 koşu yapıldı.
+  - BE 3/3 kırmızı: FabricCutOptimizer 50 ms testi 286-464 ms ölçtü (tek başına 12-17 ms).
+  - FE 2/3 kırmızı: formatLocale testi 11 dil paketini yüklüyordu, 5,0 sn.
+  - rtl-guard 4,6 sn ile sınıra dayanıyordu.
+- **Ne yapıldı:**
+  - Perf testi yeni `FabricCutOptimizerPerformanceTests` sınıfına taşındı:
+    - `CollectionDefinition("Performance", DisableParallelization=true)` ve `Trait Category=Performance`.
+    - Isınma, ardından 5 ölçüm; en iyisi < 50 ms olmalı. Hedef korundu.
+    - Ölçümler `ITestOutputHelper` ile çıktıya yazılıyor.
+    - Yardımcı metotlar (`In`, `Opt`, `AssertCoverage`, `Random`) `internal` yapıldı.
+  - formatLocale eşlemesi `formatLocaleFor` ile, paket yüklemeden doğrulanıyor.
+  - rtl-guard kaynakları bir kez okuyor; `SCAN_TIMEOUT_MS = 30_000` ölçülmüş sınır.
+- **Dokunulan dosyalar:**
+  - `tests/unit/VuoApp.UnitTests/Modules.Production/Features/FabricCutOptimizerTests.cs`
+  - `FabricCutOptimizerPerformanceTests.cs` (yeni)
+  - `src/frontend/src/core/lib/i18n/format-locale.test.tsx`
+  - `src/frontend/scripts/rtl-guard.test.ts`
+- **Sonuç:** Eşzamanlı yük altında 5/5 temiz (BE 5038, FE 1781). Perf testinin en iyi ölçümü yük altında 23-33 ms.
+- **Kararlar:**
+  - Timeout'lar topluca yükseltilmedi; yalnız ölçülen tarama testine açık sınır verildi.
+  - Kurul kapsam dışı: yalnız test değişikliği.
+- **Commit:** `c6f40d4f` — test: yuk altinda kararsiz testler (R12 #10)
