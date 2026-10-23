@@ -124,3 +124,49 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
 - **Changelog:** "Personel" altında iyileştirme maddesi.
 - **Doğrulama:** i18n + hrm testleri (88) geçti, tsc temiz.
 - **Commit:** `31e38be7`
+
+### R12 #6 — Dağıtım öncesi kalite kapısı (`fbebd11b`)
+- **Neden:** `dev-deploy.yml` test/lint çalıştırmadan deploy ediyordu. Actions faturalama nedeniyle bloklu olduğundan gerçek yol olan elle `build-dev.cmd` de kontrolsüzdü.
+- **Kurul:** CTO + Şüpheci APPROVE-WITH-CONDITIONS. Koşullar:
+  - tek betik;
+  - `build-dev.cmd`'ye bağlama;
+  - `global.json` yok → `dotnet-version 10.0.x`;
+  - Node 22 (Dockerfile ile aynı);
+  - TZ sabit;
+  - Release + `--no-build`;
+  - atlatma bayrağı yok.
+- **Ne yapıldı:**
+  - `tools/verify.sh [backend|frontend|all]` yazıldı. `all` iki tarafı ayrı süreçte çalıştırır, çünkü `( f ) || …` içinde `set -e` devre dışı kalır.
+  - `.github/workflows/ci.yml` eklendi: PR + `workflow_call`, secret yok, artifact `if: always()`.
+  - `dev-deploy.yml`'e `needs: verify` eklendi.
+  - `build-dev.cmd` docker build'den önce verify çalıştırıyor.
+  - `.gitattributes` `*.sh` / `*.mjs` için `eol=lf`.
+  - Runbook `docs/runbooks/dev-deploy.md` yazıldı.
+  - CLAUDE.md §10 düzeltildi.
+- **Yakalanan gerçek hata:** Windows temiz klonunda (`autocrlf=true`) shebang'li `extract-api-errors.mjs` CRLF oluyordu ve vitest `api-errors.test.ts`'i SyntaxError ile kırıyordu. Ana ağaçta dosya LF olduğu için görünmüyordu. Bisect ile 7 import tek tek denendi, sonra satır sonları karşılaştırıldı.
+- **Doğrulama:**
+  ```bash
+  git worktree add --detach ../_wt-ci-2 fbebd11b
+  bash tools/verify.sh all
+  ```
+  - rc=0, 114 s.
+  - BE 5041 test, 0 başarısız.
+  - FE 230 dosya / 1781 test, typecheck ve lint temiz.
+  - Bir önceki koşuda kapı FabricCut perf testinde kırmızı verip deploy'u doğru şekilde durdurmuştu (#10 ile düzeldi, fe `c6f40d4f`).
+- **Doğrulanamayan:** gerçek GitHub Actions koşusu (faturalama).
+- **ClickUp:** z8v9xnjcy5 → complete.
+
+### R12 #12 — Doküman ↔ kod mutabakatı (`d4c54970`)
+- **sprint-013:** 12 iş kanıtlı denetlendi: 5 tamamlandı, 5 kısmi, 2 yapılmadı. "Kod mutabakatı" bölümü eklendi. Test sayıları ölçüm tarihi ve commit'iyle yazıldı. Denetimi bir ajan yaptı, örnek kanıtları elle doğruladım.
+- **Standart dokümanları:** çelişkiler koda göre düzeltildi.
+  - `technical-preferences`: tablo adı PascalCase (kodda 2489'a karşı 25), yerleşik auth, Dragonfly, Outbox + Hangfire, Zustand yok, Azure kullanılmıyor.
+  - `coding-standards`: `ApiResponse<T>`, Gridify offset sayfalama.
+  - CLAUDE.md: ZITADEL ifadeleri düzeltildi.
+  - `context-management`: `active.md` gitignored.
+- **ClickUp:** z8v9xnjcyb → complete.
+- **Kararlar:** çelişkide CLAUDE.md ve kod esas. Tekrar ekran/route'lar yalnız not edildi, değiştirilmedi.
+- **Açık kalanlar:**
+  - #9 fe'de (kurul önerisi hazırlanıyor).
+  - 1044 sonrası DEV deploy kullanıcının "deploy et" demesini bekliyor.
+  - Matris açığı görevleri (7 adet).
+  - sprint-013'ün kısmi işleri.
