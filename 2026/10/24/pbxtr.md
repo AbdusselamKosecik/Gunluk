@@ -110,3 +110,42 @@ Paralelde backend-dev-2 BR-BE-267 (tip değişimi 409 onayı) üzerinde çalış
 
 ### Açık kalanlar
 - BR-BE-267 sözleşmesi kesinleşince `kindChangeConfirmationOf` ve `confirm` alanı teyit edilecek.
+
+---
+
+## BR-BE-267 — tip değişimi onayı + callcenter kapalıyken kuyruk/dialer üretilmez (backend-dev-2)
+
+### 1. Onay kapısı (tek yer)
+- **Neden:** `call_center` → `pbx` geçişi veri taşıyan `callcenter` modülünü sessizce kapatıyordu; plan §1 A.3/6 onay istiyor.
+- **Ne yapıldı:** `TenantModuleChangeGate.EnsureConfirmedAsync` (Domain) — kapanan modül + `ITenantModuleCloseImpactQuery` sayacı (`EfTenantModuleCloseImpactQuery`: queues, openCampaigns, queueTargetedDids, queueMembers; query filter altında). İki yol aynı fonksiyonu çağırır: `PUT /api/v1/tenant/profile` (`company.kind`; tip yolu `TenantEndpoints` değil `TenantProfileEndpoints`'tedir) ve `PUT /api/v1/tenants/{id}/modules`. Veri varsa ve `confirm: true` yoksa 409 `TENANT_KIND_CHANGE_REQUIRES_CONFIRM`, hiçbir şey yazılmaz. Onaylı istekte `tenant.modules.changed` denetimi (`closing`, `impact`, `confirmed`, tip yolunda `source=kind`), etkin küme değiştiyse `IProvisioningRegenerator` aynı transaction'da. Veri silinmez.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Tenancy/TenantModuleChangeGate.cs`, `ITenantModuleAdministration.cs` (`ToAuditState`, `Confirmed`), `src/Pbxtr.Infrastructure/Modules/EfTenantModuleAdministration.cs`, `src/Pbxtr.Api/Modules/Tenancy/{TenantModuleEndpoints,TenantProfileEndpoints,TenantModuleChangeProblem}.cs`, `ProblemResponse.cs`, `doc/mimari/api-kontrat-v1.md`.
+
+### 2. ConfigRenderer kapısı
+- **Ne yapıldı:** `ProvisioningSource.EnabledModules` (`null` = bugünkü metin). `callcenter` yokken: `queues` boş (yalnız `[general]`), dialer-announce / geri arama / qexit bağlamları ve kuyruk MOH sınıfları yok, `-out`'taki dialer-mode `GotoIf` yok; kuyruk adı `[pbxtr-dialer]`'da `[pbxtr-{t}-cc-off]`'a bağlanır (IVR yayın metni ve zil grubu taşması o adı taşıdığı için exten silinmedi), `UserEvent PbxtrModuleDisabled` + erken medya `vm-sorry`. Kuyruk hedefli DID statik dalda kendi kapalı-saat kararına düşer. `ProvisioningRevisionService` modülleri hedef tenant'tan okur (resolver ile ortak `EfTenantModuleResolver.ReadAsync`); queue-target anlık görüntüsü yalnız üretilen kuyruklar için.
+- **Ölçüm:** `ConfigRendererCallCenterModuleTests` 7 test; mutasyon (`CallCenterEnabled => true`) 5'ini kırdı, kalan 2'si regresyon/vacuity.
+
+### 3. AMI QueueAdd
+- `QueueMembershipSyncJob` callcenter kapalı tenant'ı keşiften düşürür (`CallCenterModuleInputsSql`, karar `TenantModules.Effective`'te). Entegrasyon testi + kontrol grubu. Diğer `QueueAdd` yolları (HTTP) modül maskesiyle 403; `LeaveEnforcementJob` ve `AgentInterventionService` kapatılmadı (rapora yazıldı).
+
+### 4. Monitor testi
+- `MonitorRejectionAuditHttpTests`: süpervizöre `4791` dahilisi fikstürde eklendi, DisposeAsync siler ve ölçer.
+
+### Komutlar / sonuç
+```bash
+dotnet build                                   # 0 hata 0 uyarı
+dotnet test Api.Tests --filter Modules.Telephony/Tenancy/Provisioning/Queues/Ivr/Dialer, Platform  # 1566/351/169/128/139/39/1467 geçti
+dotnet test Architecture.Tests                 # 857/857
+dotnet test Integration.Tests (Provisioning|Tenant|ConfigRender|QueueMembership|Monitor)  # 459/459; son ikiliyle hedefli 49/49
+dotnet format pbxtr.sln --verify-no-changes    # temiz
+```
+- **Commit:** `595272f7` — Sprint-46 BR-BE-267: tip degisimi onayi + callcenter kapaliyken kuyruk/dialer uretilmez
+
+### Kararlar
+- Onay alanı iki uçta da gövdede `confirm: true` (bool?); 409 meta bileşik değil iç içe: `impact.<modül>.<sayaç>`.
+- Verisiz modül kapanışı ve modül açma onay istemez.
+- `PUT /tenant/profile` ve `PUT /tenants/{id}/modules` If-Match tablosunda `Acik` borç (damga yüzeyi yok).
+
+### Açık kalanlar
+- route-decision çalışma anında pbx tenant'ı için hâlâ `queue` kararı üretebilir; dialplan bunu `cc-off`'a düşürür ama karar metni ve `call_events` "queue" der.
+- `LeaveEnforcementJob` / `AgentInterventionService` QueueAdd'i modülü sormuyor.
+- Profil PUT'u `tenant.manage` ile owner'a açık: owner kendi tipini `hybrid` yapıp modül açabiliyor (lisans konusu, kapsam dışı).
