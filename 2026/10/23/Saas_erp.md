@@ -108,3 +108,19 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
   - Timeout'lar topluca yükseltilmedi; yalnız ölçülen tarama testine açık sınır verildi.
   - Kurul kapsam dışı: yalnız test değişikliği.
 - **Commit:** `c6f40d4f` — test: yuk altinda kararsiz testler (R12 #10)
+
+### [fe] Dil taraması — son sabit Türkçe ekran metni
+- **Neden:** Kullanıcı önceliği "dilleri başta olmak üzere". Ekranlarda kalan sabit Türkçe metin var mı diye bakıldı.
+- **Komut:**
+  ```bash
+  grep -rlP ">[^<{}]*[çğıöşüÇĞİÖŞÜ][^<{}]*<|(label|title|placeholder|aria-label)=\"[^\"]*[çğıöşüÇĞİÖŞÜ]" src --include=*.tsx
+  ```
+  Testler, `/reference/` ve changelog hariç tutuldu.
+- **Bulgu:** 8 dosya çıktı.
+  - 7'si JSDoc yorumu veya dilden bağımsız örnek değer (ör. `59×40×28X1.76`).
+  - Yalnız `employees.page.tsx`'te kullanıcıya görünen metin vardı: Ahmet / Yılmaz / ornek@firma.com placeholder'ları.
+- **Ne yapıldı:** `HrmEmployees.firstNamePlaceholder`, `lastNamePlaceholder` ve `emailPlaceholder` anahtarları 11 dilde `b09.json`'a eklendi. Her dil için yerel örnek isim seçildi.
+  - Biçim korundu: 2 boşluk girinti, dosyanın kendi satır sonu (CRLF/LF). Ekleme öncesi gidiş-dönüş kontrolü yapıldı.
+- **Changelog:** "Personel" altında iyileştirme maddesi.
+- **Doğrulama:** i18n + hrm testleri (88) geçti, tsc temiz.
+- **Commit:** `31e38be7`
