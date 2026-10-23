@@ -42,6 +42,11 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
 - Çift `AddStackExchangeRedisCache` kaydı (DependencyInjection.cs:34 "Redis" vs CacheSetup "Dragonfly"); RedisDistributedLock atomik değil + RemoveByPrefix no-op (multiplexer artık var).
 - SPA'da her çağrıda yeni anahtar üreten çağrı yerleri (warp-beam.api.ts:94, piece-labor.api.ts:148/186/212, loom-operations.api.ts:239, cutting.api.ts:139, beam-process.api.ts:139) → tekrar-anahtar denetimi.
 
+### İdempotency koruma matrisi — R12 #11 (`ede473ad`)
+- **Neden:** Kullanıcı listesi #11; genel altyapı (63536013) sonrası komut bazlı boşlukları çıkarmak.
+- **Ne yapıldı:** `docs/architecture/idempotency-protection-matrix.md` — 30 kritik komut; IIdem, SPA anahtarı, DB/iş kuralı koruması, dış servis, risk, test. 4/30 işaretli. YÜKSEK: SendEInvoice (gönderildi kontrolü yok, UUID sağlayıcıdan sonra kaydediliyor — kodla doğrulandı), CreateCashMovement (koruma yok — doğrulandı), kimyasal sarf, SettlePaymentPlanItem. ORTA: AllocateFromReceipt, cari fiş no, Stripe webhook.
+- **Sonuç:** ClickUp z8v9xnjcyv..z8v9xnjcz1 (7 görev, her biri ayrı kurul); otomatik marker eklenmedi.
+
 ## Kararlar
 - Yayın kullanıcının "deploy et" komutu olmadan yapıldı; gerekçe: ekip arkadaşının açık yayın isteği (deploy tetikleme commit'i) — kullanıcıya bildirildi.
 
