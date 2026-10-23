@@ -18,3 +18,16 @@
 - UX post-check (MRP + Tezgah planlama) → saas-erp-fe.
 - GitHub Actions faturalama sorunu sürüyor (manuel yayın gerekli).
 - Canlıda izleyici rolü kontrolü (kullanıcı).
+
+### UX post-check — MRP + Tezgah planlama (DEV 1.0.2.1044) ve düzeltmeler (`b9d63a26`)
+- **Neden:** Kurul koşulu (MRP R2 M9, F8a U8): yayından sonra ekran kontrolü. Yayını diğer ASK oturumu (saas-erp-6d) yaptı; iş bölümü: deploy onda, post-check burada.
+- **ux-reviewer (DEV, admin, MitoTex):** PASS-WITH-FIXES.
+  - Tezgah planlama: önceki düzeltmelerin hepsi doğrulandı ("Leventler dışında kalan (m)", yükleniyor durumu, ondalık virgül, 1024'te yatay kaydırma yok, 375'te alt bilgiye 16 px boşluk).
+  - MRP Dokuma (UX-231161): 20/1 PAMUK 177,499 kg (çözgü 104,429 / atkı 73,07), "analizdeki g/m'den hesaplandı", "analiz emirden sonra değişti" uyarısı, başlıklar ve "Takip yok" ipucu doğru; 375 px ve Arapça temiz; GUID yok.
+- **Bulgu 1 → düzeltildi:** Y-0000000025'te ProductionRecipe RCT01 var ama DyeingRecipe bağlı değil (DEV DB sorgusuyla doğrulandı); ekran "reçete bağlanmamış" diyordu. Yeni neden anahtarı `dyeing-recipe-no-chemicals` ("Emrin reçetesine boya reçetesi (kimyasallar) bağlanmamış — reçeteyi açıp renk kartını bağlayın."), 11 dil; GetMrpTests güncellendi.
+- **Bulgu 2 → düzeltildi:** Renk lejantı 1. dilimde oluşamayan durumları ("Kısmen ayrıldı – eksik" vb.) listeliyordu → yalnız sonuçta görünen durumlar; vitest.
+- **Bırakılan (nit):** dil değiştirince MRP sonucu sıfırlanıyor (sayfa genel davranışı).
+- **Doğrulanamayan:** kimyasal satırlı boyahane emri DEV'de yok; tek tezgah olduğu için taşı/böl diyaloğu; Örme/Dokuma tedarik sayfaları (araç bütçesi).
+- **Doğrulama:** vitest production+i18n 771 yeşil, typecheck temiz, backend MRP 51 test yeşil.
+- **Commit:** `b9d63a26` — fix(production): MRP UX post-check
+- **Açık:** b9d63a26 DEV'e henüz çıkmadı (sonraki yayın).
