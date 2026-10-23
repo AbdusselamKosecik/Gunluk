@@ -170,3 +170,51 @@ Birim: idempotency 57 (+ sözleşme: tüm IIdempotentCommand ErrorOr döner, par
   - 1044 sonrası DEV deploy kullanıcının "deploy et" demesini bekliyor.
   - Matris açığı görevleri (7 adet).
   - sprint-013'ün kısmi işleri.
+
+### [fe] R12 #9 — Kapalı dönem: kayıtlı tarih kontrolü
+### Kural (R1)
+Kilitli bir aya tarihli belge, durumu ne olursa olsun (taslak dahil), sahip/yönetici dönemi açmadan:
+- değiştirilemez,
+- başka aya taşınamaz,
+- silinemez,
+- taslaktan kesilemez veya iptal edilemez.
+
+Kurul onayladı (hepsi koşullu onay): cto, skeptic, dba, product-owner. Tüm koşullar uygulandı.
+
+### Yapılanlar
+- `Services/FiscalPeriodChecks.cs` (Finance-yerel): `EnsureStoredOpenAsync` + `IStoredFiscalDocumentCommand` işareti.
+  - Kontrol sırası: rol → bulunamadı → durum kuralları → kayıtlı dönem → mutasyon.
+- Kayıtlı tarih kontrolü eklenen handler'lar:
+  - Update/Delete Invoice
+  - UpdateInvoiceStatus (yalnız taslaktan)
+  - Update/Delete CreditNote ve DebitNote
+  - Update/Delete cari Receipt
+  - Delete CashReceipt
+  - Update/Delete BankReceipt
+  - GL Update/Delete
+  - 4 onay handler'ı bu yardımcıya taşındı.
+- Yeni tarih kapısı eklenen komutlar: UpdateBankReceipt, CreateInvoiceFromOrder, Create/Update CreditNote, CreateCreditNoteFromInvoice, Create/Update DebitNote, CreateCashMovement.
+- `finance.fiscal_period.locked` mesajı sabitlendi; dönem etiketi `Metadata["periods"]`'e taşındı. Mesaj artık 11 dilde çevriliyor (önce ham İngilizce görünüyordu).
+
+### Testler
+- `FiscalPeriodStoredDateTests` (Invoice, cari Receipt, BankReceipt ve GL için):
+  - eski kapalı / yeni açık
+  - eski açık / yeni kapalı (MediatR + behavior üzerinden)
+  - ikisi açık
+  - silme
+  - Reddedilen her durumda başlık ve satırların değişmediği yeni context'ten okunarak doğrulanıyor.
+- `FiscalPeriodCoverageGuardTests`: reflection ile her Update/Delete/Approve/Cancel/Change komutu ya işaretli ya da gerekçeli muaf olmalı.
+- Temiz worktree'de Release build: 5071 test geçti, 0 kaldı.
+
+### Bilinen sınırlar ve ertelenenler
+- **Yarış durumu:** kontrol ile kayıt arasında dönem kilitlenirse kayıt geçebilir. DBA kabul etti; aynı sınır mevcut oluşturma yolunda da var.
+- **UTC+3 gece yarısı:** istemci yerel gece yarısı gönderirse tarih bir önceki aya düşebilir. Bu davranış önceden de vardı.
+- **Ertelenenler (ClickUp):**
+  - z8v9xnjd72: storno tarihleme (P1, kullanıcı kararı gerekli)
+  - z8v9xnjd73: çek (P1)
+  - z8v9xnjd74: taslak iptal/storno
+  - z8v9xnjd75: dönem kilidi ekranı
+  - z8v9xnjd76: GL IsDeleted
+  - z8v9xnjd3t: ekstre ödeme filtresi (P1 hata)
+- **Commit:** `e49f2533`
+- **Not:** Oturum push sırasında koptu; yeniden açılışta `.git/index` bozuktu. Yedeklendi, `git reset` ile HEAD'den yeniden kuruldu; çalışma ağacı korundu, push zaten tamamlanmıştı.
