@@ -218,3 +218,40 @@ Kurul onayladı (hepsi koşullu onay): cto, skeptic, dba, product-owner. Tüm ko
   - z8v9xnjd3t: ekstre ödeme filtresi (P1 hata)
 - **Commit:** `e49f2533`
 - **Not:** Oturum push sırasında koptu; yeniden açılışta `.git/index` bozuktu. Yedeklendi, `git reset` ile HEAD'den yeniden kuruldu; çalışma ağacı korundu, push zaten tamamlanmıştı.
+
+### [fe] Landing (tanıtım) sayfası: SEO ve LLM okunurluğu
+- **Neden:** Kullanıcı isteği ("vuo landing ekranı için LLM'lerin ve SEO gerekli düzenlemeleri"). `/tanitim` istemcide çizilen bir SPA rotasıydı; JS çalıştırmayan GPTBot/ClaudeBot/PerplexityBot boş `<div id="root">` görüyordu. Açıklama, OG, canonical, yapısal veri, robots, sitemap ve llms.txt yoktu.
+- **Kurul:** cto, skeptic, product-owner ve security; hepsi koşullu onay verdi.
+- **Kararlar:**
+  - Kayıtlı seçim ya da `?lang=` yoksa sayfa Türkçe açılır. Googlebot en-US ile çiziyor; aksi halde TR kanonik altında İngilizce indekslenirdi.
+  - `/` noindex; keşif sitemap ve llms.txt üzerinden.
+  - Yalnız `app.vuo.app` indekslenir; DEV hiçbir zaman.
+- **Ne yapıldı:**
+  - `src/frontend/src/features/landing/seo/landing-static.ts` saf fonksiyonları ve `vite.config.js` eklentisi şunları üretir: `dist/tanitim/index.html` (TR head + #root içinde `<main>` statik metin), `llms.txt`, `llms-full.txt`, `sitemap.xml`, `robots.txt`, `robots.noindex.txt`.
+  - JSON-LD: Organization, WebSite, SoftwareApplication, FAQPage. offers/rating yok; `</script>` ve U+2028/9 kaçışları yapılıyor.
+  - `meta.description` 11 dile eklendi.
+  - `public/og-image.png` (1200x630): Chrome'da HTML kart çizilip ekran görüntüsü alındı. Kaynak scratchpad'de `og/card.html`.
+  - nginx: `map $host` ve `map "$vuo_indexable:$request_uri"` ile X-Robots-Tag, `always`; `if` yok. robots dosyası host'a göre seçilir. `try_files $uri $uri/index.html /index.html`.
+  - Favicon mutlak yola alındı. Landing'de meta description çalışma anında değişiyor ve sayfadan çıkınca geri alınıyor.
+- **Doğrulama:** Temiz worktree'de (HEAD + yalnız bu değişiklik) typecheck temiz, landing testleri 95/95 geçti, `vite build` tüm dosyaları üretti. Statik görüntü JS olmadan tarayıcıda kontrol edildi.
+- **Commit:** `bb7bbda1` (dev).
+- **ClickUp:** z8v9xnjdd7 (tamam). Takip işleri:
+  - z8v9xnjdd8: dil başına URL + hreflang
+  - z8v9xnjdd9: pazarlama alan adı
+  - z8v9xnjdda: Search Console (bk-ask)
+  - z8v9xnjddb: /yenilikler statik görüntüsü
+  - z8v9xnjddc: DEV erişim kısıtı
+- **Açık:** Dağıtım sonrası curl kontrolleri. DEV deploy hâlâ docker build izni bekliyor.
+
+### [fe] UYARI — 17:22 çökmesinde X: diskinde sıfırlanan dosyalar
+- Oturum çöktüğünde, o sırada diskte bekleyen dosyalar **tamamen NUL bayta dönüştü**:
+  - 6d oturumunun commit edilmemiş idempotency işi (26 dosya: CreateCashMovement, ConsumeChemicals, use-idempotent-submit, cash.api.ts vb.);
+  - `changelog.data.ts`;
+  - `.git/index`;
+  - `_wt-idem` worktree'sinin tamamı.
+- Commit edilmiş ve push edilmiş iş sağlam.
+- **Kurtarma:**
+  - Yalnız `CreateCashMovement.cs`'in son hali git nesnesi olarak var (blob `81e8a21f`).
+  - Geri kalanı 6d oturumunun C: diskindeki transcript'inden (Write/Edit çağrıları) yeniden kurulabilir.
+- Sıfırlanmış dosyalara dokunulmadı.
+- Disk sağlığı (SMART / chkdsk) kontrol edilmeli.
