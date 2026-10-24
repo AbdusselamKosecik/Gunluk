@@ -250,3 +250,17 @@ kodları, gerçek sesli mesaj kutusu + e-posta, BR-BE-273. Kullanıcı "başla" 
 - **Silinmedi (koordinatöre bırakıldı):** test penceresinin 72 CDR ve 262 call_events satırı.
 - Ek temizlik: sesli mesaj satırları silinince aktarım işi (`LookbackHours=72`) `call_events`'teki `PbxtrVoicemail` UserEvent'lerini yeniden aday sayıp her tikte uyarı bastı. Test penceresinin 6 UserEvent satırı silindi; 23:05Z sonrası iki tikte uyarı 0.
 - Ders: sesli mesaj artığı silinirken kaynak olay satırı da silinmeli, yoksa iş 72 saat boyunca uyarı basar.
+
+## QA-128 yeniden ölçüm — yayınlanmış config (`demo-4fe67e7fd51d`, nginx `.rev/20261024T232613Z-4fe67e7fd51d`)
+- Kurulum aynı: pbx override + zzqa öz-döngü uçları + `t0007-1043` öz-REGISTER. Baseline yeniden alındı, ilk turla birebir aynı.
+- **Geçenler (geçici yama olmadan):**
+  - 3a' `*721043`: activated + global değişken + denetim satırı.
+  - 4a `*90`+dış numara: busy target E.164 olarak saklandı.
+  - 5: internal sınıfta `FC_EXTERNAL_NOT_ALLOWED`.
+  - 8 `*78`/`*79`: `dnd` t/f + iki denetim satırı.
+- **3d ölçüldü:** stdlib Python WS istemcisi `/api/v1/ws?access_token=` ile sahip oturumu açtı. `extension.settings.changed` 23:28:35.351'de, denetim satırıyla aynı anda, boş payload ile geldi.
+- **Bulgu (düzeltilmedi, kırmızı çizgi):** DND statik katmanı (`ConfigRenderer.Pbx.cs:81` `Goto(busy)`) config çekimine bağlı. `*79` 23:30:11'de, sonraki çekim 23:30:17.9'da; arada 23:30:17.06'daki çağrı hâlâ busy yoluna gitti.
+  - Pencere: en çok bir çekim döngüsü (~15 sn) + reload.
+  - Neden düzeltilmedi: anlık kapıyı "bilinmiyorsa statik" diye yazmak S76-12a negatif testinin yasakladığı `!=`/`UNKNOWN` dalını ister. Karar koordinatörde.
+- **Temizlik:** yönlendirme satırı, 2 spool kaydı, zzqa dosyaları silindi; override `[]`; md5 6/6 baseline; DND 0; sınıf hepsi domestic. İki global yine boş değerde kaldı (silinemez, restart yasak).
+- Kod değişikliği yok.
