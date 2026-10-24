@@ -174,3 +174,45 @@ dotnet format pbxtr.sln --verify-no-changes    # temiz
 
 ### Sonraki adım
 - Sprint-47 (özellik kodları, yakalama, yönlendirme, sesli mesaj, BR-BE-273).
+
+## Sprint-47 backend + Asterisk (backend-dev-2 ajanı)
+
+### Bağlam
+Sprint-46 (tenant modülleri) kapalıydı; hedef Faz B1: yakalama grubu, yönlendirme, özellik
+kodları, gerçek sesli mesaj kutusu + e-posta, BR-BE-273. Kullanıcı "başla" demişti.
+
+### 1. Şema (BR-DB-121)
+- **Neden:** yönlendirme / yakalama / özellik kodu ayarının tek doğruluk kaynağı pbxtr DB'si.
+- **Ne yapıldı:** `extension_forwarding`, `pickup_groups`, `pickup_group_members`,
+  `tenant_feature_codes` tabloları (tenant_id FK, RLS `pbxtr_apply_tenant_rls`, composite FK
+  CASCADE) + `voicemail_messages.notify_state/attempts/next_at/notified_at` ve kısmi indeks
+  `ix_voicemail_messages_notify_pending`. Expand-only, `SET LOCAL lock_timeout='5s'`.
+- **Dosya:** `src/Pbxtr.Infrastructure/Persistence/Migrations/20261024002750_PbxForwardingPickupFeatureCodes.cs`
+- **Komut:** `dotnet ef migrations add PbxForwardingPickupFeatureCodes --context PbxtrDbContext --project src/Pbxtr.Infrastructure --startup-project src/Pbxtr.Infrastructure --output-dir Persistence/Migrations --no-build` (sonra elle düzenlendi; Designer/snapshot BOM'suz LF).
+- **Doğrulama:** `PbxFeatureTenantLeakTests` gerçek PG + tam zincir: üretim kipinde B görmez/yazamaz; çapraz kipte ham SQL 4 satır görür, EF adaptörü sızdırmaz.
+
+### 2. Dialplan (BR-AST-137/138/139/140) — `ConfigRenderer.Pbx.cs`
+- PJSIP `named_call_group`/`named_pickup_group` = `t0007-pg-<id12>`; `**<dahili>` → `Pickup(t0007-N@PICKUPMARK)`.
+- Local dalı: DND → BUSY dalı; `Dial` sonrası `Gosub(pbxtr-t-fwd,N,1(${DIALSTATUS}))`; yönlendirme kuralı statik config + ARI global `PBXTR_FWD_T_N` (damga ms ile bayat global elenir).
+- Dış hedef: miras damgalar temizlenir, `-outbound` → call-permission AGI (FAIL-CLOSED); `internal` sınıfta dış dal hiç açılmaz.
+- Sesli mesaj: app_voicemail **kullanılmadı** (voicemail.conf yok, `voicemail reload` kapalı listede değil); mevcut Record+UserEvent kutusu + AstDB dizini `pbxtr-vm/<t-ext>/` ile `*97`.
+- **Santral ölçümleri (176.88.41.220, Asterisk 22.10.1):** geçici conf + `dialplan reload` ile DB_KEYS/SHIFT döngüsü, CUT boş alan, STAT, PICKUPMARK (yabancı tenant işareti yakalamadı), ARI global POST/silme 204, render edilen t9947 dialplan uçtan uca (CFU dış → call-permission AGI; NA → sesli mesaj; HOPS=3 döngü kırıcı; internal dış yönlendirme yok). Artefaktlar silindi.
+
+### 3. Uçlar
+- `POST /api/v1/telephony/feature-code` (Sınıf B uç 6, FAIL-SAFE) + edge `location` + FastAGI `/feature-code`; karar kaydı `yonetim/kurul-kararlari.md`.
+- `/api/v1/pickup-groups` CRUD, `/api/v1/forwarding`, `/api/v1/extensions/{id}/forwarding`, `/api/v1/me/extension/forwarding`, `/api/v1/telephony/feature-codes` GET/PUT. Yetkiler `bundle.pbx` (owner+supervisor), `self.forwarding` (staff); hepsi pbx modülüne bağlı.
+- WebSocket `extension.settings.changed` (tenant odası, gövdesiz).
+- BR-BE-269: `VoicemailEmailNotificationJob` (kilit 44) + `BrevoVoicemailNotificationMailer` (ses eki); hata mesajı etkilemez.
+- BR-BE-273: owner farklı `kind` → 403 `TENANT_KIND_FORBIDDEN`.
+
+### Testler
+- Architecture 857/857, Api.Tests Platform 1467 (+2 skip), Modules 2575 + 3084 (tek kırmızı düzeltildi, Realtime 159 yeniden yeşil), Integration hedefli 55 + 13, FastAGI 28, edge selftest OK, vitest 2458/2458, `tsc -b` 0, `dotnet format --verify-no-changes` temiz.
+- **Commit:** `2e11a0f2` (santral), `9c117f12` (BR-BE-273), `4b34db20` (web etiketleri).
+
+### Kararlar
+- Yönlendirme için soket açılışında yeniden ilan YOK: config tam kuralı + aynı damgayı taşıyor.
+- E-postada arayan `STRICTEST(tenant, Last4)` maskeli.
+- CLAUDE.md/AGENTS.md §3.2 satırı ajan tarafından yazılmadı (kullanıcı onayı ister).
+
+### Açık kalanlar
+- CLAUDE.md §3.2 + AGENTS.md tablo satırı (kullanıcı); FE-143 ekranları + screens.json satırları; yayın + QA-128.
