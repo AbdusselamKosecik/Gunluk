@@ -149,3 +149,28 @@ dotnet format pbxtr.sln --verify-no-changes    # temiz
 - route-decision çalışma anında pbx tenant'ı için hâlâ `queue` kararı üretebilir; dialplan bunu `cc-off`'a düşürür ama karar metni ve `call_events` "queue" der.
 - `LeaveEnforcementJob` / `AgentInterventionService` QueueAdd'i modülü sormuyor.
 - Profil PUT'u `tenant.manage` ile owner'a açık: owner kendi tipini `hybrid` yapıp modül açabiliyor (lisans konusu, kapsam dışı).
+
+## Sprint-46 kapanışı — yayın + canlı ölçüm (koordinatör)
+
+### 1. Yayın
+- **Neden:** Sprint-46 kapanış şartı canlıda `/me/menu` ölçümü.
+- **Ne yapıldı:** İlk `deploy/yerel-yayin.sh --yayinla --testsiz` koşusu `npm audit` kapısında durdu (vite ≤6.4.3 high: GHSA-9jrq-w75r-8gcw + launch-editor). `src/Pbxtr.Web` içinde `npm audit fix` → vite 6.4.5; `npx tsc -b`, `vite build`, tenant vitest (128/128) yeşil. Yeniden yayın.
+- **Commit:** `7a33d6fb` — web: vite 6.4.3 -> 6.4.5. Yayın: `tekbirsoft/pbxtr:demo-7a33d6fb7919`, migration `20261023201118_TenantModulesAndExtensionLimits` canlıda.
+
+### 2. Canlı ölçüm (176.88.41.220, app.pbxtr.com)
+- Sunucuda canlı tenant'ların hepsi boş tipli (pbx tipli tenant yok; "Örnek Fabrika" BR-OPS-19'da açılacak). Ölçüm, t0007'de `callcenter` override'ını kapatıp açarak yapıldı (gerçek yazma yolu, BR-BE-267 kapısı dahil).
+- Komut: betik scp ile `/root/m2.sh`, `bash /root/m2.sh; rm`. Parola `.env`'den değişkene okunur, basılmaz. Akış: login (demo.superadmin/sahip/agent/supervizor) → `GET /me/menu` kod listesi → `PUT /tenants/{id}/modules {"overrides":[{"module":"callcenter","enabled":false}],"confirm":true}` → tekrar ölç → `{"overrides":[]}` ile geri al → `cmp`.
+- **Sonuç:**
+  - onaysız PUT → 409 `TENANT_KIND_CHANGE_REQUIRES_CONFIRM`, `meta.impact.callcenter = {queues:1, queueMembers:3, ...}` (t0012)
+  - sahip menü 41→17, süpervizör 38→14, agent 5→2; `GET /campaigns` 200→403
+  - geri alınca üç rolün menüsü **birebir aynı**; santralde `queue show` t0007 kuyrukları (2) geri geldi; `audit_log` `tenant.modules.changed` 4 satır
+- Tuzak: `users` tablosunda `tenant_id` yok, `home_tenant_id` var; tenant tipi `tenant_company_info.kind`'da.
+
+### 3. Backlog + ClickUp
+- Sprint-46'nın 10 kartı `Bitti (2026-10-24, …)`; `sprint-46.md` durum BİTTİ.
+- Yeni kart **BR-BE-273** (sprint-47): owner `PUT /tenant/profile` ile kendi tipini `hybrid` yapıp modül açabiliyor (BE-267 raporundan) → 403 `TENANT_KIND_FORBIDDEN` olacak.
+- ClickUp: olustur (yeni 1) → senkron (yazılan 10) → `--kuru` `fark olan kart: 0, izde olmayan: 0`.
+- **Commit:** `66f4957f` — yonetim: Sprint-46 kapandi.
+
+### Sonraki adım
+- Sprint-47 (özellik kodları, yakalama, yönlendirme, sesli mesaj, BR-BE-273).
