@@ -216,3 +216,35 @@ kodları, gerçek sesli mesaj kutusu + e-posta, BR-BE-273. Kullanıcı "başla" 
 
 ### Açık kalanlar
 - CLAUDE.md §3.2 + AGENTS.md tablo satırı (kullanıcı); FE-143 ekranları + screens.json satırları; yayın + QA-128.
+
+## QA-128 — Sprint-47 santral özellikleri gerçek santralde (176.88.41.220, imaj demo-f8e5bcd5d431)
+
+### Yöntem
+- t0007'de pbx modülü süper admin ile açıldı (`PUT /tenants/{t0007}/modules`), ölçüm sonunda `{"overrides":[]}` ile kapatıldı.
+- Gerçek SIP cihazı yok. Bunun yerine Asterisk konteynerine geçici PJSIP dosyası (`pbxtr-lab.d/zzqa-pjsip.conf`) kondu:
+  - Asterisk kendine `t0007-1043` olarak REGISTER oldu (gerçek kayıt).
+  - Öz-döngü uçları `zzqa-as104x` mevcut tenant auth nesnelerini outbound_auth olarak kullandı (sır okunmadı).
+  - Gelen bacak gerçek `PJSIP/t0007-104x` kanalı olarak `pbxtr-t0007-out`'ta koştu.
+  - Lavabo ucu `1044`, `ZZQA_MODE` (ring/busy/answer) ile 1043 telefonunu taklit etti.
+- Neden: Local kanal `plain` yolundan gider ve yönlendirmeyi görmez.
+
+### Bulunan hata ve düzeltme
+- **Belirti:** `*721043` → FastAGI → edge → https 8443 → catch-all 404 → `FC_UNAVAILABLE` → beeperr.
+- **Sebep:** ön nginx 8443 Sınıf B regex'i 5 ucu taşıyordu; `feature-code` yoktu.
+- **Bekçi neden yakalamadı:** `deploy/nginx-dogrula.sh` uçları yalnız `MapPost("dize")` deseninden çıkarıyordu. `FeatureCodeEndpoints` ise `MapPost(Route, …)` sabitini kullanıyor; uç kümeye hiç girmedi. Eski bekçi kırık config'te RC=0 verdi.
+- **Düzeltme — commit `4fe67e7f`:**
+  - `deploy/nginx.conf` ve `pbxtr-demo/nginx/pbxtr-telefon-8443.conf`: 8443 regex'ine `feature-code` eklendi.
+  - Panel portunda 404 satırı eklendi: `deploy/nginx.conf` (iki panel sunucusu) ve `deploy/demo/nginx-demo-cloudflare.conf`.
+  - Bekçi artık `Route` sabitini de çözüyor ve 8443 regex'inin koddaki her ucu taşıdığını iki dosyada doğruluyor.
+  - Mutasyon: üç mutasyonun üçü de KIRMIZI.
+- **Yayın:** ön nginx (8443 inc) yayını gerekli; uygulama imajı ve edge değişmedi. Ölçüm için sunucuda geçici sıcak yama yapıldı, sonda orijinal md5 `4716516b…` geri kondu.
+
+### Sonuç (10 adım)
+- Adım 1–10 ölçüldü; ayrıntı backend-lider raporunda.
+- WebSocket olayı ölçülmedi; denetim satırı ölçüldü.
+
+### Temizlik
+- Silinenler: yakalama grubu, yönlendirme satırı, DND, 6 sesli mesaj satırı, 16 recording_assets satırı + 16 MinIO nesnesi, 4 AstDB girdisi, spool dosyaları, geçici zzqa dosyaları.
+- t0007 config md5'leri baseline ile birebir (6 dosya).
+- **Silinemeyen:** `PBXTR_FWD_T0007_1042` ve `ZZQA_MODE` globalleri boş değerde kaldı. Asterisk 22'de değişken silme yalnız restart ile; restart yasak, `clearglobalvars` kapalı. Boş değer dialplan'de "yapılandırma yok" sayılır.
+- **Silinmedi (koordinatöre bırakıldı):** test penceresinin 72 CDR ve 262 call_events satırı.
