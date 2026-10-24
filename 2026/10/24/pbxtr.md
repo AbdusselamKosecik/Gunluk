@@ -248,3 +248,5 @@ kodları, gerçek sesli mesaj kutusu + e-posta, BR-BE-273. Kullanıcı "başla" 
 - t0007 config md5'leri baseline ile birebir (6 dosya).
 - **Silinemeyen:** `PBXTR_FWD_T0007_1042` ve `ZZQA_MODE` globalleri boş değerde kaldı. Asterisk 22'de değişken silme yalnız restart ile; restart yasak, `clearglobalvars` kapalı. Boş değer dialplan'de "yapılandırma yok" sayılır.
 - **Silinmedi (koordinatöre bırakıldı):** test penceresinin 72 CDR ve 262 call_events satırı.
+- Ek temizlik: sesli mesaj satırları silinince aktarım işi (`LookbackHours=72`) `call_events`'teki `PbxtrVoicemail` UserEvent'lerini yeniden aday sayıp her tikte uyarı bastı. Test penceresinin 6 UserEvent satırı silindi; 23:05Z sonrası iki tikte uyarı 0.
+- Ders: sesli mesaj artığı silinirken kaynak olay satırı da silinmeli, yoksa iş 72 saat boyunca uyarı basar.
