@@ -149,6 +149,50 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **Commit:** `ca644613`. DEV 1.0.2.1053 yayında, API 200.
 - **F6c planı:** Plan ajanı özeti scratchpad'de `f6c-plan.md`. Kurula gidiyor.
 
+### 10. F6c — Dokuma iplik sarfı (kullanıcı: "tamamlayalim", paket B)
+- **Neden:** Top oluşturma iplik stoğunu düşmüyordu ("yakında"). F7 raporu yalnız teorik kg gösteriyordu.
+- **Kurul:**
+  - 1. turda skeptic BLOCK verdi: çözgü leventi tetiği F7 kararıyla (sarılan ≠ tüketilen) çelişiyordu. Tetik yalnız dok kesimi olacak şekilde değiştirildi.
+  - 2. tur: cto ve skeptic APPROVE-WITH-CONDITIONS; dba, product-owner APPROVE-WITH-CONDITIONS; security PASS-WITH-CONDITIONS.
+  - Uygulama sonrası güvenlik kontrolü: PASS. Üç düşük notun biri düzeltildi: liste ucundaki tarih hatası artık güvenli koda sarılıyor.
+- **Tasarım:**
+  - Dok kesilince emrin kumaş analizinden teorik kg hesaplanır. Çözgü = WarpConsumedM × g/m / 1000, atkı = LengthM × g/m / 1000; rapor ile aynı `WeavingYarnKg.Kg`.
+  - Inventory portu kilitli 3062 fişi yazar. Idempotency `inventory.ProductionConsumptionPosting` ile sağlanır (UX TenantId+SourceKind+SourceRefId).
+  - Depo seçimi: ayar `production.weaving.yarnWarehouseId`, yoksa en çok stoklu depo. Stok yetmezse `insufficient_stock`; satır depolara bölünmez.
+  - Durumlar: Bekleyen / İşlendi / Geri alındı. "Geri alma bekliyor" = İşlendi ∧ dok iptal.
+  - Poster sagası: kira alınır, Bekleyen satırlar yeniden hesaplanır, sonuç xmin ile koşullu yazılır. Port çağrısı sürerken dok iptal edilirse anında ters kayıt yapılır.
+  - Kesim ve iptal tetikleri komutu asla bozmaz; başarısızlıkta yalnız uyarı çıkar.
+- **Dokunulan dosyalar:**
+  - Inventory: `Services/ProductionInventoryService.YarnConsumption.cs`, `Entities/ProductionConsumptionPosting.cs`, `RollOutputReceiptGuard.cs`.
+  - Production: `Entities/WeavingYarnConsumption.cs`, `Features/WeavingYarn/*` (Support, Poster, Hooks, Queries, Batch), `YarnConsumptionController.cs`, `LoomCutCommands.cs`, `LoomCancelLastCommand.cs`, `YarnConsumptionReport.cs` (rapor bandı).
+  - Shared: `IProductionInventoryService.YarnConsumption.cs`, ErrorCodes, ErrorMessages, TenantSettingKeys.
+  - Diğer: `DefaultPermissionSeeder` (`production_yarn_consumption` read/create/manage), migration `WeavingYarnConsumptionF6c`.
+  - Frontend: `api/weaving-yarn.api.ts`, `pages/weaving/yarn_consumption/*`, menüde Hareketler › İplik Sarfı, Tezgah Panosu ve Kumaş Kontrol uyarı şeridi, 11 dilde `f6c.json`, `b21c.json` yarnNote, `api-errors` (yeni kilit kodu).
+  - Belge ve liste: tasarım dokümanı §3.29, changelog.
+- **Testler:**
+  - YarnConsumptionPortTests: 14 test.
+  - WeavingYarnConsumptionTests: 17 test. Kesim, iptal, yarış, g/m düzelt → fiş kg = rapor kg, analiz sonrası donma, iki tenant, toplu tarama, 200 sınırı.
+  - yarn_consumption.test.tsx: 8 test.
+  - Mevcut sayfa testlerinde şerit taklit edildi (fabric_cut, loom_board).
+- **Hata/düzeltme:**
+  - i18n ad alanı `WeavingYarnConsumption` raporla çakıştı; yeni ad `WeavingYarnPosting` oldu.
+  - Backfill onay düğmesinde yer tutucu yanlıştı (`n` yerine `cuts`).
+  - Migration'da gereksiz FK indeksleri çıktı; indeksler FK sütunuyla başlatıldı. `migrations remove` DB'ye bağlanmaya çalıştığı için migration dosyaları elle silinip snapshot git'ten geri alındı.
+- **Komutlar:**
+  ```bash
+  dotnet ef migrations add WeavingYarnConsumptionF6c --project . --context MigratorDbContext   # ConnectionStrings__DefaultConnection sahte değerle
+  node tools/strip-migration-designers.mjs
+  node scripts/extract-api-errors.mjs --write
+  bash tools/verify.sh all    # rc=0
+  ```
+- **Canlı kontrol (yerel, paylaşımlı vuo_dev):**
+  - Migration açılışta uygulandı.
+  - Sayfa, menü, sekmeler ve depo ayarı çalışıyor.
+  - "Geçmişi tara" önizlemesi: 4 dok, 4'ü hesaplanabilir, 40,376 kg. Kayıt AÇILMADI; örnek tenant stoğunu değiştirmemek için karar kullanıcıya bırakıldı.
+  - 390 px'te taşma yok.
+- **Commit:** `f2a7e5a4` — feat(production,inventory): dokuma iplik sarfi (F6c).
+- **DEV:** 1.0.2.1054 deploy edildi. Sağlık ucu 200; yeni uç girişsiz isteğe 401 dönüyor, yani uç kayıtlı.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
