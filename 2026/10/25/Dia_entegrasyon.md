@@ -38,3 +38,18 @@ sonra DIA test kullanıcısını, ardından kapsamı netleştirdi.
   SaaS'ta varyant modeli var mı; başlangıç tarihi.
 - DIA demo kullanıcısı + API key.
 - `/kurul Dia_entegrasyon`.
+
+## Ek: DIA demo login denemesi
+- **Neden:** Kullanıcı "ws ws ile login dener misin" dedi.
+- **Komut:**
+  ```bash
+  curl -s -X POST https://diademo.ws.dia.com.tr/api/v3/sis/json -H "Content-Type: application/json"     -d '{"login":{"username":"ws","password":"ws","disconnect_same_user":true,"lang":"tr","params":{}}}'
+  ```
+  Ardından `sis_kontor_sorgula`, `sis_yetkili_firma_donem_sube_depo`, `logout` çağrıldı.
+- **Sonuç:**
+  - Login 200 döndü, API key istemedi.
+  - Kontör -50.1125 (negatif) ama ücretli çağrı yine çalıştı.
+  - Firma 1 GENEL, dönem 1 (2026). Depolar AI00 (_key 2552) ve AI01 (_key 2847).
+  - Yetkili firma cevabında `depokodu` da geliyor; analizdeki "sis_depo_getir gerekir" notu düzeltildi.
+- **Not:** Demo ortak hesap. `disconnect_same_user` testlerde false olmalı, yazma testleri dikkatli yapılmalı.
+- **Commit:** `5c189d7` — docs: DIA demo sunucu login denemesi (ws/ws), firma/donem/depo bulgulari
