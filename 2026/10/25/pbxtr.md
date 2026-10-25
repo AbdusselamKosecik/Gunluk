@@ -319,3 +319,42 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 ## Açık kalanlar / sonraki adım
 - P2: BR-BE-277, BR-BE-278, BR-AST-149 (manager.conf PBXTR_DIR — Karar #70 nedeniyle konteyner yeniden yaratma penceresi ister).
 - P3: BR-AST-148, BR-AST-152, BR-SYS-145, BR-BE-274/276/279/280, BR-OPS-20, BR-QA-131.
+
+## P3 kartları — BR-BE-274 / BR-BE-279 / BR-SYS-145 / BR-OPS-20 (backend-dev-1)
+
+### 1. BR-BE-274 — CDR CSV dışa aktarma yön filtresini taşır
+- **Neden:** `CdrExportRequestDto` alansızdı; ekranda yön seçiliyken liste ile indirilen dosya farklı kümelerdi, ekran "yön dosyaya uygulanmaz" notu yazıyordu.
+- **Ne yapıldı:** DTO'ya opsiyonel `Direction`; değer `CdrListQuery.Direction`'a ham verilir, okuma katmanı liste ucuyla AYNI `DirectionCodes.TryParse`'ı kullanır (ikinci ayrıştırıcı yazılmadı). Denetim satırına `filterDirection`. Frontend `exportCdr` yönü gönderir; not ve `cdr.exportDirectionNote` anahtarı 9 dilden silindi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Api/Modules/CallHistory/CdrEndpoints.cs`, `src/Pbxtr.Web/src/app/screens/cdr/{CdrScreen.tsx,cdrApi.ts,CdrExportDirection.test.tsx}`, `src/Pbxtr.Web/src/app/i18n/messages/*.json`, `tests/Pbxtr.Api.Tests/Modules/CallHistory/CdrExportDirectionEndpointTests.cs`
+- **Sonuç / doğrulama:** API testi (liste ve export aynı ham değeri okuma yoluna verir + denetimde yön), vitest mutasyonu (yön satırı silinince test kırmızı) doğrulandı.
+- **Commit:** `13a8d9fd`
+
+### 2. BR-BE-279 — DID, onu yöneten yetkiye açık döner
+- **Neden:** Tenant sahibi kendi santral hattını maskeli görüyordu (sahipte `phone.unmask` yok, olmamalı).
+- **Karar:** DID kişi numarası değil, tenant'ın kendi hizmet numarası (emsal: `TenantCompanyDto.Phone`). `did` yüzeyinde `trunk.read`/`trunk.write` numarayı açar; kayıt defteri yüzeyinde geçersiz, başka yüzeye yayılmaz; kişi numaraları için tek gevşetme yolu hâlâ `phone.unmask`.
+- **Ne yapıldı:** `PhoneSurfaces.OpensOwnServiceNumber` + `NumberMasker.ResolveLevel` adım 1b. Alan tipi `PhoneNumber + [MaskedPhone]` olarak kaldı, maskeleme bekçisinin muafiyet listesine satır eklenmedi (10/10). ADR-004 §2.5 güncellendi. `ivrApi.ts` DID `number`'ı `MaskedPhone` olarak okur (önceden "[object Object]" yazıyordu); diğer tüketici (`pbxFieldApi.ts`) zaten doğruydu.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Platform/Privacy/PhoneMaskContext.cs`, `src/Pbxtr.Infrastructure/Platform/Privacy/NumberMasker.cs`, `src/Pbxtr.Api/Modules/Telephony/InboundDidAdminEndpoints.cs`, `doc/mimari/ADR-004-maskeleme-ve-denetim.md`, `tests/Pbxtr.Api.Tests/Platform/Privacy/PhoneSurfacesTests.cs`, `src/Pbxtr.Web/src/app/screens/ivr/{ivrApi.ts,ivrVoicemailBoxOptions.test.ts}`
+- **Commit:** `c222b33e`
+
+### 3. BR-SYS-145 — canlı demo nginx'e script taslağı location'ı
+- **Ne yapıldı:** `pbxtr-demo/nginx/pbxtr.conf`'a `deploy/nginx.conf` ile aynı `location ~ ^/api/v1/scripts/[0-9a-fA-F-]+/draft$` (10m + güvenlik başlıkları). `deploy/nginx-dogrula.sh` `script_tavan_kontrol` canlı dosyayı da tarar, 4 yer bekler, dosya yoksa kırmızı.
+- **Komutlar:** `bash deploy/nginx-dogrula.sh` (statik kapılar TAMAM, "4 yer"; docker bölümü yerelde koşmadı: daemon yok). Sunucuda `pbxtr-nginx` konteynerinde geçici bir üst conf ile `nginx -t` → syntax ok; geçici dosyalar silindi.
+- **Mutasyon:** 10m→1m ve location adı bozma → ikisi de kırmızı; geri alınınca yeşil.
+- **Commit:** `4c340d83`. Canlıya **sonraki yayınla** gider (revizyon `current/conf.d/default.conf`).
+
+### 4. BR-OPS-20 — Örnek Fabrika anons dili `tr`
+- **Ne yapıldı:** `set_announcement_language`: `PUT /api/v1/tenant/settings` (If-Match; zorunlu alanlar mevcut değerleriyle), aynı değerse yazmaz. Parola: ürün yolları ölçüldü (admin `password-reset` rastgele üretir, `/me/password` 12 karakter ister, `auth/reset-password` e-posta jetonu ister). Hash kopyalama adımı kaldı ve gerekçesiyle belgelendi; paylaşılan parola değiştirilmedi.
+- **Komutlar:** sunucuda `.env`'den değişkene okunarak 2 koşu: 1. koşu `+1` (en→tr) / `=42`, 2. koşu `+0` / `=43`; iki günlükte de sır sayısı 0. DB: `t1001|tr`.
+- **Commit:** `ded15d3b`
+
+### Testler (bu tur)
+- Api.Tests: CallHistory + Platform.Privacy + InboundDid 226/226; Platform 1485 geçti / 2 atlandı; Architecture 858/858.
+- `npx tsc -b` rc=0; vitest cdr + ivr yeni dosyası 16/16; `dotnet format --verify-no-changes` (dokunulan dosyalar) rc=0.
+
+## Kararlar (P3 turu)
+- DID maskeleme dışı değil; yüzey bazlı kural: yöneten yetki açar, diğerleri tenant maskesini görür.
+
+## Açık kalanlar (P3 turu)
+- BR-OPS-20 kalan: demo parolası politika uyumlu (≥12) olmalı — sifreler reposu + sunucu `.env` birlikte; o gün hash kopyalama adımı silinir.
+- BR-SYS-145 canlıya yayınla gider; yayın sonrası 1 MB üstü taslak PUT'u ölçülmeli.
+- `align_owner_password` dışında `set_announcement_language` mevcut `maskLevel`'ı geri yazar; `maskLevelConfigured` false idiyse artık true olabilir (değer aynı).
