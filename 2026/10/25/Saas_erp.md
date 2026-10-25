@@ -58,6 +58,37 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **Commit:** `c91615b2` fix(i18n): yetki gruplari hata kodlari katalogu guncellendi
 - **Doğrulama:** `bash tools/verify.sh frontend` rc=0, 1.880 test.
 
+### 4. Dokuma menüsü iş sırasına dizildi (kullanıcı onayı: "tamam menüyü iş sırasına göre düzenle, paket çık")
+- **Neden:** Kullanıcı Dokuma menüsünde kayboluyordu; gruplar uçtan uca akışın sırasını izlemiyordu.
+- **Kurul:** CTO ve Şüpheci koşullu onay verdi. Koşullar uygulandı:
+  - yol kümesi birebir testle korunuyor (32 yol, tekrar yok, pano en üstte);
+  - 11 dilde etiket eklendi;
+  - "ortak iskelet" yorumuna Dokuma istisnası yazıldı;
+  - verify yeşil;
+  - Chrome'da masaüstü ve 390 px kontrol edildi.
+- **Yeni sıra:** Tezgah Panosu (üstte) → Kartlar & Analiz → Emir & Planlama (emirler, planlama, çözgü planlama, tedarik) → Çözgü Hazırlık → Tezgah (tezgah planlama, doklar) → Kontrol & Muayene → Hareketler (genel hareket/barkod/paketleme) → Raporlar → Tanımlar.
+- **Dosyalar:**
+  - `layouts/components/sidebar/two-panel/menu-layout.production.ts`
+  - `__tests__/menu-layout.production.test.ts` (4 test; önce kırmızı)
+  - 11 × `assets/i18n/<dil>/b25.json` (`LayoutStandardMenu.ordersPlanning`, `.loom`)
+  - changelog `improvement` maddesi
+- **Commit:** `aebafbb5` feat(production): Dokuma menusu is sirasina dizildi
+
+### 5. Kalite kapısı (backend): makine kuyruğu silme ucu yetkisi
+- **Neden:** `verify.sh all` kırmızıydı. Sebep: `ProductionEndpointPermissionContractTests.EveryDeleteEndpoint_RequiresDeleteOrManage`. Abdurrahman'ın `d169f183` commit'indeki `MachineOpsController.Remove` (DELETE) `production:update` istiyordu.
+- **Ne yapıldı:** `production:delete` yapıldı. Dokumadaki eşi `LoomOperationsController.RemoveQueueItem` de böyle. Tek satır; mevcut test kırmızıdan yeşile döndü.
+- **Sonuç:** backend 5.133 test geçti, `[verify] BAŞARILI (backend)`. Frontend 1.884 test geçti.
+- **Commit:** `2864cdfa` fix(auth): makine kuyrugundan cikarma production:delete ister
+
+### 6. DEV paketi 1.0.2.1051
+- **Adımlar:**
+  - api ve spa `docker build` (`--build-arg VERSION=1.0.2.1051`), etiketler `:1.0.2.1051` ve `:latest`, push;
+  - `curl http://217.131.14.57:56806/abdusselam.kosecik/1.0.2.1051` → status ok, up_rc 0.
+- **Doğrulama:**
+  - API `/api/v1/auth/external/providers` ilk denemede 502 verdi, 15 sn sonra 200;
+  - SPA 200, ana pakette `ordersPlanning` anahtarı var.
+- İçerik: Planlanan Miktar düzeltmesi, Dokuma menü sırası, yetki düzeltmesi, Abdurrahman'ın 10-24 commit'leri (yetki grupları, makine planlama).
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
@@ -82,10 +113,11 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **İki sekme:** iki sekmede aynı anda çalışınca refresh token yeniden kullanım tespiti oturumu kapattı (test notu).
 
 ## Kararlar
-- DEV'e paket çıkılmadı. DEV 1050'de `419fa88e` yok; düzeltme dev dalında bekliyor.
-- Dokuma menüsünü iş akışı sırasına göre yeniden dizme önerisi kullanıcıya sunuldu; onay bekleniyor.
+- İlk turda DEV'e paket çıkılmadı. Kullanıcı menü sırasını onaylayınca 1.0.2.1051 çıkıldı.
+- Makine kuyruğu silme yetkisi "update"ten "delete"e çekildi. Yalnız güncelleme yetkisi olan kullanıcı artık kuyruktan emir çıkaramaz; dokumadaki tezgah kuyruğuyla aynı davranış.
 
 ## Açık kalanlar / sonraki adım
 - **0 m emirler:** `419fa88e` sonrası 0 m kaydedilmiş Boyahane dışı emirler varsa elle düzeltilmeli (CTO koşulu). Abdurrahman'a haber verilmeli.
 - **Backend kuralı (CTO önerisi, teknik borç):** Boyahane dışı emirde PlannedQuantity 0 ise kaydı engellemek veya uyarmak.
-- Yukarıdaki bulguların düzeltilmesi ve Dokuma menüsünün akış sırasına dizilmesi.
+- Yukarıdaki bulguların düzeltilmesi: modül atlamaları, gizli ön koşul uyarıları, analiz formu taşması ve kaydedilmemiş değişiklik uyarısı.
+- Abdurrahman'a `2864cdfa` yetki düzeltmesini bildir.
