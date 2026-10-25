@@ -51,9 +51,34 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - FE-144/FE-145 ekranları ve `delivery-manifest.json`; yayın; ardından QA-129 (panel alarmının uçtan uca WS ölçümü, gerçek telefonla BLF, t0007'de rota/iç kayıt).
 - `deploy/nginx-dogrula.sh` `script_tavan_kontrol` kırmızı (dokunulmayan alan, önceden var).
 
+### 4. Sprint-48 frontend (frontend-dev-1) — BR-FE-144 CDR iç yön, BR-FE-145 santral Faz B ekranları
+- **Neden:** Backend `be4f3318` uçları (giden rota, pbx-settings, rehber, `cdr?direction=int`) ekransızdı.
+- **Ne yapıldı:**
+  - **BR-FE-144 (#19 CDR):** yön filtresi (Tümü/Gelen/Giden/İç) → `GET /cdr?direction=in|out|int` (`api/ops.ts` `CdrQuery.direction`); `internal` satırı "İç" yazılır. CSV dışa aktarma ucu (`CdrExportRequestDto`) yön almıyor → filtre seçiliyken not satırı "yön filtresi dosyaya uygulanmaz" der (BORÇ, backend işi).
+  - **#74 Giden Rotalar** `/telephony/outbound-routes` (`outboundroute.read`/`write`): öncelik, desen (`_` önekli gösterim), numara biçimi, sıralı trunk rozetleri, sunucunun `effective` hükmü (StatusLed). Diyalog: trunk ekle/çıkar + ↑/↓ ile sıra; acil rota anahtarında desen alanı çizilmez ve `pattern` gövdeye yazılmaz. Önizleme yok (uç yok).
+  - **#75 Santral Ayarları** `/telephony/pbx-settings` (`pbxsettings.write`): acil numara listesi — "Ülke varsayılanı" gövdede `emergencyNumbers: null`, "Özel liste" çip ekle/çıkar; bilgi çağrısı hedefi; iç görüşme kaydı (`recordInternalCalls`) anahtarı. Boş liste istemcide engellenmez, sunucunun `emergency_numbers_empty` reddi cümleye çevrilir.
+  - **#76 Rehber** `/phonebook` (`phonebook.read`, grup `common` — staff da görür; yazma `phonebook.write`): dış numaralar (maskeli) + dahililer, istemci tarafı arama, `*0xx` hızlı kod. Düzenlemede numara alanı boş açılır; boşsa `number` anahtarı gövdeye yazılmaz.
+  - **#72:** `feature_code_speed_dial_conflict` mesajı. Toplam 27 yeni hata kodu `PBX_ERROR_TEXT`'e (kodlar `PbxRoutingEndpoints.cs` + `EmergencyNumberRules.Validate`'ten doğrulandı).
+  - 9 dilde 140 anahtar; `screens.json` 3 satır (#74-#76, phase S48), `delivery-manifest.json` 3 birincil eylem, `npm run screens:gen`; menü golden (owner/supervisor pbx+hybrid +3, staff pbx+hybrid +`/phonebook`), ScreenRegistry sayıları 84/74/75; duman kapsamı + 6 adet 403 satırı; `doc/rol-ekran-matrisi.md` ve `doc/ekran-yazma-yollari.md` testten üretildi.
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/pbx/{pbxRoutingApi.ts,OutboundRoutesScreen.tsx,OutboundRouteDialog.tsx,PbxSettingsScreen.tsx,PhonebookScreen.tsx,PhonebookEntryDialog.tsx,PbxRoutingScreens.test.tsx,pbxRoutingApi.test.ts,pbxApi.ts,PbxScreens.module.css}`, `screens/cdr/CdrScreen{,.test}.tsx`, `api/ops.ts`, `screens/registry.ts`, `*.generated.ts`, `i18n/messages/*.json`, `src/Pbxtr.Api/Platform/{Screens/screens.json,Delivery/delivery-manifest.json}`, `tests/Pbxtr.Api.Tests/Platform/{Authorization/TenantModuleMenuGolden.cs,Screens/ScreenRegistryTests.cs}`, `deploy/demo/{smoke-demo.sh,duman-ekran-kapsami.json}`, `doc/{rol-ekran-matrisi,ekran-yazma-yollari}.md`.
+- **Komutlar:**
+  ```bash
+  cd src/Pbxtr.Web && npm run screens:gen && npx tsc -b            # rc=0
+  npx vitest run                                                     # 282 dosya, 2483/2483
+  PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Api.Tests --filter Matris_belgesini_URET
+  PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Architecture.Tests --filter Ekran_yazma_yollari_belgesini_URET
+  dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~Pbxtr.Api.Tests.Platform"   # 1467/1469 (2 skip)
+  dotnet test tests/Pbxtr.Architecture.Tests                                                  # 857/857
+  dotnet format tests/Pbxtr.Api.Tests --verify-no-changes --include <2 test dosyası>          # rc=0
+  bash deploy/uretilmis-dosya-kontrol.sh                                                      # commit sonrası rc=0
+  ```
+- **Sonuç / doğrulama:** hepsi yeşil. İlk tam vitest koşusu `viMockTargets` bekçisinde 1 kırmızı verdi (yeni testte kullanılmayan `useSessionOptional` ezmesi) → silindi. Integration.Tests yerelde koşturulmadı (Docker yok).
+- **Commit:** `7e2a4a9c` — BR-FE-144/145: CDR ic yon filtresi; Giden Rotalar, Santral Ayarlari, Rehber ekranlari
+
 ## Kararlar
 - `*79` penceresi kabul edildi (iki katman modeli + S76-12a negatif testi); çözüm DND değişiminde anında rerender — P3.
 - Agent rolünün telefondan `*72` yapabilmesi kabul: özellik kodu dahiliye bağlıdır, role değil.
 
 ## Açık kalanlar / sonraki adım
-- Sprint-48 → FE-144/145 → yayın → QA-129; ardından Sprint-49.
+- Sprint-48: FE-144/145 bitti (`7e2a4a9c`) → yayın → QA-129; ardından Sprint-49.
+- BORÇ: CDR CSV dışa aktarma ucu yön filtresi almıyor (`CdrExportRequestDto`).
