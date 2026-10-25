@@ -89,6 +89,43 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
   - SPA 200, ana pakette `ordersPlanning` anahtarı var.
 - İçerik: Planlanan Miktar düzeltmesi, Dokuma menü sırası, yetki düzeltmesi, Abdurrahman'ın 10-24 commit'leri (yetki grupları, makine planlama).
 
+### 7. Modül atlaması, gizli ön koşul uyarıları, analiz formu (kullanıcı: "tamam onlari da duzelt, paket cik")
+- **Kurul:**
+  - CTO, Şüpheci ve Güvenlik koşullu onay verdi; koşullar uygulandı.
+  - UX için Chrome'da elle kontrol edildi: 1494, 1280 ve 390 px; menü ve onay penceresi denendi.
+- **Sol menü** (`two-panel.utils.ts` `findActiveModuleKey`, `two-panel-sidebar.tsx`, `nav-prefs.ts`):
+  - Yalnız menü sayfasının tam kendisi (yol eşit, sorgu eşleşir) modül değiştirir.
+  - Detay, yeni kayıt ya da menüde olmayan sayfada kullanıcı geldiği modülde kalır.
+  - Son modül `sessionStorage` `vuo.navLastModule` anahtarında tutulur. Menüde artık yoksa (yetki/lisans) yok sayılır.
+  - Doğrulama: Dokuma'dan "Yeni Makine" (`/production/machines/new`) ve üretim emri formu açıldı; menü Dokuma'da kaldı, yenilemeden sonra da.
+- **Tezgah planlama:**
+  - `UnplannedOrdersResult.MissingAnalysisCount`: liste ile aynı "açık dokuma emri" koşulunda, analizsiz emir sayısı.
+  - Panelde uyarı ve Çözgü Planlama bağlantısı.
+- **Levent bağla:** dokuma leventi yoksa bağlantı verilir; kuyruğun ilk emri varsa `/production/weaving/beam-processes/{orderId}`, yoksa liste sayfası.
+- **Top oluşturma:**
+  - Yeni port metodu `IInventoryMrpQueryService.GetLotTrackedInventoryIdsAsync`: `HasSerialTracking`, IN-list, AsNoTracking, tenant filtresi.
+  - `WovenRollTargetResolver.DescribeAsync` seri takibi kapalıysa `RollItemNotLotTracked` hatası ekler.
+  - Yeni `fabric_cut/roll_target_errors.tsx` hataları düğmeden önce gösterir ve kumaş kartına bağlantı verir.
+  - Kayıttaki asıl kontrol aynen duruyor.
+- **Analiz formu:**
+  - **Taşma:** `weaving_lines_grid.tsx` tablo kabı `relative w-0 min-w-full overflow-x-auto` oldu (ihtiyaç tablolarıyla aynı kalıp). Başlık ızgarası `[&>*]:min-w-0` aldı (mobilde 63 px taşma).
+  - **Neden:** `overflow-x-auto` kabın en küçük içerik genişliği, flex düzende üst katmana yansıyordu.
+  - **Kaydedilmemiş değişiklik:** `useUnsavedChanges(inputKey)` bağlandı; başarılı kaydetme ve silmede `markSaved`.
+  - Sayfanın 4 test dosyası, `useBlocker` veri yönlendiricisi istediği için `createMemoryRouter`'a geçti.
+- **Testler:**
+  - backend: port 3, tezgah planlama 2, top hedefi 2;
+  - frontend: menü 6, nav-prefs 2, tezgah planlama 2, levent bağlama 2, top hedef hataları 3, kaydedilmemiş değişiklik 3.
+- **Doğrulama:** `verify.sh all` yeşil (backend 5.140, frontend 1.902).
+- **Commit:** `1498fbcd`
+
+### 8. DEV paketi 1.0.2.1052
+- api ve spa build/push; tetik status ok.
+- API 200; ana pakette `vuo.navLastModule` ve `ordersPlanning` var.
+
+### Test notu
+- chrome-devtools'ta `evaluate_script` içinden yapılan router geçişi, bekleyen `window.confirm`'i bir sonraki araç çağrısına erteliyor ("hayalet" onay penceresi).
+- Kaydedilmemiş değişiklik testinde `click` aracı ve `handle_dialog` kullanılmalı.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
@@ -119,5 +156,12 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 ## Açık kalanlar / sonraki adım
 - **0 m emirler:** `419fa88e` sonrası 0 m kaydedilmiş Boyahane dışı emirler varsa elle düzeltilmeli (CTO koşulu). Abdurrahman'a haber verilmeli.
 - **Backend kuralı (CTO önerisi, teknik borç):** Boyahane dışı emirde PlannedQuantity 0 ise kaydı engellemek veya uyarmak.
-- Yukarıdaki bulguların düzeltilmesi: modül atlamaları, gizli ön koşul uyarıları, analiz formu taşması ve kaydedilmemiş değişiklik uyarısı.
+- Kalan bulgular:
+  - analiz formunda ham en kumaş kartından gelmiyor;
+  - malzeme ve iplik seçiciler süzülmüyor;
+  - ham İngilizce doğrulama mesajı;
+  - Kalite alanı 5 karakter hatası;
+  - dokuma emri alt başlığı ve tarih biçimi;
+  - emir durumu değişmiyor;
+  - iplik stoğu düşmüyor.
 - Abdurrahman'a `2864cdfa` yetki düzeltmesini bildir.
