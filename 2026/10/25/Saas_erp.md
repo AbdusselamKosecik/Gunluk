@@ -258,6 +258,38 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **Commit:** `6bd7b1d1` — fix(landing): koyu temada bölüm başlıkları görünmüyordu.
 - **DEV:** 1.0.2.1058 (sağlık 200). Bu sürüm başkasının `StockAllocation_PartialLot` migration'lı stok işini de içeriyor; o iş de kalite kapısından geçti.
 
+### 14. DEV dosya yükleme (MinIO) düzeltildi (kullanıcı: "minio ayarını da sen düzelt")
+- **Neden:** DEV'de ve yerelde bütün dosya yüklemeleri hata veriyordu (sohbet ekleri, `/api/v1/files/upload` 500). Teşhis:
+  1. API `cdn.vuo.app`'i kullanıyordu. DNS bu adresi .57'ye çözüyor, ama .57 traefik'inde bu ad için router yoktu (404). `cdn.vuo.app` router'ı servis sunucusunun traefik'inde tanımlıydı.
+  2. Kullanılan erişim anahtarı servis sunucusundaki MinIO'da hiç yoktu (`mc admin user list` boş döndü).
+  3. .57'deki `certs/vuo_app.crt` yalnız yaprak sertifikayı içeriyordu. Linux/.NET istemcisi "unable to get local issuer certificate" hatasıyla düşecekti.
+- **Ne yapıldı:**
+  - **Servis sunucusu (100.109.159.58), `vuoapp-minio`:**
+    - `vuoapp-dev` adlı politika oluşturuldu. CreateBucket, ListBucket ve GetBucketLocation yalnız `arn:aws:s3:::vuoapp-dev-*` için; Get, Put ve DeleteObject yalnız `vuoapp-dev-*/*` için.
+    - `vuoapp-dev` kullanıcısı açıldı ve politikaya bağlandı.
+    - Gizli anahtar yerelde rastgele üretildi ve iki sunucuya stdin ile aktarıldı. Ekrana hiç yazdırılmadı.
+  - **.57 `~/dev`** (yedekler: `appsettings.json.bak-20261025-minio`, `docker-compose.yml.bak-20261025-minio`, `traefik-local-tls.yml.bak-20261025`):
+    - `appsettings.json` MinIO bölümü: Endpoint `cdn.vuo.app`, AccessKey `vuoapp-dev`, SecretKey, UseSSL true.
+    - `traefik-local-tls.yml`: `minio-cdn` router'ı eklendi (websecure, `Host(cdn.vuo.app)`, `http://192.168.31.13:9090`, `passHostHeader`). certFile artık `certs/vuo_app.fullchain.crt`.
+    - Tam zincir dosyası, yaprak sertifikaya AIA'dan indirilen Sectigo DV R36 ara sertifikası eklenerek üretildi (`openssl verify` OK). Orijinal dosyaya dokunulmadı.
+    - `docker-compose.yml` vuoapp-api ortamına `MinIO__Endpoint`, `MinIO__AccessKey` ve `MinIO__UseSSL` eklendi. Konteyner yapılandırması değiştiği için webhook API'yi yeniden oluşturdu.
+  - **Yerel:** gitignore'daki `src/backend/VuoApp.Api/appsettings.Development.json` aynı anahtar ve uç noktayla güncellendi (yedek `.bak-20261025-minio`).
+  - **Repo:** `docs/runbooks/dev-deploy.md` dosyasına "DEV dosya depolama (MinIO)" bölümü eklendi.
+- **Komutlar:**
+  ```bash
+  # servis sunucusu: politika + kullanıcı (gizli anahtar stdin'den okunur)
+  docker exec -i vuoapp-minio sh -c 'read S; ... mc admin policy create local vuoapp-dev /tmp/p.json; mc admin user add local vuoapp-dev "$S"; mc admin policy attach local vuoapp-dev --user vuoapp-dev'
+  # .57: rota + compose ortamı -> scratchpad/dev-minio-route.sh (ssh 'bash -s' < script)
+  curl http://217.131.14.57:56806/abdusselam.kosecik/1.0.2.1058-minio   # compose up -d, API yeniden oluştu
+  node --use-system-ca scratchpad/e2e-dev-chat.cjs <memory> <signalr cjs>
+  ```
+- **Sonuç / doğrulama:**
+  - `https://cdn.vuo.app/minio/health/live` dışarıdan ve sunucudan sıkı TLS doğrulamasıyla 200 döndü; app-dev de sıkı TLS ile 200.
+  - DEV uçtan uca testte 2 dosyalı mesaj gönderildi: yanıt 200, `attachments=2`, canlı MessageReceived geldi.
+  - Presigned indirmeler `cdn.vuo.app`'ten 200 döndü; content-type ve attachment başlıkları doğru.
+- **Commit:** `32a74040` — docs(runbook): DEV dosya depolama zinciri.
+- **Not:** Diğer ekip üyelerinin yerel `appsettings.Development.json` dosyalarına yeni anahtar gerekiyor; anahtar sunucudaki dosyadan alınmalı.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
