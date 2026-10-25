@@ -75,6 +75,76 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - **Sonuç / doğrulama:** hepsi yeşil. İlk tam vitest koşusu `viMockTargets` bekçisinde 1 kırmızı verdi (yeni testte kullanılmayan `useSessionOptional` ezmesi) → silindi. Integration.Tests yerelde koşturulmadı (Docker yok).
 - **Commit:** `7e2a4a9c` — BR-FE-144/145: CDR ic yon filtresi; Giden Rotalar, Santral Ayarlari, Rehber ekranlari
 
+## QA-129 — Sprint-48 santral özellikleri gerçek santralde (176.88.41.220, imaj demo-7e2a4a9c607f)
+
+### Yöntem
+- Panel uçları UI'nin kullandığı gibi API'den çağrıldı (`demo.sahip`, modül için `demo.superadmin`). Giriş betiği parolayı `.env`'den değişkene okur, basmaz; jetonlar `/root/qa129` (700) altındaydı ve sonda silindi.
+- t0007'de pbx modülü açıldı: `PUT /tenants/{t0007}/modules {"overrides":[{"module":"pbx","enabled":true}],"confirm":true}`.
+- Geçici santral nesneleri:
+  - `pbxtr.d/dialplan/zzqa129-lab.conf`: izin damgalı / damgasız 1042 taklidi, cevaplayan bacak.
+  - `pbxtr-lab.d/zzqa129-pjsip.conf`:
+    - Santral kendine `t0007-1043` olarak REGISTER oldu (outbound_auth = mevcut auth nesnesi, sır okunmadı).
+    - `zzqa129-sink` endpoint'i `match_request_uri` ile gelen INVITE'ı cevapladı; 1043 telefonunun yerine geçti.
+    - `zzqa129-loop` iç görüşme için gerçek PJSIP kanalı üretti.
+- **Ders:** CLI `channel originate` 30 sn cevap süresi koyar. Uzun ölçümde ters kur: `Local/w@cevap-baglami extension NUM@test-baglami`.
+
+### Sonuç (8 adım)
+1. **Migration + RLS — GEÇTİ.** `20261024234849` uygulanmış; dört tabloda `relrowsecurity` + `relforcerowsecurity` + policy.
+2. **Rotasız tenant — GEÇTİ.**
+   - pbx kapalı t0007 yeni kodla yeniden üretildi: 6 dosyanın 5'i byte-byte aynı.
+   - Dialplan'de yalnız acil bloğu eklendi (+34 satır, −0). Acil dal tasarım gereği her tenant'ta.
+   - t0012/t0000/t1000 da 02:42:15'te sistem aktörüyle yeniden üretildi; t0012 farkı +26 / −0 (acil bloğu).
+3. **Rota — GEÇTİ.**
+   - `05321112233` → rota1, `PBXTR_OR_DIAL=905321112233`, ölü trunk (`zzqa-olu`, 127.0.0.1:5999). PJSIP timer B ile 32 sn sonra operator-lab'a geçti; carrier `hedef=905321112233` aldı.
+   - `0212…` → rota2; eşleşmeyen numara → rota0.
+   - API: 409 `outbound_route_name_taken`, 422 `outbound_route_pattern_invalid`.
+4. **Acil 19999 — GEÇTİ.**
+   - pbx-settings API: 4 adet 422 (`empty`, `conflict`, `notify_target_unknown`, `format`) + 200.
+   - Damgasız 1042 → `-out:1 Goto emerg` → UserEvent `PbxtrEmergencyCall`.
+   - Bilgi bacağı `Originate(Local/1043…,a)` gerçekten 1043'ü çaldırdı, cevaplandı.
+   - Carrier `hedef=19999` aldı; WS `alarm.raised` (metric `emergency_call`, critical, "ACİL ARAMA: 19999 — dahili 1042") aynı saniyede geldi.
+   - **Edge DURDURULMUŞKEN:** 19999 yine carrier'a çıktı; normal `0212…` `BLOCKED_UNKNOWN` → Congestion. Edge yeniden başlatıldı.
+5. **İç kayıt — GEÇTİ (bir gözlemle).**
+   - Gerçek PJSIP kanalıyla `-local` → `PBXTR_RECI=1`, MixMonitor dosyası 484524 bayt.
+   - CDR `recordingfile=t0007/2026/10/1792896828.351.wav`.
+   - Kayıt hattı dosyayı MinIO'ya taşıdı (`recording_assets`).
+   - `/api/v1/cdr?direction=int` çağrıyı `internal`, `hasRecording:true` döndü.
+   - **Gözlem:** filtresiz listede aynı çağrı `unknown` görünüyor. Sebep `manager.conf channelvars = PBXTR_TENANT,PBXTR_ORIGIN,QUEUE_PRIO` — `PBXTR_DIR` yok (belge `asterisk-olay-eslemesi.md:46` var diyor).
+     - Pipeline satırları yön 0 yazıyor; tenant'ta 508 satır böyle.
+     - ETL satırı (yön 3, saniye hassasiyeti) ayrı satır olarak duruyor; liste "en yeni started_at" kuralıyla pipeline satırını seçiyor.
+     - Düzeltmesi `manager.conf` + `manager reload` ister; Karar #70 kırmızı çizgisi olduğu için düzeltilmedi, kart önerildi.
+6. **Rehber — GEÇTİ.**
+   - `*011` oluşturuldu; numara sunucuda maskeli (`+90 532 111 •• ••`), liste ve denetimde açık numara yok (`numberLast2`).
+   - 409 `phonebook_speed_dial_taken`, 422 `phonebook_speed_dial_invalid`, özellik kodu `*011` → 422 `feature_code_speed_dial_conflict`.
+   - Telefondan `*011` → `-sd` → `-out,+905321112233` → call-permission AGI → gerçek karar `BLOCKED_IYS`.
+   - **Gözlem:** hızlı arama E.164 (`+90…`) ile girdiği için ulusal desenli rotalar (`_05X.`) ona uymuyor; varsayılan zincire düşüyor. Aynı sınıf yönlendirme dış hedefi ve pbxtr originate için de geçerli; tasarım kararı gerekiyor.
+7. **BLF — KISMEN.**
+   - t0007 endpoint'lerinde `subscribe_context=pbxtr-t0007-hint`; `core show hints` 1042–1048.
+   - 1043 hint Idle → InUse → Idle (çağrı sırasında). Watchers iç (gerçek SIP aboneliği 0).
+   - t0007'de SUBSCRIBE yapılamadı (cihaz sırrı okunmaz); SUBSCRIBE/NOTIFY aynı üreticiyle t9948'de ölçülmüştü.
+8. **Temizlik — GEÇTİ.**
+   - Silinenler: 2 rota, `zzqa-olu` trunk'ı (If-Match ile), rehber satırı, `tenant_pbx_settings` satırı, modül override `[]`, lab dosyaları (dialplan reload + `module reload res_pjsip.so`).
+   - Ayrıca: Redis acil alarmı (`live:alarm:*` + index), 10 spool dosyası, 6 MinIO nesnesi + 6 `recording_assets` satırı, sunucudaki `/root/qa129`.
+   - **t0007 md5 6/6 QA başlangıcıyla (yeni kod, pbx kapalı) aynı:** dialplan `70516ec9…`, ringgroups `4f43e977…`, moh `b181743…`, parking `f7c0d452…`, pjsip `b7937cce…`, queues `b1b2f4e1…`.
+   - Kalanlar: içi boş `zzqa129-int` bağlam kabuğu (0 uzantı, kaynak dosya yok, restart'ta gider). Pencerenin 48 CDR + 187 call_events satırı (koordinatöre). Denetim satırları tasarım gereği duruyor.
+
+### Bulunan ürün hatası ve düzeltme
+- **Belirti:** yalnız `{"recordInternalCalls":true}` gönderen PUT, özel acil listesini (19999) varsayılana ve bilgi hedefini (1043) yoka çevirdi (denetim 02:50:00Z).
+- **Sebep:** istek kaydında `string?`/`IReadOnlyList?` — "gönderilmedi" ile "açık null" aynı `null`.
+- **Kapsam:** FE `settingsBody` hep tam gövde gönderdiği için ekran etkilenmiyordu; tuzak API sözleşmesindeydi.
+- **Düzeltme — commit `b5d9ef22`:**
+  - Acil alanlar `JsonElement` oldu: Undefined = korunur, Null = varsayılan/yok.
+  - Dizi dışı tür ya da dize olmayan eleman 422 döner.
+  - Regresyon testi eklendi; mutasyon KIRMIZI. Api Telephony + Privacy 1809/1811, Architecture 857/857.
+- **Yeniden yayın gerekir** (sunucudaki imaj hâlâ eski sözleşmede).
+
+### Gözlemler (kart önerisi)
+- `manager.conf channelvars`'ta `PBXTR_DIR` eksik → canlı pipeline CDR yönü hep `unknown` (kırmızı çizgi: `manager reload` yasak).
+- Hızlı arama / E.164 hedefler ulusal rota desenlerine uymuyor.
+- Yanıt vermeyen trunk (UDP, cevap yok) failover'ı 32 sn geciktiriyor (timer B); qualify ya da Dial timeout önerilir.
+- Acil alarm Redis'te 24 sa TTL ile tenant başına tek kayıt; `targetKind=queue`, `queueId=emergency` (UI bağlantısı kontrol edilmeli).
+- ETL karantinası aynı satırı her tikte yeniden `crit` logluyor (25 dk'da 2182 satır, t9948 + zzqa test verisinden); 12 sa örtüşme penceresi bitince durur.
+
 ## Kararlar
 - `*79` penceresi kabul edildi (iki katman modeli + S76-12a negatif testi); çözüm DND değişiminde anında rerender — P3.
 - Agent rolünün telefondan `*72` yapabilmesi kabul: özellik kodu dahiliye bağlıdır, role değil.
