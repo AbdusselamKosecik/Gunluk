@@ -236,6 +236,28 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **DEV:** 1.0.2.1057 (sağlık 200).
 - **HATA (düzeltildi):** 1056 imajları önce yanlışlıkla `-dev` eki OLMAYAN `tekbirsoft/vuoapp-api` / `vuoapp-spa` depolarına (`latest` dahil) gönderildi. Prod'a deploy tetiklenmedi. `latest` depo tarafında önceki `0.2.1020`'ye geri bağlandı (`docker buildx imagetools create`), yanlış `1.0.2.1056` etiketleri Hub API ile silindi, sonra doğru `-dev` depolarına gönderildi.
 
+### 13. DEV nginx imaj ayarına geçti + tanıtım sayfası koyu tema (kullanıcı: "nginx'i de değiştirebilirsin… landing ekranında dark modda bazı başlıklar gözükmüyor")
+- **DEV nginx:**
+  - **Neden:** `.57` sunucusunda `~/dev/docker-compose.yml`, SPA'ya eski bir `./nginx.conf` bağlıyordu. O dosyada yalnız /api vardı; WebSocket, X-Robots-Tag, tanıtım ve llms blokları yoktu.
+  - **Ne yapıldı:**
+    - Yedek alındı: `docker-compose.yml.bak-20261025`, `nginx.conf.bak-20261025`.
+    - vuoapp-spa servisindeki `volumes: ./nginx.conf` satırı açıklamalı bir yorumla değiştirildi.
+    - Deploy webhook'u (1057) tetiklendi; SPA yeniden oluşturuldu.
+  - **Doğrulama:** her yanıtta `X-Robots-Tag: noindex, nofollow` var. Sohbet ve bildirim hub'ları DEV'de **WebSocketTransport** ile bağlanıyor; canlı MessageReceived geliyor.
+- **Tanıtım sayfası koyu tema:**
+  - **Neden:**
+    - `.vuo-landing` (min-height:100vh), uygulama kabuğunun yatay flex kapsayıcısında gerilip 900 px'e kilitleniyordu; içerik 8432 px.
+    - Zemin yalnız ilk ekranı boyuyordu. Aşağıdaki şeffaf bölümlerin arkasında body'nin açık rengi (#F4F8F8) kalıyordu.
+    - Koyu temada açık renkli başlıklar kayboluyordu ("Üretim türünüze göre…", "Size dönüş yapalım.").
+    - Açık temada da beyaz olması gereken bölümler gri görünüyordu.
+  - **Ne yapıldı:** `src/frontend/src/features/landing/landing.css` içinde `.vuo-landing`'e `align-self:flex-start` eklendi; changelog maddesi yazıldı.
+  - **Doğrulama:**
+    - Yerelde ve DEV'de landing yüksekliği 8432 px; başlığın altındaki zemin rgb(8,19,21).
+    - Açık temada beyaz/gri sıra korunuyor.
+    - `verify.sh all` rc=0.
+- **Commit:** `6bd7b1d1` — fix(landing): koyu temada bölüm başlıkları görünmüyordu.
+- **DEV:** 1.0.2.1058 (sağlık 200). Bu sürüm başkasının `StockAllocation_PartialLot` migration'lı stok işini de içeriyor; o iş de kalite kapısından geçti.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
@@ -265,7 +287,6 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 
 ## Açık kalanlar / sonraki adım
 - **DEV dosya yükleme (altyapı, kullanıcıda):** DEV API ortamındaki MinIO uç noktası/anahtarı çalışan bir MinIO'ya bakmalı ve anahtar kova oluşturabilmeli (veya tenant kovaları önceden açılmalı). Düzelince sohbet ekleri + stok/dokuma ekleri birlikte çalışır.
-- **DEV nginx:** sunucudaki elle bağlanmış eski nginx ayarı imajdakiyle değiştirilmeli (WebSocket, X-Robots-Tag). Şimdilik /api/hubs + SSE ile çalışıyor.
 - Mesajlaşma aşama 2: sohbet içi arama, ✓✓ okundu, SendToRoleAsync rol süzgeci, Web Push (VAPID).
 - GitHub Billing (Actions DEV Deploy) hâlâ bozuk.
 - **0 m emirler:** `419fa88e` sonrası 0 m kaydedilmiş Boyahane dışı emirler varsa elle düzeltilmeli (CTO koşulu). Abdurrahman'a haber verilmeli.
