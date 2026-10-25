@@ -358,3 +358,94 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - BR-OPS-20 kalan: demo parolası politika uyumlu (≥12) olmalı — sifreler reposu + sunucu `.env` birlikte; o gün hash kopyalama adımı silinir.
 - BR-SYS-145 canlıya yayınla gider; yayın sonrası 1 MB üstü taslak PUT'u ölçülmeli.
 - `align_owner_password` dışında `set_announcement_language` mevcut `maskLevel`'ı geri yazar; `maskLevelConfigured` false idiyse artık true olabilir (değer aynı).
+
+## BR-AST-149 / 148 / 152 + BR-BE-276 / 280 (backend-dev-2)
+
+### Bağlam
+Kullanıcı: "BR-AST-149: bunu yap, P3'ü de yap". İlk sunucu ölçümü `2026-10-25 11:18:58 UTC`, HEAD `58fbaf0c`. BR-QA-131 yayından sonra yapılacak.
+
+### 1. BR-AST-149 — canlı CDR yönü hep `unknown`
+- **Neden:** `AmiEventMapper` `PBXTR_DIR`'i okuyordu. Belge (`asterisk-olay-eslemesi.md:46`) değişkenin listede olduğunu söylüyordu. Ama sunucuda da depoda da `manager.conf` `channelvars = PBXTR_TENANT,PBXTR_ORIGIN,QUEUE_PRIO` idi. AMI listede olmayan değişkeni olaya koymaz. Aynı sınıftan bir kusur daha çıktı: `PBXTR_CHANNEL_LEASE_ID/SLOT` de listede yoktu, bu yüzden dialer kanal kirası hangup'ta hiç serbest bırakılmıyordu (yalnız TTL ile düşüyordu).
+- **Sunucuda nasıl yönetiliyor (ölçüldü):** `/etc/asterisk` host'tan `pbxtr-asterisk`'e bind mount edilmiş. Dosya `vuo:vuo 644`, elle yönetiliyor ve giriş betiği onu ezmez. Sırlar `pbxtr.d/credentials/ami.conf`'ta. `pbxtr-edge` ile `pbxtr-edge-fastagi` `network_mode: container:<asterisk>` ile aynı ağ ad alanını paylaşıyor.
+- **Ne yapıldı (sunucu):**
+  ```bash
+  docker exec pbxtr-asterisk asterisk -rx "core show channels count"   # 0 active
+  cp -p /etc/asterisk/manager.conf /etc/asterisk/manager.conf.bak-20261025T112144Z
+  sed -i 's/^channelvars = PBXTR_TENANT,PBXTR_ORIGIN,QUEUE_PRIO$/channelvars = PBXTR_TENANT,PBXTR_ORIGIN,QUEUE_PRIO,PBXTR_DIR,PBXTR_CHANNEL_LEASE_ID,PBXTR_CHANNEL_LEASE_SLOT/' /etc/asterisk/manager.conf
+  docker restart -t 20 pbxtr-asterisk          # 11:21:52Z, ~8 sn'de healthy
+  docker restart pbxtr-edge pbxtr-edge-fastagi # ağ ad alanı yenilendi
+  ```
+  `manager reload` kullanılmadı (Karar #70). `write = call,agent,originate` satırına dokunulmadı.
+- **Doğrulama:**
+  - `/etc/asterisk` altındaki 54 dosyanın md5'i karşılaştırıldı; yalnız `manager.conf` farklı.
+  - Contact listesi aynı (3 trunk), endpoint sayısı 33.
+  - `manager show connected` → `pbxtr`, `ari show apps` → `pbxtr`.
+  - Uygulama logunda `ARI Stasis uygulamasi 'pbxtr' acildi`, `AMI baglandi` ve `kanal-resync TAMAM` görüldü.
+  - Ağ ad alanında `127.0.0.1:8790` ve `:4573` dinliyor.
+  - `asterisk-sunucu-sapma.sh`: on iddianın onu da TAMAM.
+- **Test çağrıları (11:26Z):**
+  - Dahili `Local/1043@pbxtr-t0007-int`: `Hangup` payload'ında `direction=int`, cdr satırı 3 (int).
+  - Giden `05321112233`: payload `out`.
+  - Gelen (carrier → DID `02122223344`): yön **`out`** çıktı. Bu ikinci bir kusur.
+- **İkinci kusur (kod):** CEL'e göre çağrı `pbxtr-t0007-in`'de başladı (`PBXTR_DIR=in`). Sonra `Goto(pbxtr-dialer,<kuyruk>,1)` ile kuyruğa indi. Oradaki koşulsuz `Set(__PBXTR_DIR=out)` yönü ezdi. `-local` da aynı şekilde gelen rotayı ve kuyruk üyesi bacağını `int`'e çeviriyordu. Düzeltme `ConfigRenderer.DirectionIfUnset`: bu iki aşağı akış bağlamı yönü artık `ExecIf($["${PBXTR_DIR}"=""]?Set(__PBXTR_DIR=…))` ile yalnız boşsa yazar. Santrale yayın + confd teslimiyle girer.
+- **Tekrar sapmasın diye:**
+  - Depodaki `deploy/asterisk-lab/conf/manager.conf` güncellendi.
+  - Runbook (`deploy/asterisk-lab/README.md`) yeniden yazıldı: `manager reload` yerine konteyner yeniden başlatma, edge ×2 ve doğrulama listesi.
+  - `tests/Pbxtr.Architecture.Tests/AmiChannelVarsCoverageTests.cs`: eşleyicinin okuduğu her değişken depo dosyasında olmalı.
+  - `deploy/asterisk-sunucu-sapma.sh` **S10**: sunucudan yalnız `channelvars` satırını okur ve depo satırıyla küme olarak karşılaştırır. Öz-test 53/53; canlı hâl, satır yok, fazla değişken, çift satır, dosya yok ve eksik girdi fikstürleri var.
+  - Belge düzeltmeleri: `asterisk-olay-eslemesi.md`, `asterisk-config-degisiklik-kaydi.md` A7, `OLCULEBILIRLIK-ENVANTERI.md`, `AmiEventMapper` yorumu.
+- **Geri doldurma YAPILMADI:**
+  - Yön 0 olan 458 pipeline satırı var (126 çağrı). Bunların 238'inin ETL ikizi var.
+  - ETL yönü bacağın `dcontext`'inden türetiyor ve `-int` bağlamını tanımıyor. 14 çağrıda ikizler birbiriyle çelişiyor.
+  - Bu değeri kopyalamak, ölçülmemiş bir değeri ölçülmüş gibi göstermek olurdu (`CallDirectionUnmeasured` ilkesi). Satırlar `unknown` kaldı; kart önerisi aşağıda.
+
+### 2. BR-AST-148 — `*79` ~15 sn penceresi
+- **Neden:** confd 10 sn'de bir çekiyor, üstüne reload debounce'u geliyor. Asterisk tarafında itme kanalı yok, yani "anında teslim" yapılamaz. Yeniden üretim zaten aynı transaction'da yapılıyor.
+- **Ne yapıldı:**
+  - DND kapatılınca ARI global'i `PBXTR_DNDOFF_{T}_{N}=1` yazılıyor. DND açılınca global siliniyor (değersiz POST). Soket açılışındaki ilan turu da DND'li dahililerde global'i siliyor.
+  - pbx yolundaki statik kapı `ExecIf($["${GLOBAL(PBXTR_DNDOFF_…)}" != "1"]?Goto(busy))` oldu. Santral yeniden başlarsa global boş kalır ve statik DND aynen geçerli olur (güvenli yön).
+  - S76-12a'nın `DEVICE_STATE` pozitif dal kuralı değişmedi.
+- **Santralde ölçüldü** (geçici `zz148-lab` bağlamı, sonra silindi): global yokken MEŞGUL, `1` iken ÇALDI, `0` iken MEŞGUL. Test global'leri ARI ile silindi (204).
+
+### 3. BR-AST-152 — trunk yeni ölünce 32 sn bekleme
+- **Ne yapıldı:** Yedeği olan trunk denemesi artık `Dial(…,60^10)` (Asterisk 22 ilerleme zaman aşımı). Son trunk 60 sn'de kalıyor. Ana `pjsip.conf`'a dokunulmadı. Acil zincire dokunulmadı.
+- **Santralde ölçüldü:** mevcut `t0007-trunk-lab` endpoint'iyle yanıt vermeyen `sip:999@127.0.0.1:5999`'a arandı.
+  - `60` → `CHANUNAVAIL/32` sn.
+  - `60^10` → `CHANUNAVAIL/10` sn.
+  - Ders: CLI `channel originate` 30 sn'de bacağı kapatır, bu yüzden cevaplayan Local bacakla ters kuruldu.
+
+### 4. BR-BE-276 — ETL karantina log seli
+- `quarantine_call_data` zaten `boolean` (yeni satır mı) dönüyordu, kod bu dönüşü yok sayıyordu. Artık kritik alarm (4902) yalnız ilk karantinada basılıyor. Tekrar okunan satırlar tik başına tek bir Debug özetine giriyor. Bastırma anahtarı DB'deki UNIQUE anahtar olduğu için yeniden başlatma ve çok düğüm onu sıfırlamaz.
+
+### 5. BR-BE-280 — modül değişiminde DID / gece modu önbelleği
+- Yeni `IRouteDecisionCacheInvalidator`. Override PUT'u ve tenant tipi değişimi etkin modül kümesini değiştirince `route:did:` öneki ve `telephony:nightmode` anahtarı commit sonrası, HEDEF tenant ad alanında düşürülüyor.
+
+### Komutlar / testler
+```bash
+mkdir .../scratchpad/dotnet.lock   # kilit; sonda rmdir
+dotnet build pbxtr.sln
+dotnet test tests/Pbxtr.Api.Tests --filter <Telephony|Provisioning>   # 1910 + 2 skip
+dotnet test tests/Pbxtr.Api.Tests --filter <Modules A>                # 1423
+dotnet test tests/Pbxtr.Api.Tests --filter <Modules B + Health>       # 2472
+dotnet test tests/Pbxtr.Api.Tests --filter Pbxtr.Api.Tests.Platform.  # 1485 + 2 skip
+dotnet test tests/Pbxtr.Architecture.Tests                            # 858
+dotnet format pbxtr.sln --verify-no-changes                           # rc=0
+bash deploy/asterisk-sunucu-sapma-selftest.sh                         # 53/53
+bash deploy/asterisk-sunucu-sapma.sh                                  # on iddia TAMAM
+```
+- **Integration (sunucuda DooD, HEAD `e91d637a`):** `AsteriskCdrEtlEndToEndTests` + `TenantModuleAdministrationTenantLeakTests` 6/6 geçti (ETL karantinası ilk turda 3, ikinci turda 0 kritik log).
+- **Mutasyon:** üç değişiklik birlikte bozuldu: `-local` koşulsuz yön, DND kapatma global POST'u kaldırıldı, `DropAfterCommit` kaldırıldı. Dört test KIRMIZI oldu. Geri alınıp yeniden derlenince 46/46 yeşil.
+- **Altın test:** `ConfigRendererOutboundRouteGoldenTests` özetinden önce BR-AST-149/152 değişikliklerini eski biçime çeviriyor ve sayılarını ayrıca ölçüyor (koşullu damga ≥ 2, ilerleme zaman aşımı = trunk − 1). Böylece başka hiçbir bayt değişmediği hâlâ kilitli.
+- **Commit:** `be704e5d` (AST-149/148/152), `e91d637a` (BE-276/280)
+
+## Kararlar (bu tur)
+- `channelvars` = eşleyicinin okuduğu değişkenlerin TAMAMI (6). Sunucu ile depo S10 ile eşit tutulur.
+- Eski `unknown` yönlü satırlara geri doldurma yapılmaz; ETL'nin bacak bazlı yönü çağrı yönü değildir.
+- DND kapatmanın anlık katmanı ARI global'idir, cihaz durumu değil (S76-12a korunur).
+- İlerleme zaman aşımı yalnız arkasında yedek trunk olan denemede uygulanır.
+
+## Açık kalanlar (bu tur)
+- **Yayın gerekli:** renderer (yön, DND global kapısı, `60^10`), DND yayıncısı, ETL logu, modül önbelleği. `deploy/asterisk-lab/` değiştiği için `asterisk-sunucu-sapma.sh` S1 santral imajını geride görür, yani yayın `--santral` ile yapılmalı (imaj yeniden build'i host `manager.conf`'u değiştirmez, o zaten elle güncellendi). Edge değişmedi.
+- Yayın sonrası ölçülecekler: gelen çağrının cdr yönü `in` mi; `*79` anında çalıyor mu (gerçek SIP); BR-QA-131.
+- Kart önerisi: ETL yön eşlemesi `-int` bağlamını tanımıyor ve bacak bazlı; pipeline ile ETL satırı aynı çağrı için iki ayrı `cdr` satırı üretiyor (kesirli ve saniye `started_at`).
+- Kart önerisi: acil zincirde (`-emerg`) yedek trunk varken ilerleme zaman aşımı yok; yeni ölmüş ilk trunk acil çağrıyı 32 sn geciktirebilir.
