@@ -167,3 +167,41 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - **Yeni kartlar:** BR-BE-274 (CSV yön), BR-AST-149 (manager.conf `PBXTR_DIR` channelvars yok — `manager reload` kırmızı çizgi), BR-AST-150 (E.164 → ulusal normalize), BR-AST-151 (trunk failover 32 sn), BR-FE-147 (acil alarm bağlantısı), BR-BE-276 (ETL karantina log seli). 150/151/147 Sprint-49'a alındı.
 - **Commit:** `591d1595` (backlog + sprint-48 BİTTİ), `66375878` (sprint-49 tablosu).
 - **Sonraki:** Sprint-49 backend+Asterisk ajanı başlatıldı (paging, kapı, ConfBridge, Yealink provisioning, nginx /prov/, gece modu, AST-150/151).
+
+## Sprint-49 backend + Asterisk (backend-dev-2)
+
+### 1. Santral Faz C: anons/zil, kapı, konferans, Yealink, gece modu, AST-150/151
+- **Neden:** Sprint-49 kartları BR-AST-145/146/147, BR-BE-271/272, BR-SYS-144, BR-AST-150/151.
+- **Ne yapıldı:**
+  - Migration `20261025035545_PbxFieldFeatures`: `paging_groups`(+üyeler), `paging_bells`, `conference_rooms`, `phone_devices` + RLS; `dial_numbers` sahip tipi `paging_group`/`conference_room` + tetikleyiciler; `tenant_pbx_settings.night_mode*`, `trunk_qualify`.
+  - `ConfigRenderer.Field.cs`: `[pbxtr-{t}-page]` (Page() + `b(intercom)` otomatik cevap, cihaz yoksa beeperr), `-intercom`, `-pgbell` (zil exten `bell-{guid N}` — 12 hane önek çakışma riski yüzünden tam kimlik), `-conf` (PIN = SHA1(oda kimliği+PIN), 3 yanlışta Hangup, dinamik `CONFBRIDGE()` profil, Join/Leave UserEvent), gece modu, trunk `qualify_frequency=10/qualify_timeout=3`.
+  - Giden rota: `PBXTR_OR_NUM` ile +90/0090 → ulusal biçim, rota eşleşmesi ondan; desen `+90…` girilirse 422 `outbound_route_pattern_national`.
+  - `PagingBellJob` (advisory lock 45): çalışma saatine bağlı zil, `OriginateRequest.PagingFirst`.
+  - API: `/api/v1/paging-groups`, `/paging-bells`, `/extensions/{id}/pbx-role`, `/conference-rooms` (+`/participants`), `/phone-devices` (+`/provisioning-link`), `/telephony/night-mode`; anonim `/prov/{tenant}/o/{token}/{file}` (tek kullanımlık, yalnız HTTPS) ve `/prov/{tenant}/{token}/{file}` (kalıcı, parolasız).
+  - Gece modu: panel + `*28/*29` (edge FastAGI izin listesi), `NightModeService` tek yazım gövdesi, denetim + `nightmode.changed`; route-decision gece modunda `Open=false` (fail-open).
+  - nginx `/prov/` bloğu: `pbxtr_prov` 5r/s burst 200, `limit_except GET`, body 1k (deploy + demo ikizi + `nginx-dogrula.sh prov_blogu_kontrol`).
+  - FE: `RealtimeProvider` + `resourceInvalidation` (`conferenceRooms`, `nightMode`), denetim etiketleri 9 dil.
+- **Dokunulan dosyalar:** 85 dosya; ana yeni dosyalar `src/Pbxtr.Api/Modules/Telephony/PbxFieldEndpoints.cs`, `PhoneProvisioningEndpoints.cs`, `NightModeService.cs`, `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.Field.cs`, `src/Pbxtr.Infrastructure/BackgroundJobs/PagingBellJob.cs`, `tests/Pbxtr.Api.Tests/Modules/Telephony/PbxField*Tests.cs`, `ConfigRendererFieldTests.cs`, `ConferenceRoomSignalTests.cs`, `tests/Pbxtr.Integration.Tests/Tests/PbxFieldTenantLeakTests.cs`.
+- **Komutlar:**
+  ```bash
+  dotnet ef migrations add PbxFieldFeatures --project src/Pbxtr.Infrastructure --startup-project src/Pbxtr.Infrastructure --context PbxtrDbContext
+  node src/Pbxtr.Web/scripts/generate-screens.mjs
+  dotnet test tests/Pbxtr.Api.Tests --filter <namespace parçaları>   # tek tek, paralel değil
+  dotnet test tests/Pbxtr.Architecture.Tests
+  dotnet format pbxtr.sln --verify-no-changes ; (cd src/Pbxtr.Web && npx tsc -b && npx vitest run src/app/realtime src/app/screens/system)
+  ```
+- **Sonuç / doğrulama:** Api: Modules parça1 1156, parça2 2726, Platform 1467 (+2 skip), Telephony+Provisioning 1896 (+2 skip) geçti; Architecture 857; vitest 230; tsc -b 0; format temiz; tüm çözüm derlendi. Integration (PbxFieldTenantLeakTests) yalnız derlendi — yerelde Docker yok, koşmadı.
+- **Sunucu ölçümü (176.88.41.220, geçici t9949/zzs49):** Asterisk 22.10.1, app_page/app_confbridge/func_sha1 yüklü. Üretilen t9949 dialplan'i yüklendi, 18 bağlamın priority sayısı render ile birebir. PIN'li oda doğru PIN'le katıldı; 3 yanlış PIN ~20 sn'de kapandı; PIN'siz oda `max_members=2` tuttu; E.164 normalizasyonu 5/5; anons cihazsızken beeperr. Önceki ölçümler: qualify'lı ölü trunk 5 ms CHANUNAVAIL (qualify'sız 32,04 sn), DTMF "19" geçer, "#1" yutulur. Temizlik: zzs49 dosyaları + AstDB silindi, `dialplan reload` + `module reload res_pjsip.so`; t0007/t0012 md5 başlangıçla aynı. Not: ölçüm sırasında `channel request hangup all` koşuldu (test ortamı; o anda başka çağrı var mıydı ölçülmedi).
+- **Commit:** `a85f7322` — Sprint-49 santral Faz C: anons/zil, kapı, konferans, Yealink provisioning, gece modu, E.164 normalizasyonu, trunk qualify
+
+## Kararlar (Sprint-49 backend)
+- Kapı açma kodu yalnız rakam (`#` kör transfer, ölçüldü).
+- Konferans DID'i statik olarak odaya bağlanır → route-decision ve askıya alınmış tenant kapısı atlanır (BORÇ).
+- Zil denetimi yalnız zil çaldığında yazılır (dakikada bir satır üretmemek için).
+- BR-AST-151: qualify 10 sn + timeout 3 sn → trunk yeni öldüğünde ilk ~13 sn içinde bir çağrı hâlâ 32 sn bekleyebilir; `timer_b` global olduğu için ana `pjsip.conf`'a dokunulmadı.
+
+## Açık kalanlar (Sprint-49 backend)
+- nginx `/prov/` bloğu bir sonraki yayında canlıya girer.
+- `nginx-dogrula.sh script_tavan_kontrol` önceden kırmızı (desen `campaigns/.../script/draft`, conf `scripts/{id}/draft`) — bu işle ilgisiz.
+- PbxFieldTenantLeakTests sunucuda (DooD) koşulmalı.
+- FE-146/FE-147 ekranları + QA-130.
