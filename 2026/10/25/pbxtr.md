@@ -297,3 +297,25 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
   - `next_open_at` saniye taşıyor (05:00:37); kozmetik.
   - Tenant'lar arası MAC 409 canlıda ölçülmedi: ikinci pbx tenant + sahip yok.
   - *28'in yetkili kullanıcıyla olumlu telefon yolu ölçülmedi.
+
+## Sprint-49 kapanışı + santral hizmeti (Sprint 46–49) tamam (koordinatör)
+
+- **Neden:** Faz C (anons/zil, kapı telefonu, ConfBridge, Yealink provisioning + nginx /prov/, gece modu, AST-150/151, FE-146/147, OPS-19 demo tenant, QA-130) bitti; `/goal` "tüm sprintleri tamamla" hedefi Sprint-49 ile kapanır.
+- **Yayınlar:**
+  - `demo-8907d5ca615f` (a85f7322 + 6c0f3f9e + 9598bcec + 8907d5ca); edge FastAGI değiştiği için edge elle güncellendi:
+    ```bash
+    tar --exclude=__pycache__ -czf edge-tmp.tgz -C deploy pbxtr-edge   # GÖRELİ yol: Windows C:/ yolunu tar uzak host sanıyor ("Cannot connect to C:")
+    scp edge-tmp.tgz root@176.88.41.220:/root/edge.tgz
+    # sunucuda: aç, CRLF sil, PBXTR_EDGE_KIP=konteyner ./install.sh, docker compose up -d --no-deps --force-recreate edge edge-fastagi
+    ```
+  - `demo-58fbaf0c163b` (b11334a5: tam DID satırı route-decision'a E.164 `+` verir; f532cd4b: OPS-19 betiği + /prov/ compose eşlemesi). Edge değişmedi. Sonrası: app healthy, /health 200.
+- **Kapanış:** `58fbaf0c` — 12 kart Bitti, 8 yeni kart (BR-AST-152, BR-SYS-145, BR-BE-277 dahili kotası agent limitine bağlı, BR-BE-278 yeni tenant node anahtarı elle, BR-BE-279, BR-BE-280, BR-OPS-20, BR-QA-131). ClickUp `fark olan kart: 0, izde olmayan: 0`.
+- **Demo:** "Örnek Fabrika A.Ş." `t1001` (kind pbx, sahip `demo.fabrika`), kurulum `python deploy/demo/ornek-fabrika-kur.py` (idempotent).
+
+## Kararlar
+- Konferans DID'i route-decision'dan geçer (askı + kara liste uygulanır), çalışma saati/gece modu odaya uygulanmaz (`ALWAYS_OPEN`); fail-open'da doğrudan odaya.
+- Canlıda ölçülemeyen iki madde (kiracılar arası MAC 409, yetkili `*28`) entegrasyon testine dayanılarak kabul edildi, BR-QA-131 kartında.
+
+## Açık kalanlar / sonraki adım
+- P2: BR-BE-277, BR-BE-278, BR-AST-149 (manager.conf PBXTR_DIR — Karar #70 nedeniyle konteyner yeniden yaratma penceresi ister).
+- P3: BR-AST-148, BR-AST-152, BR-SYS-145, BR-BE-274/276/279/280, BR-OPS-20, BR-QA-131.
