@@ -449,3 +449,57 @@ bash deploy/asterisk-sunucu-sapma.sh                                  # on iddia
 - Yayın sonrası ölçülecekler: gelen çağrının cdr yönü `in` mi; `*79` anında çalıyor mu (gerçek SIP); BR-QA-131.
 - Kart önerisi: ETL yön eşlemesi `-int` bağlamını tanımıyor ve bacak bazlı; pipeline ile ETL satırı aynı çağrı için iki ayrı `cdr` satırı üretiyor (kesirli ve saniye `started_at`).
 - Kart önerisi: acil zincirde (`-emerg`) yedek trunk varken ilerleme zaman aşımı yok; yeni ölmüş ilk trunk acil çağrıyı 32 sn geciktirebilir.
+
+## Yayın sonrası ölçüm + BR-QA-131 (backend-dev-2, imaj `demo-e91d637a6420` / santral `22-e91d637a6420`)
+
+### Bağlam
+Koordinatör yayını yaptı (asterisk + edge ×2 yeniden yaratıldı). Ölçüm başlangıcı `13:08:05Z`.
+
+### 1. Yayın sonrası durum
+- Sapma betiği S1–S10 TAMAM: imaj `e91d637a6420` güncel, S10 channelvars depoyla aynı. 33 endpoint, 4 contact, AMI `pbxtr` bağlı, ARI `pbxtr` uygulaması kayıtlı.
+- Yeni üretici santrale yayından ~5 dk sonra kendiliğinden ulaştı. `ProvisioningRerenderJob` parmak izi farkını yakaladı; t0007/t0012/t1001 13:11:42–13:11:59'da yeniden üretildi. Koşullu yön damgaları: t0007'de 11, t0012'de 5, t1001'de 17. `dialplan show` ile yüklü olduğu doğrulandı.
+
+### 2. Yön ölçümü (gerçek çağrılar, `core show channels` = 0 iken)
+- **Gelen** (carrier → DID `02122223344`): pipeline cdr `1` (`in`). Yayından önce `2`'ydi.
+- **Dahili** (`Local/1043@pbxtr-t0007-int`): `3` (`int`).
+- **Giden** (`Local/05321112233@pbxtr-t0007-out`): dialplan bacağı `2` (`out`).
+- Not: Local originate'in uygulama bacağı (`;1`) dialplan koşmadığı için 0 kalır. `-int` dış numarayı zaten yönlendirmiyor (Congestion), ilk denemem bu yüzden giden sayılmadı.
+- **Bulunan regresyon (benim BR-AST-149 değişikliğim):** telefonların endpoint bağlamı `-out`'tur ve yön önce `out` yazılır. `-local` yönü yalnız boşsa yazmaya başlayınca, telefondan dahiliye yapılan çağrı (`t1001-2001` → `2001`) cdr'de **2 (giden)** göründü.
+  - **Düzeltme:** `-out`, yerel hedefe atlamadan hemen önce `ExecIf(DIALPLAN_EXISTS(-local)?Set(__PBXTR_DIR=int))` yapar.
+  - **Test:** `Telefondan_yerel_hedefe_atlayan_cagri_once_int_olur` (mutasyonda KIRMIZI). Altın test satırı çıkarıp sayısını (1) ayrıca ölçüyor.
+  - Telephony+Provisioning 1911 geçti / 2 atlandı, Architecture 858, format temiz.
+  - **Commit:** `f497cb4d`. **Yayın gerekir.**
+
+### 3. BR-QA-131 (a) — kiracılar arası MAC 409
+- Ürün yoluyla geçici pbx tenant `t1002` ("BR-QA-131 MAC olcumu (GECICI)") ve sahibi `zzqa131.sahip` kuruldu. Sahip girişi süper admin parola sıfırlamasıyla yapıldı; parola yalnız bellekte kaldı, hiçbir yere basılmadı.
+- t1001'de `00:15:65:13:11:31` 201 ile oluştu (dahili 2002'ye bağlı).
+- t1002'den aynı MAC üç biçimde denendi (`:`, bitişik küçük harf, `-`); üçü de **409 `phone_device_mac_taken`**. Yanıtta t1001 izi yok, t1002 listesinde t1001'in MAC'i görünmüyor.
+- Kontrol: farklı MAC (`…:32`) 201.
+- **Ölçüm notları:** cihaz bir dahili ister (`422 phone_device_extension_unknown`); dahili silme `If-Match` ister (`428`).
+
+### 4. BR-QA-131 (b) — `*28`/`*29` ve BR-AST-148 `*79`
+- **Yöntem:** t1001 (edge anahtarı var). `fabrika.2001`'e API ile geçici `supervisor` rolü verildi (`bundle.pbx` → `nightmode.write`). `pbxtr-lab.d/zz131-pjsip.conf` endpoint'i `outbound_auth=t1001-2001` ile santralin kendisine INVITE attı; sır okunmadı. Gerçek kanal `PJSIP/t1001-2001-…`, bağlam `pbxtr-t1001-out`.
+- **Gece modu ölçümü** için t1001'e geçici DID `+908505550131 → 2002` eklendi. Konferans DID'i tasarım gereği 7/24 açık olduğu için gece modunu göstermiyor (BR-AST-147).
+- **Sonuçlar:**
+  - `*28` → `activated`; panelde `enabled:true`; route-decision `open=0 reason=NIGHT_MODE decision=announce_hangup`.
+  - `*29` → `enabled:false`; karar çalışma saatine döndü (`OUT_OF_HOURS`; bugün Pazar).
+  - Denetim: iki `telephony.nightmode.changed` satırı, aktör `fabrika.2001`, `source: phone`.
+  - Negatif kontrol: rol geri alındıktan sonra `*28` → `PbxtrFeatureCodeRejected` + `beeperr`, gece modu kapalı kaldı.
+- **`*79`:**
+  - `*78` sonrası statik katmanın teslimi 16 sn sürdü. Kontrol araması meşgul dalına girdi (`Gosub(...(BUSY))`, pbx'te meşgul → sesli mesaj).
+  - `*79`'dan 2,8 sn sonra statik `Goto(busy)` hâlâ yüklüydü, global `PBXTR_DNDOFF_T1001_2001=1` idi. Arama `ExecIf 0?Goto(busy)` ile meşgul dalını atladı ve arama yoluna geçti (cihaz kayıtsız → `CHANUNAVAIL`).
+  - Teslim 11 sn sonra statik katmanı kaldırdı. **BR-AST-148 canlıda doğrulandı.**
+
+### Temizlik (kanıt)
+- t1002: cihaz 0, dahili 0, sahip `disabled`, tenant `suspended`. Silme ucu yok; audit_log yüzünden t9052/t9061 emsali gibi askıda kalır.
+- t1001: test cihazı silindi (0), geçici DID silindi (kalan yalnız "Toplantı hattı"), `fabrika.2001` rolleri `staff`, 2001 `dnd=false`, gece modu `false`.
+- Test çağrılarının bıraktığı 2 sesli mesaj temizlendi: 2 MinIO nesnesi (`mc stat` → yok), 2 `voicemail_messages` + 2 `recording_assets` satırı, 2 spool dosyası. Redis'te t1001 için alarm/sesli mesaj anahtarı yok.
+- Lab dosyaları silindi; ardından `module reload res_pjsip.so` + `dialplan reload` (kapalı listeden). ZZ131/DNDOFF global'leri ARI ile silindi (0). Endpoint sayısı 33'e döndü, açık kanal 0.
+- t0007/t0012/t1001 config md5'leri **18/18 aynı**. `/root/qa131` silindi. Sapma betiği: on iddia sağlandı.
+
+## Kararlar
+- Telefondan yerel hedefe giden çağrının yönü `-out`'ta `int`'e çevrilir; `-local` ve `pbxtr-dialer` yönü yalnız boşsa yazar (gelen yön korunur).
+
+## Açık kalanlar
+- `f497cb4d` yayını bekliyor. Yayından sonra t0007/t1001 dialplan md5'i bilinçli olarak değişecek. Ölçülecek: telefondan dahiliye cdr `3`.
+- Gözlem: telefon kaynaklı `telephony.nightmode.changed` denetim satırında `actor_name` boş (aktör kimliği dolu).
