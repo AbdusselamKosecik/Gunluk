@@ -126,6 +126,29 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - chrome-devtools'ta `evaluate_script` içinden yapılan router geçişi, bekleyen `window.confirm`'i bir sonraki araç çağrısına erteliyor ("hayalet" onay penceresi).
 - Kaydedilmemiş değişiklik testinde `click` aracı ve `handle_dialog` kullanılmalı.
 
+### 9. Kalan bulgular, paket A (kullanıcı: "tamamlayalim")
+- **Kurul:** CTO ve Şüpheci koşullu onay verdi; koşullar uygulandı.
+- **Emir durumu:**
+  - `LoomRunCommands.cs` `StartLoomHandler.MarkOrderInProgressAsync`: tezgahtaki emir Status < 3 ise 3 (İşlemde) olur; `StartDate ??=` ve `ProductionOrderStatusChangedEvent` yazılır, aynı transaction'da.
+  - İkinci başlatmada olay tekrar yazılmaz (test var).
+  - Emsal: `CreateScanMovement`.
+- **Analiz formu:**
+  - `applyFabricWidth`: kumaş seçilince ham en boşsa kart eni (`/api/v1/inventory/items/{id}` → `fabric.width`, yeni `fabric-width.api.ts`) yazılır.
+  - Kumaş seçicisi `typeNameCi=*dokuma` süzgecini kullanır.
+  - `linesReadyForCalc`: tel ya da tekrarı 0 olan satırla hesap isteği gitmez; backend Ends/Repeat mesajları Türkçe.
+- **Kumaş kartı:**
+  - `InventoryFabricLimits` sabitleri: entity yapılandırması ve `SaveInventoryFabricValidator` aynı kaynaktan; `SetValidator(...).When(Fabric != null)`.
+  - Kalite girişi `maxLength=5`.
+- **Emir alt başlığı:** `subtitleByType.{1,2,3,4,6}` ve `subtitleGeneric` (11 dil); Boyahane eski metni korur. Eski boyahane crash testi `findByText`'e çevrildi.
+- **Yapılmadı:**
+  - Tarih biçimi: 61 yerel `<input type=date>`, tarayıcı diline göre çiziliyor. Ayrı karar.
+  - İplik sarfı (F6c): ayrı paket.
+- **Doğrulama:**
+  - `verify.sh all` yeşil (backend 5.154, frontend 1.916).
+  - Canlı kontrol: emir alt başlığı "Dokuma kumaş üretim emri"; kumaş seçicisinde süzgeç; DK-POPLIN-160 seçilince ham en 160.
+- **Commit:** `ca644613`. DEV 1.0.2.1053 yayında, API 200.
+- **F6c planı:** Plan ajanı özeti scratchpad'de `f6c-plan.md`. Kurula gidiyor.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
