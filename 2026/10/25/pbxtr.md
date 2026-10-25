@@ -205,3 +205,46 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - `nginx-dogrula.sh script_tavan_kontrol` önceden kırmızı (desen `campaigns/.../script/draft`, conf `scripts/{id}/draft`) — bu işle ilgisiz.
 - PbxFieldTenantLeakTests sunucuda (DooD) koşulmalı.
 - FE-146/FE-147 ekranları + QA-130.
+
+---
+
+## Sprint-49 frontend — BR-FE-146 / BR-FE-147 (frontend-dev-1)
+
+### 1. Santral Faz C ekranları (#77–#79) + Gece Modu
+- **Neden:** Backend `a85f7322` uçları (PbxFieldEndpoints) ekransızdı; sprint-49 kartı BR-FE-146.
+- **Ne yapıldı:**
+  - `screens.json`'a #77 `phone-devices` `/telephony/phone-devices` (`phonedevice.read`), #78 `paging` `/telephony/paging` (`paging.read`), #79 `conference-rooms` `/telephony/conference-rooms` (`conference.read`); hepsi `module: pbx`, faz S49, sortOrder 100/110/120 (pbx-settings'ten sonra). `npm run screens:gen`.
+  - `delivery-manifest.json`'a 3 birincil `*.load` eylemi. Tablo adı ilk denemede `inbound_dids` yazıldı; `DeliveryManifestDataSourceTests` yakaladı → gerçek tablo `dids`.
+  - `pbxFieldApi.ts`: tipler + gövde kurucular. PIN üç hâlli (anahtar yok = koru, `null` = kaldır, dize = yaz). Konferans `maxMembers`/`didId` düzenlemede TAM yazılır — sunucu gönderilmeyen kapasiteyi varsayılana, DID'i bağlantısıza düşürüyor (kod okundu: `ToInput`). Cihaz düzenlemesinde MAC gönderilmez. Zil `time` yalnız `fixed`'te. `intField` yalnız biçim denetler (sınır sunucuda). Hata kodları `PBX_ERROR_TEXT`'e yayıldı.
+  - #77: tek kullanımlık provisioning bağlantısı yalnız POST/`provisioning-link` yanıtında, bir diyalogda bir kez, kopyala düğmeli. `provisioningConfigured=false` uyarısı.
+  - #78: Tabs (Gruplar / Ziller / Cihaz rolleri); kapı kodu tabloda gösterilmez, düzenlemede gizli alanda tutulur (boş gönderilse sunucu siliyordu).
+  - #79: canlı katılımcılar REST + WS `conference.updated {room,count}` (`useRealtimeEvent`; `RealtimeInvalidationInventory` istisna listesine gerekçeyle eklendi). 503 `conference_live_unavailable` "boş oda" diye yazılmaz.
+  - Gece Modu: `NightModeControl` #75'in başında (pbx tenant'ında dashboard yok). `nightmode.changed` ile tazelenir.
+  - #75: `trunkQualify` anahtarı; kayıt artık kısmi yazım (`settingsPatch`, yalnız değişen anahtar).
+- **Dokunulan dosyalar:** `src/Pbxtr.Web/src/app/screens/pbx/{pbxFieldApi,PhoneDevicesScreen,PhoneDeviceDialogs,PagingScreen,PagingDialogs,ConferenceRoomsScreen,ConferenceRoomDialog,NightModeControl}.tsx|ts`, `PbxSettingsScreen.tsx`, `pbxRoutingApi.ts`, `pbxApi.ts`, `PbxScreens.module.css`, `registry.ts`, 9 dil i18n (267 anahtar), `screens.json`, `delivery-manifest.json`, `TenantModuleMenuGolden.cs`, `ScreenRegistryTests.cs` (87/77/78), `deploy/demo/smoke-demo.sh` (+8 adet 403), `duman-ekran-kapsami.json`, `doc/rol-ekran-matrisi.md`, `doc/ekran-yazma-yollari.md`.
+- **Komutlar:**
+  ```bash
+  cd src/Pbxtr.Web && npm run screens:gen && npx tsc -b && npx vitest run && npm run guard:no-polling
+  PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Api.Tests --filter FullyQualifiedName~RoleScreenMatrixTests
+  PBXTR_WRITE_DOCS=1 dotnet test tests/Pbxtr.Architecture.Tests --filter FullyQualifiedName~ScreenWritePathEvidenceTests
+  dotnet test tests/Pbxtr.Api.Tests --filter FullyQualifiedName~Pbxtr.Api.Tests.Platform
+  dotnet test tests/Pbxtr.Architecture.Tests
+  dotnet format tests/Pbxtr.Api.Tests/Pbxtr.Api.Tests.csproj --verify-no-changes --include <iki test dosyası>
+  ```
+- **Sonuç / doğrulama:** tsc -b 0; vitest 284 dosya / 2509 test geçti; Api Platform 1467 geçti (+2 skip); Architecture 857 geçti; format temiz; polling bekçisi geçti. Bekçilerin yakaladıkları (düzeltildi): JSX literal (MAC placeholder → i18n), vi.mock dar imza (`signal`), WS payload istisna listesi, manifest tablo adı.
+- **Commit:** `6c0f3f9e` — BR-FE-146/147: Telefon Cihazlari, Anons Gruplari, Konferans Odalari, Gece Modu; acil alarm CDR'a
+
+### 2. BR-FE-147 — acil alarm bağlantısı
+- **Neden:** QA-129: `emergency_call` alarmı sahte `queueId: 'emergency'` taşıyor, "İncele" kuyruk ekranına gidiyordu.
+- **Ne yapıldı:** `screens/shared/emergencyAlarm.ts` (metrik sabitinin istemcideki tek kopyası). #14'te acil alarmın bağı `routeOfScreen('cdr')`'a (menüde yoksa bağ yok), eşik/hedef satırı yerine "Acil numara arandı"; #4 dashboard satırı aynı.
+- **Sonuç:** `LiveAlarmsScreen.test.tsx`'e 3 test. Fikstürde `'emergency'` sentinel'i adlandırılmış sabitle yazıldı (GUID bekçisi kuyruk kimlikleri içindir; değer sunucunun gerçek sentinel'i).
+
+## Kararlar (Sprint-49 frontend)
+- Gece Modu ayrı ekran değil, #75'in başında bir panel (pbx tenant'ında dashboard yok). Yalnız `nightmode.write` taşıyan özel rol #75'i görmezse anahtarı da görmez — BORÇ adayı.
+- Konferans DID seçicisi `trunk.read|trunk.write` ister (supervisor'da yok) → mevcut bağ salt okunur gösterilir ve aynen gönderilir.
+- `ivrApi.ts:187` DID `number`'ını `string` diye tipliyor; gerçek DTO `MaskedPhone` nesnesi — dokunulmadı, not.
+
+## Açık kalanlar (Sprint-49 frontend)
+- Yayın yapılmadı; ekranlar canlıda bir sonraki yayında.
+- 200 duman satırları demo tenant'ın pbx modülü ölçülünce (BR-OPS-19 "Örnek Fabrika").
+- BR-QA-130 gerçek telefonla provisioning ölçümü.
