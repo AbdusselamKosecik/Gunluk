@@ -503,3 +503,14 @@ Koordinatör yayını yaptı (asterisk + edge ×2 yeniden yaratıldı). Ölçüm
 ## Açık kalanlar
 - `f497cb4d` yayını bekliyor. Yayından sonra t0007/t1001 dialplan md5'i bilinçli olarak değişecek. Ölçülecek: telefondan dahiliye cdr `3`.
 - Gözlem: telefon kaynaklı `telephony.nightmode.changed` denetim satırında `actor_name` boş (aktör kimliği dolu).
+
+## `f497cb4d` yayını sonrası yön ölçümü (backend-dev-2)
+- **Durum:** imaj `demo-f497cb4dfe6a`, santral imajı değişmedi. Yeni dialplan 13:48:38–55'te teslim edildi. `-out`'taki `int` dönüşümü t0007, t0012 ve t1001'de birer satır; `dialplan show` ile yüklü olduğu doğrulandı.
+- **Ölçüm (13:49Z, `core show channels` = 0):**
+  - Telefondan dahiliye (`PJSIP/t1001-2001` → 2002; geçici lab endpoint, sır okunmadı): cdr **3**, Hangup payload'ı `int`.
+  - Gelen DID (carrier → `02122223344`, t0007): cdr **1**, payload `in`.
+  - Giden (`Local/05321112233@pbxtr-t0007-out`): dialplan bacağı **2**, payload `out`. Uygulama bacağı (`;1`) 0; Local originate yapısı gereği.
+- **Temizlik:**
+  - Lab endpoint silindi, ardından `module reload res_pjsip.so`. 33 endpoint / 4 contact, global 0, açık kanal 0.
+  - 3 spool dosyası içe alınmadan silindi: 2001'in sesli mesajı ve t0007'nin "tüm görüşmeleri kaydet" kayıtları. 75 sn sonra `voicemail_messages` 0, `recording_assets` 0.
+  - Config md5'leri 18/18 aynı. Kod değişikliği yok, commit yok.
