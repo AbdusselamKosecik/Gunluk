@@ -53,3 +53,20 @@ sonra DIA test kullanıcısını, ardından kapsamı netleştirdi.
   - Yetkili firma cevabında `depokodu` da geliyor; analizdeki "sis_depo_getir gerekir" notu düzeltildi.
 - **Not:** Demo ortak hesap. `disconnect_same_user` testlerde false olmalı, yazma testleri dikkatli yapılmalı.
 - **Commit:** `5c189d7` — docs: DIA demo sunucu login denemesi (ws/ws), firma/donem/depo bulgulari
+
+## Ek: Demodan stok kartı ve fiş okuma
+- **Neden:** Kullanıcı "demodan stok kartlarını ve fişleri oku bakalım" dedi.
+- **Ne yapıldı:** Login (`disconnect_same_user:false`), firma 1 / dönem 1 ile şu çağrılar yapıldı, sonra logout:
+  - `scf_stokkart_listele` (limit 0)
+  - `scf_stokkart_varyant_listele` (limit 50)
+  - `scf_malzeme_ozellik_listele`
+  - `scf_malzeme_fisi_listele` ve `_listele_ayrintili` (limit 0)
+  - `scf_malzeme_fisi_getir` (key 33303, varyantlı transfer fişi)
+- **Bulgular:**
+  - Kontör eksiyken tüm çağrılar code 406 döndü ama result dolu geldi. İstemci 406'da veriyi kullanmamalı.
+  - 78 kart: TCR 74, HMD 2, MML 1, KK 1. Çok birimli kart yok.
+  - 11 varyantlı kart (`ozelliksayisi`). Özellikler Beden/Renk; değerler ayrı key'li, rengin hex kodu var.
+  - 17 fiş, türler 1–12. Başlıkta `depokodu`/`depokodu2` kod olarak geliyor.
+  - Varyant kırılımı yalnız `_getir` cevabındaki `m_varyantlar` içinde var, `_ayrintili`'de yok. Varyantlı fişler için ek getir çağrısı gerekecek.
+- **Dokunulan dosyalar:** `docs/dia-entegrasyon-analiz.md` (§2.1.2), `docs/dia-demo-cevaplar/*.json` (6 ham cevap; session id içermediği kontrol edildi)
+- **Commit:** `a778b4d` — docs: DIA demo stok karti, varyant ve malzeme fisi okuma sonuclari + ham cevaplar
