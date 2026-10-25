@@ -256,3 +256,44 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - **Doğrulama:** Telephony+Provisioning 1901 (+2 skip), WorkingHours+Observability 125, Architecture 857 geçti; format temiz; `nginx-dogrula.sh` EXIT=0 (`script` tavanı: 3 yer, 9 MiB / 10m). Yeni satırlar sunucuda yeniden yüklenmedi (şablon mevcut `GotoIf`/`Gosub` satırlarıyla aynı).
 - **Commit:** `9598bcec` (konferans route-decision), `8907d5ca` (nginx bekçisi).
 - **Açık:** pbx modülü kapatıldıktan sonra en fazla 60 sn (DID rota önbelleği TTL) eski `conference` kararı → route `invalid` (Congestion) penceresi. Gece modu önbelleğiyle aynı sınıf.
+
+### Sprint-49: BR-QA-130 gerçek sunucuda + BR-OPS-19 Örnek Fabrika (backend-dev-2)
+- **Neden:** Yayın `demo-8907d5ca615f` sonrası Faz C'nin canlı doğrulaması ve kalıcı demo santral tenant'ı.
+- **OPS-19 — ne yapıldı:** `deploy/demo/ornek-fabrika-kur.py` (sunucuda, idempotent; ikinci koşu 41 "=" / 0 "+"). Tenant `t1001` "Örnek Fabrika A.Ş.", tip pbx, sahip `demo.fabrika`.
+  - İçerik: trunk "Ana Hat" (TEST-NET 192.0.2.10), "Fabrika Mesaisi" (Pzt–Cum 08:00–17:30).
+  - Dahililer: Üretim 2001–2004, İdari 2101–2103, Depo 2201–2203, ayrıca hoparlör 2091 ve kapı telefonu 2290 (kapı kodu 9); hepsine personel hesabı.
+  - Gruplar: departman başına yakalama grubu + zil grubu (6001–6003); anons grubu 8100 "Üretim holü" ve mesai başı/sonu zili.
+  - Konferans 8500 (PIN'li) + DID +908505550149, giden rota "Yurt içi" 0X., rehber 3 kayıt (*011–*013), acil liste TR varsayılanı.
+  - Santral bağlantısı: düğüm API anahtarı (asterisk-01) + edge `api-keys` satırı.
+  - Menü: santral ekranları var, çağrı merkezi ekranı YOK.
+- **Komutlar:**
+  ```bash
+  scp deploy/demo/ornek-fabrika-kur.py root@176.88.41.220:/root/
+  ssh root@176.88.41.220 'cd /home/vuo/pbxtr-demo && export PBXTR_SAMPLE_PASSWORD="$(grep ^PBXTR_SAMPLE_PASSWORD= .env | cut -d= -f2-)" && python3 /root/ornek-fabrika-kur.py'
+  PBXTR_TEST_FILTER=FullyQualifiedName~PbxFieldTenantLeakTests bash /root/entegrasyon-kos.sh /root/pbxtr-it-s49   # nohup + EXIT=
+  ```
+- **Ölçülen ürün sınırları:**
+  - Ortak demo parolası 12 karakter politikasına takılıyor, `me/password` reddediyor; bu yüzden `demo.sahip` özeti kopyalandı (tek ham SQL adımı).
+  - Dahili sayısı agent kotasıyla sınırlı (2. dahili 409 PROVISIONING_BLOCKED, kota 30'a çekildi).
+  - Tenant node-bundle'a yalnız düğüm adlı API anahtarıyla giriyor (anahtarsız confd 304 verdi).
+  - Sahipte `apikey.manage` yok; anahtarı super admin açıyor.
+  - DID numarası sahibe de maskeli dönüyor.
+- **QA-130 sonuçları:**
+  - Konferans DID: normal → `decision=conference`, oda PIN'e girdi. Askıda → `announce_hangup TENANT_SUSPENDED`, early-media anons ~4 sn sonra kapandı. Edge durdurulunca → doğrudan oda (fail-open).
+  - PIN: doğru PIN katıldı, katılımcı ucu count=1 / boşalınca 0 gösterdi. Üç yanlış PIN 23 sn'de kapandı.
+  - Gece modu: panelden açılınca normal DID `NIGHT_MODE` aldı, konferans DID `ALWAYS_OPEN` kaldı; iki denetim satırı yazıldı. Personel dahilisinden *28 → FC_FORBIDDEN.
+  - Zil: sabit saat ayarlanınca 07:47:05'te çaldı, lastFiredAt yazıldı.
+  - Rota: `+90` desen → 422.
+  - /prov: ilk kullanım 200 (parola satırı 1), ikinci kullanım 404, kalıcı link 200 (parola 0), başka MAC'li UA 404. nginx :80 → 301, uygulamaya doğrudan HTTP → 403, POST → 403. 300 paralel istekte 81 adet 503 (oran sınırı). Aynı MAC 409; tenant'lar arası 409 entegrasyon testinde.
+  - Denetimde dosya içeriği yok.
+  - Entegrasyon testi 4/4 geçti (EXIT=0).
+  - Temizlik sonrası t0007/t0012 md5 sabah ile aynı (12/12).
+- **Bulunan ürün hatası + düzeltme:** tam DID satırı route-decision'a `${EXTEN}` (E.164 artısız, `did_prefix=none`) gönderiyordu. Uç bunu ulusal yorumlayıp ROUTE_UNCONFIGURED dönüyordu; yani bu biçimde teslim edilen hiçbir DID için karar verilmiyordu (saat/kapalı dal/gece/konferans). Gerçek Asterisk'te A/B: `${EXTEN}` → fallback, `+${EXTEN}` → route kararı. Düzeltme `+${EXTEN}`. **Yeniden yayın gerekir**; sonrasında DID'i olan her tenant'ın dialplan'i değişir (t0007/t0012 md5 de).
+- **Dağıtım değişikliği:** compose'a PhoneProvisioning eşlemesi eklendi (yoktu → /prov 503). Sunucu `.env`'e `PBXTR_PhoneProvisioning__SipServer=100.106.82.119` yazıldı (sır değil), app aynı imajla yeniden oluşturuldu.
+- **Doğrulama:** Telephony+Provisioning 1901 (+2 skip), Architecture 857, format temiz.
+- **Commit:** `b11334a5` (DID +E.164), `f532cd4b` (OPS-19 betiği + compose).
+- **Açık:**
+  - t1001 anons dili `en`: askıdayken İngilizce anons çalıyor. Tenant ayarından `tr` yapılmalı.
+  - `next_open_at` saniye taşıyor (05:00:37); kozmetik.
+  - Tenant'lar arası MAC 409 canlıda ölçülmedi: ikinci pbx tenant + sahip yok.
+  - *28'in yetkili kullanıcıyla olumlu telefon yolu ölçülmedi.
