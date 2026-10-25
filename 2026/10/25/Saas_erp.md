@@ -193,6 +193,20 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **Commit:** `f2a7e5a4` — feat(production,inventory): dokuma iplik sarfi (F6c).
 - **DEV:** 1.0.2.1054 deploy edildi. Sağlık ucu 200; yeni uç girişsiz isteğe 401 dönüyor, yani uç kayıtlı.
 
+### 11. Tarih biçimi global: bilgisayarın bölge ayarı (kullanıcı: "tarih bicimi glabol olmak lazim. bilgisayarin tarih formati neyse o")
+- **Neden:** Ekrandaki tarihler uygulama dilini izliyordu (`formatLocale()`, tr → 25.10.2026), tarih giriş kutuları ise tarayıcının yerel ayarını (İngilizce Chrome'da 10/25/2026). Genel ayarlardaki "Tarih biçimi" seçimi kaydediliyordu ama hiçbir yerde kullanılmıyordu.
+- **Ne yapıldı:**
+  - Yeni `src/frontend/src/core/lib/i18n/date-locale.ts`. `dateLocale()` = `Intl.DateTimeFormat().resolvedOptions().locale`, giriş kutularıyla aynı kaynak. `formatDateOnly('yyyy-MM-dd')` saat dilimi kaymadan gün biçimler.
+  - Python kod dönüştürme betiği: sayısal tarih/saat çağrıları `formatLocale()` → `dateLocale()` (102 çağrı, 86 dosya). Ay/gün adı yazan uzun biçimler (36) kelimeler uygulama dilinde kalsın diye bırakıldı. Sayı/para biçimi değişmedi.
+  - Sabit `dd.MM.yyyy` kullanan yerler `formatDateOnly`'ye geçti: tablo tarih süzgeci, dokuma rapor gün anahtarı (`fmtDay`), termin (`formatDeadline`).
+  - Genel ayarlardaki ölü "Tarih biçimi" kartı kaldırıldı; DB'deki kayıtlı değere dokunulmadı.
+  - Test kurulumunda sistem yerel ayarı `tr-TR`'ye sabitlendi; mevcut test beklentileri değişmedi.
+  - Changelog maddesi eklendi.
+- **Doğrulama:** `verify.sh frontend` rc=0, 1928 test.
+- **Not:** Web uygulaması Windows bölge ayarını doğrudan okuyamaz; tarayıcının diline/bölgesine bakar. Chrome'da bu, Chrome'un dil ayarıdır. Test tarayıcısı en-US → 10/25/2026.
+- **Commit:** `9f070416` — feat(frontend): tarih bicimi bilgisayarin bolge ayarini izler.
+- **DEV:** 1.0.2.1055 (sağlık 200).
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
