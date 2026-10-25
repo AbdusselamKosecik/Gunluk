@@ -152,3 +152,18 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 ## Açık kalanlar / sonraki adım
 - Sprint-48: FE-144/145 bitti (`7e2a4a9c`) → yayın → QA-129; ardından Sprint-49.
 - BORÇ: CDR CSV dışa aktarma ucu yön filtresi almıyor (`CdrExportRequestDto`).
+
+## Sprint-48 kapanışı (koordinatör)
+
+- **Neden:** Faz B (giden rota, acil numara, iç kayıt, rehber, BLF) backend + ekran + QA-129 tamamlandı.
+- **Yayınlar:** `demo-7e2a4a9c607f` (be4f3318 + 7e2a4a9c), ardından `demo-591d1595effa` (QA-129 düzeltmesi b5d9ef22: pbx-settings kısmi PUT acil listeyi sıfırlıyordu). Edge/nginx değişmedi, edge yeniden kurulmadı.
+- **Komutlar:**
+  ```bash
+  bash deploy/yerel-yayin.sh --yayinla --testsiz
+  python scratchpad/s48-backlog.py     # 9 kart Bitti + 6 yeni kart
+  node yonetim/arac/clickup-olustur.js && node yonetim/arac/clickup-senkron.js && node yonetim/arac/clickup-senkron.js --kuru
+  ```
+- **Tuzak:** BR-QA-129 durum metninde "kismen" geçtiği için senkron kartı `in progress` yaptı (yapısal eşleme `Kısmen`'i ayrıca arar). İfade "hint t0007, SUBSCRIBE t9948 ölçüldü" olarak netleştirildi → `complete`.
+- **Yeni kartlar:** BR-BE-274 (CSV yön), BR-AST-149 (manager.conf `PBXTR_DIR` channelvars yok — `manager reload` kırmızı çizgi), BR-AST-150 (E.164 → ulusal normalize), BR-AST-151 (trunk failover 32 sn), BR-FE-147 (acil alarm bağlantısı), BR-BE-276 (ETL karantina log seli). 150/151/147 Sprint-49'a alındı.
+- **Commit:** `591d1595` (backlog + sprint-48 BİTTİ), `66375878` (sprint-49 tablosu).
+- **Sonraki:** Sprint-49 backend+Asterisk ajanı başlatıldı (paging, kapı, ConfBridge, Yealink provisioning, nginx /prov/, gece modu, AST-150/151).
