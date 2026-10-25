@@ -514,3 +514,31 @@ Koordinatör yayını yaptı (asterisk + edge ×2 yeniden yaratıldı). Ölçüm
   - Lab endpoint silindi, ardından `module reload res_pjsip.so`. 33 endpoint / 4 contact, global 0, açık kanal 0.
   - 3 spool dosyası içe alınmadan silindi: 2001'in sesli mesajı ve t0007'nin "tüm görüşmeleri kaydet" kayıtları. 75 sn sonra `voicemail_messages` 0, `recording_assets` 0.
   - Config md5'leri 18/18 aynı. Kod değişikliği yok, commit yok.
+
+## BR-AST-149 + P3 turu — kapanış (koordinatör)
+
+### Yayınlar
+- **Neden:** be704e5d/e91d637a (dialplan yön, DND global, trunk `^10`, ETL log, modül önbelleği) ve 4c340d83 (canlı nginx) canlıya girmeliydi; `deploy/asterisk-lab/` değiştiği için santral imajı da.
+- **Komutlar:**
+  ```bash
+  bash deploy/yerel-yayin.sh --yayinla --testsiz --santral   # demo-e91d637a6420 + pbxtr-asterisk:22-e91d637a6420
+  bash deploy/yerel-yayin.sh --yayinla --testsiz             # demo-f497cb4dfe6a (yalnız uygulama)
+  ```
+- Edge değişmedi (`git diff --stat 58fbaf0c HEAD -- deploy/pbxtr-edge` boş).
+- İkinci yayının sebebi: yayın sonrası ölçümde telefondan dahiliye çağrı `out` yazıyordu (be704e5d regresyonu); f497cb4d `-out` bağlamında yerel hedefe atlamadan `int` yapar.
+
+### Canlı doğrulama
+- **SYS-145:** kimliksiz 2 MB `PUT /api/v1/scripts/<guid>/draft` → 401 JSON (nginx geçirdi); kontrol `PUT /api/v1/scripts/<guid>` → nginx 413 HTML.
+- **Yön (f497 sonrası):** telefon→dahili 3 (int), gelen DID 1 (in), giden 2 (out).
+- **QA-131:** geçici t1002'den aynı MAC üç biçimde 409; `*28` NIGHT_MODE, `*29` geri, iki denetim satırı, yetkisizken `beeperr`. Temizlik md5 18/18 aynı; t1002 askıda kaldı (silme ucu yok).
+
+### Backlog / ClickUp
+- Betik: scratchpad `p3-backlog.py` (durum hücresi `Acik (...)` → `Bitti (2026-10-25, ...). Onceki kayit: ...`, BR-QA-131 satırından sonra yeni kart).
+- Bitti: AST-149, AST-148, AST-152, SYS-145, BE-274, BE-276, BE-279, BE-280, OPS-20, QA-131.
+- Yeni: BR-OPS-21 (demo parolası ≥12, OPS-20'den bölündü), BR-BE-281 (ETL yön eşlemesi `-int`/çift cdr; 458 eski satır unknown), BR-AST-153 (acil zincirde ilerleme zaman aşımı yok), BR-BE-282 (telefon kaynaklı denetimde aktör adı boş).
+- `clickup-olustur.js` (4 yeni) → `clickup-senkron.js` (10 yazıldı) → `--kuru`: fark 0, izde olmayan 0.
+- **Commit:** `42e906b2` — P3 + BR-AST-149 kapanisi.
+
+### Açık kalanlar
+- P2: BR-BE-277 (dahili kotası agent limitine bağlı), BR-BE-278 (yeni tenant için node API anahtarı elle).
+- P3: BR-OPS-21, BR-BE-281, BR-AST-153, BR-BE-282.
