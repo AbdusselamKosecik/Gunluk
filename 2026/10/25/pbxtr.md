@@ -248,3 +248,11 @@ Santral epiği (Sprint-46..49) sürüyor. Sprint-46 kapalı; gün Sprint-47 QA-1
 - Yayın yapılmadı; ekranlar canlıda bir sonraki yayında.
 - 200 duman satırları demo tenant'ın pbx modülü ölçülünce (BR-OPS-19 "Örnek Fabrika").
 - BR-QA-130 gerçek telefonla provisioning ölçümü.
+
+### Sprint-49 ek: konferans DID borcu + nginx bekçisi (backend-dev-2)
+- **Neden:** Koordinatör yayından önce borcu kapattırdı: konferans DID'i route-decision'ı ve askıya alınmış tenant kapısını atlıyordu. Ayrıca `nginx-dogrula.sh script_tavan_kontrol` bayat desen yüzünden kırmızıydı.
+- **Ne yapıldı:** Yeni karar `conference` eklendi (`RouteDecisions.All`). Hedef ConfBridge adı `extension` alanında gider; kaynak `conference_rooms.did_id`, yalnız pbx modülü etkinken. Uç oda için çalışma saatini ve gece modunu sormaz (`reason=ALWAYS_OPEN`); askı ve kara liste rota çözümünden önce koştuğu için konferans DID'inde de çalışır. Dialplan'de DID satırı önce `Gosub(pbxtr-{t}-route)`, uç cevapsızsa (fail-open) odaya `Goto`. Route bağlamına her oda için exact eşleşmeli satır eklendi. Oda yazımı commit sonrası DID rota önbelleğini düşürür. Bekçi deseni gerçek uca bağlandı: `PUT /api/v1/scripts/{id:guid}/draft`.
+- **Seçim gerekçesi:** "Yalnız `TENANT_SUSPENDED` reason'ına bakan ayrı alt yordam" seçeneği reddedildi. Dialplan `reason`'ı karar için okumaz (Karar #15 §E1-3); ayrıca DID'in kendi `dids.decision` değeri yanlış hedefe sızardı.
+- **Doğrulama:** Telephony+Provisioning 1901 (+2 skip), WorkingHours+Observability 125, Architecture 857 geçti; format temiz; `nginx-dogrula.sh` EXIT=0 (`script` tavanı: 3 yer, 9 MiB / 10m). Yeni satırlar sunucuda yeniden yüklenmedi (şablon mevcut `GotoIf`/`Gosub` satırlarıyla aynı).
+- **Commit:** `9598bcec` (konferans route-decision), `8907d5ca` (nginx bekçisi).
+- **Açık:** pbx modülü kapatıldıktan sonra en fazla 60 sn (DID rota önbelleği TTL) eski `conference` kararı → route `invalid` (Congestion) penceresi. Gece modu önbelleğiyle aynı sınıf.
