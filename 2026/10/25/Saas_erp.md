@@ -207,6 +207,35 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - **Commit:** `9f070416` — feat(frontend): tarih bicimi bilgisayarin bolge ayarini izler.
 - **DEV:** 1.0.2.1055 (sağlık 200).
 
+### 12. Ekip içi mesajlaşma + canlı bildirim sistemi (kullanıcı: "bildirimlerin sistemini, mesajlaşmanın sistemini yazman lazım… whatsapp gibi arkada çalışacak… dosya gönderebilmem… geçmiş kayıtlar" + "yeni grup oluşturma falan olsun" + "fişlerin, malzeme kartlarının, seri topların, carilerin, cari fişlerinin linkini verebileceğiz")
+- **Neden:** Kullanıcı DB'leri sıfırlayıp kullandıkları 3. parti uygulamayı (Novu) kaldıracak; öncesinde sistem içi mesajlaşma/bildirim çalışır olmalı. Keşif: Messaging/Notifications modülleri vardı ama uçtan uca çalışmıyordu (hub'da tenant yok, iki NotificationHub — biri korumasız `SendToTenant`, dosya servisi implementasyonsuz, ön yüz sahte rozetler, "ben" ilk katılımcı sanılıyor).
+- **Kurul:** CTO, Skeptic, DBA, PO, Security → hepsi APPROVE/PASS-WITH-CONDITIONS. Koşullar + API kontratı `scratchpad/chat-plan.md`'de; özet: hub tenant'ı `?tenantId=` (yalnız /hubs, middleware doğrular, HttpContext.Items), kişisel push grupları `t:{tenant}:user:{id}`, hub'da mesaj gönderme yok (REST+MediatR+idempotency), presence Dragonfly sorted set (90 sn), MessageAttachment + NotificationReceipt tabloları, keyset sayfalama, Conversation.DirectKey, atomik UnreadCount. Aşama 2'ye kalan: sohbet içi arama, ✓✓, SendToRoleAsync rol süzgeci, Web Push.
+- **Ne yapıldı (paralel iki ajan: backend + frontend, ortak kontrat):**
+  - Backend: `TenantResolutionMiddleware` /hubs query tenant; `HubTenant`/`RealtimeGroups` (Shared); ChatHub yeniden (Ping/Typing/StopTyping/MarkRead, presence); Api NotificationHub silindi, modül hub'ı `/hubs/notifications`; contacts (Shared port `ITenantMemberDirectory`, Tenant modülü implement eder); grup komutları (rename/add/remove/promote/leave/mute, son admin devri, sistem mesajları); multipart gönderim (≤10 dosya, AttachmentUploadPolicy + txt/csv/zip, tenant önekli anahtar, hata olursa yüklenenler silinir), `attachments/{id}/url` (15 dk presigned, attachment disposition); NotificationReceipt ile kişi başı okundu; kullanıcı başı dakikada 60 mesaj sınırı. Migration `20261025102528_MessagingNotificationsV2`.
+  - Frontend: `RealtimeProvider` (AppLayout'ta, iki hub, artan beklemeli yeniden bağlanma, tenant değişince yeniden aç), toast + tarayıcı bildirimi + sekme başlığında "(n)", iki panelli Mesajlar sayfası (Sohbetler/Ekip, mobilde tek panel), yeni grup diyaloğu, grup bilgi paneli, "⋯" mesaj menüsü (yanıt/tepki/düzenle/sil), dosya ataç/sürükle/yapıştır, header'da gerçek zil + mesaj rozeti. 11 dil `chat.json` parça dosyaları; 12 yeni API hata kodu 11 dilde.
+  - Kayıt paylaşma: header paylaş düğmesi → sohbet seç → `🔗 başlık\nURL` mesajı; mesajda tıklanabilir kart, uygulama içi linkify (javascript:/data: link olmaz). `useShareTitle` ile başlık: malzeme kartı, stok fişi, cari kart, kumaş topu. Cari kart ve kumaş topu `?edit=<id>` ile doğrudan açılır.
+  - Güvenlik post-check (PASS-WITH-FIXES) düzeltmeleri: teklif dosyası yüklemesine (Orders, artık IFileStorageService adapter'ı ile canlı) tür/imza kontrolü + boyut sınırı; `/hubs/chat` modül kapısından geçer (ModuleEntitlementGateMiddleware).
+  - UX post-check (PASS-WITH-FIXES) düzeltmeleri: üye çıkar/yönetici yap onaylı, "⋯" menü (dokunmatik), paylaşımda "Gönderilecek:" satırı, yeni grupta zorunlu yıldız + ipucu, ortak Input/SearchInput, mobilde yazma alanı ekrana sığar. Saat biçimi değişmedi (kullanıcı kararı: bilgisayarın bölge ayarı).
+  - DEV'de hub'lar 405 verdi: DEV sunucusu imajdaki nginx.conf yerine ESKİ elle bağlanmış bir ayar kullanıyor (yalnız `/api` API'ye gidiyor). Çözüm: `HubPathAliasMiddleware` (`/api/hubs/*` → `/hubs/*`, UseRouting'den önce; `app.UseRouting()` artık açık), ön yüz `/api/hubs/...` kullanır, hub yanıtlarında `X-Accel-Buffering: no`; imajdaki nginx.conf'a WebSocket'li `/api/hubs/` bloğu.
+  - Novu: kodda hiç bağımlılık yok; tek iz `posgrasql/docker-compose.network-tek.yml` yorumu, nötr örnekle değiştirildi.
+- **Dokunulan dosyalar:** 187 + 6 dosya; başlıcaları `src/backend/VuoApp.Modules.Messaging/**`, `VuoApp.Modules.Notifications/**`, `VuoApp.Api/Middleware/{TenantResolutionMiddleware,ModuleEntitlementGateMiddleware,HubPathAliasMiddleware}.cs`, `VuoApp.Api/Program.cs`, `VuoApp.Shared/Realtime/*`, `VuoApp.Infrastructure.Common/{Caching/RedisPresenceStore,FileStorage/TenantFileStorageService}.cs`, `src/frontend/src/features/messaging/**`, `features/notifications/**`, `layouts/components/header/header.tsx`, `src/frontend/nginx.conf`, testler `tests/unit/VuoApp.UnitTests/{Api,Modules.Messaging,Modules.Notifications,Modules.Orders/Rfqs}/*`.
+- **Komutlar:**
+  ```bash
+  cd src/backend/VuoApp.Migrator && ConnectionStrings__DefaultConnection="Host=localhost;Database=x;Username=x;Password=x" dotnet ef migrations add MessagingNotificationsV2 --project . --context MigratorDbContext
+  node tools/strip-migration-designers.mjs
+  bash tools/verify.sh all           # rc=0 (her commit öncesi)
+  V=1.0.2.1057; docker build -f src/backend/VuoApp.Api/Dockerfile --build-arg VERSION=$V -t tekbirsoft/vuoapp-api-dev:$V -t tekbirsoft/vuoapp-api-dev:latest src/backend
+  docker build -f src/frontend/Dockerfile --build-arg VERSION=$V -t tekbirsoft/vuoapp-spa-dev:$V -t tekbirsoft/vuoapp-spa-dev:latest src/frontend
+  docker push ... (4 etiket); curl http://217.131.14.57:56806/abdusselam.kosecik/$V
+  ```
+- **Sonuç / doğrulama:**
+  - Yerel canlı (Chrome, gerçek backend, paylaşımlı vuo_dev — migration açılışta uygulandı): ekip listesi, birebir mesaj, grup kurma, sistem mesajları, ad değiştirme ikinci sekmeye canlı yansıdı, paylaş → kart → tıklayınca cari kart açıldı, mobil 390 px.
+  - DEV uçtan uca (Node + @microsoft/signalr, jeton yazdırılmadan): iki hub bağlandı (Server-Sent Events — eski nginx WebSocket'i iletmiyor), REST ile gönderilen mesaj canlı `MessageReceived` olarak geldi.
+  - **Dosya yükleme DEV'de ÇALIŞMIYOR — altyapı:** mevcut eski `/api/v1/files/upload` da 500. MinioFileService her tenant için `{BucketName}-{tenantId}` kovası açmaya çalışıyor; anahtarın kova oluşturma yetkisi yok / uç nokta uyuşmuyor. Yerelde: `cdn.vuo.app` → .57 traefik 404; servis sunucusundaki MinIO (`100.109.159.58:9090`, `vuoapp-minio`) AccessDenied; o MinIO'da hiç `vuoapp*` kovası yok.
+- **Commit:** `913506a0` — feat(messaging,notifications): ekip içi mesajlaşma ve canlı bildirim sistemi (aşama 1) + kayıt linki paylaşma; `9b278981` — fix(messaging): hub'lar /api/hubs altından da erişilir.
+- **DEV:** 1.0.2.1057 (sağlık 200).
+- **HATA (düzeltildi):** 1056 imajları önce yanlışlıkla `-dev` eki OLMAYAN `tekbirsoft/vuoapp-api` / `vuoapp-spa` depolarına (`latest` dahil) gönderildi. Prod'a deploy tetiklenmedi. `latest` depo tarafında önceki `0.2.1020`'ye geri bağlandı (`docker buildx imagetools create`), yanlış `1.0.2.1056` etiketleri Hub API ile silindi, sonra doğru `-dev` depolarına gönderildi.
+
 ## Bulgular (düzeltilmedi, kullanıcıya raporlandı)
 - **Modül atlamaları:**
   - Dokuma'da "Yeni Makine" Üretim Yönetimi'ne, "Yeni" iplik/kumaş kartı Stok'a atlıyor.
@@ -235,6 +264,10 @@ Bir gün önce yeni sol menü DEV'e çıktı (1.0.2.1050). Kullanıcı, Dokuma m
 - Makine kuyruğu silme yetkisi "update"ten "delete"e çekildi. Yalnız güncelleme yetkisi olan kullanıcı artık kuyruktan emir çıkaramaz; dokumadaki tezgah kuyruğuyla aynı davranış.
 
 ## Açık kalanlar / sonraki adım
+- **DEV dosya yükleme (altyapı, kullanıcıda):** DEV API ortamındaki MinIO uç noktası/anahtarı çalışan bir MinIO'ya bakmalı ve anahtar kova oluşturabilmeli (veya tenant kovaları önceden açılmalı). Düzelince sohbet ekleri + stok/dokuma ekleri birlikte çalışır.
+- **DEV nginx:** sunucudaki elle bağlanmış eski nginx ayarı imajdakiyle değiştirilmeli (WebSocket, X-Robots-Tag). Şimdilik /api/hubs + SSE ile çalışıyor.
+- Mesajlaşma aşama 2: sohbet içi arama, ✓✓ okundu, SendToRoleAsync rol süzgeci, Web Push (VAPID).
+- GitHub Billing (Actions DEV Deploy) hâlâ bozuk.
 - **0 m emirler:** `419fa88e` sonrası 0 m kaydedilmiş Boyahane dışı emirler varsa elle düzeltilmeli (CTO koşulu). Abdurrahman'a haber verilmeli.
 - **Backend kuralı (CTO önerisi, teknik borç):** Boyahane dışı emirde PlannedQuantity 0 ise kaydı engellemek veya uyarmak.
 - Kalan bulgular:
