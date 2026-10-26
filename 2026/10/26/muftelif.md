@@ -56,6 +56,24 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
 - **Sonuç:** `dotnet test` → 514/514 geçti.
 - **Commit:** `31e83b1` — feat(sentez-selvedge/olcum): model olcu tablosu Excel ile yuklenir (Sentez eki yerine)
 
+### 5. IIS paketi (0007 dahil)
+- **Neden:** Kullanıcı "paket çıkartır mısın" dedi.
+- **Ne yapıldı:** Site yeniden derlendi; şema aracı yeniden publish edildi (`sema\db`'ye 0007 girdi);
+  `IIS-KURULUM.txt` başına "2026-10-26 SURUMU — SEMA DEGISTI (0007)" bölümü eklendi (sıra: db-tool → 9001
+  GRANT bloğu → paket → ilk tablo yüklemeleri), paket sürümü `31e83b1`. 9001'in GRANT'i UZM_Selvedge_
+  tablolarını döngüyle dolaştığı için yeni tablolar da kapsanıyor, betik değişmedi.
+- **Komutlar:**
+  ```bash
+  PK=SentezSelvedge-IIS-192.168.3.228-91
+  .\SentezSelvedge\Deploy-IIS.ps1 -OutputDir "$PK\site"
+  rm -rf $PK/sema && dotnet publish SentezSelvedge/db-tool -c Release -o $PK/sema
+  mkdir -p $PK/sema/db $PK/sema/elle; cp SentezSelvedge/db/*.sql $PK/sema/db/; cp SentezSelvedge/db/elle/*.sql $PK/sema/elle/; cp SentezSelvedge/Deploy-IIS.ps1 $PK/
+  Compress-Archive -Path "$PK\*" -DestinationPath "$PK.zip"
+  ```
+- **Sonuç:** `SentezSelvedge-IIS-192.168.3.228-91.zip` 161 girdi, 21,9 MB; bundle `index-Cl4QAEci.js`,
+  wwwroot'ta eski bundle yok; Development/logs/files yok; appsettings'te bağlantı dizesi boş.
+  Kurulum kullanıcıda (buradan sunucuya erişim yok).
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Excel dosyasının kendisi saklanmaz; yüklemede ayrıştırılıp satırlar yazılır.
@@ -67,6 +85,6 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   Uygulama: önceki gibi sqlcmd ile `BEGIN TRAN; 0007; INSERT SchemaHistory(0007, hash); COMMIT`
   ya da paketteki `sema\SentezSelvedge.Db.exe db`. Ardından yeni tablolar için
   `db/elle/9001_yetki.sql` yetki bloğu ELLE koşturulmalı (GRANT INSERT/UPDATE/DELETE).
-- Yeni IIS paketi (Deploy-IIS.ps1) çıkarılıp sunucuya kurulmalı.
+- IIS paketi hazır (zip); sunucuya kurulmalı — ÖNCE 0007 + 9001 GRANT.
 - Mevcut modellerin tablolarının ilk yüklemesi yapılmalı; yüklenmeyen modelde ölçüm açılamaz.
 - İstenirse mobil uyarı metni ("Sentez'de Excel eki yok") güncellenip yeni APK.
