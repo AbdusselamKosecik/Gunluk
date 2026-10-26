@@ -348,3 +348,19 @@ Takip dosyaları (scratchpad):
   4. Temizlik: set DELETE roll-sets/{id} → 204, giriş fişi DELETE → 204. Tarayıcıda anahtar açıkken yeniden 8 top, taslak satır yok.
 - **Not:** dev-api.cjs her çalıştırmada giriş yapıyor; auth sınırı 10 giriş / 5 dk (QueueLimit 2), aşınca istekler kuyrukta asılı kalıyor. 5 dk beklenip tek girişle devam edildi.
 - **Sonuç:** goal.txt maddelerinin hepsi DEV 1074 üzerinde tarayıcıda doğrulandı; açık kod işi yok.
+
+### 12. Satır indirimleri + ana sayfa kutucukları + sekmeler arası oturum kilidi (commit/push 2026-10-27 00:35)
+- **Neden:** Kullanıcı istekleri: "satıra birden fazla indirim", "dashboard yerine kutu kutu, favoriler SAP gibi ayrı sayfa", "listeler gelmiyor" (oturum düşmesi), "login olamıyoruz".
+- **Ne yapıldı:**
+  - Sipariş/teklif/faturada satır başına çoklu indirim (yüzde/tutar, sıralı); toplam/forex/UBL satır AllowanceCharge; migration `20261026182828_DocumentLineDiscounts` (paylaşılan vuo_dev'e yerel API açılışında uygulanmış olduğu için ID'si korunarak origin/dev'deki `Sprint_PermissionGroupActions` üzerine rebase edildi; snapshot otomatik birleşti, changelog çakışması elle iki taraf korunarak çözüldü).
+  - Ana sayfa `/`: tüm modüller boşluksuz masonry kutucuklar (`home-nav-tree.tsx`, `columns-[16rem]`); `/favorites` ayrı Favorilerim sayfası (grup, sürükle-sırala, yıldızla kaldır); eski sayaç dashboard'u silindi.
+  - `axios-instance.ts`: Web Locks `vuo-auth-refresh` ile sekmeler arası tek refresh; başka sekme yenilediyse eski token gönderilmez; çıkış sonrası token geri yazılmaz; refresh 15 sn zaman aşımı. Kök neden: localStorage ortak + backend reuse-detection (`RefreshTokenExchange.cs`) tüm oturumları düşürüyordu.
+  - Login takılması: global "auth" fixed-window limiter (10/5 dk, QueueLimit 2, IP'ye bölünmemiş) refresh fırtınasıyla doldu; yerel API yeniden başlatıldı. Kalıcı düzeltme (IP başına bölme + refresh'e ayrı limit + kuyruk yerine 429) ÖNERİLDİ, kullanıcı onayı bekliyor.
+- **Komutlar:**
+  ```bash
+  git rebase origin/dev   # changelog çakışması elle
+  bash tools/verify.sh all
+  git push origin HEAD:dev
+  ```
+- **Sonuç / doğrulama:** frontend typecheck+lint+2499 test yeşil. Backend 6156/6158; tek kırmızı `WeavingReportLoomTests.Handle_Efficiency_EqualsBoardNumberForSameScenario` saate bağlı (İstanbul 00:00–01:00 arasında olaylar "gelecekte" kalıyor), değişiklikle ilgisiz. Not: `verify.sh` içindeki `npm ci`, çalışan Vite süreci dosya kilitlediği için EPERM ile düştü ve node_modules'u yarım bıraktı → Vite süreci (taskkill) durdurulup `npm ci` yeniden çalıştırıldı.
+- **Commit:** `9543e4c7` fix(auth) refresh kilidi · `572a76a2` feat(dashboard) kutucuklar + /favorites · `1864b02c` feat(orders,finance) çoklu satır indirimi (dev'e push: 063b65a9..1864b02c)
