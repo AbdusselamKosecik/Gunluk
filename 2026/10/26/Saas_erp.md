@@ -281,6 +281,23 @@ Takip dosyaları (scratchpad):
 - `2f89ea0e` (1073): Üretim emri miktarları dile göre biçimli; İş Emri boş görünümü tek mesaj. Tarayıcıda doğrulandı ("5.000", "234,9"; yalnız özel mesaj görünüyor).
 - **Komutlar:** her turda `bash tools/verify.sh all` rc=0 (son: backend 6078, frontend 2420); Postgres entegrasyon testleri 7/7; `bash scratchpad/deploy-dev.sh 1.0.2.1071|1072|1073`, sağlık 200.
 
+### 10. Son sürümde (DEV 1073, 261026.1540) goal.txt'in tamamı yeniden doğrulandı
+- **Neden:** Hook, son sürümde tüm maddelerin tarayıcıda doğrulanmasını istedi.
+- **Bölüm 1 (UX ajanı, fin1):**
+  - **Fiş:** lookup "ile başlayan" ve ad araması, çip kaldırma, indirim/masraf açıklaması, alan düzeni aç-kapa (eski hâline alındı), tam ekran → PASS.
+  - **Talep:** liste Türkçe → PASS.
+  - **Oluşturma ekranları:** dört ekran fiş düzeninde → PASS.
+  - **Fatura ÖTV:** detayda ÖTV 100 / matrah 1.100 / KDV 220 / 1.320, düzenleme alt çubuğu aynı → PASS.
+  - **Alacak dekontu:** ÖTV 40 / matrah 440 / 528 / Taslak; "Alıcının iade faturası no" kaydedildi, yeniden yüklemede korundu → PASS.
+  - **Tüm Faturalar:** tip seçimi → PASS.
+- **Bölüm 2 (UX ajanı, fin2):** bayraklar (11), favoriler (gruplu, sıralama kalıcı, link), ana sayfa ağacı, yönetici paneli, 5 belgede otomatik numara + Kod Üretici, BI "Oluştur" pivot, stok raporu modalda, rapor tasarımcısı (oluştur/çalıştır/sil), bildirim tercihleri (kalıcı, geri alındı), kaynak yükleme ısı haritası; Örme ve Dokuma'dan 27 sayfa hatasız açıldı → 11/11 PASS.
+- **Koordinatör:**
+  - 1c fişte vergi listeden seçiliyor ("OIV75 — ÖİV %7,5", "OTV10 — ÖTV %10"), ÖTV %10 satıra eklendi.
+  - Lookup Esc: hem arama kutusunda hem başlık düğmesindeyken pencereyi kapatıyor, odak Kart Kodu alanına dönüyor.
+  - Dokuma detaylı top listesi sayfalaması API'de: pageSize 5 ile 4 sayfa, 20 farklı satır, 5. sayfa boş (`totalRows` 20, `totalRolls` 8). Ekranda 50'lik sayfa, DEV'de 20 satır olduğu için tek sayfa görünüyor.
+  - Doğrulama faturası ve alacak dekontu silindi (204).
+- **Not:** Kod alanına ad yazılınca 0 sonuç gelmesi goal.txt'in tarifine uygun ("kodda ile başlayan, adda ad araması"); adla arama Adı alanından yapılıyor.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
