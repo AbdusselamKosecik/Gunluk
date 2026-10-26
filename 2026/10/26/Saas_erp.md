@@ -341,5 +341,10 @@ Takip dosyaları (scratchpad):
     - Üretim Hareketleri ve Stok Raporu sayfaları süzgeçle kendiliğinden yükleniyor (Stok 10 satır).
     - Ekranlarda hata metni görünmedi.
   - `/notifications/preferences` sert yeniden yüklendi: "Fiş silindi — E-posta" = kapalı (eski hâline dönmüş).
-- **Tarayıcıda gösterilemeyen:** Dokuma "Taslak dahil" anahtarı. DEV'de taslak (Pending) set yok; bu durum yalnız stok kaydı başarısız olunca oluşuyor, oluşturmak DB'ye elle kayıt gerektirir (yapılmadı). Davranış Postgres entegrasyon testi (varsayılan yalnız onaylı) ve birim testleriyle kapsanıyor.
-- **Sonuç:** goal.txt maddelerinde açık kod işi yok; yukarıdaki tarayıcı-dışı kalan tek nokta test kapsamında.
+- **Taslak dahil (tarayıcıda doğrulandı):** DEV'de taslak set yoktu; uygulamanın kendi API'siyle geçici olarak oluşturuldu, DB'ye elle yazılmadı:
+  1. Ham Kumaş deposuna, 19D STD 210 708 001001 malzemesi için 1 m'lik giriş fişi (3001) açıldı; fişte "UX-231161-T001" lotu vardı.
+  2. Muayene UX-231161-T001 (01a15bea, DirectFabric) için top seti oluşturuldu. Stok girişi 409 `productionreceipt.lot_no_duplicate` aldı; set Pending kaldı (01a17856-eb9e).
+  3. Dokuma Üretim Emri Top Listesi: anahtar kapalıyken 8 top, taslak satır yok; açıkken 9 top, "1B … Taslak 1 10,00" özet satırı ve "UX-231161-T001 … Taslak" top satırı.
+  4. Temizlik: set DELETE roll-sets/{id} → 204, giriş fişi DELETE → 204. Tarayıcıda anahtar açıkken yeniden 8 top, taslak satır yok.
+- **Not:** dev-api.cjs her çalıştırmada giriş yapıyor; auth sınırı 10 giriş / 5 dk (QueueLimit 2), aşınca istekler kuyrukta asılı kalıyor. 5 dk beklenip tek girişle devam edildi.
+- **Sonuç:** goal.txt maddelerinin hepsi DEV 1074 üzerinde tarayıcıda doğrulandı; açık kod işi yok.
