@@ -145,3 +145,34 @@ yarım dosyalarına dokunulmadı; commit'ler `git commit --only -- <yollar>` ile
 - Yayın gerekli (uygulama imajı). Santral imajı (`--santral`) GEREKMEZ: acil dal değişikliği confd ile üretilen dialplan'dır; yayından sonra yeni revizyon üretilip santralde `-emerg` bağlamında `,^10` görülmeli.
 - Eski veride kalan: 39 (linkedid, uniqueid) çifti 2 sn penceresi dışında (5–317 sn; abandon türetimi/çok parçalı CDR), 26 boru hattı içi mükerrer — dokunulmadı. Ölçülmemiş eski ETL yönleri (bacak bazlı, sıfır olmayan) olduğu gibi duruyor.
 - CDR `disposition` eşlemesi `CONGESTION`'ı tanımıyor (0) — kart dışı gözlem.
+
+## Kalan kartlar turu — kapanış (koordinatör)
+
+### Yayın
+- **Neden:** 949dc07b, b22601c7, 5e1da098, 75527fd2, f46dfe15, 40444b2e canlıya girmeliydi. Edge'de yalnız README değişti, santral imajı gerekmedi.
+- **1. deneme (EXIT 2):** format kapısı 16 dosyada ENDOFLINE/WHITESPACE. Depo (index) LF, çalışma ağacı CRLF'ti (ajan artığı). Düzeltme:
+  ```bash
+  F=$(git ls-files --eol | grep 'w/crlf' | grep 'attr/text eol=lf' | awk '{print $NF}')  # 58 dosya
+  rm -f $F && git checkout -- $F
+  dotnet format --verify-no-changes --no-restore   # 0 hata
+  ```
+- **2. deneme (EXIT 69):** migrate şema envanteri bekçisi `br281_yedek` (BR-BE-281 geri doldurma yedeği) şemasını reddetti — doğru davranış. Yedek dosyaya alınıp şema kaldırıldı:
+  ```bash
+  docker compose exec -T postgres pg_dump -U postgres -d pbxtr -n br281_yedek > /root/br281_yedek-20261026.sql
+  docker compose exec -T postgres psql -U postgres -d pbxtr -c "DROP SCHEMA br281_yedek CASCADE"
+  ```
+  **Ders:** sunucu DB'sinde yedek tablo ayrı şemaya değil, dosyaya (pg_dump) alınmalı; şema bekçisi yayını durdurur.
+- **3. deneme:** `tekbirsoft/pbxtr:demo-40444b2e8d51`, app healthy, /health 200.
+
+### Canlı gözlem
+- t0007/t1001 tek trunk taşıdığı için acil dalda `^10` üretilmez (son trunk zaman aşımsız); teslim edilen dialplan değişmedi. `^10` ajan tarafından sunucuda lab dosyasıyla ölçüldü (10 sn / kontrol 32 sn).
+
+### Backlog / ClickUp
+- Betik: scratchpad `kalan-backlog.py <yayin>`.
+- Bitti: BR-BE-277, BR-BE-278, BR-BE-281, BR-BE-282, BR-OPS-21, BR-AST-153.
+- Yeni: BR-FE-148 (düğüm anahtarı ekranı), BR-BE-283 (CONGESTION disposition 0), BR-OPS-22 (env-esleme-kontrol PhoneProvisioning__*), BR-QA-132 (Integration HEAD'de 3 kırmızı).
+- ClickUp: 4 yeni, 6 yazıldı, `--kuru` fark 0.
+
+### Açık kalanlar
+- BR-FE-148, BR-BE-283, BR-OPS-22, BR-QA-132 (hepsi P3).
+- BR-BE-277'nin t1001 üzerindeki canlı etkisi ölçülmedi (birim testlerle).
