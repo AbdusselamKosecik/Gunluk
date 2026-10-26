@@ -165,6 +165,16 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   IIS-KURULUM.txt'ye "2026-10-26 (2)" bölümü eklendi.
 - **Commit:** `88c9f1e` — feat(sentez-selvedge/olcum): Excel okumalari olcum olarak yuklenir, mobilden yeni olcum kapali
 
+### 10. Sipariş araması müşteri PO numarasında da arar
+- **Neden:** Kullanıcı "91798 order'ı neden gelmez" dedi. 91798 Excel'deki "PO NO" = `Erp_WorkOrder.CustomerOrderNo`;
+  `SentezSql.OrderAra` yalnız `WorkOrderNo` ve `InventoryCode`'da arıyordu. (DB'ye bağlanıp doğrulanmadı; kimlik bilgisi yok.)
+- **Ne yapıldı:** `OrderAra` WHERE'ine `OR wo.CustomerOrderNo COLLATE Turkish_CI_AS LIKE @AramaKalip`; arama kutusu
+  placeholder "Siparis no, PO no veya model kodu". Not: verbatim C# string içindeki SQL yorumunda çift tırnak derlemeyi bozdu, kaldırıldı.
+- **Dokunulan dosyalar:** `SentezSelvedge/api/Sentez/SentezSql.cs`, `SentezSelvedge/web/src/pages/OrderPage.tsx`
+- **Sonuç:** test 534/534; paket yeniden (bundle `index-Bnjda9Gf.js`, zip 22.9 MB, IIS-KURULUM.txt commit 525be39).
+  Sipariş Sentez'de kapalı/iptal ya da tip 15 değilse yine listede çıkmaz (filtre bilerek).
+- **Commit:** `525be39` — fix(sentez-selvedge/siparis): siparis aramasi musteri PO numarasinda da arar
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Ölçüm girişi Excel okumalarından (web); mobilden yeni ölçüm açılmaz (sunucu reddeder, APK değişmedi). Web'de "Yeni ölçüm" kaldı.
@@ -182,4 +192,4 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
 - IIS paketi hazır (zip); sunucuya kurulmalı — ÖNCE 0007 + 9001 GRANT.
 - Mevcut modellerin tablolarının ilk yüklemesi yapılmalı; yüklenmeyen modelde ölçüm açılamaz.
 - İstenirse mobil uyarı metni ("Sentez'de Excel eki yok") güncellenip yeni APK.
-- SentezSelvedge paketi (88c9f1e) sunucuya kurulmalı; ardından Ctrl+F5. Önceki sürümle yüklenen tablolar (boş kolonlu Excel) yalnız 22–23 bedeni almış olabilir → yeniden yüklenmeli.
+- SentezSelvedge paketi (525be39) sunucuya kurulmalı; ardından Ctrl+F5. Önceki sürümle yüklenen tablolar (boş kolonlu Excel) yalnız 22–23 bedeni almış olabilir → yeniden yüklenmeli.
