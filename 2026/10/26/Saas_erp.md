@@ -327,3 +327,19 @@ Takip dosyaları (scratchpad):
 - Faturada "Fiş No" etiketi fiş ekranı standardı gereği (`receipt-screen-standard.md`).
 - Lookup hücresindeki iç içe düğme ortak `GridLookupCell` bileşeninde ve tüm uygulamada aynı desen; bu turda değiştirilmedi.
 - İş Emri'nde sevk miktarı ve irsaliye "Bu bilgi bu raporda yok" olarak gösteriliyor (PO kararı; bu veri Inventory modülünde).
+
+### 11. DEV 1074 son tarayıcı doğrulaması (hook itirazları)
+- **Neden:** Hedef denetimi; detaylı top listesinde 2. sayfa, Örme/Dokuma raporlarının "Raporu getir" ile çalıştırılması ve bildirim tercihinin yeniden yüklemeden sonraki durumu tarayıcıda gösterilmemişti.
+- **Ne yapıldı (Chrome, app-dev.vuo.app, 1.0.2.1074, admin@vuo.app / MitoTex):**
+  - Dokuma "Üretim Emri Top Listesi Detaylı", sayfa boyutu 10: "1 / 2" ve "2 / 2", 10 + 10 satır, 20 farklı satır, çakışma 0.
+  - Başlangıç 2025-10-27 yapılıp "Raporu getir"/"Uygula" basıldı:
+    - Dokuma: İş Emri 2 satır; Top Listesi 11; Detaylı 23; Üretilen Kumaş 7; İplik Sarfiyatı 10; Tezgah Durumu 2; Tahar Değişimleri 2.
+    - Dokuma Emir Tezgah Süreleri (en çok 92 gün; 2026-08-01'den): 2 emir, 3 oturum.
+    - Dokuma Parti Tarihçesi (emir UX-231161): 7 satır, Net gelen 234,90.
+    - Örme İş Emri, Top Listesi, Detaylı ve Müşteri/Ham Depo, Fason Takip, Kümülatif Fason, İplik Kullanım Kontrol (her iki modülde): "Seçilen aralıkta kayıt yok".
+    - Örme Gerçekleşen Maliyet ve Örme Parti Tarihçesi: "bulunamadı" mesajı. DEV'de Örme (tip 4) üretim emri yok; emir seçim penceresi boş geliyor.
+    - Üretim Hareketleri ve Stok Raporu sayfaları süzgeçle kendiliğinden yükleniyor (Stok 10 satır).
+    - Ekranlarda hata metni görünmedi.
+  - `/notifications/preferences` sert yeniden yüklendi: "Fiş silindi — E-posta" = kapalı (eski hâline dönmüş).
+- **Tarayıcıda gösterilemeyen:** Dokuma "Taslak dahil" anahtarı. DEV'de taslak (Pending) set yok; bu durum yalnız stok kaydı başarısız olunca oluşuyor, oluşturmak DB'ye elle kayıt gerektirir (yapılmadı). Davranış Postgres entegrasyon testi (varsayılan yalnız onaylı) ve birim testleriyle kapsanıyor.
+- **Sonuç:** goal.txt maddelerinde açık kod işi yok; yukarıdaki tarayıcı-dışı kalan tek nokta test kapsamında.
