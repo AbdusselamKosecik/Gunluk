@@ -74,6 +74,41 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   wwwroot'ta eski bundle yok; Development/logs/files yok; appsettings'te bağlantı dizesi boş.
   Kurulum kullanıcıda (buradan sunucuya erişim yok).
 
+### 6. SentezPlaning dikim: Fashion ve Non Denim ayrıca da görülsün
+- **Neden (kullanıcı):** "Dikimde Fashion ve Non Denim'i birleştirmiştik. Onun haricinde ayrı ayrı DA
+  görmek istiyorlar, mevcudu bozmadan."
+- **Sorulan / karar:** Çalışan sayısı hat başına (Fashion & ND = 110) tanımlı, dikim yerine bölünemez.
+  Kullanıcı seçti: alt görünüm **yalnız yük** (order, adet, +%pay, SMV, SAH, Op. %xx); çalışan/tahmini/
+  fark/adet tavanı ve tam hafta özeti yalnız birleşikte. Excel'e de ayrı sayfa: **evet**.
+- **Ne yapıldı:**
+  - `api/Sentez/UretimPlan/HatAltGrup.cs` (yeni): `Indis(line, yer)` (boşluk/harf normalize),
+    `Icinde(line, indis, order)` — önce UD_DikimYeri, boşsa AYNI SIRADAKİ kategori (hat eşleşmesiyle aynı kural).
+  - `UretimPlanService`: `LineOrders(line, yer)`; `GetWeeks/GetWeeksToplam/GetSevk/GetOrders`'a isteğe bağlı
+    `yer`. Alt görünümde `AltGorunum=true`, Calisan/Tahmini/Fark/AdetTavan=0, `Durum="yok"`; weeks-toplam → 204.
+    Hatta olmayan yer → boş liste. `yer` verilmezse davranış birebir eski.
+  - Controller: dört uca `[FromQuery] string? yer`.
+  - `UretimPlanExport`: çok dikim yerli hatta birleşik sayfanın yanına `Kapasite Fashion`, `Kapasite Non Denim`
+    (yalnız yük kolonları + TOPLAM + açıklama satırı). Sheet adı çakışmasın diye `BenzersizAd`.
+  - Web `UretimPlanlamaPage.tsx`: hat düğmelerinin yanında `Birleşik / Fashion / Non Denim` seçici
+    (yalnız `dikimYerleri.length > 1`), başlıklar "Fashion & ND › Non Denim", `CapacityTable yukOnly`
+    kapasite kolonlarını gizler (tfoot colSpan'leri buna göre). `api/uretimPlan.ts` `yer` parametreleri.
+  - README "Dikim hatları"na not.
+- **Dokunulan dosyalar:** `SentezPlaning/api/Sentez/UretimPlan/{HatAltGrup,UretimPlanService,UretimPlanController,UretimPlanExport,UretimPlanModels}.cs`,
+  `SentezPlaning/web/src/{api/uretimPlan.ts,pages/UretimPlanlamaPage.tsx}`, `SentezPlaning/tests/SentezPlaning.Tests/HatAltGrupTests.cs`, `SentezPlaning/README.md`.
+- **Komutlar / doğrulama:**
+  ```bash
+  dotnet test SentezPlaning/tests/SentezPlaning.Tests     # 268/268 (yeni 5)
+  cd SentezPlaning/web && npx tsc -b && npm run build      # temiz
+  # yerel uçtan uca: data/sentez-planing.db yedeklendi; API Development 5299, JWT dev anahtarıyla imzalı
+  ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --urls http://localhost:5299
+  ```
+  Yerel veride (Sentez'den fiili 28.445 satır): 10 dolu haftanın HER BİRİNDE Fashion + Non Denim =
+  birleşik (order sayısı, plan adet, SAH). Order 295 = 193 + 102; sevk adedi 113.090 = 79.154 + 33.936.
+  Alt weeks-toplam 204, geçersiz yer 0 satır. Export: 12 sayfa, `Kapasite Fashion` / `Kapasite Non Denim` doğru kolonlarla.
+  Sonra API kapatıldı; açılışta oluşan WAL/SHM silindi (ana .db yedekle byte-aynıydı).
+  Tarayıcıda görsel kontrol YAPILAMADI: chrome-devtools MCP profili başka oturumda kilitli.
+- **Commit:** `3148029` — feat(sentez-planing/dikim): Fashion ve Non Denim birlesik hatta ayrica da gorulur
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Excel dosyasının kendisi saklanmaz; yüklemede ayrıştırılıp satırlar yazılır.
@@ -81,6 +116,7 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   modelin tablosu ayrı seçenek olarak listelenir.
 
 ## Açık kalanlar / sonraki adım
+- SentezPlaning: Fashion/Non Denim alt görünümü canlıya (192.168.3.228:90) kurulmadı; paket istenirse çıkarılacak. Ekran tarayıcıda denenmedi.
 - **0007 canlıya (SentezLive, 192.168.1.22) uygulanmadı** — bu oturumda SQL kimlik bilgisi yoktu.
   Uygulama: önceki gibi sqlcmd ile `BEGIN TRAN; 0007; INSERT SchemaHistory(0007, hash); COMMIT`
   ya da paketteki `sema\SentezSelvedge.Db.exe db`. Ardından yeni tablolar için
