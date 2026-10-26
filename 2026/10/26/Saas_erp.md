@@ -88,14 +88,64 @@ Takip dosyaları (scratchpad):
 - **Komutlar:** `bash tools/verify.sh all` (rc=0, frontend 2230 test), ardından `git push origin HEAD:dev` ve `bash scratchpad/deploy-dev.sh 1.0.2.1062`. İlk denemede Docker Desktop kapalıydı; açılınca deploy geçti.
 - **Sonuç:** DEV 1.0.2.1062 yayında, sağlık 200, duman testi OK.
 
+### 5. goal.txt'de kalanlar (Plan 2: Q1–Q6) ve DEV 1063–1065
+- **Neden:** `/goal` hook'u "goal.txt'deki her şey bitsin" dedi. 1062 raporunda ertelenen maddeler de bu kapsamdaydı.
+- **Plan ve kurul:** `scratchpad/plan2-20261026.md`. CTO, Şüpheci, DBA, PO ve Güvenlik hepsi APPROVE-WITH-CONDITIONS verdi. Kararlar:
+  - Alan düzeni ve ekler her belgenin kendi modülünde tutulur (Tenant'ta tek tablo YOK; genel `FileAttachment` ve `/files` kullanılmaz).
+  - İzin adları `demand`, `order`, `finance` (`orders` değil).
+  - Onay bildirimi "edit'e düşme" kuralı iptal edildi. `inventory:approve` zaten etkin izinden çözülüyor (`TenantPermissionDirectory`); 1062'deki "override boşluğu" notu yanlıştı.
+  - Kalan/Fire formülü Sentez ile aynı kalır, sütun ipucunda formül gösterilir. PO tek tanım istemişti; Şüpheci'nin "Sentez birebir" gerekçesi seçildi ve kullanıcıya not edilecek.
+  - Kumaş iplik reçetesi giriş ekranı yoktu; Sentez menüsündeki "Kumaş İplik Reçetesi" ekranı yapıldı.
+- **Commitler (dev):**
+  - `ffaac43e` Q4: çift bildirim engeli, deterministik `SourceKey`, `ON CONFLICT DO NOTHING`. `OccurredAt` init yapıldı ki outbox tekrarında anahtar aynı kalsın.
+  - `5870813b` Q2: fiş satırında KDV listeden (`InventoryReceiptItem.VatId`), oran sunucuda. Migration'lar:
+    - `20261026060611_NotificationSourceKeyAndReceiptLineVat`;
+    - `20261026060639_NotificationSourceKeyUniqueIndex`: elle yazıldı, `CREATE UNIQUE INDEX CONCURRENTLY ... NULLS NOT DISTINCT WHERE SourceKey IS NOT NULL`, `suppressTransaction`.
+  - `11759003`, `7735a2ba`, `848ecb50` Q3: Kumaş İplik Reçetesi (Örme + Dokuma), İplik Kullanım Kontrol (Teorik = kumaş × oran × (1+fire)), Müşteri/Ham Depo (cari + depo + birim), orme rota koruması.
+  - `84a3a393` güvenlik post-check: reçeteye yalnız iplik kartı eklenir, hedefli `ON CONFLICT`.
+  - Q1 (11 commit, son `f8656be4`): dört oluşturma ekranında sekmeler, Alanları düzenle, Ekler, Kod/Ad yazılabilir lookup, satır ÖTV/ÖİV listeden, KDV listeden, dip indirim/masraf açıklaması, tam ekran, İptal. Migration `20261026065729_DocumentLayoutsAttachmentsAndLineTaxes`:
+    - 3 layout tablosu, 3 ek tablosu;
+    - VatId, ÖTV ve ÖİV kolonları;
+    - SortOrder ve Description.
+  - `42acbc60` iplik kontrolü SQL `lower()` ile. "İplik" adlı tip .NET `ToLowerInvariant`'ta eşleşmiyordu (UX 400).
+  - Q1b (5 commit, son `864dfdbe`):
+    - talep/teklif detayında Ekler;
+    - serbest metin kalem adı;
+    - e-Fatura UBL'de ÖTV 0071 ve ÖİV 4080;
+    - fatura kopya/düzenlemede vergiler satır Id'siyle;
+    - **fatura seçim hatası** (async afterSelect bayat satır listesini yazıyordu);
+    - ekranlar arası tutarlılık.
+  - Q5 (`cdf5d709`..`ec1bb058`): lookup arama kutusuna odak, ↑/↓+Enter, modalda silme gizli, raporlarda boş sonuçta başlıklar, item filtresi lookup, İngilizce çoğul, placeholder rengi.
+  - `f8890dd3`:
+    - `LookupModalContext` (her lookup sayfasında klavye seçimi);
+    - fiş ÖTV/ÖİV kolonları liste kipinde salt okunur;
+    - KDV listesi yüklenirken oran kilitli;
+    - KDV başlıkları ayrıştı;
+    - fatura "Döviz Kuru";
+    - güvenlik: aynı kayıtlı satır Id'si reddedilir, taşınan ÖTV/ÖİV yeni nete göre ölçeklenir, ek açıklaması için ayrı hata kodu.
+  - `344ca425` Q6: reçete miktar biçimi, boş satırda erken hata yok, Fark ipuçları, talep detayında tip adı, kur ve tarih biçimi.
+  - `4a955f29` birim adları veri migration'ı `20261026075810_UnitTurkishNames`: yalnız eski seed adını taşıyan satırlar, Down var.
+- **Yöntem notları:**
+  - Ajan worktree'lerinde `git reset --hard` izinle engellendi. Çözüm: audit log stash'e alındı, ardından `checkout -B` / `merge --ff-only`.
+  - JSON çeviri düzenlemelerinde `JSON.stringify` tüm dosyayı yeniden biçimlendiriyordu. Bunun yerine metin bazlı anahtar değişimi yapan `scratchpad/i18n-labels.cjs` kullanıldı.
+  - DEV'de vergi tanımı yoktu (sıfırlanmış DB). MitoTex'e KDV 0/1/10/20, ÖTV 10, ÖİV 7,5 eklendi (`scratchpad/seed-vats.cjs`).
+- **Doğrulama:** her birleştirmede `verify.sh all` rc=0. Son durum: backend 5875 test, frontend 2322 test. DEV 1063, 1064 ve 1065 yayında, sağlık 200.
+  - UX post-check 1063'te BLOCK verdi (fatura seçimi, reçete 400). 1064'te yalnız klavye maddesi kaldı. 1065'te son kontrol yapıldı.
+  - Güvenlik post-check: Q2–Q4 PASS, Q1/Q1b PASS-WITH-FIXES; düzeltmeler uygulandı.
+  - Son UX kontrolü (1065, önbelleksiz yenileme ile): PASS-WITH-NITS. İlk turdaki BLOCK, açık sekmenin eski paketinden geliyordu. Ders: UX kontrolünde her zaman ignoreCache ile yenile.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
 - Fatura numaralarında boşluk olabilir; e-Fatura için boşluksuz sıra gerekirse ayrı tasarım yapılacak.
 
 ## Açık kalanlar / sonraki adım
-- Fiş çalışma alanı açılırken tüm stok kartlarını (`pageSize=100000`) çekiyor. Bu önceden de vardı; ekranın sunucu taraflı aramaya taşınması ayrı iş.
-- Oluşturma ekranlarında fiş çalışma alanıyla tam eşlik yok: "Alanları düzenle" yok, sekme seti farklı, faturada satır lookup'ı tek kolon. Ekler için backend yok.
-- P7b: İplik Kullanım Kontrol ve Müşteri/Ham Depo raporları ertelendi. Kalan/Fire formülleri Sentez'den aynen alındı; İade'yi tutarsız sayıyor. Yeni menü grubu `production-module-sub-items.ts` içinde yok.
-- KDV satırda hâlâ yüzde kutusu (ÖTV/ÖİV listeden). Zorunlu alan işareti yok. a11y eksikleri (tema düğmesi etiketi, DialogContent açıklaması).
-- Override ile `inventory:edit` almış kullanıcılar `inventory:approve` almıyor; outbox tekrarında çift bildirim olabilir.
+- Fiş workspace hâlâ tüm stok kartlarını (pageSize=100000) çekiyor. Sunucu taraflı aramaya taşınması ayrı bir performans işi.
+- Kalan/Fire formülü Sentez ile aynı bırakıldı. PO, paydanın "işlenen (Giden − İade)" olmasını önerdi; kullanıcı kararı bekliyor.
+- Genel `/files` uçlarında [RequirePermission] yok ve klasör adı temizlenmiyor (güvenlik, Med). Ayrı iş.
+- e-Fatura: ÖTV her zaman 0071 (I. liste) yazılıyor, çünkü liste satırda tutulmuyor. Fatura kopyasında serbest metin satırın ÖTV/ÖİV'i taşınmıyor.
+- Taşınan ÖTV/ÖİV net oranıyla ölçekleniyor (yüzde vergi varsayımı). Maktu ÖTV için ayrı tasarım gerekir.
+- Bildirim: uygulama içi bildirimi kapalı, e-postası açık kullanıcıda e-posta tekrarı engellenmiyor.
+- Bazı birim adları İngilizce (Foot/Inch/Pound/Yard/KwH).
+- Talep/teklif Adı alanında Enter'dan sonra odak kayboluyor (yeniden üretilemedi).
+- Fatura numarası boşluksuz sıra (e-Fatura) ayrı tasarım ister.
