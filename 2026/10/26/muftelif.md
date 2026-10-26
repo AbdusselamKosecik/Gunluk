@@ -133,8 +133,41 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
      Not: sqlcmd'de `-I` (QUOTED_IDENTIFIER ON) şart — filtreli indeksli tabloya yazarken 1934 hatası.
 - **Sonuç:** `http://192.168.3.228:91/` 200, bundle `index-Cl4QAEci.js` (= paket), `/api/olcum/tablo/1` 401 (API ayakta).
 
+### 9. Excel okumaları ölçüm olarak yüklenir, mobilden yeni ölçüm kapalı
+- **Neden:** Müşteri: "yalnız okunmuşlar girilsin, normal ölçüm gibi görülsün, mobilden yeni giriş engellensin".
+  Örnek dosya `91798 LOW CURVE UTILITY A336-1885-1535 RANK.xlsx` (repo kökünde, izlenmiyor): satır 10 başlık,
+  F=22, G=23 + H,I okuma, J=24 + K,L okuma … AL=34; okumalar "OK", "-1/2", "+1/8" (sapma). 22/33/34 okumasız.
+  Eski ayrıştırıcı boş başlıkta durduğu için bu dosyada yalnız 22–23'ü okuyordu.
+- **Ne yapıldı:**
+  - `OlcumSpecExcel`: `BedenKolonu(Beden, Kolon, OkumaKolonlari)`. Başlığı boş kolon, veri satırlarında (başlık+1..+80)
+    doluysa o bedenin okuma kolonu (en çok 10); okuma bir sonraki başlıkla sürer. Veri de boşsa ya da sonraki başlık
+    TEKRAR eden bedense eskisi gibi biter (yanda ikinci blok testi korunur). `SapmaMetni`: OK=0, ±a/b, ±n a/b, ondalık.
+    Sayı hücresi spec'e kendisinden yakınsa ölçülen değer sayılır. Okunamayan hücre → `OkumaUyarilari` (yükleme durmaz).
+  - `OlcuTablosuStore.OkumaOlcumleri`: (beden, adet) başına bir ölçüm, bedenin tüm POM'ları; ölçülen = spec + sapma,
+    durum `SapmaHesap.Durum` (×2 kuralı YOK). `YukleAsync(..., workOrderId)` aynı transaction'da: önceki
+    `AttachmentType LIKE 'Excel okuma%'` ölçümlerini (aynı sipariş + model) IsDeleted=1, yenileri KAPALI
+    (`EndTime` dolu, Status=Kapali, tip "Excel okuma - N. adet") yazar.
+  - Controller: `POST /api/olcum/tablo/{inv}?isEmri=` (model siparişte yoksa 400), yanıtta `olcumSayisi`.
+    `POST /api/olcum/ac` yalnız `X-Istemci: web` başlığıyla; yoksa 400 "Mobilden yeni olcum girisi kapatildi".
+  - Web: `client.ts` her isteğe `X-Istemci: web`; `OlcuTablosuPaneli` `isEmri` prop'u (OrderPage `order.recId` geçer).
+- **Dokunulan dosyalar:** `SentezSelvedge/api/Selvedge/Olcum/{OlcumSpecExcel,OlcuTablosuStore,OlcumController}.cs`,
+  `SentezSelvedge/web/src/{api/client.ts,api/olcum.ts,components/OlcuTablosuPaneli.tsx,pages/OrderPage.tsx}`,
+  `SentezSelvedge/tests/SentezSelvedge.Tests/OlcumOkumaTests.cs` (yeni).
+- **Komutlar:**
+  ```bash
+  dotnet test SentezSelvedge/tests/SentezSelvedge.Tests      # 534/534
+  cd SentezSelvedge/web && npx tsc -b && npm run build
+  .\SentezSelvedge\Deploy-IIS.ps1 -OutputDir "$PK\site"     # bundle index-COevzwUv.js
+  Compress-Archive SentezSelvedge-IIS-192.168.3.228-91\* SentezSelvedge-IIS-192.168.3.228-91.zip   # 22.9 MB
+  ```
+- **Sonuç / doğrulama:** Gerçek dosya (geçici test ile): 13 beden, 17 POM, 340 okuma, 0 uyarı → 20 ölçüm (23–32 × 2 adet),
+  WAIST 23/1: spec 27.5, ölçülen 27.0, sapma −0.5, Uygun. Şema değişmedi; sunucuda yalnız paket kurulumu.
+  IIS-KURULUM.txt'ye "2026-10-26 (2)" bölümü eklendi.
+- **Commit:** `88c9f1e` — feat(sentez-selvedge/olcum): Excel okumalari olcum olarak yuklenir, mobilden yeni olcum kapali
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
+- Ölçüm girişi Excel okumalarından (web); mobilden yeni ölçüm açılmaz (sunucu reddeder, APK değişmedi). Web'de "Yeni ölçüm" kaldı.
 - Excel dosyasının kendisi saklanmaz; yüklemede ayrıştırılıp satırlar yazılır.
 - Çok modelli iş emrinde sipariş penceresi ilk kalemin modelini gösterir; ölçüm açarken her
   modelin tablosu ayrı seçenek olarak listelenir.
@@ -149,3 +182,4 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
 - IIS paketi hazır (zip); sunucuya kurulmalı — ÖNCE 0007 + 9001 GRANT.
 - Mevcut modellerin tablolarının ilk yüklemesi yapılmalı; yüklenmeyen modelde ölçüm açılamaz.
 - İstenirse mobil uyarı metni ("Sentez'de Excel eki yok") güncellenip yeni APK.
+- SentezSelvedge paketi (88c9f1e) sunucuya kurulmalı; ardından Ctrl+F5. Önceki sürümle yüklenen tablolar (boş kolonlu Excel) yalnız 22–23 bedeni almış olabilir → yeniden yüklenmeli.
