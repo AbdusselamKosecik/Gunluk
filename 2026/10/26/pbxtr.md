@@ -105,3 +105,43 @@ yarım dosyalarına dokunulmadı; commit'ler `git commit --only -- <yollar>` ile
 - `deploy/env-esleme-kontrol.sh` önceden kırmızı: PhoneProvisioning__* şablonda yok (benim değil).
 - Uygulama konteyneri `Bootstrap__SampleUserPassword` eski değeri yayına kadar taşır (yalnız
   yeni örnek kullanıcı tohumlar).
+
+
+## BR-BE-281 / BR-AST-153 (backend-dev-2)
+
+### 1. BR-AST-153 — acil çağrı zincirinde ilerleme zaman aşımı
+- **Neden:** Yeni ölmüş ilk trunk INVITE'a cevap vermezse acil çağrı timer B (32 sn) kadar bekliyordu; BR-AST-152 yalnız normal rotayı düzeltmişti.
+- **Ne yapıldı:** `ConfigRenderer.Routing.cs` acil dal: yedeği olan her deneme `Dial(PJSIP/${PBXTR_EM_DIAL}@<trunk>,^10)`. Cevap alanı **boş** (sonsuz; çalan acil hat kesilmez, BR-AST-142 kuralı aynen), son trunk zaman aşımsız. Normal rotanın `60^10`'u acil dala sızmaz.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Provisioning/ConfigRenderer.Routing.cs`, `tests/Pbxtr.Api.Tests/Modules/Telephony/ConfigRendererRoutingTests.cs`
+- **Santral ölçümü (176.88.41.220, lab dosyası `pbxtr.d/dialplan/zz153-lab.conf`, `dialplan reload`):**
+  - yanıt vermeyen `sip:999@127.0.0.1:5999`, `^10` → `CHANUNAVAIL` / 10 sn
+  - aynı hedef zaman aşımsız (kontrol) → `CHANUNAVAIL` / 32 sn
+  - 75 sn çalıp cevaplayan Local hedef, `^10` → `ANSWER` (boş cevap alanı gerçekten sonsuz, 180 ilerleme sayılıyor)
+  - Ölçüm sonrası lab dosyası silindi, `dialplan reload`; `pbxtr.d` 30 dosya md5 önce/sonra aynı; kanal 0; spool'da artık yok. Lab çağrısının boru hattı satırları (2 cdr + 4 call_events, t0007) yedeklenip silindi (`br281_yedek.lab153_*`); ETL'in Asterisk CDR'ından aldığı 2 satır kalır (Asterisk DB salt-okunur).
+- **Testler:** golden — 3 trunk'lı zincir birebir (`^10`, `^10`, zaman aşımsız), tek trunk zaman aşımsız. Mutasyonlar (zaman aşımı yok / son trunk'a da / `60^10`) üçü de kırmızı.
+- **Commit:** `f46dfe15` — BR-AST-153: acil cagri zincirinde yedegi olan trunk denemesine ilerleme zaman asimi
+
+### 2. BR-BE-281 — ETL yönü çağrı bazında; boru hattı/ETL `cdr` ikizi
+- **Ölçüm (yön):** CDR `dcontext` bacağın SON bağlamıdır (gelen çağrı `pbxtr-dialer`'da giden, `-local`'de dahili oluyordu; `-route`/`-fwd`/`-ctl` → 0); `-int` hiç tanınmıyordu. Olculen `PBXTR_DIR` (call_events payload) yalnız BR-AST-149 yayınından beri var (12 çağrı, biri `in,out` çelişkili).
+- **Ölçüm (çift satır):** KUSUR, tasarım değil. PK `(linkedid, uniqueid, started_at)`; boru hattı AMI zamanı (µs), ETL CDR `calldate`'i (saniye) yazıyordu → anahtar hiç çakışmıyordu. t0007'de 118 tam çift, ikiz farkı 0,02–0,95 sn. CLAUDE.md §3.4 CDR'ı mutabakat kaynağı sayar (delik kapatır, kopya üretmez).
+- **Ne yapıldı:**
+  - `AsteriskCallDirectionResolver`: çağrı başına (1) ölçülen `PBXTR_DIR` tek değerse o, çelişkiyse unknown (CEL'e düşülmez); (2) ölçüm yoksa CEL'de kaynak kanalın (uniqueid = linkedid) bağlam dizisi, dialplan yön satırlarının aynası (`-in`/`-int`/`-out`/`-emerg` koşulsuz, `-out`→`-local` int, `-local`/`pbxtr-dialer` yalnız boşsa). Bacak bazlı `Direction(dcontext)` kaldırıldı.
+  - ETL: `ReadOriginContextsAsync` (CEL, READ ONLY, eventtime penceresi; linkedid'deki epoch'tan başlar). Çözülen yön aynı çağrının YÖNÜ BOŞ satırlarına yayılır, dolu yön ezilmez.
+  - `CdrTwinKey`: iki yazar da `started_at`'i saniyeye keser (aynı saniyedeki ikiz PK'da çakışır → `ON CONFLICT`, yarışsız) + 2 sn tolerans pencereli EXISTS (sınırı aşan ikiz). ETL var olan satıra yalnız boş alan doldurur; CDR'ın kanıtladığı ANSWERED, boru hattının "cevapsız" türetimini yükseltir ve boru hattı onu geri ezmez.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Platform/Jobs/AsteriskCallDataEtlJob.cs`, `src/Pbxtr.Infrastructure/Telephony/{CdrTwinKey.cs, Asterisk/AsteriskCallDirectionResolver.cs, Asterisk/AsteriskCallDataSource.cs, Asterisk/AsteriskCallDataTenantCodes.cs, Pipeline/TelephonyEventPipeline.cs}`, `tests/Pbxtr.Api.Tests/Platform/Jobs/{AsteriskCallDirectionResolverTests.cs, AsteriskCallDataEtlContractTests.cs, AsteriskCallDataTenantCodesTests.cs}`, `tests/Pbxtr.Architecture.Tests/{RawSqlAllowlistTests.cs, CallDataSourceGuardTests.cs}`, `tests/Pbxtr.Integration.Tests/Tests/AsteriskCdrEtlEndToEndTests.cs`
+- **Sunucu DB düzeltmesi (test ortamı, tek transaction, guard'lı):**
+  - Yedek şema `br281_yedek`: `cdr_ikiz` (357 satır = 179 ETL + 178 boru hattı), `cdr_yon` (6), `lab153_cdr` (2), `lab153_ce` (4).
+  - 179 ETL ikizi en yakın boru hattı satırına birleştirildi (yalnız boş alan: kayıt 35, cevap anı 69, ANSWERED yükseltme 66, billsec 55), sonra PK ile silindi (ctid değil). ETL'in eski bacak bazlı yönü TAŞINMADI.
+  - Yön geri doldurma YALNIZ ölçülmüş kaynakla (call_events `PBXTR_DIR`, çağrı başına tek değer): **6 satır (t0007)**. Çelişkili 1 çağrı dokunulmadı. live cdr 1114 → 935, yön 0: 581 → 505.
+- **Testler:** Api 1913+1383+2526+1501 geçti (4 atlandı), Architecture 858, `dotnet format --verify-no-changes` (kendi dosyalarım) temiz. Integration sunucuda (DooD): 1320 geçti / 3 kırmızı — üçü de pristine HEAD'de aynı kırmızı (FinalDeliveryReport, LeaderElection mutasyon, EnumMirror pbx CHECK'leri). Mutasyonlar: çelişki→CEL, `-out→-local`, `-int` tanıma, ikiz anahtarı kaldırma — hepsi kırmızı.
+- **Commit:** `40444b2e` — BR-BE-281: ETL yonu cagri bazinda ve PBXTR_DIR ile ayni; boru hatti/ETL cdr ikizi tekillestirildi
+
+### Kararlar
+- ETL yönünün ikinci kaynağı CEL (kaynak kanal bağlamları); CDR satırı yön kaynağı değildir.
+- Danışma kilidi kullanılmadı (ETL'in büyük tikleri kilit tablosunu taşırırdı); yarış saniye kesmesiyle PK'ya bırakıldı. Kalan pencere: yalnız "saniye sınırı + eşzamanlılık" kesişimi.
+- Tolerans içindeki iki CDR parçası (aynı kanal) tek satırda birleşir (yalnız boş alan doldurma).
+
+### Açık kalanlar
+- Yayın gerekli (uygulama imajı). Santral imajı (`--santral`) GEREKMEZ: acil dal değişikliği confd ile üretilen dialplan'dır; yayından sonra yeni revizyon üretilip santralde `-emerg` bağlamında `,^10` görülmeli.
+- Eski veride kalan: 39 (linkedid, uniqueid) çifti 2 sn penceresi dışında (5–317 sn; abandon türetimi/çok parçalı CDR), 26 boru hattı içi mükerrer — dokunulmadı. Ölçülmemiş eski ETL yönleri (bacak bazlı, sıfır olmayan) olduğu gibi duruyor.
+- CDR `disposition` eşlemesi `CONGESTION`'ı tanımıyor (0) — kart dışı gözlem.
