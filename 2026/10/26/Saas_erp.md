@@ -211,6 +211,41 @@ Takip dosyaları (scratchpad):
   - DEV 1068 yayında, sağlık 200, smoke testi geçti.
 - **Commit:** `f6f2f140` (dev).
 
+### 8. Hook geri bildirimi: kalan UX maddeleri, tarayıcı doğrulaması ve DEV 1069–1070
+- **Neden:** 1068 raporundaki "düzeltilmedi" ve "yalnız otomatik testle doğrulandı" maddeleri goal kapsamında açık sayıldı.
+- **goal.txt kontrolü:** Dosyanın tamamı okundu (382 satır). e-Fatura entegratörü dosyada hiç geçmiyor. Her madde günlükteki commit'lerle eşlendi (aşağıdaki Kararlar'a bakın).
+- **Ne yapıldı:**
+  - `12b3f84b`:
+    - Tüm Faturalar'da "Yeni Fatura" önce tip seçtiriyor (`invoice-type-chooser.tsx`).
+    - Yeni teklif başlığı tekil belge adı (`QUOTATION_DOCUMENT_TITLES`, `quotationDocType` 11 dil).
+  - `d925e2fc`:
+    - Fatura ve dekont detayında KDV matrahı net + ÖTV + ÖİV (`note-totals.ts`), faturada ÖTV/ÖİV satırı var.
+    - Dekont durumu çevrildi (`noteStatusLabel`).
+  - `3bf07b76`, `cd6db8e4`: Fatura, sipariş ve teklif alt çubuğunda ÖTV/ÖİV gösteriliyor (`DocumentWorkspace.footer.excise/communication` 11 dil).
+  - `86e07904` (ajan): Siparişten faturada dip indirim ve masraf açıklamalarıyla taşınıyor; oranlı satır ara toplamdan yeniden hesaplanıyor (`IOrderReceiptReader.Charges`).
+  - `37ed8056` (ajan): Taslak alacak/borç dekontu güncellemesi 500 veriyordu.
+    - **Kök neden:** Soft-delete edilen eski satırlar (CreditNoteId, LineNo) unique index'ini tutuyordu → Postgres 23505.
+    - **Düzeltme:** Eski satırlar negatif LineNo'ya park edilip tek transaction'da siliniyor (`NoteLineParking.cs`). Şema değişmedi.
+    - `SourceInvoiceLineId` korunuyor.
+    - **Test:** Testcontainers'ta gerçek Postgres testi (`UpdateNoteLinesPostgresTests`, 3/3).
+- **Tarayıcı doğrulaması (DEV, MitoTex):**
+  - API ile taslak satış faturası açıldı: 10 × 100, KDV20, ÖTV %10.
+    - **Sunucu:** KDV 220, toplam 1320.
+    - **Detay:** ÖTV 100, "KDV %20 (matrah 1.100)", toplam 1320.
+    - **Düzenleme:** Satır vergi panelinde ÖTV %10 / 100, alt çubukta ÖTV 100,00.
+  - Faturadan kısmi alacak dekontu (4 adet) açıldı:
+    - **Detay:** Satır tablosu, ÖTV 40, matrah 440, KDV 88, toplam 528, durum "Taslak".
+    - "Alıcının iade faturası no" kaydı 1069'da 500 verdi; 1070'te kaydediliyor, toplamlar korunuyor.
+  - "Yeni Fatura" tip diyaloğu 8 tip listeliyor; Toptan Satış seçince `?type=4052` açılıyor. Teklif `?type=5101` başlığı "Verilen Teklif".
+  - Doğrulama kayıtları sonra silindi (204).
+- **Komutlar:**
+  ```bash
+  bash tools/verify.sh all            # rc=0: backend 6054, frontend 2381
+  dotnet test tests/integration/VuoApp.IntegrationTests --filter "FullyQualifiedName~UpdateNoteLinesPostgresTests"   # 3/3
+  bash scratchpad/deploy-dev.sh 1.0.2.1070   # health 200
+  ```
+- **Not:** DEV her yayından sonra tarayıcı oturumu düşüyor ve tekrar giriş gerekiyor (gözlem). Şifre geçici bir script dosyasıyla forma yazıldı, sonra dosya silindi.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
@@ -218,7 +253,19 @@ Takip dosyaları (scratchpad):
 - Dekontlar defter kaydıdır, e-Fatura olarak gönderilmez (PO). Borç dekontunun SATIŞ olarak gönderimi mali müşavir onayına bağlı (kurul).
 - Kalan/Fire formülü Sentez ile aynı kaldı; formül ipucunda gösteriliyor.
 - Eski kayıtlar toplu olarak yeniden hesaplanmaz; yeniden kaydedilince yeni kural uygulanır.
-- Entegratör yokken önek uç noktası 404 döner (REST anlamı doğru); entegratör CRUD'u goal.txt kapsamında değil. Önek ayar sayfasından veya konfigürasyondan verilir.
+- e-Fatura entegratör kayıt ekranı goal.txt'te yok. Önek "e-Fatura Seri Önekleri" sayfasından veya `EInvoice:Series:*` konfigürasyonundan verilir.
+- Dekont satırlarında unique index değiştirilmedi (migration yok); eski satırlar negatif LineNo ile park ediliyor.
+- goal.txt eşlemesi:
+  - fiş ekranı 5 madde → P4 + Q1;
+  - bayrak, favoriler, ana sayfa → `87e78275`;
+  - yönetici paneli → `77845a07`;
+  - kod üretimi → `47e60618`;
+  - BI hatası, stok modalı, rapor tasarımcısı → `ac9fb890`;
+  - bildirim tercihleri → P-paketi (1060 duman testi);
+  - talep dil → `be3017b7`;
+  - 4 oluşturma ekranı → `1f300637` + Q1;
+  - kaynak yükleme → `3ea48866`;
+  - Örme/Dokuma menüleri → `3ea48866`, `327c4b1c`, Q3.
 
 ## Açık kalanlar / sonraki adım
 - goal.txt kapsamında açık iş yok.
