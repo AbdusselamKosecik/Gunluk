@@ -134,18 +134,46 @@ Takip dosyaları (scratchpad):
   - Güvenlik post-check: Q2–Q4 PASS, Q1/Q1b PASS-WITH-FIXES; düzeltmeler uygulandı.
   - Son UX kontrolü (1065, önbelleksiz yenileme ile): PASS-WITH-NITS. İlk turdaki BLOCK, açık sekmenin eski paketinden geliyordu. Ders: UX kontrolünde her zaman ignoreCache ile yenile.
 
+### 6. Plan 3 (R1–R6), KDV matrahı (T1), dekont vergileri (T2) ve DEV 1066–1067
+- **Neden:** `/goal` hook'u 1065 raporundaki açık maddeleri de kapsam içinde saydı.
+- **Kurul:** Plan 3 (`scratchpad/plan3-20261026.md`) için CTO, Şüpheci ve DBA APPROVE-WITH-CONDITIONS, Güvenlik PASS-WITH-FIXES verdi. KDV matrahı turunda CTO ve Şüpheci APPROVE-WITH-CONDITIONS verdi.
+- **Ne yapıldı:**
+  - `22d7e73b` R2/R4/R5:
+    - Genel `/files` uçları kaldırıldı (kullanan yoktu, yetki kontrolü de yoktu). Ölü `features/files` silindi.
+    - E-posta tekrarı `SET NX` kilidiyle (7 gün) engelleniyor. Gönderim başarısız olursa kilit bırakılıyor.
+    - Birim adları Libre/İnç/Fit/Yarda oldu. Migration `20261026082215_UnitTurkishNamesImperial`.
+  - `216ca1fa` R1/R6:
+    - Fiş ekranı tüm stok kartlarını çekmiyor; kartlar Id ile 40'lık parçalar halinde geliyor.
+    - Kabuk `inert` olduğunda odak kayboluyordu; artık geri veriliyor.
+  - `4579c224`..`08ebc160`, `73a6b856`, `4217d46b` R3:
+    - Satır vergi tanımları kalıcı (`LineTaxes jsonb`). Migration `20261026083051_DocumentLineTaxes`.
+    - Maktu ÖTV yeniden hesaplanıyor.
+    - UBL kodu tanımın SpecialCode'undan geliyor (beyaz liste).
+    - Kopyada, siparişten faturaya geçişte ve sipariş düzenlemede vergiler taşınıyor.
+    - Teklif güncellemesi satırları Id ile eşliyor.
+  - `d832f17e`..`05b8c89c` T1: KDV matrahı net + ÖTV + ÖİV (KDVK md. 24) her belgede ve fişte.
+    - Fişteki `HasVatPositiveEffect` hiçbir yerde true yapılmıyordu.
+    - UBL TaxableAmount düzeltildi.
+    - Eski ÖTV'li taslak e-Fatura gönderiminde `finance.invoice.vat_base_stale` ile durduruluyor.
+    - Toplamlarda ÖTV/ÖİV ayrı satır olarak gösteriliyor.
+  - `8021b122`, `23bf66d1` T2:
+    - Alacak/borç dekontu satırlarına ÖTV/ÖİV ve LineTaxes eklendi. FromInvoice kısmi iadede vergileri orantılı hesaplıyor. Migration `NoteLineTaxes`.
+    - Sipariş ve talepte birim listesi ad gösteriyor.
+- **Doğrulama:**
+  - Her birleştirmede `verify.sh all` rc=0. Son durum: backend 5944 test, frontend 2350 test.
+  - Güvenlik post-check PASS.
+  - UX 1066 PASS-WITH-NITS. KDV matrahı hatasını bu kontrol buldu.
+  - DEV 1066 ve 1067 yayında, sağlık 200.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
 - Fatura numaralarında boşluk olabilir; e-Fatura için boşluksuz sıra gerekirse ayrı tasarım yapılacak.
 
 ## Açık kalanlar / sonraki adım
-- Fiş workspace hâlâ tüm stok kartlarını (pageSize=100000) çekiyor. Sunucu taraflı aramaya taşınması ayrı bir performans işi.
-- Kalan/Fire formülü Sentez ile aynı bırakıldı. PO, paydanın "işlenen (Giden − İade)" olmasını önerdi; kullanıcı kararı bekliyor.
-- Genel `/files` uçlarında [RequirePermission] yok ve klasör adı temizlenmiyor (güvenlik, Med). Ayrı iş.
-- e-Fatura: ÖTV her zaman 0071 (I. liste) yazılıyor, çünkü liste satırda tutulmuyor. Fatura kopyasında serbest metin satırın ÖTV/ÖİV'i taşınmıyor.
-- Taşınan ÖTV/ÖİV net oranıyla ölçekleniyor (yüzde vergi varsayımı). Maktu ÖTV için ayrı tasarım gerekir.
-- Bildirim: uygulama içi bildirimi kapalı, e-postası açık kullanıcıda e-posta tekrarı engellenmiyor.
-- Bazı birim adları İngilizce (Foot/Inch/Pound/Yard/KwH).
-- Talep/teklif Adı alanında Enter'dan sonra odak kayboluyor (yeniden üretilemedi).
+- Kurul kararıyla bilinçli bırakılanlar:
+  - Kalan/Fire formülü Sentez ile aynı kaldı; formül ipucunda gösteriliyor.
+  - Depo listesi küçük olduğu için toplu çekilmeye devam ediyor.
+  - Eski kayıtlar toplu olarak yeniden hesaplanmıyor; yeniden kaydedilince yeni kural uygulanıyor.
+- Alacak/borç dekontu için e-Fatura gönderimi ve satırlı detay ekranı uygulamada hiç yok. Bu, yeni özellik olarak ayrıca ele alınabilir.
 - Fatura numarası boşluksuz sıra (e-Fatura) ayrı tasarım ister.
