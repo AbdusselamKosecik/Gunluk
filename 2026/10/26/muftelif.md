@@ -109,6 +109,17 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   Tarayıcıda görsel kontrol YAPILAMADI: chrome-devtools MCP profili başka oturumda kilitli.
 - **Commit:** `3148029` — feat(sentez-planing/dikim): Fashion ve Non Denim birlesik hatta ayrica da gorulur
 
+### 7. SentezPlaning paketi (3148029)
+- **Neden:** Kullanıcı "paket çıkartır mısın" dedi.
+- **Komutlar:**
+  ```powershell
+  cd SentezPlaning; powershell -ExecutionPolicy Bypass -File .\Deploy-IIS.ps1
+  Compress-Archive publish\* X:\GitlabredericTr\SentezPlaning-paket-2026-10-26-3148029.zip
+  ```
+- **Sonuç:** 70 dosya, 7,9 MB; `.db`/log/Development/data yok. Bundle `index-DHkLEhDl.js` içinde
+  alt görünüm metni, DLL'de `AltGorunum` → bayat değil. Şema değişikliği yok.
+  Kurulum kullanıcıda: `.\Deploy-IIS.ps1 -SkipWebBuild -SetupIIS -SiteName SentezPlaning -Port 8090 -PhysicalPath 'C:\inetpub\SentezPlaning'` ya da zip.
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Excel dosyasının kendisi saklanmaz; yüklemede ayrıştırılıp satırlar yazılır.
@@ -116,7 +127,7 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   modelin tablosu ayrı seçenek olarak listelenir.
 
 ## Açık kalanlar / sonraki adım
-- SentezPlaning: Fashion/Non Denim alt görünümü canlıya (192.168.3.228:90) kurulmadı; paket istenirse çıkarılacak. Ekran tarayıcıda denenmedi.
+- SentezPlaning: paket hazır (`SentezPlaning-paket-2026-10-26-3148029.zip`), sunucuya kurulmalı. Ekran tarayıcıda denenmedi.
 - **0007 canlıya (SentezLive, 192.168.1.22) uygulanmadı** — bu oturumda SQL kimlik bilgisi yoktu.
   Uygulama: önceki gibi sqlcmd ile `BEGIN TRAN; 0007; INSERT SchemaHistory(0007, hash); COMMIT`
   ya da paketteki `sema\SentezSelvedge.Db.exe db`. Ardından yeni tablolar için
