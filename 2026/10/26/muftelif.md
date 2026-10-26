@@ -175,6 +175,21 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   Sipariş Sentez'de kapalı/iptal ya da tip 15 değilse yine listede çıkmaz (filtre bilerek).
 - **Commit:** `525be39` — fix(sentez-selvedge/siparis): siparis aramasi musteri PO numarasinda da arar
 
+### 11. SentezPlaning dikim: Fashion ve Non Denim ayrı hat düğmesi
+- **Neden:** Kullanıcı (localhost:90/dikim) "Fashion & ND yanına Fashion ve ND getirmemişsin" dedi. 3148029'daki
+  Birleşik/Fashion/Non Denim seçicisi yalnız Fashion & ND seçiliyken görünüyordu → bulunamadı.
+- **Ne yapıldı:** `DikimTab` hat düğmeleri `flatMap`: her hat + `dikimYerleri.length > 1` ise her dikim yeri için
+  ayrı düğme (`setLineId(l.id); setYerSecim(y)`); seçili = aynı hat VE aynı yer. Ayrı seçici kaldırıldı. API değişmedi.
+- **Dokunulan dosyalar:** `SentezPlaning/web/src/pages/UretimPlanlamaPage.tsx`
+- **Komutlar:**
+  ```powershell
+  cd SentezPlaning/web; npx tsc -b; npm run build
+  cd ..; powershell -ExecutionPolicy Bypass -File .\Deploy-IIS.ps1
+  Compress-Archive publish\* X:\GitlabredericTr\SentezPlaning-paket-2026-10-26-d7ee125.zip
+  ```
+- **Sonuç:** tsc/build temiz; bundle `index-Dcy5TFzh.js`, zip 8.3 MB, .db/log yok. Ekran tarayıcıda denenmedi (localhost:90 kullanıcının sunucusu).
+- **Commit:** `d7ee125` — fix(sentez-planing/dikim): Fashion ve Non Denim ayri hat dugmesi olarak gorunur
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Ölçüm girişi Excel okumalarından (web); mobilden yeni ölçüm açılmaz (sunucu reddeder, APK değişmedi). Web'de "Yeni ölçüm" kaldı.
@@ -184,7 +199,7 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
 
 ## Açık kalanlar / sonraki adım
 - `sa` ve `uzm_selvedge_app` şifreleri sohbette açık yazıldı → değiştirilmesi önerildi (app şifresi değişirse sunucudaki ConnectionStrings__Sentez de).
-- SentezPlaning: paket hazır (`SentezPlaning-paket-2026-10-26-3148029.zip`), sunucuya kurulmalı. Ekran tarayıcıda denenmedi.
+- SentezPlaning: paket hazır (`SentezPlaning-paket-2026-10-26-d7ee125.zip`), sunucuya kurulmalı. Ekran tarayıcıda denenmedi.
 - ~~0007 canlıya uygulanmadı~~ → 2026-10-26 uygulandı (bkz. 8).
   Uygulama: önceki gibi sqlcmd ile `BEGIN TRAN; 0007; INSERT SchemaHistory(0007, hash); COMMIT`
   ya da paketteki `sema\SentezSelvedge.Db.exe db`. Ardından yeni tablolar için
