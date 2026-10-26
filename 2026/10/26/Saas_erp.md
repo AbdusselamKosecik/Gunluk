@@ -165,15 +165,60 @@ Takip dosyaları (scratchpad):
   - UX 1066 PASS-WITH-NITS. KDV matrahı hatasını bu kontrol buldu.
   - DEV 1066 ve 1067 yayında, sağlık 200.
 
+
+### 7. Plan 4 (S1–S4) ve DEV 1068
+- **Neden:** 1067 raporunda dekont satırları, boşluksuz e-Fatura numarası ve fiş depo listesi açık kalmıştı (`scratchpad/plan4-20261026.md`).
+- **Kurul:** CTO ve Şüpheci APPROVE-WITH-CONDITIONS, DBA şemayı onayladı. PO kararıyla S3 (dekontların e-Fatura gönderimi) kapsamdan çıkarıldı.
+  - Alacak dekontu bir iade kaydıdır; iade faturasını alıcı keser.
+  - Borç dekontu SATIŞ olarak gönderilmez; mali müşavir onayı gelmeden açılmayacak.
+- **Ne yapıldı:**
+  - `f3bfd61b` S1: Fiş ekranı depoları `pageSize=1000` ile çekiyor; kayıtlı fişte listede olmayan depo Id ile ayrıca getiriliyor (`hooks/use-receipt-warehouses.ts`).
+  - `702bc6e7` S4: Alacak ve borç dekontu detayında satır tablosu ve vergi toplamları gösteriliyor (`note_shared/note-lines-card.tsx`, `note-totals.ts`).
+    - Metin "Alacak Dekontu (İade Kaydı)" oldu.
+    - "Alıcının iade faturası no" taslakta düzenlenebiliyor. 11 dile çevrildi.
+  - `122bfeb4` güvenlik:
+    - Fatura ve dekont yazma uçlarına `finance` izinleri eklendi.
+    - Faturadan iadede miktar kümülatif olarak fatura miktarını aşamıyor (`CreditNoteLine.SourceInvoiceLineId`).
+    - Dekont doğrulayıcı sınırları ve negatif toplam kontrolü eklendi. `OriginalInvoiceId` tenant içinde ve aynı müşteride doğrulanıyor.
+  - `90fa35bc` S2: e-Fatura numarası taslakta değil gönderim anında ayrılıyor.
+    - Sayaç `finance.EInvoiceNumberSeries` tablosunda (`INSERT … ON CONFLICT … RETURNING`); fatura satırı `FOR UPDATE` ile kilitleniyor ve tek transaction'da yazılıyor.
+    - Gönderim başarısız olursa tekrar gönderimde aynı numara ve UUID kullanılıyor.
+    - Numarası ayrılmış fatura silinemiyor ve yılı değiştirilemiyor.
+    - Sayaç, mevcut en yüksek numaradan tohumlanıyor.
+  - `f6f2f140`:
+    - Seri öneki okuma uçları ve `/finance/e-invoice-series` sayfası eklendi.
+    - Entegratör kaydı olmayan firmada önek `EInvoice:Series:*` konfigürasyonundan okunuyor.
+    - Tüm fatura ve dekont GET uçlarına `finance:read` eklendi (viewer dahil 5 rolde tanımlı).
+    - Borç dekontunda da `OriginalInvoiceId` doğrulanıyor.
+    - Listeler e-Fatura numarasını `Invoice.EInvoiceNumber`'dan okuyor.
+- **Migration:** `20261026101544_EInvoiceGaplessNumbers`
+  - Yeni tablo + UNIQUE(TenantId, SeriesPrefix, Year) + 2 check.
+  - `Invoice.EInvoiceNumber varchar(30)` + filtreli unique index.
+  - Entegratörde 2 önek kolonu + check.
+  - `CreditNoteLine.SourceInvoiceLineId`.
+- **Komutlar:**
+  ```bash
+  cd src/backend/VuoApp.Migrator && ConnectionStrings__DefaultConnection="Host=localhost;Database=x;Username=x;Password=x" dotnet ef migrations add EInvoiceGaplessNumbers --project . --context MigratorDbContext
+  node tools/strip-migration-designers.mjs && bash tools/verify.sh all
+  git push origin HEAD:dev && bash scratchpad/deploy-dev.sh 1.0.2.1068
+  ```
+- **Doğrulama:**
+  - `verify.sh all` rc=0: backend 6049 test, frontend 2375 test.
+  - Güvenlik post-check PASS. Ham SQL parametreli ve her sorguda TenantId filtresi var; eşzamanlı gönderimde tek numara ayrılıyor.
+  - UX 1068 PASS-WITH-NITS:
+    - Fiş deposu, birim adları ve fatura listesi doğru; seri öneki sayfası menüde ve boş durumu anlaşılır.
+    - Faturada ÖTV satır altındaki vergi panelinden giriliyor (fiş ile aynı desen). Hesap T1 testleriyle doğrulandı.
+  - DEV 1068 yayında, sağlık 200, smoke testi geçti.
+- **Commit:** `f6f2f140` (dev).
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
-- Fatura numaralarında boşluk olabilir; e-Fatura için boşluksuz sıra gerekirse ayrı tasarım yapılacak.
+- e-Fatura numarası gönderimde ve boşluksuz ayrılır; taslak fatura numarası (iç numara) boşluk bırakabilir.
+- Dekontlar defter kaydıdır, e-Fatura olarak gönderilmez (PO). Borç dekontunun SATIŞ olarak gönderimi mali müşavir onayına bağlı (kurul).
+- Kalan/Fire formülü Sentez ile aynı kaldı; formül ipucunda gösteriliyor.
+- Eski kayıtlar toplu olarak yeniden hesaplanmaz; yeniden kaydedilince yeni kural uygulanır.
+- Entegratör yokken önek uç noktası 404 döner (REST anlamı doğru); entegratör CRUD'u goal.txt kapsamında değil. Önek ayar sayfasından veya konfigürasyondan verilir.
 
 ## Açık kalanlar / sonraki adım
-- Kurul kararıyla bilinçli bırakılanlar:
-  - Kalan/Fire formülü Sentez ile aynı kaldı; formül ipucunda gösteriliyor.
-  - Depo listesi küçük olduğu için toplu çekilmeye devam ediyor.
-  - Eski kayıtlar toplu olarak yeniden hesaplanmıyor; yeniden kaydedilince yeni kural uygulanıyor.
-- Alacak/borç dekontu için e-Fatura gönderimi ve satırlı detay ekranı uygulamada hiç yok. Bu, yeni özellik olarak ayrıca ele alınabilir.
-- Fatura numarası boşluksuz sıra (e-Fatura) ayrı tasarım ister.
+- goal.txt kapsamında açık iş yok.
