@@ -65,12 +65,37 @@ Takip dosyaları (scratchpad):
   - DEV 1.0.2.1059 (K+P2+P4) ve 1.0.2.1060 (+P1, P3, P5, P7a) yayında, sağlık 200.
   - DEV duman testi (`scratchpad/smoke-1060.cjs`): tercihler, bildirim kataloğu, numara önizlemesi, alan düzeni, makine yükü, analitik kaynaklar, 4 kaynakta pivot ve rapor tanımları 200 döndü. DEV DB boş (sıfırlanmış).
 
+### 3. Kalan paketler, güvenlik ve 1061
+- **Commitler:**
+  - `77845a07` P8: yönetici paneli `/admin-panel`, admin-summary uç noktası, duyurular sayfası, PrivateRoute düzeltmesi.
+  - `327c4b1c` P7b: Fason Takip, Kümülatif, Parti Tarihçesi (Örme + Dokuma). Migration `20261025235107_InventoryReceiptTypeDateIndex`. Elle düzenlendi: `CREATE INDEX CONCURRENTLY IF NOT EXISTS ... WHERE "IsDeleted" = false`, `suppressTransaction: true`.
+  - `1f300637` P6: talep, teklif, sipariş ve fatura oluşturma ekranları ortak `DocumentWorkspaceShell` üzerinde. Talep toplamları sunucuda hesaplanıyor. `IInventoryReferenceValidator` eklendi.
+  - `674f44fd` güvenlik post-check: fason raporları `production:read` yanında `inventory:read` de istiyor (`SubcontractReportSupport.EnsureReceiptReadAsync`, `SubcontractReportsAccessTests`).
+- **Sonuç:** DEV 1.0.2.1061 yayında, sağlık 200, duman testi OK.
+
+### 4. UX post-check ve 1062
+- **Neden:** ekran değişen her iş uygulama sonrası UX kontrolünden geçer.
+- **Ortam:** yerel ortam açılmadı. Paylaşımlı dev primary'si (`100.109.159.58:15433`) zaman aşımı veriyordu, PgBouncer `:9999` açıktı. Migration'sız açılan yerel API'de yeni tablolar olmayacaktı. Bu yüzden kontrol, migration'ları uygulanmış DEV 1061 (app-dev.vuo.app) üzerinde ux-reviewer ile yapıldı.
+- **Sonuç:** PASS-WITH-FINDINGS, engelleyici yok. Sekiz ekran grubunun hepsi çalışıyor. Konsolda hata, ağda 4xx/5xx yok. İngilizce kontrolü temiz.
+- **Düzeltilenler (`6125384d`):**
+  - stok kartı seçim penceresinde silme düğmesi yok (`inventory_item.page.tsx`, `canDelete={isModal ? () => false : undefined}`);
+  - fason raporlarında cari filtresi düz `<select>` (pageSize=1000) yerine lookup (`customer_filter_field.tsx`);
+  - stok raporu sayıları dile göre biçimleniyor (`ColumnBuilder.addNumberColumn`); "Free (Kullanılabilir)" artık "Kullanılabilir";
+  - boş listede sayfa bilgisi "0 - 0" ve "1 / 1" (`pagination-range.ts`);
+  - `/finance/invoice/create` açıkken menüde Finans seçili (`two-panel.utils.ts`, istisna yalnız rapor/analitik modülünden gelişte);
+  - fatura ekranında "Vazgeç" yerine "İptal";
+  - Kaynak Yükleme tablosu tam genişlikte.
+- **Komutlar:** `bash tools/verify.sh all` (rc=0, frontend 2230 test), ardından `git push origin HEAD:dev` ve `bash scratchpad/deploy-dev.sh 1.0.2.1062`. İlk denemede Docker Desktop kapalıydı; açılınca deploy geçti.
+- **Sonuç:** DEV 1.0.2.1062 yayında, sağlık 200, duman testi OK.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
 - Fatura numaralarında boşluk olabilir; e-Fatura için boşluksuz sıra gerekirse ayrı tasarım yapılacak.
 
 ## Açık kalanlar / sonraki adım
-- P6 (oluşturma ekranları), P7b (fason raporları) ve P8 (yönetici paneli) ajanlarda.
-- Ardından: UX post-check (Chrome) ve güvenlik post-check.
+- Fiş çalışma alanı açılırken tüm stok kartlarını (`pageSize=100000`) çekiyor. Bu önceden de vardı; ekranın sunucu taraflı aramaya taşınması ayrı iş.
+- Oluşturma ekranlarında fiş çalışma alanıyla tam eşlik yok: "Alanları düzenle" yok, sekme seti farklı, faturada satır lookup'ı tek kolon. Ekler için backend yok.
+- P7b: İplik Kullanım Kontrol ve Müşteri/Ham Depo raporları ertelendi. Kalan/Fire formülleri Sentez'den aynen alındı; İade'yi tutarsız sayıyor. Yeni menü grubu `production-module-sub-items.ts` içinde yok.
+- KDV satırda hâlâ yüzde kutusu (ÖTV/ÖİV listeden). Zorunlu alan işareti yok. a11y eksikleri (tema düğmesi etiketi, DialogContent açıklaması).
 - Override ile `inventory:edit` almış kullanıcılar `inventory:approve` almıyor; outbox tekrarında çift bildirim olabilir.
