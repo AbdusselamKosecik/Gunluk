@@ -62,3 +62,9 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 - Y-0000000032'de RCT01 Yıkama reçetesi duruyor; iplik tipinde reçete yok → kullanıcı iplik reçetesi tanımlamalı.
 - Fatura tarih filtresi 500 → yönetici panosu fatura kutucuğu gerçek sayım.
 - Dokuma testinde ulaşılmayan: Kumaş Teknik Analiz Formu kaydet, levent oluşturma, tezgah panosu işlemleri.
+
+### 11. P4 2. tur + dokuma testi 2. bölüm
+- **Ne yapıldı:** Lookup içinden Yeni → iç içe modal: reçete, üretim reçetesi, üretim emri, sipariş, fatura listeleri de dönüştürüldü (fixedType / fiş tipi aktarılır, kaydedince otomatik seçim). Stok kartı ve personel zaten modalda açıyordu.
+- **Dokuma testi 2 (DEV 1076):** Kumaş Teknik Analiz Formu oluştur/kaydet/yeniden yükle/düzenle PASS (KA-0004), Çözgü Planlama analiz bağla + 9 levent oluştur PASS (Y-0000000033-C01..C09), üretim emri yeni Detay ızgarası (yazarak arama + F2 kumaş filtreli + uzunluk birimleri, kaydet/yeniden yükle) PASS. Sürtünmeler (rapor `scratchpad/weaving-test-report-2.md`): lookup seçiminden sonra odak satıra dönmüyor; analiz formunda malzeme/iplik lookup'ları türe göre süzülmüyor; çözgü planlama emir satır toplamı yerine başlık miktarını (1200) kullanıyor; emir detayında bağlı analiz görünmüyor.
+- **Sonuç / doğrulama:** verify all yeşil (backend 6245, frontend 2722).
+- **Commit:** `e8b45c8b` — DEV 1.0.2.1077 (health 200).
