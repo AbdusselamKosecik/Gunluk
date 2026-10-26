@@ -120,6 +120,19 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   alt görünüm metni, DLL'de `AltGorunum` → bayat değil. Şema değişikliği yok.
   Kurulum kullanıcıda: `.\Deploy-IIS.ps1 -SkipWebBuild -SetupIIS -SiteName SentezPlaning -Port 8090 -PhysicalPath 'C:\inetpub\SentezPlaning'` ya da zip.
 
+### 8. SentezSelvedge canlı: 0007 + yetki (site düşmüştü)
+- **Neden:** Kullanıcı paketi şema adımlarından ÖNCE kurdu → SemaDogrulayici "Sema eksik (3 sorun)" ile uygulama açılmadı.
+- **Engeller:** `uzm_selvedge_app` DDL yetkisiz (CREATE TABLE/ALTER = 0, tasarım gereği). Windows kimliği (abdus,
+  0001–0006'yı uygulayan) bu makineden "Cannot generate SSPI context". Kullanıcı `sa` verdi (şifre hiçbir yere yazılmadı,
+  yalnız `SQLCMDPASSWORD` ortam değişkeni, komut sonrası silindi).
+- **Ne yapıldı:**
+  1. Hash = paketteki `sema/db/0007_olcu_tablosu.sql` (CRLF, BOM'suz; git checkout ile aynı) SHA256 = `A29443160EE9…`.
+  2. `SET XACT_ABORT ON; BEGIN TRAN; <0007>; INSERT SchemaHistory(0007, hash, 'abdus'); COMMIT` — `sqlcmd -U sa -b` → trancount 0.
+  3. 9001'in GRANT döngüsü (sa) → uygulama dışı yazma izni 0 satır.
+  4. Doğrulama: tablolar + `MeasureSpecFileId` var; `uzm_selvedge_app` ile SpecFile/Spec INSERT + UPDATE → ROLLBACK, kalan 0.
+     Not: sqlcmd'de `-I` (QUOTED_IDENTIFIER ON) şart — filtreli indeksli tabloya yazarken 1934 hatası.
+- **Sonuç:** `http://192.168.3.228:91/` 200, bundle `index-Cl4QAEci.js` (= paket), `/api/olcum/tablo/1` 401 (API ayakta).
+
 ## Kararlar
 - Ölçü tablosunun kaynağı artık model başına yüklenen Excel (spec §4.5'e tarihli not düşüldü).
 - Excel dosyasının kendisi saklanmaz; yüklemede ayrıştırılıp satırlar yazılır.
@@ -127,8 +140,9 @@ anlık okunuyordu (spec §4.5, 0005). Müşteri bunun yerine eski Selvedge'deki 
   modelin tablosu ayrı seçenek olarak listelenir.
 
 ## Açık kalanlar / sonraki adım
+- `sa` ve `uzm_selvedge_app` şifreleri sohbette açık yazıldı → değiştirilmesi önerildi (app şifresi değişirse sunucudaki ConnectionStrings__Sentez de).
 - SentezPlaning: paket hazır (`SentezPlaning-paket-2026-10-26-3148029.zip`), sunucuya kurulmalı. Ekran tarayıcıda denenmedi.
-- **0007 canlıya (SentezLive, 192.168.1.22) uygulanmadı** — bu oturumda SQL kimlik bilgisi yoktu.
+- ~~0007 canlıya uygulanmadı~~ → 2026-10-26 uygulandı (bkz. 8).
   Uygulama: önceki gibi sqlcmd ile `BEGIN TRAN; 0007; INSERT SchemaHistory(0007, hash); COMMIT`
   ya da paketteki `sema\SentezSelvedge.Db.exe db`. Ardından yeni tablolar için
   `db/elle/9001_yetki.sql` yetki bloğu ELLE koşturulmalı (GRANT INSERT/UPDATE/DELETE).
