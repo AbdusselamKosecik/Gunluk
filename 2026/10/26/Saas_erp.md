@@ -246,6 +246,41 @@ Takip dosyaları (scratchpad):
   ```
 - **Not:** DEV her yayından sonra tarayıcı oturumu düşüyor ve tekrar giriş gerekiyor (gözlem). Şifre geçici bir script dosyasıyla forma yazıldı, sonra dosya silindi.
 
+### 9. goal.txt tam kabul turu (DEV 1070–1073), Plan 5 (eksik Örme/Dokuma raporları)
+- **Neden:** Hook, goal.txt eşlemesinin commit açıklamalarına dayandığını, ekranların tek tek doğrulanmadığını söyledi.
+- **Kabul (DEV 1070):** Üç UX ajanı goal.txt'in tüm maddelerini tarayıcıda yaptı.
+  - **A grubu (fiş R1–R7):** PASS. Kart ek vergisi otomatik ekleniyor (R3b); bunu koordinatör geçici `UXTEST-OTV` kartıyla doğruladı (ÖTV 100 / KDV 220 / 1.320), kart sonra silindi.
+  - **B grubu (bayrak, favori, ana sayfa, yönetici, kod üretimi, bildirim tercihleri):** PASS.
+  - **C grubu (BI, stok modal, rapor tasarımcısı, teklif/sipariş/fatura, kaynak yükleme):** PASS. Örme/Dokuma menülerinde eksik bulundu: İş Emri Raporu, Üretim Emri Top Listesi (normal/detaylı), Kumaş/Çözgü Teknik Analiz adları.
+- **Küçük düzeltmeler:**
+  - `6376af4c`: lookup Esc sonrası odak alana dönüyor (`grid-lookup.tsx`, focusin izleyici); talep kalem sayısı boş satırı saymıyor; Kod Üretici açıklaması gerçek davranışı anlatıyor (11 dil).
+  - `73ca407e`: vergi seçim etiketi (`taxOptionLabel`): oran tekrarı yok, ondalık dile göre.
+- **Plan 5 (`scratchpad/plan5-20261026.md`):**
+  - **Kurul:** CTO, Şüpheci, DBA ve PO APPROVE-WITH-CONDITIONS; Güvenlik PASS-WITH-FIXES.
+  - **Şüpheci düzeltmesi:** Örme topları Inventory `FabricRoll`'dan `IFabricRollReader` portuyla okunuyor; `FabricInspection` kullanılmıyor. Taslak setler varsayılan olarak hariç, "Taslak dahil" seçeneğiyle gösteriliyor.
+  - `15fcdc5b` backend: `GET api/v1/production/reports/order-rolls` ve `.../work-order` (stok/üretim/operasyon). Tenant lisansı ve kullanıcı modül engeli kontrol ediliyor (403); sorgular türe göre filtreli siparişlerden başlıyor; açık DTO; 366 gün sınırı, 500 satırlık sayfa, Excel'de 5000 satır sınırı. Şema değişikliği yok.
+  - `17d1d8a9` frontend:
+    - `order_reports/*`;
+    - menüler: Örme RAPORLAR, Dokuma RAPORLAR ve hub kartları, Kartlar & Analiz altında Teknik Analiz adları;
+    - Excel'de adlar ve kesilme notu;
+    - p7c.json 11 dil.
+  - `22fe1743` TotalRows: Detaylı listede sayfa sayısı hata satırlarından hesaplanıyor.
+  - **Güvenlik post-check:** PASS.
+- **UX 1071 bulguları → `bc739572` (A–J):**
+  - Stok görünümü kalemsiz siparişte başlık satırını gösteriyor.
+  - Üretim/Operasyon görünümleri için ayrı boş durum mesajları var.
+  - Analiz başlıkları menüyle uyumlu.
+  - Tür kolonu Top/Parça gösteriyor.
+  - Örme açıklaması Örme'ye özgü.
+  - Örme lookup'ında Dokuma No kolonu yok.
+  - Talep boş satırı sayılmıyor.
+  - İngilizcede Weaving No/Package No çevrildi.
+  - g/m² biçimli.
+  - Parti Tarihçesi filtrelerine aria-label eklendi.
+- **UX 1072:** A–J PASS. Talep taslağı kaydedilip silindi (uçtan uca).
+- `2f89ea0e` (1073): Üretim emri miktarları dile göre biçimli; İş Emri boş görünümü tek mesaj. Tarayıcıda doğrulandı ("5.000", "234,9"; yalnız özel mesaj görünüyor).
+- **Komutlar:** her turda `bash tools/verify.sh all` rc=0 (son: backend 6078, frontend 2420); Postgres entegrasyon testleri 7/7; `bash scratchpad/deploy-dev.sh 1.0.2.1071|1072|1073`, sağlık 200.
+
 ## Kararlar
 - PlannedDuration "saat" kabul edildi (planlayıcı 7 gün için 7×24 gönderiyor).
 - Bilinmeyen vergi kodu satırda reddedilir (`line_tax_unsupported`); sessizce kaybolmaz.
@@ -269,3 +304,9 @@ Takip dosyaları (scratchpad):
 
 ## Açık kalanlar / sonraki adım
 - goal.txt kapsamında açık iş yok.
+
+### Ek kararlar (tur 9)
+- Tarih biçimi bilgisayarın yerel ayarını izler (2026-10-25 kullanıcı kararı, `date-locale.ts`); test tarayıcısı en-US olduğu için tarihler ABD biçiminde göründü. Bu bir hata değil.
+- Faturada "Fiş No" etiketi fiş ekranı standardı gereği (`receipt-screen-standard.md`).
+- Lookup hücresindeki iç içe düğme ortak `GridLookupCell` bileşeninde ve tüm uygulamada aynı desen; bu turda değiştirilmedi.
+- İş Emri'nde sevk miktarı ve irsaliye "Bu bilgi bu raporda yok" olarak gösteriliyor (PO kararı; bu veri Inventory modülünde).
