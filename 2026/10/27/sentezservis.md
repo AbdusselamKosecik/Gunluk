@@ -55,4 +55,20 @@ kategorileri tekrarsız, `+` ile (ARASIN + MAYO + BAYAN); Miktarı = toplam adet
 ## Açık kalanlar / sonraki adım
 - **Canlı ERP'de denenmedi.** İlk kullanımda "Fatura bulunamadı" sayısına bak: yüksekse liste numarası
   DocumentNo'da değil demektir (ReceiptNo yedeği var).
-- Paket (`deploy/yayinla.ps1`) bu iş için üretilmedi; sunucuya kurulum bekliyor.
+- Paket sunucuya kurulmadı (bkz. 6).
+
+## Ek — 6. Paket
+- **Neden:** Kullanıcı paket istedi.
+- **Ne yapıldı:** `git status`: src/web'de commit edilmemiş değişiklik yok (yalnız docs altında ilgisiz dosyalar),
+  çalışma klasörü = HEAD `809183b`. Paket çalışma klasöründen çıkarıldı.
+- **Komutlar:**
+  ```bash
+  powershell -NoProfile -ExecutionPolicy Bypass -File deploy/yayinla.ps1
+  powershell -NoProfile -Command "Compress-Archive -Path yayin\* -DestinationPath SentezServis-2026-10-27-indirimli-oran.zip -Force"
+  ```
+- **Sonuç / doğrulama:** `SentezServis-2026-10-27-indirimli-oran.zip` (80 MB), arayüz tarihi 2026-10-27 12:12.
+  appsettings.json çıkarıldı, örnek bırakıldı (30 değer boşaltıldı). 20.10 paketiyle karşılaştırma: dosya listesi
+  aynı (tek dosya exe, NPOI içinde; exe 201→211 MB), app.js rota sayısı 32→33, eksilen yok, yeni yalnız `/indirimli-oran`.
+- **Kurulum:** sunucuda `servis-kur.cmd "D:\UzmanAdres\SentezServis" 81`; sonra `/api/surum` → arayuzTarihi 2026-10-27 12:12.
+  Yeni ayar anahtarı yok (mevcut ERP bağlantısını kullanır), sunucu appsettings'ine dokunmak gerekmez.
+- Zip depoya commit edilmedi (önceki zip'ler gibi izlenmiyor).
