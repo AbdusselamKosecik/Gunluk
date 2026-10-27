@@ -128,3 +128,13 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 - Çözgü Faz 2 (levent, tezgâhta sıradaki kumaş, yalnız atkı sarfı).
 - Düşük güvenlik bulguları: çözgü tahsisinde warpInventoryId tenant kontrolü; üretim emri GetById/listede RequirePermission; CRM CurrentAccountId/LeadId tenant kontrolü.
 - DEV test kayıtlarının silinmesi kullanıcıya soruldu/bekliyor.
+
+### 20. Hata: transfer onayında "Depoda 0 birim üretim emrine tahsisli … en fazla 0" 409 (DEV 1086)
+- **Neden:** Kullanıcı DIA-00000019 (3014) onayında 409 aldı. DEV ölçümü (salt okuma): çıkış deposunda bakiye yok, tahsis yok, InventoryWarehouse kaydı yok (eksi stok serbest).
+- **Kök neden:** `StockLedger.PostReceiptAsync` tahsis koruması `otherVariants + applied < allocated` — allocated=0 iken bakiye eksiye düşünce de tetikleniyordu. B1'den önce transfer tek taraflı (giriş) olduğu için görünmüyordu; satış irsaliyesi vb. korunan tüm çıkış tiplerinde de aynı kusur vardı.
+- **Ne yapıldı:** koşul `allocated > 0m && ...`; test `AllocatedStockIssueGuardTests.Handle_NoAllocationAndNoStock_NegativeAllowed_IsNotBlockedByGuard` (önce kırmızı); changelog (Stok, fix).
+- **Doğrulama:** 1057 ilgili test yeşil; `verify.sh all` rc=0; DEV health 200.
+- **Commit:** `bdcbe9c9` → DEV 1.0.2.1086.
+
+### 21. DIA B2 (5 varyant slotu + doğrulama) — kurul
+- Öneri/sözleşme: scratchpad `dia-b2-proposal.md`, `dia-b2-contract.md`. CTO, Şüpheci, Güvenlik: APPROVE-WITH-CONDITIONS (UI'nin 3 slot gönderip 4/5'i düşürmemesi, eski satır muafiyeti, malzeme kartı slotlarında tenant/grup doğrulaması, set modu kart değerleri). Uygulama devam ediyor.
