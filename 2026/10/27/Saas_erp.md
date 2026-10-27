@@ -138,3 +138,19 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 
 ### 21. DIA B2 (5 varyant slotu + doğrulama) — kurul
 - Öneri/sözleşme: scratchpad `dia-b2-proposal.md`, `dia-b2-contract.md`. CTO, Şüpheci, Güvenlik: APPROVE-WITH-CONDITIONS (UI'nin 3 slot gönderip 4/5'i düşürmemesi, eski satır muafiyeti, malzeme kartı slotlarında tenant/grup doğrulaması, set modu kart değerleri). Uygulama devam ediyor.
+
+### 22. DIA B2 uygulandı — fiş satırında 5 varyant slotu + doğrulama (DEV 1087)
+- **Neden:** DIA kartları 5 boyutlu, fiş satırı 3 slot alıyordu; fiş varyant çözümleyicisi hiç doğrulama yapmıyordu (başka malzemenin/tenant'ın Id'si yazılabiliyordu); doğrudan `InventoryVariantId` kontrolsüzdü.
+- **Kurul:** CTO + Şüpheci + Güvenlik APPROVE-WITH-CONDITIONS → sözleşme `scratchpad/dia-b2-contract.md`. Kararlar: kısmi kombinasyon serbest; set modunda kartın güncel varyantları izinli; tip-değersiz slot red.
+- **Ne yapıldı:**
+  - Yeni `Inventory/Services/VariantSlotRules.cs` (5 slot IsAllowed/IsEmpty/Key, LoadAllowedAsync, FindOrCreateAsync) — `InventoryVariantResolver` (Orders) ve `ReceiptVariantResolver` ortak kullanır.
+  - `CreateReceiptItemCommand` + `VariantCombination` Variant4/5 (opsiyonel). `ReceiptVariantResolver.ResolveAndBindAsync` → `ErrorOr<Success>`; hata kodları `inventory.variant.invalid_value`, yeni `inventory.receipt.variant_mismatch` (11 dil api-errors).
+  - Update'te değişmemiş satır muafiyeti (malzeme aynı + 1..3 aynı, 4/5 aynı ya da gönderilmemiş) → eski bağ korunur (3 slotlu istemci 5 boyutu düşüremez; şemadan çıkarılmış değerli eski fiş düzenlenebilir).
+  - Yeni `Features/Inventories/InventoryVariantSlotValidation.cs`: malzeme kartı şeması kaydında SlotIndex 0..4 tekil, grup/kart/değer tenant'ta ve aynı grupta (güvenlik C1).
+  - Görünüm: `ReceiptItemVariantSlotResult.SlotIndex`, 5 slot Include; GetReceiptItems 5 etiket.
+  - Frontend: `receipt-line-payload.ts` 5 slot + `variantFieldsFromSlots` (SlotIndex'e göre geri yükleme); `receipt_workspace.page.tsx` kolon görünürlüğü/seçimi SlotIndex'e göre (3 sınırı kalktı).
+- **Testler:** `ReceiptVariantSlotValidationTests` (19), `ReceiptRowVariantResolveTests` fixture'ına şema eklendi, frontend payload testleri; `verify.sh all` rc=0. Güvenlik post-check PASS-WITH-NOTES → 2 not (malzeme değişince muafiyet, VariantIds=null 500) düzeltildi + test.
+- **DEV ölçümü (önce):** InventoryVariant 32, slot dışı 0, varyantlı fiş satırı 0, aralıklı slot 0 → veri onarımı yok.
+- **Canlı:** fiş listesi/detay 200.
+- **Commit:** `f522dbc5` → DEV 1.0.2.1087.
+- **Kapsam dışı:** `ProductionInventoryService.YarnConsumption:101` varyant sahiplik kontrolü (sonraki tur).
