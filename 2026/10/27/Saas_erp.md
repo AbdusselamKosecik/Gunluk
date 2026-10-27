@@ -81,3 +81,25 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 - Tasarım v1 → v2 (Şüpheci BLOCK: tahsis anahtarı SyncItemAllocations çakışması kodla doğrulandı, `== Dokuma` 16 yer tablosu, tip-13 seed, tip değişimi CHECK) → v3 (WarpAllocation tablosu, Parent yok). Kurul v3: CTO/Şüpheci/DBA/PO APPROVE-WITH-CONDITIONS, **yalnız Faz 1** (planlama+tahsis; tezgaha dokunmaz). Faz 2 (levent çözgü emrinde, tezgahta sıradaki kumaş, kesimde yalnız atkı) ayrı kurul.
 - Kararlar: WeavingKind = mevcut WeavingAnalysisKind (Warp=1, Fabric=2); çözgü metresi = Σ kumaş m × (1+çekme) + ilave BİR KEZ (Şüpheci); Faz 1'de çözgü emrinde iplik tahsisi yok (CTO/PO); tahsis metresi dondurulur, değişince stale.
 - Dosyalar (scratchpad): `weaving-warp-requirements.md`, `weaving-warp-proposal{,-v2,-v3}.md`, `warp-f1-contract.md`. Uygulama iki şeritte başladı (backend + frontend).
+
+### 14. Ürün reçetesi listesi 500 (kullanıcı URL'si: recipes?Filter=type=4&OrderBy=name)
+- **Neden:** GetRecipes Gridify'ı konumsal DTO projeksiyonundan SONRA uyguluyordu (gridify-after-projection) → Postgres 500; in-memory testler yakalamaz.
+- **Ne yapıldı:** filtre/sıralama entity üzerinde GridifyMapper ile, sonra Count/Skip/Take/Select; geçersiz alan → 400 `Production.InvalidQuery` (11 dil).
+- **Sonuç:** DEV 1.0.2.1079'da aynı URL 200. **Commit:** `e1fb201a`.
+
+### 15. CRM Leads kırılımı + tenant sızıntısı (kullanıcı: "crm/leads tenant kırılımını eklemeyi unutmuşsun" → AskUserQuestion: tenant içi kırılım)
+- **Bulgu (DEV'de doğrulandı):** `Lead.cs`/`Opportunity.cs` kendi `HasQueryFilter(!IsDeleted)` tanımı, CrmDbContext'te base.OnModelCreating SONRA ApplyConfigurations çalıştığı için BaseDbContext tenant filtresini eziyordu → aynı lead Admin ve MitoTex tenant'ında görünüyordu. Satırlar kaldırıldı, izolasyon testleri. Lead/fırsat uçlarında RequirePermission yoktu → crm read/create/edit/delete (varsayılan matriste tüm rollerde var).
+- **Özellik:** kırılım şeridi (Aşama/Kaynak/Sorumlu; adet, toplam, ağırlıklı, para birimi ayrı, kaybedilen=0, Atanmamış/Belirtilmemiş), tıkla-süz, sorumlu atama (`PUT crm/leads/{id}/assignee`, aktif üye kontrolü, ad sunucuda), Olasılık alanı. Şube/departman sistemde yok → ClickUp z8v9xnjjye.
+- **Kurul:** CTO/Skeptic/PO koşullu onay; security PASS-WITH-FINDINGS (fırsat yetkileri aynı commit'te). **Commit:** `acec0827`, DEV 1.0.2.1080 (sızıntı kapandı, canlı doğrulandı).
+
+### 16. Dokuma/Çözgü Faz 1 uygulandı
+- Kumaş/Çözgü türü (WeavingKind, backfill Kumaş + CHECK), satır analizi, WarpAllocation + Çözgü Tahsis ekranı (yeni çözgü emri / mevcut çözgüye ekle; metre = Σ m×(1+çekme) + ilave bir kez), analiz-ihtiyaç ucu + MRP aynı servis (eski emirde sonuç aynı), çözgü emri tezgah/levent/top/kontrolde reddedilir, tip-3 stok tahsisi kuralları. Migration `20261027051657_Sprint_WarpAllocationAndWeavingKind`.
+- Son kontroller: DBA onay (silmede log), security PASS-WITH-FIXES (purge tenant koşulu, analysis-requirements production:read) → `127085f6`. verify all yeşil (6420/2828).
+- **Commit:** `76da4c71` + `127085f6`, DEV 1.0.2.1081. Canlı: Y-0000000033 weavingKind=2, analysis-requirements 200, liste filtreleri 200.
+- **Ek düzeltme:** Çözgü sistem stok tipi DEV'de yoktu — `SeedSystemDataAsync` yalnız Development/--seed'de çalışıyor (DEV/PROD Production ortamı). İdempotent veri migration'ı `20261027054449_Sprint_SeedWarpInventoryType` → `8bdea1a9`, DEV 1.0.2.1082'de COZGU var.
+
+### 17. DIA entegrasyon istekleri (kullanıcının yapıştırdığı not)
+- **A (acil):** vats, variant-groups(+id), variant-cards, variants, lookups/variants → `[ApiKeyScope(inventory, read)]`; POST variant-groups/cards/variants → create; PUT/DELETE kapalı (test). Sınır testi (InventoryReferenceCatalogRollout) yeni sınıra güncellendi. CreateVariant grubu kartın grubundan alır. Security PASS. `234949e7`, DEV 1.0.2.1082.
+- **B1 transfer tek taraflı:** UI de transfer bacak miktarlarını göndermiyor → ekrandan yapılan transferler de tek taraflıydı. `ReceiptLineDirection` tek kural (builder + detaylı stok raporu); Transfer tipleri (3014/3067/3102) Quantity-only → çıkış+giriş; 3014/3067 depo eksik/aynı → `inventory.receipt.transfer_warehouse_invalid`; 23505 → Conflict. 3067 iki taraflı (CTO kanıtı). DEV ölçümü: onaylı transfer 0 → onarım gerekmedi. Kurul CTO/Skeptic/DBA koşullu onay. `ac4b5134`, DEV 1.0.2.1083.
+- **C5:** `GET inventory/receipt-types` kodda yok (yalnız /{code}/profile, /layout).
+- **Açık:** B2 (5 varyant slotu + kart slot doğrulama), B3 (varyant bazında stok bakiyesi), C4 (inventory idempotency), C6 (items/bulk gerçek toplu yazım) — ayrı kurul.
