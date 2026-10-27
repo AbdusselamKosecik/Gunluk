@@ -154,3 +154,24 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 - **Canlı:** fiş listesi/detay 200.
 - **Commit:** `f522dbc5` → DEV 1.0.2.1087.
 - **Kapsam dışı:** `ProductionInventoryService.YarnConsumption:101` varyant sahiplik kontrolü (sonraki tur).
+
+### 23. DIA B3 — stok bakiyesi/hareketi varyant kombinasyonu bazında, KATI kural (DEV 1088)
+- **Kurul akışı:** v1 (dia-b3-proposal.md) → DBA/PO koşullu, CTO "C1 kararı" bekliyor, Şüpheci BLOCK (okuma ucu önerdi). AskUserQuestion → kullanıcı "Defter, geri düşmeli"; ardından düzeltti: **"varyant yoksa yoktur, başka stok düşmemen lazım"**, **"stok ve varyant birdir, kırmızı telefon yerine pembeyi mi vereceğiz"**, **"ürün varyantlıysa varyantsız stok olmaz"**. İkinci soru: varyantlı ürün = **satır varyantı bayrağı + şema birlikte**; eski varyantsız stok **yalnız varyanta aktarılır**. v3/v4 → CTO, Şüpheci APPROVE-WITH-CONDITIONS. Sözleşme `scratchpad/dia-b3-contract.md` (K1–K13).
+- **Ne yapıldı:**
+  - Migration `20261027101055_Sprint_StockBalanceVariantCombination`: Balance/Movement.VariantId FK → InventoryVariant (SET LOCAL lock_timeout 5s, dolu VariantId varsa dur, NOT VALID + VALIDATE, Down simetrik+guard). Navigation `InventoryVariant`.
+  - `ReceiptStockPostingBuilder`: posting VariantId = satır kombinasyonu (yoksa matris payı, `ReceiptLineVariantSplit` Σ tam).
+  - `StockLedger`: satırlar birbirine düşmez; `StockVariantRules` — varyantlı üründe varyantsız posting `inventory.stock.variant_required` (istisna 3101 ≤ U, 3151 ≤ −U); kombinasyon aynı malzemenin olmalı (aynı işlemdeki kaydedilmemiş kombinasyonlar Local'den); tahsis koruması yalnız varyantsız çıkışta; yetersiz stok mesajı varyant adı + bakiyeler; TransferAsync aynı kural.
+  - `StockAllocationService.GetAvailableAsync` katı; varyantlı üründe Allocate/Revise red (`stockallocation.variant_item_not_supported`, kontrol kayıttan ÖNCE).
+  - `UpdateInventory`: varyantlı stok varken satır varyantı kapatma/şema boşaltma red (`inventory.variant.tracked_stock_exists`).
+  - İplik sarfı ön kontrolü (iplik, kombinasyon) anahtarlı, varyantlı iplikte kombinasyonsuz satır erken red; kimyasal depo seçimi varyantsız satırlardan.
+  - Detaylı stok raporu hareketlerden varyant kırılımlı (fiş payı hesabı kalktı); bakiye listeleri kombinasyon etiketi (`InventoryVariantLabels`, silinmiş dahil); depo durumu sekmesi "Varyantsız" (g2i.json, 11 dil); api-errors 3 yeni kod 11 dil; changelog.
+- **Testler:** `StockVariantLedgerTests` (23), YarnConsumptionPortTests +4, ReceiptStockPostingBuilderTests güncel; tüm birim testler 6519 yeşil; `verify.sh all` rc=0. CTO post-check FAIL → (derleme hatası: mesaj kırpılmış; Revise kaydet-sonra-kontrol) düzeltildi + iplik erken ret + split kalan≤0 koruması + testler.
+- **DEV doğrulama:** iki yeni FK `convalidated = t`, son migration uygulandı; stok-detaylı/özet/serbest stok raporları ve bakiye listesi 200.
+- **ClickUp:** z8v9xnjkn9 — PROD öncesi ölçüm SQL + geri dönüş planı.
+- **Commit:** `f09b9574` → DEV 1.0.2.1088.
+- **Kabul edilen sonuçlar:** varyantlı üründe varyantsız üretim çıktısı/sarfı ve tahsis reddedilir (varyantlı üretim çıktısı + varyant bazlı tahsis ayrı iş).
+
+### Açık kalanlar (güncel)
+- DIA: C4 (stok idempotency), C6 (gerçek toplu upsert) — kurul ister.
+- Varyantlı üretim çıktısı, varyant bazlı tahsis (B3 sonrası).
+- Çözgü Faz 2; düşük güvenlik bulguları (çözgü warpInventoryId tenant, üretim emri GetById/list RequirePermission, CRM CurrentAccountId/LeadId, YarnConsumption:101 varyant sahipliği — artık ledger'da kombinasyon sahipliği kontrol ediliyor).
