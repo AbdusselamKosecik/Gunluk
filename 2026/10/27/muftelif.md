@@ -103,15 +103,46 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
 - **Sonuç:** test 272/272, tsc/build temiz; paket `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-27-2257a0b.zip` (7.9 MB, bundle `index-D1XswIO5.js`). Ekran denenmedi.
 - **Commit:** `2257a0b` — feat(sentez-planing/dikim): Ortalama SMV ve Ozet'e Fashion / Non Denim bantlari
 
-### 5. Yıkama planı: etüde eklenen 50'li kodlu operasyonlar — İNCELEME (kod yok)
+### 5. Yıkama planı: etüde eklenen 50'li kodlu operasyonlar plana geldi + iki kapasite grubu
 - **İstek:** Asiye H.: "Etüdlere 50'li kodlarla operasyonlar eklendi, onlar plana gelsin, kapasiteler, çalışma süreleri".
-- **Bulgu (koddan):** Haftalık yıkama planı (`Planning/PlanningSql.cs`) etüt satırını yıkama sayar ancak işlemin
-  `Erp_Process.ParentId` = WASHING (ProcessCode '50') ise; bölüm de rotadan öğrenilir ya da addan (SÜRME/KILÇIK) —
-  bölümsüz satır yüke GİRMEZ. Dikim planı ise `ProcessCode LIKE '5%'` kullanıyor (iki farklı kural).
-  Yeni işlemlerin ParentId'si/bölümü bilinmeden düzeltme yapılmadı; canlı DB'ye bakmak gerekiyor.
-- **Güvenlik bulgusu:** `SentezPlaning/api/appsettings.Development.json` (ve diğer projelerin Development.json'ları)
-  repoda TAKİPLİ ve sa bağlantı dizesini (şifreli) içeriyor (ilk commit f8e0487, 2026-07-29). Kullanıcıya bildirildi;
-  dosya okunmadı/kullanılmadı, şifre bu günlüğe yazılmadı.
+- **Ölçüm (canlı DB, salt okunur, kullanıcı onayıyla Development.json bağlantısı; şifre ortam değişkeninde, yazdırılmadı):**
+  - Bütün 50xx/52xx/53xx/54xx işlemleri `ParentId = WASHING(50)` → SQL'e zaten giriyor.
+  - Son 30 günde etüde eklenenler: ÖN TUTTURMA (5100-1, 26.10'da tanımlandı, 22 kart), DÜĞME DİKME (5402-1, 6),
+    KEMERE İP BAĞLAMA (5354-1), KİRLETME'ler (5221-x), sürmeler (52xx).
+  - 2026'da kullanılan 70 yıkama işlemi `YikamaOzetEsleme.Esle`'den geçirildi (scratchpad'de `dotnet run esle.cs`,
+    `#:project` ile): ÖN TUTTURMA, KEMERE İP BAĞLAMA, DÜĞME DİKME, 4 KİRLETME, DİZ ALTI YOĞUNLUK → "eşlenmeyen".
+    ÖN BIYIK SÜRME (383 kart, rota bölümü PP Sürme) "BIYIK" deseniyle WSH-WHISKERS'a (Zımpara) gidiyordu.
+  - Şablon (Frederic Template v85 Weekly Capacity 76-89): sistemde olmayan iki grup — "WHS-TOTAL GRINDING"
+    (DESTROY, BASIC GRINDING, OPEN GRINDING W/AIR, Cut of Hem scissor; E=3, F=5) ve "WHS-TOTAL O/L & ATTACH FRONT"
+    (Overlock Hem SHORT, Cut of Hem O/L MC, ATTACH FRONT; E=6, F=2). TIE FRONT B/LOOPS grupsuz.
+- **Kullanıcı kararları:** DÜĞME DİKME → yeni satır WSH-BUTTON SEWING; KİRLETME/YOĞUNLUK → PP SPRAY;
+  BIYIK SÜRME → PP SPRAY; iki grup eklensin (vardiyalı + normal ayrı).
+- **Ne yapıldı:**
+  - `YikamaOzetEsleme.Esle`: TUTTURMA → `WSH- ATTACH FRONT`, IP BAGLAMA → `WSH-TIE FRONT B/LOOPS`, OVERLOK →
+    `WSH-Cut of Hem with O/L MC` (SORT varsa Overlock Hem SHORT), DUGME DIKME → `WSH-BUTTON SEWING` (yeni, sıra 210),
+    KIRLETME/YOGUNLUK → PP SPRAY; RODEO'dan sonra, BIYIK'tan ÖNCE `SURME` → PP SPRAY.
+    `WSH-Cut of Hem with scissor` bölümü Yıpratma (grup toplamı aynı bölüm bloğunda kuruluyor).
+  - `SablonGrup.Grup` + `EkNormalKisi`; `MusaitSaat = Kisi×(43,5|45) + Ek×45`, `GunlukSaat` aynı mantık;
+    karma grupta operatör ihtiyacı 45 saat esası (`IhtiyacVardiyali`). İki yeni grup varsayılanı şablondan.
+  - Kadro: `yikama_kadro.ek_normal_kisi` (ALTER ile eklenir), DTO/giriş/doğrulama; web Kadro panelinde
+    "+ Normal çalışan (9 × 5)" (karma gruplarda), özet tablosunda "3V + 5S"; Excel E/F kolonları ayrı.
+  - `OperasyonStore.SablonGoc2` (meta `operasyon.sablon-2026-10-27`, bir kez): eksik tohum satırı eklenir,
+    boş grup doldurulur, Cut of Hem scissor bölümü tohum değerindeyse Yıpratma; kullanıcının SMV/grubu ezilmez.
+  - Süreler: SMV önceliği değişmedi (style override > katalog SMV > etüt/rota dakikası); yeni işlemler etüt
+    StandartTime1 ile gelir (ÖN TUTTURMA 0,15; DÜĞME DİKME 0,18 dk).
+- **Dokunulan dosyalar:** `SentezPlaning/api/Sentez/Planning/{YikamaOzetEsleme,SablonGrup,PlanningModels,PlanningController,PlanningService,YikamaPlanExport,OperasyonStore}.cs`,
+  `SentezPlaning/api/Storage/{PlaningDb,YikamaKadroRepository}.cs`, `SentezPlaning/web/src/{api/planning.ts,components/planning/YikamaKadroPanel.tsx,components/planning/YikamaOzetTablo.tsx}`,
+  `SentezPlaning/tests/SentezPlaning.Tests/{YikamaSablonGuncellemeTests,OperasyonStoreTests}.cs`
+- **Sonuç:** test 296/296; canlı 70 işlemden eşlenmeyen 0. Paket `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-27-dc3bf85.zip` (7.9 MB, bundle `index-DKuUdKyi.js`).
+  Ekran denenmedi. **Not:** BIYIK SÜRME düzeltmesi Zımpara (Touch Up Laser) yükünü düşürür, PP SPRAY yükünü artırır.
+- **Commit:** `dc3bf85` — feat(sentez-planing/yikama): etude eklenen 50'li operasyonlar plana gelir, iki yeni kapasite grubu
+
+### 6. Güvenlik bulgusu: Development.json'larda sa bağlantısı repoda
+- `SentezPlaning/api/appsettings.Development.json` (ve SarfKullanim, Selvedge, SentezDashbord, SentezSelvedge'deki
+  Development.json'lar) git'te TAKİPLİ; SentezPlaning'dekinde sa kullanıcılı bağlantı dizesi var (ilk commit f8e0487,
+  2026-07-29). Kullanıcıya bildirildi; değişiklik yapılmadı (geçmişten silmek kullanıcı kararı). Şifre buraya yazılmadı.
+- SentezSelvedge kullanıcı sorusu: Yetki ekranı boş aramada yalnız rolü olanları + yöneticileri (UZM) listeler;
+  yeni kullanıcı için arama kutusuna Sentez kodu/adı yazılıp rol atanır (Sentez'de ek işlem yok).
 
 ## Kararlar
 - Bant kadrosu hattın kadrosundan **bölünmüyor**, ayrıca giriliyor; birleşik hat kendi parametresiyle kalır
@@ -119,11 +150,11 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
 - Bant için İK departman eşleşmesi ve hafta override'ı yok (istenmedi); verimlilik senaryoları hattınkiler.
 
 ## Açık kalanlar / sonraki adım
-- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-2257a0b.zip`, öncekilerin yerine) sunucuya kurulmalı → Parametreler'de
+- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-dc3bf85.zip`, öncekilerin yerine) sunucuya kurulmalı → Parametreler'de
   Fashion / Non Denim satırlarına çalışan girilmeli → Ctrl+F5.
 - Birleşik hat çalışanı = bantların toplamı mı olmalı? Planlamaya sorulacak.
 - SentezSelvedge paketi (8f389d9) kurulmalı + app pool'a `Smtp__Host/Port/Username/Password/From` girilmeli;
   bilgi kullanıcıdan/BT'den gelecek (bana yazılmayacak). Sonra bir QC'den "Maille" ile deneme.
 - APK 2.0.0.4 cihazlara dağıtılmalı. Mail otomatik mi olmalı (KK Fail vb.)? Kullanıcıya sorulmuştu, cevap yok.
-- Yıkama: 50'li yeni operasyonlar için canlı DB incelemesi (kullanıcı onayı / erişim bekleniyor).
+- Yıkama: kurulumdan sonra Parametreler > Kapasite > Yıkama Kadrosu'nda iki yeni grubun kadrosu kontrol edilmeli; yeni satırların katalog SMV'si istenirse girilir (girilmezse etütten).
 - Development.json'lardaki sa şifresi: şifre değiştirilmeli; dosyalar repodan çıkarılıp .gitignore'a alınmalı (kullanıcı kararı).
