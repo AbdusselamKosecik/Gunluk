@@ -87,15 +87,43 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
   (7.9 MB, bundle `index-DCTRbtBz.js`). Ekran tarayıcıda denenmedi.
 - **Commit:** `5acf0e4` — fix(sentez-planing/dikim): Fashion / Non Denim'de Calisan-Eff-Dev-Tahmini-Fark kolonlari hep gorunur
 
+### 4. SentezPlaning: Ortalama SMV ve Özet sekmelerine Fashion / Non Denim
+- **Neden:** Asiye H. (27.10 10:26): "Dikimde ortalama SMV sekmesine yeni bantları ekleyelim", "Özet sekmesine de".
+- **Ne yapıldı:**
+  - `UretimPlanService.SeriTanimlari(lines)` (internal static): her hat, ardından çok dikim yerli hatta her bant
+    (`Id = "hatId|yer"`, `Ad = yer`, `Yer`). Sıra: Basic, Fashion Basic, Fashion & ND, Fashion, Non Denim.
+  - SMV trendi: fiili tarafta `UD_DikimYeri` bant eşleşmesi (`yerBant`) → bant serisine de eklenir; plan tarafı
+    `LineOrders(line, yer)`. Web grafiği serileri genel işliyor, değişmedi.
+  - Özet: `GetOzet` bant satırları; kadro `HatAltGrup.Param` (yoksa çalışan 0). `OzetDto.UstHatId`, `ParametreVar`.
+    Web: bant kartı "(Fashion & ND bandı)"; kadrosuz bantta gri kart (Ort. SMV, plan, SAH, order) + "Çalışan girilmedi
+    — Parametreler → Hatlar → ↳ bant". Senaryo tablosunda "↳ Fashion" satırları, kadrosuzda "—". Excel Özet de bantlı.
+  - Adet tavanı / hedef hat bazında; bantta yok.
+- **Dokunulan dosyalar:** `SentezPlaning/api/Sentez/UretimPlan/{UretimPlanService,UretimPlanModels,UretimPlanExport}.cs`,
+  `SentezPlaning/web/src/{api/uretimPlan.ts,pages/UretimPlanlamaPage.tsx}`, `SentezPlaning/tests/SentezPlaning.Tests/HatAltGrupTests.cs`
+- **Sonuç:** test 272/272, tsc/build temiz; paket `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-10-27-2257a0b.zip` (7.9 MB, bundle `index-D1XswIO5.js`). Ekran denenmedi.
+- **Commit:** `2257a0b` — feat(sentez-planing/dikim): Ortalama SMV ve Ozet'e Fashion / Non Denim bantlari
+
+### 5. Yıkama planı: etüde eklenen 50'li kodlu operasyonlar — İNCELEME (kod yok)
+- **İstek:** Asiye H.: "Etüdlere 50'li kodlarla operasyonlar eklendi, onlar plana gelsin, kapasiteler, çalışma süreleri".
+- **Bulgu (koddan):** Haftalık yıkama planı (`Planning/PlanningSql.cs`) etüt satırını yıkama sayar ancak işlemin
+  `Erp_Process.ParentId` = WASHING (ProcessCode '50') ise; bölüm de rotadan öğrenilir ya da addan (SÜRME/KILÇIK) —
+  bölümsüz satır yüke GİRMEZ. Dikim planı ise `ProcessCode LIKE '5%'` kullanıyor (iki farklı kural).
+  Yeni işlemlerin ParentId'si/bölümü bilinmeden düzeltme yapılmadı; canlı DB'ye bakmak gerekiyor.
+- **Güvenlik bulgusu:** `SentezPlaning/api/appsettings.Development.json` (ve diğer projelerin Development.json'ları)
+  repoda TAKİPLİ ve sa bağlantı dizesini (şifreli) içeriyor (ilk commit f8e0487, 2026-07-29). Kullanıcıya bildirildi;
+  dosya okunmadı/kullanılmadı, şifre bu günlüğe yazılmadı.
+
 ## Kararlar
 - Bant kadrosu hattın kadrosundan **bölünmüyor**, ayrıca giriliyor; birleşik hat kendi parametresiyle kalır
   (ikisi tutarsız girilebilir — planlamaya söylenecek).
 - Bant için İK departman eşleşmesi ve hafta override'ı yok (istenmedi); verimlilik senaryoları hattınkiler.
 
 ## Açık kalanlar / sonraki adım
-- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-5acf0e4.zip`, 4a71920'in yerine) sunucuya kurulmalı → Parametreler'de
+- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-2257a0b.zip`, öncekilerin yerine) sunucuya kurulmalı → Parametreler'de
   Fashion / Non Denim satırlarına çalışan girilmeli → Ctrl+F5.
 - Birleşik hat çalışanı = bantların toplamı mı olmalı? Planlamaya sorulacak.
 - SentezSelvedge paketi (8f389d9) kurulmalı + app pool'a `Smtp__Host/Port/Username/Password/From` girilmeli;
   bilgi kullanıcıdan/BT'den gelecek (bana yazılmayacak). Sonra bir QC'den "Maille" ile deneme.
 - APK 2.0.0.4 cihazlara dağıtılmalı. Mail otomatik mi olmalı (KK Fail vb.)? Kullanıcıya sorulmuştu, cevap yok.
+- Yıkama: 50'li yeni operasyonlar için canlı DB incelemesi (kullanıcı onayı / erişim bekleniyor).
+- Development.json'lardaki sa şifresi: şifre değiştirilmeli; dosyalar repodan çıkarılıp .gitignore'a alınmalı (kullanıcı kararı).
