@@ -75,13 +75,25 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
   APK: `X:\Gitlab\fredericTr\muftelif\sentez-selvedge-2.0.0.4.apk` (repoya girmez).
 - **Commit:** `8f389d9` — feat(sentez-selvedge): QA PDF maili + mobil 2.0.0.4 (yeni olcum dugmesi kaldirildi)
 
+### 3. SentezPlaning: bant kolonları her zaman görünür
+- **Neden:** Kullanıcı 4a71920 paketini kurdu; "Fashion ve Non Denim'de Çalışan, Eff, Dev., Tahmini, Fark alanları yok".
+  Kolonlar yalnız bant parametresi girildiyse açılıyordu (`yukOnly`); parametre girilmeden bakılınca kayıp sanıldı.
+- **Ne yapıldı:** `CapacityTable`: `kap` hep true, `bos = yukOnly` → Çalışan/Eff/Dev./Tahmini/Fark hücreleri "—"
+  (title: Parametreler → Hatlar'da çalışan girilmedi). Alt görünüm başlığı: "⚠ <bant> bandına henüz çalışan girilmedi…
+  ↳ <bant> satırına çalışan girip Kaydet". Excel bant sayfasında kolonlar hep var, parametresizse boş.
+- **Dokunulan dosyalar:** `SentezPlaning/web/src/pages/UretimPlanlamaPage.tsx`, `SentezPlaning/api/Sentez/UretimPlan/UretimPlanExport.cs`,
+  `SentezPlaning/tests/SentezPlaning.Tests/HatAltGrupTests.cs`
+- **Sonuç:** test 271/271, tsc/build temiz; paket `X:\GitlabredericTr\SentezPlaning-paket-2026-10-27-5acf0e4.zip`
+  (7.9 MB, bundle `index-DCTRbtBz.js`). Ekran tarayıcıda denenmedi.
+- **Commit:** `5acf0e4` — fix(sentez-planing/dikim): Fashion / Non Denim'de Calisan-Eff-Dev-Tahmini-Fark kolonlari hep gorunur
+
 ## Kararlar
 - Bant kadrosu hattın kadrosundan **bölünmüyor**, ayrıca giriliyor; birleşik hat kendi parametresiyle kalır
   (ikisi tutarsız girilebilir — planlamaya söylenecek).
 - Bant için İK departman eşleşmesi ve hafta override'ı yok (istenmedi); verimlilik senaryoları hattınkiler.
 
 ## Açık kalanlar / sonraki adım
-- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-4a71920.zip`) sunucuya kurulmalı → Parametreler'de
+- SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-5acf0e4.zip`, 4a71920'in yerine) sunucuya kurulmalı → Parametreler'de
   Fashion / Non Denim satırlarına çalışan girilmeli → Ctrl+F5.
 - Birleşik hat çalışanı = bantların toplamı mı olmalı? Planlamaya sorulacak.
 - SentezSelvedge paketi (8f389d9) kurulmalı + app pool'a `Smtp__Host/Port/Username/Password/From` girilmeli;
