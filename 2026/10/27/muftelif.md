@@ -72,7 +72,7 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
   ```
 - **Sonuç / doğrulama:** test 538/538 (alıcı çözümü, appsettings'te 3 alıcı ve şifre yok, Host yoksa anlaşılır hata).
   Gerçek SMTP ile gönderim DENENMEDİ (sunucu bilgisi yok). IIS-KURULUM.txt'ye "2026-10-27" bölümü (Smtp__* komutları).
-  APK: `X:\GitlabredericTr\muftelif\sentez-selvedge-2.0.0.4.apk` (repoya girmez).
+  APK: `X:\Gitlab\fredericTr\muftelif\sentez-selvedge-2.0.0.4.apk` (repoya girmez).
 - **Commit:** `8f389d9` — feat(sentez-selvedge): QA PDF maili + mobil 2.0.0.4 (yeni olcum dugmesi kaldirildi)
 
 ## Kararlar
