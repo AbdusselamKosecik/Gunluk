@@ -103,3 +103,28 @@ DEPLOY_DIR=wtdeploy bash scratchpad/deploy-dev2.sh 1.0.2.<n>   # temiz worktree'
 - **B1 transfer tek taraflı:** UI de transfer bacak miktarlarını göndermiyor → ekrandan yapılan transferler de tek taraflıydı. `ReceiptLineDirection` tek kural (builder + detaylı stok raporu); Transfer tipleri (3014/3067/3102) Quantity-only → çıkış+giriş; 3014/3067 depo eksik/aynı → `inventory.receipt.transfer_warehouse_invalid`; 23505 → Conflict. 3067 iki taraflı (CTO kanıtı). DEV ölçümü: onaylı transfer 0 → onarım gerekmedi. Kurul CTO/Skeptic/DBA koşullu onay. `ac4b5134`, DEV 1.0.2.1083.
 - **C5:** `GET inventory/receipt-types` kodda yok (yalnız /{code}/profile, /layout).
 - **Açık:** B2 (5 varyant slotu + kart slot doğrulama), B3 (varyant bazında stok bakiyesi), C4 (inventory idempotency), C6 (items/bulk gerçek toplu yazım) — ayrı kurul.
+
+### 18. B1 sonrası UX düzeltmeleri + Çözgü tahsis uçtan uca testi (DEV 1084)
+- **Neden:** UX post-check APPROVE-WITH-CONDITIONS (çözgü listesi başlığı, taşmalar, erişilebilirlik); başlıkta analiz seçili kumaş emirleri aday listesine düşmüyordu.
+- **Ne yapıldı:** Aday/komutlar "etkin analiz" kullanıyor (satır analizi yoksa başlık analizi, `fromHeaderAnalysis`); kendi levendi olan kumaşa tahsis reddi (`production.warp_allocation.fabric_has_own_beams`); Leads ve Çözgü Tahsis sayfalarında taşma, aria-pressed, htmlFor, tooltip düzeltmeleri.
+- **Doğrulama (DEV Postgres, `scratchpad/warp-e2e.cjs`):** TEST-E2E-01 (KA-0004, 1000 m) → aday çıktı (ÇA-0002, çekme %8) → create-warp-order → Y-0000000035, 1080 m; iki yönlü bağlar ve ihtiyaç ekranı doğru; fazla tahsis `exceeds_fabric_line` ile red. Test kayıtları DEV'de duruyor: TEST-CZ-01, TEST-E2E-01, Y-0000000035.
+- **Commit:** `fad6fe0f` → DEV 1.0.2.1084.
+
+### 19. DIA: KDV oluşturma + fiş tipi listesi API anahtarına açıldı (DEV 1085)
+- **Neden:** DIA test sonucu: GET vats açık ama boş, POST vats 403, GET receipt-types (liste) kapalı. Kullanıcı: "bunlar lazim".
+- **Neden GET vats boş:** KDV tenant'a özel (`Vat : SoftDeletableTenantEntity`), sistem tohumu yok; DIA anahtarının tenant'ında kayıt yok. Artık POST ile kendileri açabilir.
+- **Ne yapıldı:**
+  - `InventoryController.CreateVat`: `[ApiKeyScope("inventory","create")]` + `[RequirePermission("inventory","create")]`; Update/Delete Vat'a `edit`/`delete` yetkisi (önceden viewer dahil her üye yazabiliyordu — güvenlik bulgusu).
+  - Yeni `GET api/v1/inventory/receipt-types` → `ReceiptTypeRegistry.StockProfiles()` (İrsaliye ailesi katalog profilleri, koda göre sıralı, statik; tenant verisi yok), `inventory:read`.
+  - Create/UpdateVat validator: oran 0–100, tutar ≥ 0, SpecialCode/UniversalCode ≤ 15 (kolon boyu).
+- **Dokunulan dosyalar:** `Inventory/Features/InventoryController.cs`, `Features/Vats/CreateVat.cs`, `UpdateVat.cs`, `Services/Stock/ReceiptTypeRegistry.cs`, testler `Modules.Inventory/ReceiptTypeListTests.cs`, `VatIntegrationHardeningTests.cs`.
+- **Kurul:** security-reviewer APPROVE-WITH-CONDITIONS (yetki + validator) → uygulandı. Tenant izolasyonu: tenant anahtardan, X-Tenant-Id anahtarda yok sayılıyor, gövdede TenantId/Id yok.
+- **Doğrulama:** ilgili 744 birim testi yeşil; `verify.sh all` rc=0; canlı: receipt-types 200 / 52 tip; POST vats rate=150 → 400 `validation.invalid_range`.
+- **Not:** ilk deploy denemesi "tag does not exist" ile düştü (buildx o an docker-container sürücüsünü seçmiş, imaj yüklenmemiş); ikinci denemede normal.
+- **Commit:** `153335ad` → DEV 1.0.2.1085.
+
+### Açık kalanlar (güncel)
+- DIA: B2 (5 varyant slotu + slot doğrulama), B3 (varyant bazlı bakiye — büyük), C4 (stok idempotency), C6 (gerçek toplu upsert) — her biri kurul ister.
+- Çözgü Faz 2 (levent, tezgâhta sıradaki kumaş, yalnız atkı sarfı).
+- Düşük güvenlik bulguları: çözgü tahsisinde warpInventoryId tenant kontrolü; üretim emri GetById/listede RequirePermission; CRM CurrentAccountId/LeadId tenant kontrolü.
+- DEV test kayıtlarının silinmesi kullanıcıya soruldu/bekliyor.
