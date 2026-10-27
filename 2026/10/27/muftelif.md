@@ -44,6 +44,37 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
   tsc/build temiz; bundle `index-Cn6rDXyl.js`, zip 7.9 MB. Ekran tarayıcıda denenmedi (sunucu kullanıcıda).
 - **Commit:** `4a71920` — feat(sentez-planing/dikim): Fashion ve Non Denim bantlarina kendi parametresi
 
+### 2. SentezSelvedge: QA PDF maili (web + mobil) ve mobil 2.0.0.4
+- **Neden:** Olcay B.: "SentezSelvedge'de mail gönderilecek kişiler" hbolu@, mtureli@, ybabadag@ (mfggiyim.com.tr).
+  Kullanıcı: "APK'yı da değiştirmen gerekiyor". Eski Selvedge'de "Raporu Maille" (sipariş birleşik PDF) ve QC kartında
+  "Mail" vardı (Smtp:Recipients'e PDF); 7ae436c'de API karşılığı olmadığı için mobilden kaldırılmıştı.
+  Kullanıcı sorulara cevap vermeden "bitirdin mi" deyince varsayılanla ilerlendi: eskisi gibi elle tetiklenen mail.
+- **Ne yapıldı:**
+  - API: `Rapor/MailServisi` (MailKit 4.13.0, eski SmtpEmailService ile aynı kural: 465 SSL, 587 STARTTLS, EnableSsl=false
+    şifresiz). `Smtp` config: Host/Port/EnableSsl/Username/Password/From/Recipients; Recipients JSON dizi ya da `a;b`.
+    Host yoksa `InvalidOperationException("Mail sunucusu tanimli degil (Smtp:Host bos)...")` → 400 `{hata}`.
+    Uçlar: `POST /api/kk/{id}/mail?en=`, `POST /api/order-qa/order/{workOrderId}/mail?en=` (izin KkOku), yanıt `{gonderildi, alici}`.
+  - `appsettings.json`: `Smtp.Recipients` = 3 adres; Host/Username/Password BOŞ (ortam değişkeni `Smtp__*`).
+  - Web: `MailDugmesi` (TR + EN, onay sorar) → KkRaporPage başlığı, OrderPage "Raporu maille".
+  - Mobil: `sendQaEmail` / `sendEmail` geri (yeni uçlara); sipariş ekranında "Raporu Maille", QC kartında "Mail";
+    Mezuralar başlığındaki "+ Yeni" kaldırıldı (`_sectionHeader` aksiyonu opsiyonel) + açıklama notu. Sürüm 2.0.0.4.
+- **Dokunulan dosyalar:** `SentezSelvedge/api/{Program.cs,appsettings.json,SentezSelvedge.Api.csproj,Rapor/MailServisi.cs,Selvedge/Kk/KkController.cs,Selvedge/OrderQa/OrderQaController.cs}`,
+  `SentezSelvedge/tests/SentezSelvedge.Tests/MailServisiTests.cs`, `SentezSelvedge/web/src/{components/RaporBilesenleri.tsx,pages/KkRaporPage.tsx,pages/OrderPage.tsx}`,
+  `SentezSelvedge/mobile/{pubspec.yaml,lib/core/version.dart,lib/data/api/customer_orders_api.dart,lib/data/api/qa_reports_api.dart,lib/features/orders/order_detail_screen.dart}`
+- **Komutlar:**
+  ```powershell
+  cd SentezSelvedge/api; dotnet add package MailKit --version 4.13.0
+  dotnet test SentezSelvedge/tests/SentezSelvedge.Tests          # 538/538
+  cd SentezSelvedge/web; npx tsc -b; npm run build
+  cd SentezSelvedge/mobile; .uild-apk.ps1 -Surum 2.0.0.4        # analyze temiz, 75 MB
+  .\SentezSelvedge\Deploy-IIS.ps1 -OutputDir "$PK\site"          # bundle index-CuyHwEBZ.js
+  Compress-Archive SentezSelvedge-IIS-192.168.3.228-91\* SentezSelvedge-IIS-192.168.3.228-91.zip -Force   # 25.0 MB
+  ```
+- **Sonuç / doğrulama:** test 538/538 (alıcı çözümü, appsettings'te 3 alıcı ve şifre yok, Host yoksa anlaşılır hata).
+  Gerçek SMTP ile gönderim DENENMEDİ (sunucu bilgisi yok). IIS-KURULUM.txt'ye "2026-10-27" bölümü (Smtp__* komutları).
+  APK: `X:\GitlabredericTr\muftelif\sentez-selvedge-2.0.0.4.apk` (repoya girmez).
+- **Commit:** `8f389d9` — feat(sentez-selvedge): QA PDF maili + mobil 2.0.0.4 (yeni olcum dugmesi kaldirildi)
+
 ## Kararlar
 - Bant kadrosu hattın kadrosundan **bölünmüyor**, ayrıca giriliyor; birleşik hat kendi parametresiyle kalır
   (ikisi tutarsız girilebilir — planlamaya söylenecek).
@@ -53,4 +84,6 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
 - SentezPlaning paketi (`SentezPlaning-paket-2026-10-27-4a71920.zip`) sunucuya kurulmalı → Parametreler'de
   Fashion / Non Denim satırlarına çalışan girilmeli → Ctrl+F5.
 - Birleşik hat çalışanı = bantların toplamı mı olmalı? Planlamaya sorulacak.
-- SentezSelvedge: mail alıcıları (3 adres) + APK değişikliği — sıradaki iş.
+- SentezSelvedge paketi (8f389d9) kurulmalı + app pool'a `Smtp__Host/Port/Username/Password/From` girilmeli;
+  bilgi kullanıcıdan/BT'den gelecek (bana yazılmayacak). Sonra bir QC'den "Maille" ile deneme.
+- APK 2.0.0.4 cihazlara dağıtılmalı. Mail otomatik mi olmalı (KK Fail vb.)? Kullanıcıya sorulmuştu, cevap yok.
