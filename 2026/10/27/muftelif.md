@@ -66,7 +66,7 @@ Kullanıcı ayrıca "APK'yı da değiştirmen gerekiyor, önce SentezPlaning bit
   cd SentezSelvedge/api; dotnet add package MailKit --version 4.13.0
   dotnet test SentezSelvedge/tests/SentezSelvedge.Tests          # 538/538
   cd SentezSelvedge/web; npx tsc -b; npm run build
-  cd SentezSelvedge/mobile; .build-apk.ps1 -Surum 2.0.0.4        # analyze temiz, 75 MB
+  cd SentezSelvedge/mobile; .\build-apk.ps1 -Surum 2.0.0.4        # analyze temiz, 75 MB
   .\SentezSelvedge\Deploy-IIS.ps1 -OutputDir "$PK\site"          # bundle index-CuyHwEBZ.js
   Compress-Archive SentezSelvedge-IIS-192.168.3.228-91\* SentezSelvedge-IIS-192.168.3.228-91.zip -Force   # 25.0 MB
   ```
