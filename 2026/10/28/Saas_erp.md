@@ -62,3 +62,15 @@ DIA B3 (varyant bazlı stok) 27'sinde DEV 1088 ile kapandı. Kullanıcı; İleri
 ## Açık kalanlar
 - Tahsis Fişi ön yüz + UX + commit/deploy.
 - Analizdeki H1–H7 hızlı düzeltmeler (her biri kurul önerisi).
+
+### 4. Gereksinim belgesi 1.2 eki: §19 zincirleme tahsis, §20 iç üretim/fason/ham-mamul
+- **Neden:** Kullanıcı `docs/chatcpt` altında güncelleme yaptı (yeni `08_zincirleme_tahsis.md`, `09_ic_uretim_fason_kumas_asamasi.md`; 01/06/07'de yalnız atıflar) ve tekrar kontrol + yorum istedi.
+- **Ne yapıldı:** İki yeni bölüm elle okundu; iki Explore ajanı kodu taradı. Ana klasör (X:) origin/dev'in 103 commit gerisinde çıktı; ajanlar güncel `wtcrm` ağacında yeniden doğruladı (ilk turda varyant bakiyesi yanlış "yok" görünmüştü).
+- **Sonuç:** Raporun sonuna bölüm 8 eklendi. Ana yorum: tahsis bugün yalnız fiziksel stokta; beklenen tedarik (PR/PO/planlanan çıktı) bağı, mal kabulünde/üretim çıktısında otomatik tahsis ve kalite bekletme yok. Fason sevki (3057) düz çıkış, fasoncudaki miktar yalnız raporda. Ham/mamul ayrı kart + depo. Yeni bulgular: H8 3006 anlamı raporlar arasında tutarsız (doğrulanmalı), H9 varyantlı bakiye vs varyantsız tahsis, H10 tüketim defterinde tekillik yok, H11 AllocateFromReceipt çift gönderimde çift satır.
+- **HTML:** artifact https://claude.ai/artifact/XCRHhQDJuxpBeAK1Qf522T (v2) + indirilebilir tek dosya (scratchpad `tekstil-erp-yonerge-analizi.html`).
+- **Commit:** `fbc3d146` — docs(design): yonerge analizi eki (§19, §20, H8-H11)
+
+### Açık kalanlar (güncel)
+- Tahsis Fişi ön yüz + UX + commit/deploy; H10 bu işe eklenebilir.
+- H1–H11 her biri kurul önerisi.
+- Ana çalışma klasörü X: origin/dev'in 103 commit gerisinde (kullanıcının değişiklikleri var, dokunulmadı).
