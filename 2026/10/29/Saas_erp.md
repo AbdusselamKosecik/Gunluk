@@ -70,8 +70,38 @@
 - **Sonuç:** E4 S1/S3 onay (uygulanıyor), E9 S1/S2 onay (uygulanıyor); E5 S2 BLOCK (backfill çift sayım: RefType 9 backfill satırları + Out join), E8 S1/S2 BLOCK (yeniden teslimde çift peg), E9 S3/S4 BLOCK (fatura kodu / kapsam).
 - **ClickUp:** sorular E4/E8/E9 task'larına yorum; E8 bk-ask; E3/E4/E6/E7/E9 ip-ask.
 
+### 12. E6 UX düzeltmeleri
+- **Neden:** UX post-check: kilitli rota/reçetede form ve grid düzenlenebilir görünüyordu, boş renk alt başlığı, Flotte terim karmaşası.
+- **Ne yapıldı:** `route_detail.page.tsx`, `dyeing_recipe_detail.page.tsx`, `production_recipe_create.page.tsx` kilitliyken salt-okuma; yeni test `route_detail.locked.test.tsx`.
+- **Commit:** `76a6defe` — DEV 1109.
+
+### 13. E4 dilim 1+3 — lot kalite durumu + şartlı kabul
+- **Ne yapıldı:** `InventoryLot.QualityStatus` (Bekliyor/Serbest/Bloke/Ret) + `IsConditional`/`QualityReason`; olay tablosu `InventoryLotQualityEvent`; tek yazıcı `LotQualityChanger` (advisory kilit → lot `FOR UPDATE`, tenant filtreli); `LotQualityRules` serbest olmayan lotları tahsis/çıkıştan dışlar; `LotQualityController` (durum değiştir, şartlı kabul — `quality:conditional-accept`).
+- **Migration:** `20261029064735_E4S1_LotQualityStatus` (CHECK'ler, kısmi indeks, olay indeksi, idempotent karantina backfill).
+- **Ön yüz:** `features/inventory/components/lot_quality/*` (Seri Kartları / Kumaş Topları aksiyonu + geçmiş).
+- **Commit:** `11924a8d` — DEV 1110.
+
+### 14. Hotfix — boş başlıklı şablon kolon
+- **Neden:** E4 sonrası Seri Kartları ve Kumaş Topları DEV'de çöktü: seçim kutusu kolonunun başlığı boş → TanStack kolon id'si türetemeyip fırlatıyor.
+- **Ne yapıldı:** `column-builder.utils.tsx` `addTemplateColumn`: başlık boşsa `__template_<sıra>` id; testler `addTemplateColumn_EmptyHeader_GetsStableNonEmptyId`, `addTemplateColumn_WithHeader_KeepsDerivedId`.
+- **Commit:** `d02fa5a9` — DEV 1111. UX tekrar PASS-with-nits.
+
+### 15. E9 dilim 1+2 — fason sipariş bağı
+- **Ne yapıldı:** `SubcontractLinkRoles` (3057 gönderim, 3006 alım, 3065 iade; Kalan = Sipariş − (Gelen − İade)); fiş↔fason sipariş bağlama/çözme, bağlanmamış fişler listesi, sipariş hareketleri; `SubcontractLinkGuard` yalnız bağ değişince doğrular.
+- **Güvenlik düzeltmesi (ben):** müşteri değişince bağ yeniden doğrulanıyor (`OldCustomerId`), snapshot `ReceiptMapper.Update`'ten ÖNCE alınıyor.
+- **Migration:** `20261029080937_E9_SubcontractOrderLink`, `20261029080956_E9_SubcontractOrderLinkIndexes` (CONCURRENTLY).
+- **Doğrulama:** backend 6934 test geçti.
+- **Commit:** `3c209725` — DEV 1112.
+
+### 16. E5 dilim 1 — parti → top iki seviyeli lot (uygulandı, kurul post-review'da)
+- **Ne yapıldı:** `InventoryLot.Kind/Origin/PartiLotId/ParentLotId/PartiNo/SupplierId`, `Inventory.LotLevel` (0 yok / 1 parti=lot / 2 parti→top); parti anahtarı (malzeme, tedarikçi, PartiNo); konteyner parti `PRT-xxxxxxxxxxxx` LotNo, depo/seri kartı yok, serbest/tahsis/çıkışta dışlanır (`LotKindRules`); kalite kaskadı `LotQualityChanger` içinde (tek yazıcı); `ConvertItemToPartiLevel` (idempotent, opt-in).
+- **Migration:** `20261029084428_E5S1_PartiTopLots`.
+- **Doğrulama:** verify all rc=0 (backend 6956, frontend 2922), model senkron.
+- **Sınır:** çıkış fişinde "parti seç → toplara aç" yok; dokuma top çıktısı partisiz top üretir.
+
 ## Açık kalanlar
-- E4 S1+S3, E9 S1+S2 ve E6 UX düzeltmeleri ajanlarda.
+- E5 S1 DBA + güvenlik incelemesinde; sonra commit/DEV 1113.
+- Sıradaki (CTO sırası): E5 S2a → S2b → E4 S2 → E8 (yeniden tasarım) → E4 S4 → E5 S3/S5/S4 → E9 S3/S4a.
 - H8 (3006 anlamı) kullanıcıda bk-ask. E2 S4 sorusu ClickUp'ta.
-- Kalan: E1b, E3 S2/S3, E4, E5, E6 S3/S4, E7 S2–S4, E8, E9, E10.
+- Kalan: E1b, E3 S2/S3, E4 S2/S4, E5 S2–S5, E6 S3/S4, E7 S2–S4, E8, E9 S3/S4, E10.
 - GitHub Billing hâlâ DEV Deploy'u engelliyor (elle deploy). `_wt-idem` worktree index'i bozuk (bizim değil).
