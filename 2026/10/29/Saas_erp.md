@@ -99,9 +99,27 @@
 - **Doğrulama:** verify all rc=0 (backend 6956, frontend 2922), model senkron.
 - **Sınır:** çıkış fişinde "parti seç → toplara aç" yok; dokuma top çıktısı partisiz top üretir.
 
+### 17. E5 dilim 1 tamamlandı + UX düzeltmeleri
+- **Commit:** `60f6a9a3` (DEV 1113) — iki seviyeli lot; DBA C1–C10 (lock_timeout, NOT VALID CHECK/FK, ayrı CONCURRENTLY indeks migration'ı, parti yarışı advisory kilit + 409, Inventory FOR UPDATE, LeafOnly HeldQty, SQL'de toplu parti listesi).
+- **UX BLOCK düzeltmesi:** `89b453e5` (DEV 1114) — lotu olan üründe "Lot seviyesi" kilitli (GetInventoryById.HasLots), parti başlığı yalnız seviye 2, Seri Kartları Parti kolonu sıralanır/süzülür (Gridify isimli satır tipi).
+- **Ek hata:** `3f88247a` (DEV 1115) — Seri Kartları Kod/Stok Kalemi süzmesi 500 (Gridify eşlemesinde yoktu).
+
+### 18. E5 dilim 2a-1 — lot kalan defteri (bütün lot çıkışı)
+- **Kurul:** 3 tur. İlk öneri Şüpheci BLOCK (lotsuz çıkış yolları kalanı eskitir); CTO ikiye böldü (2a-1 backend defter / 2a-2 kısmi çıkış+UI, aralarında 3 gün sıfır sapma). Yeniden öneri: kesit bazında Σ R ≤ bakiye koruması (StockLedger + giriş geri alma), Term B kaldırıldı (DEV'de lot bağlı RefType 9 yok → migration assertion).
+- **Ne yapıldı:** `InventoryLot.RemainingQuantity`, join `Direction`; tek yazıcı `LotLedger` (koşullu UPDATE … RETURNING xmin, önce sıralı kilit); 3062/paketleme/iplik tüketimi kalanı düşürür; yaşam döngüsü engelleri (`SarfLotBoundGuard`).
+- **Migration:** `20261029143332_E5S2a1_LotRemaining` (preflight, partili backfill, NOT VALID/VALIDATE/SET NOT NULL). Runbook `docs/runbooks/e5-s2a-lot-remaining.md`. Deploy öncesi preflight DEV'de elle çalıştırıldı (0/0).
+- **Doğrulama:** verify all rc=0 (backend 7059, frontend 2944), 22 Postgres testi.
+- **Commit:** `3ae74d85` — DEV 1116; DEV'de R=Q tüm lotlarda, kısıtlar validated. Ekip arkadaşının 5 migration'ı aynı deploy'da gitti.
+- **Not:** dev'de ekip arkadaşının commit'lerinde eksik api-errors çevirileri vardı; katalog testi geçsin diye ekledim (PreCosting.*, requirement_order_*, open_orders_*), interpolasyonlu kodları çeviriden çıkardım.
+- **PROD kapısı:** S2a-2 kill switch (C4) ve migration bölme (DBA C1) olmadan PROD'a çıkmaz.
+
+### 19. Kullanıcı kararları (akşam) ve yeni kurullar
+- Kararlar: scratchpad `user-decisions-1029.md` + ClickUp yorumları. Özet: 3006 adı doğru; dış giriş = 3001/3011/3006/3065; dokumada sevk üretim emrine; 3061/3062 geri alma engelleri; E8 varsayılan "öner", %10 üstü uyarı; fason işçilik = hizmet alım faturası; E9 S4 şimdi; fason bayrağı kilitli rotada da değişir; Müşteri/Ham Depo raporu 3006+3011 sayar; Fason Takip fire formülü düzeltilir (Sentez'den bilerek ayrılır).
+- **Kurul E4 S2 + E9 S4a:** 5 üye koşullu onay (`board-e4s2-e9s4a.md`). Uygulama başladı.
+- **UX küçük düzeltmeler:** `9f9a8dec` (DEV 1117) — "Kalite Durumu" kolonu, tümünü seç, "Serbest" filtresi, "seri" metinleri, "1. Kalite", bağlanmamış fason fişleri menüde, uzlaşma detayı dar ekran.
+
 ## Açık kalanlar
-- E5 S1 DBA + güvenlik incelemesinde; sonra commit/DEV 1113.
-- Sıradaki (CTO sırası): E5 S2a → S2b → E4 S2 → E8 (yeniden tasarım) → E4 S4 → E5 S3/S5/S4 → E9 S3/S4a.
-- H8 (3006 anlamı) kullanıcıda bk-ask. E2 S4 sorusu ClickUp'ta.
-- Kalan: E1b, E3 S2/S3, E4 S2/S4, E5 S2–S5, E6 S3/S4, E7 S2–S4, E8, E9 S3/S4, E10.
-- GitHub Billing hâlâ DEV Deploy'u engelliyor (elle deploy). `_wt-idem` worktree index'i bozuk (bizim değil).
+- Uygulamada: E4 dilim 2 (giriş kalite bekletmesi), E9 dilim 4a (fason bayrağı + "Fason siparişi aç").
+- Sırada: H8 rapor düzeltmesi, E8 yeniden tasarım (öner), E2 dilim 4 (emre sevk), E5 dilim 2a-2 (3 gün sapma sonrası), E4 S4, E5 S3/S5/S4, E9 S3, E3 S2/S3, E6 S3/S4, E7 S2–S4, E10.
+- DEV veri: 3010-000012 deposuz fiş (1250'lik lot stoğa işlenmemiş), LOT-TEST-01-1 sahipsiz lot — dokunulmadı.
+- GitHub Billing DEV Deploy'u engelliyor (elle deploy). `_wt-idem` index bozuk (push başarılı).
