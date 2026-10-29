@@ -46,8 +46,32 @@
 - **Commit:** `fbd6266f` — DEV 1.0.2.1106 (health 200).
 - **Kurul:** S2 BLOCK (rota sadece doğrusal → paralel operasyon), S3 koşullu (PROD'da BoxBarcode tekrar kontrolü kullanıcıya), S4 geçiş kuralı bekliyor. PO: tamirden dönen sağlam sayılır, tetik koli kapanışı, tolerans %5, karışık sevkte 2K yok.
 
+### 8. E7 arama düzeltmesi (UX BLOCK)
+- **Neden:** UX kontrolü Uzlaşma listesinde sipariş no aramasının hiç sonuç getirmediğini buldu: ayrıştırıcı Gridify'ın `/i` bayrağını aramaya katıyordu, sorgu da büyük/küçük harf duyarlıydı.
+- **Ne yapıldı:** TDD (3 kırmızı test) → regex `(?:/i)?` ile bayrağı ayırır; `OrderReceiptNo.ToLower().Contains(s)`.
+- **Commit:** `9285acf0`. Güvenlik post-check PASS.
+
+### 9. E6 dilim 1+2 — reçete/rota revizyonu + doz hesabı
+- **Ne yapıldı:** Route/ProductionRecipe/DyeingRecipe için LineageId, RevisionNo, IsCurrent, LockedAt/By, SupersededById; emirde kullanılınca kilit (zincirleme); "Kopyala ve revize et"; rota ve reçete satırları Id ile diff-upsert (adım geçmişi kopmaz); emri yeni revizyona yükseltme; DoseBasis (eski/g/L/%owf) + DoseCalculator (parti kg × flotte).
+- **Migration:** `20261029024250_E6_DefinitionRevisions` (backfill, NOT VALID CHECK, `SET LOCAL lock_timeout`), `20261029024251_E6_DefinitionRevisionIndexes` (CONCURRENTLY, INVALID indeks temizliği, VALIDATE, Down koruması).
+- **Kurul koşulları:** DBA ve güvenlik koşulları ben uyguladım (renk kartı revizyonu `manage`, renk kartı kullanım ucu boyahane modül kapısı — sabit segment `{kind}` rotasından önce eşleşir).
+- **Doğrulama:** verify all backend 6775 geçti; frontend 1 test yük altında zaman aşımı → tek başına 2/2 geçti (flaky).
+- **Commit:** `417ae610` — DEV 1107. UX PASS-with-nits (kilitli rotada grid hâlâ düzenlenebilir görünüyor, terim karmaşası) → ön yüz düzeltmesi çalışıyor.
+- **Bilinen borç:** sipariş (`OrderReceipt.RouteId`) ve stok fişi satırı kullanımı tanımı kilitlemiyor.
+
+### 10. E3 dilim 1 — varyantlı tahsis
+- **Ne yapıldı:** tahsis/rezerv/serbest stok varyant bazında; `InventoryLot.VariantId`; lot–tahsis varyant eşleşmesi; MRP `GetFreeStockByVariantAsync`; Tahsis Fişi ve Konfeksiyon Tedarik'te varyant kolonu/seçici.
+- **Rebase:** api-errors en/tr ve changelog çakışması birleşim script'i ile (yalnız yinelenen anahtarlar düştü), fixture'lar yeniden üretildi, model senkron.
+- **DBA:** DEV'de varyantlı 1 malzemede varyantsız 900 tahsis / 1500 bakiye var — yeni tahsis için sayım farkı fişiyle varyanta taşınmalı (DB'ye dokunulmadı).
+- **Commit:** `fe6d157e` — DEV 1108, migration uygulandı.
+
+### 11. E4/E5/E8/E9 önerileri + kurul
+- Öneriler: scratchpad `e4/e5/e8/e9-proposal.md`; kurul kararları `board-e4589.md`.
+- **Sonuç:** E4 S1/S3 onay (uygulanıyor), E9 S1/S2 onay (uygulanıyor); E5 S2 BLOCK (backfill çift sayım: RefType 9 backfill satırları + Out join), E8 S1/S2 BLOCK (yeniden teslimde çift peg), E9 S3/S4 BLOCK (fatura kodu / kapsam).
+- **ClickUp:** sorular E4/E8/E9 task'larına yorum; E8 bk-ask; E3/E4/E6/E7/E9 ip-ask.
+
 ## Açık kalanlar
-- E7 S1 UX/güvenlik post-check (çalışıyor). E3 S1 (varyantlı tahsis) ve E6 S1+S2 (reçete/rota revizyon + doz) ajanlarda.
+- E4 S1+S3, E9 S1+S2 ve E6 UX düzeltmeleri ajanlarda.
 - H8 (3006 anlamı) kullanıcıda bk-ask. E2 S4 sorusu ClickUp'ta.
 - Kalan: E1b, E3 S2/S3, E4, E5, E6 S3/S4, E7 S2–S4, E8, E9, E10.
 - GitHub Billing hâlâ DEV Deploy'u engelliyor (elle deploy). `_wt-idem` worktree index'i bozuk (bizim değil).
