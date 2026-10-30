@@ -77,6 +77,21 @@ paralel worktree'lerde (scratchpad/wte7, wte8, wte9). Ana checkout'a dokunulmad�
 - **Commit:** `ea1e65ca`. **DEV:** 1.0.2.1121, health 200.
 - **Bilinen sınır:** boyahane tenant'ında 3006 müşteri kumaşı → İplik raporu anlamsız; ClickUp backlog z8v9xnjrp3.
 
+### 6. D6 — Siparişe bağlı mal kabulde aşım uyarısı
+- **Neden:** Kullanıcı kararı 6 (%10 üstü yalnız uyarı). Eski kural (D1 koşul 6, %0 tolerans) her aşımı hata yapıyordu.
+- **Kurul:** CTO (S3'ten ayrılıp hemen çıksın, kural tersine dönüşü onaylandı) + Skeptic koşullu onay; PO tenant ayarı istedi, CTO+Skeptic sabit 10m dedi → çoğunluk.
+- **Ne yapıldı:** `PurchaseOrderLinkGuard.ValidateAsync` sert hataları korur, aşımı `OrderOverReceiptWarning` listesi olarak döner;
+  Create/Update/Approve sonuçlarında ayrı `OrderWarnings`; fiş ekranında kaydet/onayda ayrı uyarı; `order_over_received` hata kodu kalktı.
+- **Doğrulama:** verify backend rc=0 (7168); frontend 1 test zaman aşımı (i18n lazy `ka`, tek başına 20/20 geçti — bilinen yük flaky'si).
+- **Commit:** `19b14413`. **DEV:** 1.0.2.1122.
+
+### 7. Kurul turları (kod yok)
+- **E8 v2** (beklenen tedarik bağı): S2a hepsi koşullu onay → uygulanıyor (wte7). S1 DBA BLOCK (iptal satırında CHECK karşılanamıyordu,
+  taban formülü) → v3 (e8-s1a-v3-proposal.md) → DBA + Skeptic koşullu onay; S1a/S1b bölündü, kullanıcıya S4a'ya kadar kapalı (DEV pilot admin görür).
+  Bulgu: CreateReceipt ile UpdateReceipt kilitleri ters sırada alıyor (mevcut, düşük-orta: 40P01 geri alma, bozulma yok) → S3 giriş şartı.
+- **E2 S4** (dokumada iplik emre çıkış = tüketim): 5 üye koşullu onay; S4a/S4b bölündü; rejim emir başına saklanır (anahtar geri alınca çift düşüm olmasın),
+  deploy anında süren emirler Teorik kalır. Uygulanıyor (wte9). Koşullar: scratchpad/board-e2s4.md.
+
 ## Kararlar
 - Ajanların `verify all` koşuları paralel yapılmayacak (bellek).
 - E4 S2 Lotlar sekmesi için Quality→Inventory okuma ucu eklendi (modüller arası doğrudan sorgu yasak olduğu için).
