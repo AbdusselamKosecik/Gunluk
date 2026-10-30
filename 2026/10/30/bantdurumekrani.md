@@ -51,3 +51,22 @@ Kullanıcı Superset için iki dashboard istedi: (1) bant sonu monitörü (bantd
   DENY (Vanna kullanıcısındaki gibi gizli bilgi). Artık kısıt anlamsız olduğundan SQL Lab yeniden açık (`expose_in_sqllab=True`).
   Şifre aynı; betik DB'de çalıştırılmadı.
 - **Dokunulan dosyalar:** `superset/superset_okur.sql`, `superset/olustur.py`, `superset/README.md`, `superset/*.zip`
+
+### 4. PDKS dashboard'u (10:30)
+- **Neden:** Kullanıcı zkbiotime'a superset_okur yetkisi verdi; sentezservis'in günlük PDKS mailini Superset'te ve
+  ayrıca departman bazında istedi.
+- **Ne yapıldı:** `sql/pdks_gunluk.sql` = `PdksDeposu.GunlukAsync` (DECLARE yerine CTE `g`: Gun + Onceki; yön işaretine
+  güvenmeyen çıkış/giriş, source<>1 elle). `sql/pdks_devam.sql` = `PdksDevamAnalizi` SQL'de: dünden geriye 45 gün
+  (VALUES 0–99 sayı CTE'si), iş günü = aktif personelin yarısı (ceil, en az 1), çalışılan = DATEDIFF(SECOND)/60 (C#'taki
+  TotalMinutes kesmesi), 565 dk standart, ±60 dk eşik, tatilde tamamı fazla mesai; satır = gelinen gün + iş günü NON.
+  `olustur.py`: çoklu veritabanı (`VTLER`: SentezCore, zkbiotime; aynı uuid5 → eski ZIP'lerle uyumlu), native filtre
+  desteği (datasetUuid), gruplu tablo / çizgi / yığın çubuk yardımcıları. `modfex_pdks.zip`: 4 sekme (Günlük ·
+  Departman bugün · Departman 45 gün · Kişi 45 gün), 12 grafik, Departman filtresi, yenileme 5 dk.
+  `superset_okur.sql` zkbiotime db_datareader bölümü eklendi (kullanıcı yetkiyi kendisi vermişti).
+- **Sonuç / doğrulama:** İki sorgu zkbiotime'da Superset sarmalıyla 2 sn'de çalıştı; bugün (cuma) 356 aktif, 0 giriş;
+  45 günde departman toplamları makul (ör. Line1 Bra 1514 beklenen kişi-gün, 55 NON). Superset'e import denenmedi
+  (kullanıcı müşteride yükleyecek).
+- **Commit:** `9460a80` — Superset: PDKS dashboard'u (günlük giriş/çıkış + departman bazında, 45 gün devam), zkbiotime bağlantısı
+
+## Açık kalanlar
+- PDKS ZIP'inde native filtre ilk kez kullanıldı; import'ta sorun çıkarsa filtre olmadan üretilebilir (`filtreler` kaldır).
