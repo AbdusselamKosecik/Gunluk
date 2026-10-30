@@ -44,3 +44,10 @@ Kullanıcı Superset için iki dashboard istedi: (1) bant sonu monitörü (bantd
   `mssql+pymssql://superset_okur:…@192.168.0.2:1433/SentezCore`, `expose_in_sqllab=False` (UZM_Ayar okunabildiği için).
 - **Sonuç:** Betik DB'de ÇALIŞTIRILMADI; kullanıcı sysadmin ile çalıştıracak.
 - **Commit:** `f78fac5` — Superset: superset_okur login betiği (21 tabloya SELECT), bağlantı 192.168.0.2, SQL Lab kapalı
+
+### 3. superset_okur tüm tabloları okusun (09:53)
+- **Neden:** Kullanıcı "tüm dosyaları okuyacak şekilde" istedi.
+- **Ne yapıldı:** Tek tek GRANT yerine `ALTER ROLE db_datareader ADD MEMBER superset_okur`; `UZM_OnayAyar` ve `Meta_User`
+  DENY (Vanna kullanıcısındaki gibi gizli bilgi). Artık kısıt anlamsız olduğundan SQL Lab yeniden açık (`expose_in_sqllab=True`).
+  Şifre aynı; betik DB'de çalıştırılmadı.
+- **Dokunulan dosyalar:** `superset/superset_okur.sql`, `superset/olustur.py`, `superset/README.md`, `superset/*.zip`
