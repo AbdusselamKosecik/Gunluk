@@ -35,3 +35,12 @@ Kullanıcı Superset için iki dashboard istedi: (1) bant sonu monitörü (bantd
 ## Açık kalanlar / sonraki adım
 - Müşteride: `pip install pymssql`, import, bağlantı kullanıcı/sunucu düzeltmesi; grafiklerin veriyle görünmesi orada doğrulanacak.
 - Uygulama sorguları değişirse `superset/sql` de güncellenmeli.
+
+### 2. superset_okur kullanıcısı ve bağlantı (09:50)
+- **Neden:** Import, `SentezCore_Modfex.yaml` için şifre istedi; kullanıcı ayrı bir salt-okur login istedi, sunucu 192.168.0.2.
+- **Ne yapıldı:** `superset/superset_okur.sql`: CREATE LOGIN/USER + yalnız dashboard'ların okuduğu 21 tabloya GRANT SELECT
+  (db_datareader yerine en az yetki; tablo listesi `sql/*.sql` içindeki `dbo.` adlarıyla birebir karşılaştırıldı). Şifre
+  20 karakter, rastgele üretildi; yalnız kullanıcıya iletildi, repoda `<şifre>` yer tutucusu var. ZIP bağlantısı
+  `mssql+pymssql://superset_okur:…@192.168.0.2:1433/SentezCore`, `expose_in_sqllab=False` (UZM_Ayar okunabildiği için).
+- **Sonuç:** Betik DB'de ÇALIŞTIRILMADI; kullanıcı sysadmin ile çalıştıracak.
+- **Commit:** `f78fac5` — Superset: superset_okur login betiği (21 tabloya SELECT), bağlantı 192.168.0.2, SQL Lab kapalı
