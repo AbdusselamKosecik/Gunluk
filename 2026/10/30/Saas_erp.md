@@ -159,11 +159,24 @@ paralel worktree'lerde (scratchpad/wte7, wte8, wte9). Ana checkout'a dokunulmad�
   kart `LotId` ile bağlı farklı numaralı lot bulunur (liste "Teslim alındı" / panel "Beklenen" farkı), `SerialCards.columns.variant` çevirisi.
   Tarih biçimi değişmedi (2026-10-25 kararı: tarayıcı yereline göre) — kullanıcıya soruldu.
 
+### 16. Test senaryoları Excel'i (tek tek + entegrasyon) — `docs/qa/VuoApp_Test_Senaryolari.xlsx`
+- **Neden:** Kullanıcı tüm akışın önce tek tek, sonra entegre test senaryolarını Excel olarak istedi (1.Satın Alma > 1.1 Talep > 1.1.1 Cari seçimi gibi hiyerarşi; indirim, cari/adres, masraf, X TL'lik üründe toplam; talep→teklif→sipariş→irsaliye→fatura→stok; ileri üretim, iplik, örme, yıkama, boyahane, dar dokuma, dokuma, indigo, hazır giyim).
+- **Ne yapıldı:** İki keşif ajanı ile kod haritası çıkarıldı. Yerel `dev` 167 commit gerideydi; ilk tarama eski koda göreydi, `git pull --ff-only` sonrası iki ajana fark raporu yaptırıldı. 572 senaryo yazıldı. Sayfalar: Özet (COUNTIF ile durum özeti), Hesap Örnekleri (11 formüllü vaka; ekranda görülen değer girilince fark çıkar), Riskler ve Eksikler (37 madde), 1-Satın Alma … 4-Cari-Finans, 5-Entegrasyon Ticari, 6–13 üretim modülleri, 14-Entegrasyon Üretim. Durum sütununda açılır liste var.
+- **Kod incelemesinde görülen önemli riskler (senaryolarda kırmızı):** teklif→sipariş dönüştürmede ön yüz `/convert-to-order` adresine gövdesiz istek atıyor, arka uç ise `/convert` + `OrderReceiptNo` bekliyor, oluşan siparişin tipi de 5202 değil. Sipariş/teklif/faturada dip indirim KDV matrahını düşürmüyor (yalnız stok fişi düşürüyor). Faturada tevkifat ödenecekten düşülmüyor. `ShippedQuantity` ve sipariş "kısmen sevk" durumu hiç güncellenmiyor. Siparişten fatura için ekran yok, kısmi faturalama ve mükerrer faturalama koruması da yok. İrsaliye→fatura dönüşümü yok. Satış irsaliyesinde "Açık Siparişler" yok. Açık siparişten aktarımda satır indirimleri taşınmıyor. Talepte onay/durum yok. Dar Dokuma modülü yok. Yıkama ayrı modül değil, Boyahane süreci. İndigo, Dokuma içindeki bir sayfa. İplik menüsünde paketleme yok.
+- **Dokunulan dosyalar:** `docs/qa/VuoApp_Test_Senaryolari.xlsx`, `docs/qa/generator/{xl,prod,comm,integ,main}.py`, `docs/qa/generator/README.md`
+- **Komutlar:**
+  ```bash
+  cd docs/qa/generator && python main.py ../VuoApp_Test_Senaryolari.xlsx
+  ```
+- **Sonuç / doğrulama:** Bu makinede LibreOffice yok, Excel COM da açılmadı (CO_E_SERVER_EXEC_FAILURE), bu yüzden recalc.py çalıştırılamadı. Hesap formülleri Python'da aynı mantıkla bağımsız hesaplandı ve senaryo metinleriyle eşleşti (ör. HC-05: KDV 151, toplam 906). Özet aralıklarının yalnız test satırlarını kapsadığı doğrulandı. Dosyaya fullCalcOnLoad bayrağı kondu (Excel açılışta hesaplar).
+- **Commit:** `939ef228` — docs(qa): ... test senaryolari Excel'i
+
 ## Kararlar
 - Ajanların `verify all` koşuları paralel yapılmayacak (bellek).
 - E4 S2 Lotlar sekmesi için Quality→Inventory okuma ucu eklendi (modüller arası doğrudan sorgu yasak olduğu için).
 
 ## Açık kalanlar / sonraki adım
+- Test Excel'indeki kırmızı riskler için ClickUp kaydı/kurul kararı (özellikle teklif→sipariş dönüşüm hatası, dip indirim KDV, fatura tevkifatı, sevk miktarı güncellenmemesi).
 - E8 S1a (wte7, uygulanıyor), seri paneli UX düzeltmeleri (wte8), E2 S4b (+ Örme/Boyahane, karar 14), sorunlu lot raporu + runbook (karar 17), fasoncu lookup (karar 15).
 - Takip maddeleri ClickUp z8v9xnjrp3 (PUT /orders yetki, port alt-modül kısıtı, İplik/boyahane, fiş satırı sayı kolonu, fasoncu lookup süzgeci).
 - E5 S2a-2: DEV 1116'dan sonra 3 gün sıfır sapma penceresi (≈ 2026-11-01).
