@@ -147,6 +147,18 @@ paralel worktree'lerde (scratchpad/wte7, wte8, wte9). Ana checkout'a dokunulmad�
 ### 13. E8 S2a UX düzeltmesi
 - Aktarılamayan talepte/satırda neden açıklaması, "Aktarılacak" alanına aria-label. **Commit:** `ecd113fd`.
 
+### 14. Karar 15 ve 17
+- **15 (fasoncu lookup):** kod gerekmedi — 5203 tedarikçi ve rota adımı fasoncu lookup'ı tüm carileri listeliyor; DEV'de 1305 carinin `AccountType`'ı NULL.
+- **17 (sorunlu lotlar):** `docs/runbooks/e5-s2a-lot-remaining.md` §H — salt-okuma rapor (DELETE_CANDIDATE / ORPHAN_WITH_STOCK / NO_WAREHOUSE),
+  yetim stoksuz lot soft delete (kilitle → koşulu yeniden değerlendir → kuru koşu → COMMIT), seri kartı bağı çözülür, geri alma.
+  Deposuz lot çıkışı kodda zaten kapalı (C8). DEV raporu: aday 0, stoklu yetim 1 (LOT-TEST-01-1), deposuz 1 (SN-…08). **Commit:** `303392b1`.
+
+### 15. UX post-check düzeltmeleri (E2 S4a + seri paneli) — DEV 1.0.2.1126
+- E2 S4a (`03086405`): tüketim kaynağı açıklaması "Teorik/Emre çıkış seçiliyken", sayfa alt başlığı seçili kaynağı izler, kaynak başlığı görünür, genişlik.
+- Seri paneli (`4f9352d0`): zaman çizelgesi olayları dile göre (backend yapılandırılmış alanlar ekledi), girişsiz lot açıklaması,
+  kart `LotId` ile bağlı farklı numaralı lot bulunur (liste "Teslim alındı" / panel "Beklenen" farkı), `SerialCards.columns.variant` çevirisi.
+  Tarih biçimi değişmedi (2026-10-25 kararı: tarayıcı yereline göre) — kullanıcıya soruldu.
+
 ## Kararlar
 - Ajanların `verify all` koşuları paralel yapılmayacak (bellek).
 - E4 S2 Lotlar sekmesi için Quality→Inventory okuma ucu eklendi (modüller arası doğrudan sorgu yasak olduğu için).
