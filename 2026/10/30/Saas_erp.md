@@ -117,12 +117,42 @@ paralel worktree'lerde (scratchpad/wte7, wte8, wte9). Ana checkout'a dokunulmad�
   `AllocationConsumption` join yazmıyor, lot dolu görünürdü) → v2 (Kalan = `InventoryLot.RemainingQuantity`; Kullanılan = Out join + tüketim satırları;
   uyumsuzluk = Quantity − Remaining ≠ Kullanılan; emir no Shared port `GetByOrderIdsAsync` ile) → koşullu onay. Uygulanıyor (wte8).
 
+### 11. Seri kartı izlenebilirliği (karar 13) — uygulandı
+- **Neden:** Kullanıcı: "hangi üretim fişinden üretilmiş, hangi fişlerde ne kadar kullanılmış görmemiz lazım". `InventoryReceiptSerialCard`
+  9a5d7ef4'te kaldırılmıştı (yazanı olmayan, miktarsız ölü tablo); kullanıcı tablo yerine ekranı seçti.
+- **Ne yapıldı:** `GetSerialHistory` yeniden yazıldı: yön `InventoryReceiptItemLot.Direction`'dan; Kullanılan = onaylı Out join + tüketimler
+  (`StockAllocationConsumption` RefType 1/2/3, geri alınmamış; 4 hariç); Kalan = `InventoryLot.RemainingQuantity`;
+  Uyumsuzluk = (Miktar − Kalan) ≠ Kullanılan; "Kısmen kullanıldı" durumu; kapsayıcı parti özetsiz; iade fişi İade.
+  Emir no Shared port `IProductionOrderRefQuery.GetByOrderIdsAsync` ile (Production implement), yalnız `production:read` ile.
+  Seri Kartları'nda "Geçmiş" → yan panel (lazy).
+- **Kurul:** CTO koşullu onay; Şüpheci BLOCK → v2 → koşullu onay; güvenlik post-review koşullu onay (emir no yetkiye bağlandı).
+- **Yan bulgu:** dev'de api-errors fixture kaymıştı (108333f6 sonrası); interpolated `inventory.receipt.order_*` çeviriden çıktı.
+- **Commit:** `47676784`. **DEV:** 1.0.2.1124. UX: PASS-WITH-NITS (zaman çizelgesi metinleri çevrilmemiş, TR tarih biçimi,
+  liste/panel durum farkı — kart LotId ile farklı numaralı lota bağlı, girişsiz lotta açıklama yok) → düzeltiliyor (wte8).
+
+### 12. E2 S4a — Dokumada iplik emre çıkış = tüketim
+- **Neden:** Karar 3: dokumada iplik üretime emir bazında çıkılıyor; çıkış + top kesimi ipliği iki kez düşüyordu.
+- **Ne yapıldı:** 3061/3021 satırı `ProductionOrderId` ile dokuma emrine bağlanır (koruyucu: dokuma modül erişimi, açık emir, satır tipi);
+  bağlı çıkış tüketim sayılır (RefType 5 onayda; lotlu yol RefType 4 kayıtta — runbook'ta). Emir `YarnConsumptionRegime` bir kez yazılır
+  (1 Emre çıkış / 2 Teorik); Emre çıkış emrinde kesim durum 4 (Teorik, stoksuz). Tenant ayarı `production.weaving.yarnConsumptionSource`
+  varsayılan 0 (karar 16). Emir kilidi her yolda önce, sıralı.
+- **Post-review:** DBA — rejim Inventory işlemi dışında commit oluyordu (geri alınan fişte emir sessizce Emre çıkış'ta kalırdı) → yazım
+  PostReceipt sonrasına, bayat rejim kendini onarır; VALIDATE ayrı migration; Update'te FOR UPDATE emir kilidinden sonra. Güvenlik —
+  genel `PUT /tenants/settings` her anahtarı kabul ediyordu (viewer bile modu açabilirdi) → modül-yönetimli anahtarlar reddedilir.
+- **Birleştirme:** seri commit'iyle aynı `ProductionOrderRef` adında iki farklı kayıt → E2'ninki `ProductionIssueOrderRef` oldu.
+- **Migration:** `20261030072319_..._ProductionIssue`, `20261030072915_..._ProductionIssueIndexes`, `20261030115418_..._ProductionIssueValidate`.
+- **Doğrulama:** verify backend rc=0 (7319), frontend rc=0. DEV: 3 migration, kısıtlar validated, indeks geçerli, 18 tenant ayar 0, 5 dokuma emri Teorik.
+- **Commit:** `2419b449`. **DEV:** 1.0.2.1125. Runbook: `docs/runbooks/e2-s4-weaving-issue.md`.
+
+### 13. E8 S2a UX düzeltmesi
+- Aktarılamayan talepte/satırda neden açıklaması, "Aktarılacak" alanına aria-label. **Commit:** `ecd113fd`.
+
 ## Kararlar
 - Ajanların `verify all` koşuları paralel yapılmayacak (bellek).
 - E4 S2 Lotlar sekmesi için Quality→Inventory okuma ucu eklendi (modüller arası doğrudan sorgu yasak olduğu için).
 
 ## Açık kalanlar / sonraki adım
-- E8 S1a (S2a birleşti → sırada), E2 S4a (wte9, uygulanıyor), seri izlenebilirliği (wte8, uygulanıyor), sorunlu lot raporu + runbook (karar 17).
+- E8 S1a (wte7, uygulanıyor), seri paneli UX düzeltmeleri (wte8), E2 S4b (+ Örme/Boyahane, karar 14), sorunlu lot raporu + runbook (karar 17), fasoncu lookup (karar 15).
 - Takip maddeleri ClickUp z8v9xnjrp3 (PUT /orders yetki, port alt-modül kısıtı, İplik/boyahane, fiş satırı sayı kolonu, fasoncu lookup süzgeci).
 - E5 S2a-2: DEV 1116'dan sonra 3 gün sıfır sapma penceresi (≈ 2026-11-01).
 - `_wt-idem` worktree'nin git index'i bozuk (zararsız gürültü; ileride `git worktree remove`).
