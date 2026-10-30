@@ -92,12 +92,37 @@ paralel worktree'lerde (scratchpad/wte7, wte8, wte9). Ana checkout'a dokunulmad�
 - **E2 S4** (dokumada iplik emre çıkış = tüketim): 5 üye koşullu onay; S4a/S4b bölündü; rejim emir başına saklanır (anahtar geri alınca çift düşüm olmasın),
   deploy anında süren emirler Teorik kalır. Uygulanıyor (wte9). Koşullar: scratchpad/board-e2s4.md.
 
+### 8. E8 S2a — Satın alma talebinden siparişe aktarım
+- **Neden:** Talep (5001) satırları SAS'a (5201/5205) aktarılamıyordu; MRP talep+sipariş ihtiyacını iki kez sayıyordu.
+- **Ne yapıldı:** `orders.OrderReceiptItemDemandSource` (sipariş satırı ← talep satırı, miktar; CHECK Quantity>0; talep satırına FK yok, modül sınırı).
+  Orders tek "canlı sipariş satırı" tanımının sahibi; Demand `IDemandTransferQuery` portuyla okur, Orders talep gerçeklerini `IDemandLineSupplyQuery` ile.
+  Kalan, `DemandTransferLock` (paylaşılan; tek ifadede sıralı `pg_advisory_xact_lock`, `lock_timeout` 10s, 55P03→409 `*.transfer_busy`) altında doğrulanır.
+  MRP'de talep kalanı = miktar − aktarılan. Aktarılmış talep silinemez / tipi değişemez; SAS iptal/silme/satır silmede bağ silinir; kapalı SAS teslim alınanı sayar.
+  Talep detayında Aktarılan/Kalan + "Siparişe aktar"; SAS'ta "Kaynak talep". Taşıyan siparişler yalnız `order:read` yetkisiyle döner.
+- **Migration:** `20261030053440_Sprint_E8S2a_DemandSource`, `20261030054210_Sprint_E8S2a_DemandSourceIndexes` (CONCURRENTLY, ayrı lock_timeout).
+- **Doğrulama:** verify backend rc=0 (7199), frontend rc=0; Postgres testleri 8/8 (eşzamanlı 60+60/100 → biri; 6×30/100 → 3; SAS create × talep delete; kilit meşgul → 409).
+  Kurul sonrası: DBA koşullu onay (lock_timeout, tek ifade kilit) + Güvenlik onay (düşük: sipariş no görünürlüğü → yetkiye bağlandı) — hepsi uygulandı.
+- **Sapmalar:** talep satır miktarını değiştiren uç yok (kural `DemandTransferGuard.EnsureCoversTransfersAsync`'te, testli); talep iptal/kapat ucu yok.
+- **Commit:** `16a27ea5`. **DEV:** 1.0.2.1123 (migration'lar ve 4 indeks geçerli).
+
+### 9. Kullanıcı kararları 13–17 (2026-10-30 11:45)
+- 13 Seri kartı izlenebilirliği: `InventoryReceiptSerialCard` geri gelmez (9a5d7ef4'te kaldırılmıştı, yazanı olmayan ölü tabloydu); mevcut veriden seri detay paneli.
+- 14 Örme/Boyahane'de de çıkış emir bazlı → E2 S4b kapsamına.
+- 15 Fasoncu lookup: tedarikçi + müşteri.
+- 16 Dokuma "çıkış = tüketim" PROD'a kapalı gider; kullanıcı DEV pilotu sonrası tenant bazında açar.
+- 17 Sorunlu lotlar: yetim lot silinir, deposuz lot çıkışa kapalı; önce salt-okuma rapor, runbook'a yazılır.
+
+### 10. Seri kartı izlenebilirliği — kurul
+- Öneri: `scratchpad/serial-trace-proposal.md`. CTO koşullu onay; Şüpheci önce BLOCK (Kullanılan yalnız Out join'den → üretim tüketimi
+  `AllocationConsumption` join yazmıyor, lot dolu görünürdü) → v2 (Kalan = `InventoryLot.RemainingQuantity`; Kullanılan = Out join + tüketim satırları;
+  uyumsuzluk = Quantity − Remaining ≠ Kullanılan; emir no Shared port `GetByOrderIdsAsync` ile) → koşullu onay. Uygulanıyor (wte8).
+
 ## Kararlar
 - Ajanların `verify all` koşuları paralel yapılmayacak (bellek).
 - E4 S2 Lotlar sekmesi için Quality→Inventory okuma ucu eklendi (modüller arası doğrudan sorgu yasak olduğu için).
 
 ## Açık kalanlar / sonraki adım
-- E8 yeniden öneri (S1/S2 BLOCK gerekçeleri + karar 5–6) ve E2 S4 önerisi Plan ajanlarında; sonra kurul.
+- E8 S1a (S2a birleşti → sırada), E2 S4a (wte9, uygulanıyor), seri izlenebilirliği (wte8, uygulanıyor), sorunlu lot raporu + runbook (karar 17).
 - Takip maddeleri ClickUp z8v9xnjrp3 (PUT /orders yetki, port alt-modül kısıtı, İplik/boyahane, fiş satırı sayı kolonu, fasoncu lookup süzgeci).
 - E5 S2a-2: DEV 1116'dan sonra 3 gün sıfır sapma penceresi (≈ 2026-11-01).
 - `_wt-idem` worktree'nin git index'i bozuk (zararsız gürültü; ileride `git worktree remove`).
