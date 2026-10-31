@@ -47,3 +47,28 @@ Hedef: değişiklikleri incelemek ve GitLab'a (`origin` = gitlab.com/mitotr/muft
 ## Açık kalanlar / sonraki adım
 - `PlanningSettingsStoreTests` testini yeni varsayılana (50000/80000) güncelle.
 - `System.Security.Cryptography.Pkcs` paketini güncel sürüme yükselt (NU1903).
+
+---
+
+### 4. mitotr repolarının GitHub organizasyonuna taşınması (20:45–21:50)
+- **Neden:** `X:\Gitlab\mitotr` altındaki tüm repolar GitHub'da bir organizasyon altında da dursun.
+- **Ne yapıldı:**
+  - GitHub'da org **Mitotr** (https://github.com/Mitotr) web arayüzünden elle açıldı. github.com'da API ile org açılamıyor.
+  - 6 private repo açıldı: MitoSentezApi, loomscreen, maliyet1, mezura, muftelif, sevkiyat.
+  - GitLab'daki tüm uzak dallar, yerel dallar ve etiketler GitHub'a gönderildi. muftelif'te sadece yerelde olan `list` dalı da gitti.
+  - Yerel klonlarda `origin` → GitHub, `gitlab` → GitLab. `main` artık `origin/main`'i izliyor.
+- **Komutlar (her repo için):**
+  ```bash
+  git fetch origin --tags --prune
+  gh repo create "Mitotr/$r" --private
+  git push https://github.com/Mitotr/$r.git 'refs/remotes/origin/*:refs/heads/*'
+  git push https://github.com/Mitotr/$r.git --all
+  git push https://github.com/Mitotr/$r.git --tags
+  git remote rename origin gitlab
+  git remote add origin https://github.com/Mitotr/$r.git
+  git fetch origin && git branch -u origin/main main && git remote set-head origin main
+  ```
+- **Sonuç / doğrulama:** `git ls-remote` ile GitLab ve GitHub ref'leri karşılaştırıldı, hepsi aynı çıktı (muftelif'te fazladan sadece `list` var).
+
+## Kararlar (ek)
+- GitLab silinmedi, `gitlab` remote'u olarak duruyor. GitLab'a da göndermek için: `git push gitlab main`.
