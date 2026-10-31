@@ -82,6 +82,41 @@
 - Bozuk `_wt-idem` worktree'si kaldırıldı (`git worktree remove --force`; HEAD e49f2533 zaten dev'deydi).
 - E12 S1/S2 kurulu: Skeptic BLOCK, CTO ve PO şartlı onay verdi. Gerekçe: e-Fatura UBL matrahı satır net tutarından hesaplanıyor; `IsVatBaseStale` dip indirimli faturayı reddederdi; tevkifat GL'ye yanlış gidiyor. v2 önerisi hazırlanıyor.
 
+### 9. E3 S2a UX düzeltmesi
+- **Neden:** UX post-check BLOCK verdi. Korunan kayıt silinmek istendiğinde doğru toast'un üstüne ham anahtarlı İngilizce bir modal daha açılıyordu.
+- **Ne yapıldı:**
+  - Ortak `delete-item-modal.tsx` (tüm GenericTable listeleri) artık tek bir hata gösteriyor.
+  - Varyant tipi listesine "Sistem" rozeti eklendi; sistem grubunda Sil düğmesi gizli.
+  - Seri geçmişinde tarihler tarayıcı diline göre gösteriliyor (kullanıcı kararı).
+- **Commit:** `3993c88d`. **DEV:** 1131.
+
+### 10. E2 S4b-1 — dokuma iplik çıkış özeti + boyahane maliyet düzeltmesi
+- **Ne yapıldı:**
+  - Emir detayına İhtiyaç/Çıkılan/İade/Net/Fark paneli ve rejim rozeti eklendi; "Çıkış yap" düğmesi geldi.
+  - Teorik > 0 ve Çıkılan = 0 iken uyarı ve kapatma onayı gösteriliyor.
+  - Özet endpoint'i eklendi (yalnız dokuma; modül erişimi kontrol ediliyor).
+  - Emre çıkış rejiminde maliyet, canlı RefType 4/5 tüketimi ile fazla çıkışın kart fiyatından hesaplanıyor.
+  - Bloklamayan uyarılar eklendi.
+  - Bağlı lot satırında RefType 4 kaydı onay anında yazılıyor; eski taslaklar çift tüketmiyor.
+  - Fix: tip-1 tahsis maliyeti kalem id ile eşleniyor (boyahane kumaş maliyeti eksik çıkıyordu).
+- **Doğrulama:**
+  - Testler: BE 7568, FE 3096 yeşil; PG testleri 3/3.
+  - Security PASS; Low bulgu uygulandı (dokuma dışı emirde boş dönüyor).
+- **Commit:** `36a3e968`. **DEV:** 1132.
+- **Not:** `production/reports/actual-cost` endpoint'inde izin kontrolü yok (önceden beri). Ayrı ele alınacak.
+
+### 11. E12 kurulu tur 2 + kullanıcı kararları
+- **Kararlar:**
+  - D1: GL'de tevkifat işlenecek (alışta 360 alacak, satışta 391 − W).
+  - D2: Tevkifatlı e-Fatura şimdi tam yapılacak (satır tevkifat kodu + `WithholdingTaxTotal`; TEVKIFAT tipi yalnız UBL'de türetilecek).
+  - D3: Konfeksiyon planlama sürükle-bırak + kapasite ile yapılacak.
+  - D4: SEPA pain.001.001.03 yapılacak.
+- **Kurul:**
+  - Şartlı GO: S1a, S1b (DebitNote dahil), S1c, S2, S8a, S8b CRUD, S8c stok kontrol + Numune.
+  - Ayrı tasarım + kurul bekleyenler: SEPA (şema eksikleri, cari etkisi) ve Konfeksiyon Order Planlama.
+- **Kural değişikliği:** Satır KDV'si v_i = Round2(B_i·r); grup kalanı yok (e-Fatura `IsVatBaseStale` uyumu için).
+- **Uygulamada:** S8a (wte7), S1a (wte9), E8 S1b-1 (wte8).
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
