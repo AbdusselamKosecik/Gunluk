@@ -117,6 +117,23 @@
 - **Kural değişikliği:** Satır KDV'si v_i = Round2(B_i·r); grup kalanı yok (e-Fatura `IsVatBaseStale` uyumu için).
 - **Uygulamada:** S8a (wte7), S1a (wte9), E8 S1b-1 (wte8).
 
+### 12. E8 S1b-1 — beklenen tedarik bağı: üretim emri
+- **Neden:** Konfeksiyon kumaşının yaklaşık %30'u devam eden üretimden karşılanıyor (karar E8).
+- **Ne yapıldı:**
+  - Konfeksiyon Tedarik ekranından bir ihtiyaç, açık bir üretim emrine elle bağlanabiliyor ya da bağ kaldırılabiliyor. Yetki: owner/admin ve `inventory.supplyPeg.enabled` bayrağı (varsayılan kapalı).
+  - Bağlanacak emir seçilirken aday emirler durumları ve kalan miktarlarıyla listeleniyor.
+  - Üretilen miktar bağlara (NeedDate, Id) sırasıyla dağıtılıyor.
+  - Emir tamamlanınca bağ duruyor; emir iptal edilir ya da silinirse bağ iptal oluyor ve iptal nedeni görünüyor.
+  - `ProductionOrderSupplyChangedEvent` → `OnProductionOrderSupplyChanged_ReconcilePegs`.
+  - ③b kilit anahtarı artık gerçek `NeedSourceType` ile kuruluyor.
+  - Null varyant ve null tarih için Postgres testi eklendi.
+- **Doğrulama:** Backend 7614 ve frontend 3109 test yeşil; SupplyPeg Postgres testleri 52/52. DBA şartlı onay verdi, Security PASS.
+- **Commit:** `202f2551`. **DEV:** 1133.
+- **S1b-2'ye devredilenler:**
+  - Aday sorgusu için kısmi indeks (CONCURRENTLY).
+  - Bağ yeniden açılırken Σ ≤ Planned kontrolü.
+  - Manuel kind-2 bağ ve diğer bağ şekilleri. S1b-2 wte8'de başladı.
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
