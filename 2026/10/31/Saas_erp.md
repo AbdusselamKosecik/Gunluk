@@ -64,6 +64,24 @@
 - **Commit:** `9d90826e`.
 - **Sonraki:** S1 (KDV/tevkifat) + S2 (teklif→sipariş) + S8 (yer tutucu sayfalar) kurulda (cto/skeptic/po).
 
+### 7. E6 S3a — kimyasal sarf idempotent + Kimyasal sarf düğmesi
+- **Neden:** Kimyasal sarf yeniden gönderilince (çift tıklama veya yavaş ağ) stoktan iki kez düşüyordu; ayrıca diyalog hiçbir yerden açılmıyordu.
+- **Ne yapıldı:**
+  - `ConsumeChemicalsCommand.RequestId` eklendi. Bu id ile kind-3 `ProductionConsumptionPosting` satırı yazılıyor (`chem:`+RequestId); 3062 fişinin `SourceRefId` alanı null kalıyor.
+  - Advisory lock alınıyor (lock_timeout 10s, 55P03 → 409 `request_in_progress`). 23505 yarışı yaşanırsa kazanan kayıt dönüyor.
+  - Aynı RequestId farklı bir emir için gelirse reddediliyor.
+  - CHECK kısıtı 1..4'e genişletildi: önce NOT VALID eklendi, ayrı bir migration'da VALIDATE edildi.
+  - `RollOutputReceiptGuard` kind 3'ü muaf tutuyor; kind 2 ve 4 kilitli kalıyor.
+  - Boyahane emir detayına `production:update` yetkisiyle görünen bir düğme eklendi. Miktar değişince yeni RequestId üretiliyor.
+- **Doğrulama:** BE 7495 ve FE 3070 test yeşil; PG testleri 15/15. DBA ve Security post-review şartları uygulandı.
+- **Commit:** `cac1d7c6`. **DEV:** 1.0.2.1130 (CHECK VALID).
+
+### 8. Kullanıcı kararları (öğle)
+- E12 S8: yer tutucu sayfalar gizlenmeyecek, geliştirilecek. Plan: S8a hazır ekranları bağla, S8b eksik backend'i yaz, S8c Konfeksiyon sayfalarını yap.
+- Seri panelinde tarih formatı tarayıcı dilinden alınacak.
+- Bozuk `_wt-idem` worktree'si kaldırıldı (`git worktree remove --force`; HEAD e49f2533 zaten dev'deydi).
+- E12 S1/S2 kurulu: Skeptic BLOCK, CTO ve PO şartlı onay verdi. Gerekçe: e-Fatura UBL matrahı satır net tutarından hesaplanıyor; `IsVatBaseStale` dip indirimli faturayı reddederdi; tevkifat GL'ye yanlış gidiyor. v2 önerisi hazırlanıyor.
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
