@@ -134,6 +134,36 @@
   - Bağ yeniden açılırken Σ ≤ Planned kontrolü.
   - Manuel kind-2 bağ ve diğer bağ şekilleri. S1b-2 wte8'de başladı.
 
+### 13. E12 S8a — İzin tipleri, Bordro dönemleri, Kalite spesifikasyonları [16:46]
+- **Ne yapıldı:**
+  - HRM'de `leave-types` ve `payroll-periods` için CRUD eklendi. Dönem kapatma tek yönlü; kapanan dönem salt okunur.
+  - Uçlarda `RequirePermission("hrm", read/create/edit/delete/approve)` var. Varsayılan yetki satırları her açılışta seed ediliyor.
+  - Kalite spesifikasyonu listesi ve soft delete eklendi. Migration'lar: `20261031094017_..QualitySpecSoftDelete` ve `20261031130331_..QualitySpecIndex` (CONCURRENTLY).
+  - İzin tipi formundaki PUT'un veri sıfırlama hatası düzeltildi.
+  - Yer tutucu sayfalar menüden gizlendi; kontrat testi eklendi.
+  - Eşzamanlı aynı kod girişi (23505) artık 409 döndürüyor.
+  - Teknik borç kaydı: TD-024.
+- **Doğrulama:**
+  - Testler: BE 7643, FE 3125 geçti.
+  - DBA şartlı onay verdi.
+  - Security, izinler olmadığı için BLOCK verdi; izinler eklendi.
+- **Commit:** `7c354b21`. DEV'e deploy edilmedi (yeni akış, aşağıda).
+
+### 14. Yerel kontrol ortamı (kullanıcı isteği) [16:35–16:54]
+- **Neden:** Kullanıcı "kontrolleri localden yap, her seferinde docker oluşturma" dedi.
+- **Ne yapıldı:**
+  - `scratchpad/wtlocal` worktree'si açıldı. `appsettings.Development.json` ve `.env.development.local` ana ağaçtan kopyalandı; bu dosyalar git'e girmiyor. CORS'a `vuo.local:3131` eklendi.
+  - `local-up.sh [ref]` yazıldı:
+    - Yalnız origin/dev'deki commit'leri çalıştırıyor; açılışta migration'lar ortak DEV DB'ye uygulandığı için başka ref'leri reddediyor.
+    - API'yi `:5240`'ta `dotnet run` ile, web'i `:3131`'de Vite ile başlatıyor (`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=vuo.local`).
+    - `/health/live` ve web 200 dönene kadar bekliyor.
+  - `local-down.sh` portları kapatıyor.
+  - hosts dosyasına `127.0.0.1 vuo.local` eklemek admin yetkisi istiyor; kullanıcının eklemesi gerekiyor.
+- **Sonuç:** 16:54'te READY. S8a'nın 2 migration'ı DEV DB'ye uygulandı.
+- **Kararlar:**
+  - Her dilimde docker build/deploy yapılmayacak; DEV deploy toplu yapılacak.
+  - Durum mesajlarına `[HH:MM]` zaman damgası eklenecek.
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
