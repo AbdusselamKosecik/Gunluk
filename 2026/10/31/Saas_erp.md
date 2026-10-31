@@ -29,10 +29,46 @@
   eski `status` parametresi eşlenir; yazmada 400; top uçlarına `inventory` yetkisi (önceden viewer top açabiliyordu); aralık doğrulaması.
 - **Commit:** `1456a0c2`. **DEV:** 1.0.2.1128 (DEV'de hurda top yok → no-op).
 
+### 5. E3 S2a — Ham (boyasız) sistem varyantı
+- **Neden:** Karar: ham kumaş ayrı kart değil, aynı ürünün HAM varyantıdır (E3).
+- **Ne yapıldı:**
+  - `Variant`/`VariantGroup` tablolarına `SystemKey` alanı eklendi.
+  - Migration her tenant için seed yapar:
+    - Tek Renk/Color grubu varsa onu benimser; yoksa Renk grubunu, "Standart" kartını ve HAM'ı oluşturur.
+    - Birden fazla aday grup varsa hiçbir şey oluşturmaz, NOTICE yazar ve Ayarlar'da seçim ipucu gösterilir.
+  - Yeni tenant: `OnTenantCreated_SeedHamVariant` olay işleyicisi.
+  - HAM silinemez, yeniden adlandırılamaz ve pasiflenemez:
+    - Handler kontrolü, DB tetikleyicisi (`WHEN OLD.SystemKey IS NOT NULL`) ve kart koruması.
+    - `ExceptionHandlingMiddleware`, 23514 `system_protected` hatasını 409'a çevirir.
+  - Varyantlı kumaş kartında HAM zorunludur; kural yalnız varyantlar değişince çalışır, eski kartlar bloklanmaz.
+- **Migration'lar:** `20261030233125_Sprint_E3S2a_HamSystemKey` ve `..._HamSystemKeyIndexes` (CONCURRENTLY, unique partial).
+- **Doğrulama:**
+  - BE 7540, FE 3073 test yeşil; `HamSystemKeyMigrationTests` gerçek PG'de 14/14.
+  - DBA post-review şartları ve Security PASS (2 Low) uygulandı.
+- **Commit:** `61ce375a`. **DEV:** 1.0.2.1129 — 18 tenantta HAM oluştu.
+
+### 6. E12 — QA Excel'inin "Riskler ve Eksikler" sayfası backlog'a
+- **Neden:** Kullanıcı isteği: `docs/qa/VuoApp_Test_Senaryolari.xlsx` dosyasındaki riskler ve eksikler backlog'a eklenip bitirilsin.
+- **Ne yapıldı:**
+  - 37 satır koda karşı doğrulandı: 10 madde kesin, 2 madde kısmi.
+  - Kök nedenler:
+    - Teklif/sipariş/fatura `ForexCalculator`'ı kullanıyor; dip indirim KDV matrahından düşmüyor, tevkifat ödenecekten düşmüyor.
+    - Teklif→sipariş düğmesi yanlış URL'ye gidiyor (404).
+    - Sipariş satırında teslim/fatura miktarı kalıcı tutulmuyor.
+  - Backlog'a E12 eklendi (S1–S12).
+- **Kullanıcı kararları:**
+  - Teslim takibi otomatik olacak; sipariş %100 teslimde kapanır.
+  - Fatura irsaliyeden ve siparişten kesilebilecek; kısmi fatura olacak, mükerrer fatura engellenecek.
+  - İrsaliyede risk kontrolü siparişteki ayara göre yapılacak.
+  - Eksiklerin hepsi yapılacak.
+- **Commit:** `9d90826e`.
+- **Sonraki:** S1 (KDV/tevkifat) + S2 (teklif→sipariş) + S8 (yer tutucu sayfalar) kurulda (cto/skeptic/po).
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
 ## Açık kalanlar / sonraki adım
-- E3 S2a (wte7, uygulanıyor); UX kontrolü E9 S3 + E4 S4 (DEV 1128).
+- UX kontrolü E9 S3 + E4 S4 (DEV 1128) ve E3 S2a (1129). E6 S3a (wte8) post-review düzeltmeleri, E2 S4b-1 (wte9) uygulanıyor.
+- E12 S1/S2/S8 kurulu → uygulama; ardından S3→S7, S9–S12.
 - Öneri → kurul: E2 S4b (+Örme/Boyahane), E8 S1b, E6 S3a/S3b/S4.
 - Sonra: E3 S2b/S2c, E5 S2a-2 (~11-01) ve S2b-S5, E8 S2b-S4b, E7 S2 (paralel operasyon tasarımı), E2 S3 (transfer tasarım dokümanı), E10, H12.
