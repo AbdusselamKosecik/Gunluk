@@ -207,6 +207,16 @@
 - **Commit:** `7925e87f`.
 - **Uygulamada:** E12 S1c (wte9), S8b (wte7), S2 (wte8).
 
+### 19. E12 S8b + prefill/clearFields düzeltmeleri + S1c tevkifat + S8 UX
+- **Neden:** QA Excel riskleri (E12) — tanım ekranları, kullanıcı kararı D1/D2 (tevkifat GL + tam e-Fatura).
+- **Ne yapıldı:**
+  - `e0fb1ff1` fiş satırında "Üretim emri temizle" `clearFields: ['productionOrderId']` ile id'yi de siler.
+  - `f8634fa2` E12 S8b: Salesperson/PackagingType/ReturnType/QC test kartı CRUD; migration `20261031153803_Sprint_E12S8b_DefinitionCodeIndexes` (geçici adla CONCURRENTLY kısmi unique index, CREATE sırasında `lock_timeout = 0`, DROP/RENAME 10s).
+  - `7c480601` E12 S1c: satır `WithholdingCode smallint` (Invoice/CreditNote/DebitNote line, CHECK NOT VALID + ayrı VALIDATE migration `20261031181217`/`181300`), `WithholdingCodeCatalog` oran koddan türetir; GL alış 360 alacak, satış 391 = G−W; UBL `WithholdingTaxTotal`, TEVKIFAT tipi yalnız builder'da; `EInvoiceWithholdingGuard`; security fix: oran 0–100 validator + mapper W>KDV / payable<0 ret.
+  - `d1638d85` local UX post-check notları (Stok Kontrolleri koyu tema/390px/yerel sayı/etiket; İade tipi kategori select; başlıklar).
+- **Sonuç / doğrulama:** backend 8024 / frontend 3192 test yeşil; DBA PASS-WITH-NOTES, security PASS-WITH-FIXES (uygulandı); local UX: S8 beş ekran PASS-WITH-NOTES, Stok Kontrolleri BLOCK → düzeltildi.
+- **Açık:** tevkifat kod kataloğu mali müşavir onayı; entegratör test portalı; İade tipi kategori etiketleri (0–4) varsayım; dekont tevkifat GL/UBL sonraki dilim.
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
