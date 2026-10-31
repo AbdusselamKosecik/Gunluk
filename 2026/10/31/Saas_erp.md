@@ -164,6 +164,49 @@
   - Her dilimde docker build/deploy yapılmayacak; DEV deploy toplu yapılacak.
   - Durum mesajlarına `[HH:MM]` zaman damgası eklenecek.
 
+### 15. E8 S1b-2 [17:44] — tedarik bağı genişletildi
+- **Ne yapıldı:**
+  - Üretim emri artık tip 1, 2 ve 3 ihtiyaçlara bağlanabiliyor; satınalma satırı da üretim ihtiyaçlarına bağlanabiliyor.
+  - Orders güncellemesinde, manuel bağı olan satırın RequirementOrderId'si değiştirilirse 409 dönüyor.
+  - Yeni indeks: `IX_ProductionOrder_OpenOutput` (CONCURRENTLY; CREATE sırasında lock_timeout=0).
+  - Runbook: `e8-supply-peg-flag-off.md`.
+- **Kontrol:** DBA şartlı onay verdi, Security PASS. Şartlar uygulandı.
+- **Commit:** `e880d219`.
+
+### 16. E12 S8a UX düzeltmeleri + Çıkış yap [17:51 / 20:28 / 21:22]
+- **Ne yapıldı:**
+  - `aa014bcc`:
+    - Spesifikasyon silme işlemine onay adımı ve arama eklendi.
+    - İzin tipi etiketleri ve devir kolonları düzeltildi.
+    - Bordro diyaloglarına açıklama metni eklendi.
+    - `use-production-order-prefill` hook'u eklendi.
+  - `0c8c3183`: Yerel E2E testinde ön doldurmanın çalışmadığı görüldü. İki kök neden vardı:
+    - setRows updater'ı saf değildi; StrictMode'da ikinci çalıştırmada emir kayboluyordu.
+    - Boş giriş satırı emir bilgisini almıyordu.
+    - Hook testleri artık StrictMode altında çalışıyor.
+  - `e0fb1ff1`: Yerel E2E testinde ikinci bir hata bulundu. Satırda "Üretim emri temizle" yalnızca görünen numarayı siliyordu, `productionOrderId` kalıyordu ve satır kayıtta yine emre bağlı gidiyordu. Kolona `clearFields: ['productionOrderId']` eklendi.
+- **Doğrulama:** Yerel UX kontrolü [20:52]: İzin tipleri, Spesifikasyonlar ve mobil/koyu görünüm notlarla geçti. UXTEST kayıtları silindi.
+
+### 17. Arda ile iş bölümü [18:40] (kullanıcı kararı)
+- **Durum:** Arda aynı QA Excel'in 1.x Satınalma bölümünü yapıyor:
+  - da6bbb62: A1 dip indirim KDV matrahı, A2 tevkifat ödenecek.
+  - 6f984d02: teklif→sipariş.
+  - 21c326ef: satınalma kısmen teslim + sipariş adresi.
+- **Karar:** Satınalma Arda'da; geri kalan bizde.
+- **Sonuç:**
+  - Bizim E12 S1a iptal edildi; aynı kuralın ikinci bir uygulaması olmasın. Değişiklikler stash `e12s1a-superseded-by-da6bbb62` ve scratchpad'deki patch/tar dosyalarında.
+  - Arda'ya öneriler: ortak golden HC dosyası, HC-12, C7 diyaloğu.
+
+### 18. E12 S8c [21:43] — Konfeksiyon Stok Kontrolleri + Numune listesi
+- **Ne yapıldı:**
+  - Sipariş bazında kumaş ve aksesuar için ihtiyaç / eldeki / tahsisli / siparişte / eksik görünümü. Kaynaksız kolonlarda "—" gösteriliyor.
+  - Uç noktası: `GET inventory/mrp/stock-control`.
+  - Orders modülüne `IApparelOrderModelQuery` portu eklendi.
+  - Numune listesi menüde görünüyor.
+- **Kontrol:** Security PASS.
+- **Commit:** `7925e87f`.
+- **Uygulamada:** E12 S1c (wte9), S8b (wte7), S2 (wte8).
+
 ## Kararlar
 - E6 S3/S4 ve E3 S2b/S2c yeni öneri gerektiriyor; E2 S4b, E8 S1b, E6 S3b+S4 önerileri Plan ajanlarında.
 
