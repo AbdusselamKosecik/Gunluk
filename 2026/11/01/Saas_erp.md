@@ -57,12 +57,24 @@
 - **Commit:** `f39d848d`
 - **Takip:** Arda'ya ClickUp z8v9xnjvde (satınalma seçici indirimi ENT-SA-13 + UpdateReceipt kilit sırası).
 
+### 10. S4 UX BLOCK: aktarılan satır indirimi kayboluyordu
+- **Neden:** Local UX (uxlocal8): 3052'ye siparişten aktarılan %10 indirim kaydedilmiyordu (300 yerine 270 olmalı).
+- **Kök neden:** önizleme/kayıt payload'ı hep `charges: []` gönderiyor; `ReceiptTotalCalculator` boş Charges listesini tek indirim kaynağı sayıp satırın discountRate/Amount'unu yok sayıyor.
+- **Ne yapıldı:** aktarım indirimi oran bazlı satır indirimi (lineCharges kind 50) olarak ekler (`carriedLineCharges`, `lineDiscountAmount`); pencere 390px'e sığar; "Sipariş miktarı" başlığı; cari değişince uyarı; masaüstünde pencere max-w-4xl.
+- **Sonuç:** frontend 3235; local recheck (uxlocal9) PASS-WITH-NITS: İndirim 30 / Genel 270, kayıt ve yeniden açılışta aynı.
+- **Commit:** `ddc8a932`, `5b4ceaf2`
+
+### 11. E12 S5 kurulu
+- CTO/Skeptic/PO/DBA APPROVE-WITH-CONDITIONS → F1–F13 (`scratchpad/e12s5-proposal.md`). S5a: sipariş/irsaliyeden kısmi fatura, türetilmiş defter (InvoiceLine.SourceOrderItemId/SourceDispatchItemId), çift anahtar, InvoiceSourceLock, kaynak koruma, iade faturası sipariş anahtarına geri verir. S5b: risk.
+- Arda'ya bilgi: ClickUp z8v9xnjvpq (CreateInvoiceFromOrder değişikliği + KR-16 risk by-pass).
+- S5a kodlaması wte9'da sürüyor.
+
 ## Kararlar
 - S2: `user` rolünde `order.create/edit` yok → teklif oluşturma/düzenleme artık yalnız owner/admin/manager (POST /orders ile tutarlı). Kullanıcı onayı bekleniyor.
 
 ## Açık kalanlar / sonraki adım
-- S4 local UX kontrolü (f39d848d).
 - S4: staging EXPLAIN (K6), PROD kuru sayım (K10) — sahip onayı.
 - S3 backfill: PROD öncesi sahip onayı (runbook).
 - Sahte "kaydedilmemiş" uyarısı diğer editörlerde (talep/sipariş/teklif/fiş) de olabilir — takip.
-- Sonraki E12: S5 (faturalama), S6, S7, S11, S12.
+- S5a (sürüyor) → S5b risk → S6, S7, S11, S12.
+- Kurul kararı: siparişe başlıktan bağlı eski faturalar varsa PO seçeneği (uyarı + onay) uygulandı; CTO engel istemişti — kullanıcı değiştirebilir.
