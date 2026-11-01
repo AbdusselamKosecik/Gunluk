@@ -40,11 +40,29 @@
 - **Sonuç / doğrulama:** backend 8096, frontend 3222, Postgres `SalesShipmentPostgresTests` 8/8; migration yok; DBA + security post-check PASS(-WITH-NOTES), must-fix'ler uygulandı.
 - **Commit:** `a6344514`
 
+### 7. S3 local UX (a6344514)
+- **Sonuç:** Kısmen Sevk → Sevk Edildi, Kalan 10→6→0; miktar sevkin altına düşürülemez (TR hata); açık listede Sevk Edildi yok; onay geri alma durumu geri çeker. Tevkifat düzeltmesi (6c318c79) PASS. Notlar `scratchpad/uxlocal7-notes.md`; artık UXT kayıtları: sipariş UXT-S3 (İptal), irsaliye IRS1/IRS2 (onaysız).
+
+### 8. Silme uçlarında iş kuralı hatası 500 → doğru kod
+- **Neden:** UX kontrolünde taslak olmayan sipariş / hareketli fiş silme 500 döndü; 20 controller noktasında `NotFound ? 404 : 500`.
+- **Ne yapıldı:** Orders/Finance/Crm/Ast/Saas'ta altı durumlu eşleme; InventoryController.HandleDeleteResult'a Validation→400, Unauthorized→401. Gövde aynı.
+- **Sonuç:** backend 8102. Kalan aile: Ast:76, InvoiceController:82, QualityController:86, PmsController:56.
+- **Commit:** `5160f9df`
+
+### 9. E12 S4 — satış irsaliyesi ← sipariş
+- **Kurul:** CTO/Skeptic/PO/DBA APPROVE-WITH-CONDITIONS → K1–K14 (`scratchpad/e12s4-proposal.md`). Kritik bulgu (Skeptic/CTO): konfeksiyon 3052/3053 bağları tip-1 siparişlere → guard yalnız 5202/5206'da çalışır.
+- **Ne yapıldı:** Shared `IOpenSalesOrderLineQuery` (sayfalı); Orders `OpenSalesOrderLineQueryService`; Inventory `GetOpenSalesOrderLines` (order:read, cari zorunlu, kalan>0, 500+truncated), `SalesOrderLinkGuard` (S3 MismatchReason ile aynı kural, iade yalnız iptalde ret, Changed bayrağı), Update'te order-fulfil kilidi fiş FOR UPDATE'ten önce; FE `open-sales-orders-dialog.tsx`, `carriedLineDiscount` (efektif oran), kayıt öncesi fazla sevk onayı, `shipWarnings`.
+- **K10:** DEV salt-okunur sayım: bağlı onaylı 3052/3053/3002/3003 satırı 0.
+- **Sonuç:** backend 8118, frontend 3235, PG 15; migration yok; DBA PASS-WITH-NOTES (sayfalama + kilit testi eklendi), güvenlik PASS.
+- **Commit:** `f39d848d`
+- **Takip:** Arda'ya ClickUp z8v9xnjvde (satınalma seçici indirimi ENT-SA-13 + UpdateReceipt kilit sırası).
+
 ## Kararlar
 - S2: `user` rolünde `order.create/edit` yok → teklif oluşturma/düzenleme artık yalnız owner/admin/manager (POST /orders ile tutarlı). Kullanıcı onayı bekleniyor.
 
 ## Açık kalanlar / sonraki adım
-- S3 local UX kontrolü (Kalan sütunu, durumlar) — a6344514 üzerinde.
+- S4 local UX kontrolü (f39d848d).
+- S4: staging EXPLAIN (K6), PROD kuru sayım (K10) — sahip onayı.
 - S3 backfill: PROD öncesi sahip onayı (runbook).
 - Sahte "kaydedilmemiş" uyarısı diğer editörlerde (talep/sipariş/teklif/fiş) de olabilir — takip.
-- Sonraki E12: S4 (iskonto irsaliyeye, açık siparişler, link guard), S5, S6, S7, S11, S12.
+- Sonraki E12: S5 (faturalama), S6, S7, S11, S12.
