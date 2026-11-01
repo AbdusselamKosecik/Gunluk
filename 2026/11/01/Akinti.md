@@ -203,6 +203,50 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
   - Yelken (Sail/SailBase/SailFull) ve Paddle var → planlanan yelken/kürek yönlendirmesine model hazır.
 - **Sonuç:** Proje değişmedi, commit yok. Karar kullanıcıda: grid 2 m'ye mi geçilir, kit 0.75'e mi ölçeklenir.
 
+### 14. Raft Builder Kit entegrasyonu: 2 m karo, kit zemini, elde aletler
+- **Neden:** Kullanıcı "karoyu 2 m'ye çıkar, kiti kullan" dedi.
+- **Ne yapıldı:**
+  - Kit import edildi (`AssetDatabase.ImportPackage(path, false)`). Play modundayken reddediyor ("Cannot import package in play mode") → önce `editor.playmode stop`.
+  - 150 MB / 54 adet 2K doku Android için sıkıştırıldığı için ~15 dk sürdü; komut 30 sn'de 504 verir ama Editor'de devam eder. İlerleme Unity penceresinin başlığında görünür ("Importing - Compress 54%").
+  - Sonra `SkyboxHDRI HAVEN/`, `SampleScene/` ve `New Lighting Settings.lighting` silindi; klasör 150 → 82 MB.
+  - `RaftGrid.TileSize` 1.5 → 2.0, `MassPerTile` 110 → 195 (alanla orantılı). Yüzdürme ağırlığa oranlı olduğu için su çizgisi değişmedi.
+  - Yeni alanlar `floorPrefab` (kit `Floors/Floor`) ve `floatPrefab` (`LargePlatform1/FloatingRoll`, karo başına 2 adet). `Fit()` pivota güvenmiyor, renderer sınırlarını ölçüp ölçekliyor ve oturtuyor. Kit prefablarındaki Rigidbody ve Collider siliniyor. Kit yoksa eski primitif tahtalar kullanılıyor.
+  - `HeldItems.cs`: seçili hotbar eşyası sağ elde görünüyor. Builder, bind pozunda (T-pose) aleti sap ileri bakacak şekilde ele yerleştiriyor.
+    - Uç tespiti: kesiti geniş uç baş sayılıyor; oltada tersi (`gripAtWide`).
+    - Olta ipi artık oltanın ucundan çıkıyor (`RodTip`).
+- **Dokunulan dosyalar:** `Scripts/Raft/RaftGrid.cs`, `Scripts/Player/HeldItems.cs`, `Editor/AkintiSceneBuilder.cs`, `Assets/Raft Builder Kit/**`, `CLAUDE.md`
+- **Sonuç / doğrulama:** Güverte sudan 0.61 m yüksekte, eğim 6°, 0 hata. Yakın plan görüntüler: `Docs/tool-*.png`, `Docs/raftkit-hammer.png`.
+- **Not:** Kullanıcı `Assets/Barrels/` paketini kendisi ekledi; commit edilmedi. `Assets/Scenes/SampleScene.unity` ve TMP fallback değişiklikleri de bilerek dışarıda bırakıldı.
+- **Commit:** `297a9ca` — Raft Builder Kit: 2 m tiles with kit floor + floats, tools in hand
+
+### 15. Gün-gece + ay evresi, rüzgâr bayrağı, gölgelik, su/açlık barları
+- **Neden:** Kullanıcı istedi: rüzgârı gösteren küçük bayrak, başlangıçta gölgelik, su ve açlık barları, ay evresine göre gece aydınlığı.
+- **Asset Store önbelleği tarandı:** gökyüzü, gün-gece ya da gölgelik paketi yok. O yüzden hepsi kodla yazıldı (palete bağlı kalması için zaten doğrusu bu).
+- **Ne yapıldı:**
+  - **`Core/DayNight.cs`** (Sun objesinde):
+    - Saat: gün 12 gerçek dakika; güneş 06–18 arası, 28° eğik yörüngede (öğlen 62°).
+    - Ay: aynı yörüngede faz × 24 saat geriden geliyor (8 günlük çevrim), yani dolunay gün batımında doğuyor. Aydınlık = (1 − cos(2π·faz)) / 2.
+    - Işık: tek directional light gündüz güneş, gece ay (mobilde tek gölge haritası). Gökyüzü, sis, trilight ambient ve `reflectionIntensity` paletten karıştırılıyor; gece deniz gündüz gökyüzünü yansıtmasın diye yansıma kısılıyor.
+    - Sky.mat çalışma anında kopyalanıyor (asset dosyası değişmesin diye).
+  - **`SkyGradient.shader`:** ay diski bir küre olarak gerçek `_SunDir` ile aydınlatılıyor, yani evre sahte değil, ışıkla birebir tutarlı. Hash'le üretilen yıldızlar `_Stars` ile geceleri beliriyor. Güneş diski ufkun altında gizleniyor.
+  - **`Ocean/Wind.cs`:** tek rüzgâr fonksiyonu. Yön 35° etrafında ±70° Perlin ile geziniyor, şiddet 0.3–1 × 7 m/s. Yelken de bunu okuyacak.
+  - **`Raft/WindFlag.cs`:** prosedürel çift yüzlü bayrak (10×4 vertex, yürüyen sinüs dalgası). Görünen rüzgârı gösteriyor (rüzgâr − sal hızı); rüzgâr hafifken uç sarkıyor.
+  - **`Raft/Canopy.cs`:** 4 direk, 2 kiriş, halat sargıları ve sarkan bez (7×7). Çatıda tetik collider var; `Canopy.Shades()` güneşe ışın atıyor, böylece gölge güneşle birlikte kayıyor.
+  - **`Raft/RaftProp.cs`:** sahnede raft altında duran prop, Start'ta kendi karosuna geçiyor (karo kırılınca onunla gidiyor). `RaftGrid.TileTransform(cell)` eklendi.
+  - **`Player/Survival.cs`:**
+    - Su 10 dk'da, açlık 16 dk'da biter. Susama güneşte ×1.5, gölgede ve gece ×0.6.
+    - Bar boşalınca hız %60'a düşer; düşük seviyede toast uyarısı çıkar.
+    - Yeni eşyalar Su Şişesi (20) → İÇ (+35 su) ve Hindistan Cevizi (21) → YE (+25 açlık, +10 su). Elde kit modelleri (`Bottle`, `Coconut`) görünüyor.
+  - **`UI/SurvivalHUD.cs`:** sol üstte SU ve AÇLIK barları (Filled Image, yumuşak geçiş, %20 altında yanıp söner), altında "Gün N · hh:mm", gece ay evresinin adı, gölgedeyken "gölgede" yazısı.
+  - Palete yeni renkler: DuskGlow, NightZenith, NightHorizon, MoonLight, Canvas, Flag, Thirst, Hunger.
+- **Sorun:** Builder'a eklenecek uzun Python yaması bash heredoc içinde tırnak hatası verdi ("unexpected EOF"). Çözüm: yamayı dosyaya yazıp `python -I dosya.py` ile çalıştırmak.
+- **Sonuç / doğrulama:**
+  - Altı saat ve evrede görüntü alındı: `Docs/daynight.png`.
+  - Öğlen gölgelik altında `InShade=True`, dışarıda `False`.
+  - Yeme: su 57 → 67, tokluk 63 → 88. İçme: su → 100.
+  - HUD görüntüsü: `Docs/hud-survival.png`. Konsolda 0 hata.
+- **Commit:** `2972349` — Day/night with moon phases, wind flag, canopy, thirst/hunger bars
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
