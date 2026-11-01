@@ -29,3 +29,8 @@ ve kalınlığı da parametrik olsun.
 
 ## Açık kalanlar / sonraki adım
 - Gerçek yazıcıda büyük punto (5–6 mm) denemesi; yayın paketi (dagitim/yayinla.ps1) üretilmedi.
+
+### 2. Windows yayın paketi
+- **Neden:** Kullanıcı yeni etiket ayarlarıyla paket istedi.
+- **Komut:** `powershell -ExecutionPolicy Bypass -File dagitim/yayinla.ps1` (self-contained win-x64, ReadyToRun)
+- **Sonuç:** `dagitim/paketleme-win-x64-2026-11-01.zip` (≈89 MB, git'e girmez), commit `85f2dae` içeriği. Sunucuya/makinelere kurulmadı.
