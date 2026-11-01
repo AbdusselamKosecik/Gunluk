@@ -79,6 +79,27 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - `gh repo create AbdusselamKosecik/Akinti --private --source . --remote origin --push`
 - **Commit:** `d3d013e` — Initial Unity project: Akinti
 
+### 7. Variller, karakter, dokunmatik kamera (öğleden sonra)
+- **Neden:** Kullanıcı geri bildirimi: su salın üstüne çıkıyordu, kamera dokunarak çevrilebilmeliydi, bir de karakter istendi.
+  İleride yelken ve kürekle yön değiştirme planlanıyor.
+- **Variller (`RaftGrid.cs`):** Her karonun altında X ekseni boyunca yatan 2 varil var (r=0.31, uzunluk 1.2, y=-0.48), ikişer çember.
+  Yüzme noktaları varil uçlarında (y=-0.73), floatDepth 0.45. Su varil merkezinde dengeleniyor.
+  Karo başına kütle 110, CoM varil hizasında. Collider 0.86 yüksekliğe uzatıldı.
+  **Ölçüm:** güverte sudan 0.55–0.58 m yukarıda, yalpalama 5–9°.
+- **Varil dokusu:** Builder `Textures/Barrel.png` (128×64) dosyasını prosedürel üretiyor (seed 1907): Palette.Barrel #4F7A6E boya,
+  dikey çizgiler, ortada Accent şerit (v 0.42–0.58), kenarlara doğru pas. Unity silindirinde U çevre, V yükseklik boyunca.
+- **Karakter (`Player/CastawayController.cs`):** Primitiflerden kazazede: hasır şapka, turuncu can yeleği, mavi gömlek.
+  Salın CHILD'ı, raft-local uzayda yürüyor (fizik yok, dalgayı bedavaya taşıyor). Kamera yönüne göre hareket ediyor.
+  4 köşeden `HasTileAtLocal` kontrolüyle kenarda kayıyor, düşmüyor. Prosedürel yürüyüş: bacak/kol salınımı 34°, gövde zıplaması, nefes.
+- **Kontroller (`Player/PlayerControls.cs`):** Touch: ekranın sol %40'ında yüzen joystick, sağda kamera.
+  İki parmak aynı anda çalışıyor. UI üstünde başlayan dokunuş yok sayılıyor. Masaüstü: WASD + fare sürükleme.
+- **Kamera (`Core/TouchOrbit.cs`):** CM_Play artık CinemachineOrbitalFollow (Sphere, r=8.5, pitch 8–65°, WorldSpace binding)
+  kullanıyor ve karakterin `CameraFocus`'unu takip ediyor. Bırakınca momentum söner (5/s).
+- **Doğrulama:** Recompile temiz. Play'de karakter (1,1) yönünde yürüdü ve köşede (1.97,1.97) durdu (kenar − 0.28).
+  Kamera yaw 150° döndü. Konsol 0 hata/uyarı. Görüntü: `Docs/baseline-castaway.png`.
+- **Tuzak:** Kullanıcı Editor'de Play açıkken sahne rebuild yapılmaz. Durdurmasını istedim, kendim durdurmadım.
+- **Commit:** `e4e46a8` — Barrel-floated raft, castaway character, touch camera orbit
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
@@ -87,7 +108,8 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 
 ## Açık kalanlar / sonraki adım
 - `Waves.Current()` akıntı davranışı (kullanıcının katkısı bekleniyor).
-- Oyuncu karakteri + birinci şahıs kontrol, enkaz spawn'ı ve toplama (kanca), karo ekleme UI'ı.
+- ~~Oyuncu karakteri~~ (yapıldı, üçüncü şahıs). Sıradaki: enkaz spawn'ı + toplama (kanca), karo ekleme UI'ı.
+- Yelken/kürek: salın Rigidbody'sine kuvvet uygulayan bileşenler olacak. Yön TouchOrbit.Yaw / kamera yönünden gelecek.
 - Ses floor'u, game-feel, done-gate scorecard (oynanabilir döngü oluşunca).
 - Leaderboard / Remote Config kaynaklarının dashboard'da oluşturulması (insan adımı).
 - Template'ten kalan `Assets/Scenes/SampleScene.unity` ve TutorialInfo silinebilir.
