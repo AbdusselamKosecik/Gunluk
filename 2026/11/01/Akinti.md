@@ -113,3 +113,9 @@ SÄ±fÄ±rdan yeni oyun projesi. Hedef: aÃ§Ä±k denizde enkaz toplayÄ±p salÄ± bÃ¼yÃ¼
 - Ses floor'u, game-feel, done-gate scorecard (oynanabilir dÃ¶ngÃ¼ oluÅŸunca).
 - Leaderboard / Remote Config kaynaklarÄ±nÄ±n dashboard'da oluÅŸturulmasÄ± (insan adÄ±mÄ±).
 - Template'ten kalan `Assets/Scenes/SampleScene.unity` ve TutorialInfo silinebilir.
+
+### 8. Eylemsizlik salinimi iskeleti
+- **Neden:** Kullanici sordu: adam durdugunda denizin tersine hareket etmeli mi? Cevap: sürtünme kaymayi önler (ahsap–ayakkabi ~25–30° sürtünme açisi, sal en fazla 9° egiliyor). Eylemsizlik gövde salinimi olarak görünür.
+- **Ne yapildi:** `CastawayController.FeltPush` = karakter çerçevesinde (gravity - güverte ivmesi), sonlu fark + low-pass. `SwayStep` yay–sönüm adimi TODO olarak kullaniciya birakildi. Gövde rotasyonu `(6·speed + sway.x, 0, -sway.y)`.
+- **Commit:** `1384b3c` — Castaway balance sway scaffold
+- **Sonraki:** firtinada egim > sürtünme açisi ise kayma; `SwayStep` kullanici yazacak.
