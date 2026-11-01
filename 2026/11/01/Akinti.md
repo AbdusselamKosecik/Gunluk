@@ -131,6 +131,21 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - **Klavye:** WASD, sürükle, V POV, E/Tab çanta, 1–9 hotbar, B yap, Space vur, Q olta/sar, Esc pause.
 - **Commit:** `6fe6f49` — HUD: joystick, hotbar + bag inventory, action buttons, hook, POV
 
+### 10. Tek bağlamsal buton, Balta, dik duran karakter
+- **Neden:** Kullanıcı: "karakter tekneyle birlikte direk gibi sallanıyor"; "yap/vur/olta olmaz, tek buton:
+  elde çekiç → yap, balta → kır, olta → olta at / atılmışsa çek".
+- **Dik durma (`CastawayController`):** Ayaklar güvertede (raft-local konum), ama `transform.rotation` dünyaya göre
+  yalnızca yaw (`LookRotation(flatForward, up)`). Eğimi bilekler alıyor. **Ölçüm:** sal 9.6° → gövde 0.00°.
+- **Tek buton (`PlayerActions`):** Seçili hotbar eşyasına göre: Hammer→YAP, Axe→KIR, FishingHook→OLTA AT / ÇEK, diğer→VUR.
+  Olta dışına geçilirse kanca otomatik sarılıyor. Klavye: Space/F.
+- **KIR:** Baktığı yöndeki komşu karo (üstünde durulan değil). `RaftGrid.CanRemove` flood-fill ile salın tek parça
+  kaldığını kontrol ediyor. Yarısı iade (2 Tahta + 1 Halat). **Test:** 4→3 karo, Tahta 12→14.
+- Yeni eşya: Balta (`ItemId.Axe`, "BLT"). Çekiç kısaltması "ÇKÇ" (buton "ÇEK" ile karışmasın).
+  Başlangıç hotbar: Olta, Çekiç, Balta, 12 Tahta, 4 Halat.
+- **Asset Store:** Kullanıcı Toon Fox (pet) ve Low Poly Medieval Peasants (karakter) paketlerini aldı. CLI'da Asset Store
+  indirme komutu yok, `%APPDATA%/Unity/Asset Store-5.x` boş. Kullanıcı Package Manager ▸ My Assets ▸ Download/Import yapacak.
+- **Commit:** `6064c9c` — Single context action button, Axe, upright castaway
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
@@ -139,6 +154,7 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 
 ## Açık kalanlar / sonraki adım
 - `Waves.Current()` akıntı davranışı ve `CastawayController.SwayStep()` (kullanıcının katkısı bekleniyor).
+- Asset Store importu sonrası: köylü modeliyle karakteri değiştirmek, tilkiyi pet olarak takip ettirmek.
 - Kancaya enkaz takılması (enkaz spawn sistemi), VUR'un hedefleri, gerçek eşya ikonları.
 - ~~Oyuncu karakteri~~ (yapıldı, üçüncü şahıs). Sıradaki: enkaz spawn'ı + toplama (kanca), karo ekleme UI'ı.
 - Yelken/kürek: salın Rigidbody'sine kuvvet uygulayan bileşenler olacak. Yön TouchOrbit.Yaw / kamera yönünden gelecek.
