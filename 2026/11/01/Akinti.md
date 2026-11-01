@@ -100,6 +100,37 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - **Tuzak:** Kullanıcı Editor'de Play açıkken sahne rebuild yapılmaz. Durdurmasını istedim, kendim durdurmadım.
 - **Commit:** `e4e46a8` — Barrel-floated raft, castaway character, touch camera orbit
 
+### 8. Eylemsizlik salınımı iskeleti
+- **Neden:** Kullanıcı sordu: adam durduğunda denizin tersine hareket etmeli mi? Cevap: sürtünme kaymayı önler (ahşap–ayakkabı ~25–30° sürtünme açısı, sal en fazla 9° eğiliyor). Eylemsizlik gövde salınımı olarak görünür.
+- **Ne yapıldı:** `CastawayController.FeltPush` = karakter çerçevesinde (gravity − güverte ivmesi), sonlu fark + low-pass. `SwayStep` yay–sönüm adımı TODO olarak kullanıcıya bırakıldı. Gövde rotasyonu `(6·speed + sway.x, 0, −sway.y)`.
+- **Commit:** `1384b3c` — Castaway balance sway scaffold
+- **Tuzak:** PowerShell 5.1 `Add-Content` ANSI (cp1254) yazar; günlüğe ekleme için UTF-8 kullanan araç kullan.
+
+### 9. HUD: joystick, envanter, aksiyon butonları, olta, POV
+- **Neden:** Kullanıcı istedi: mobil joystick, Minecraft benzeri envanter (hotbar + çanta), yap/vur/olta butonları, 1. şahıs görünüm.
+  Ayrıca: kenarda karakter "duvara karşı koşuyor" gibiydi.
+- **Kenar düzeltmesi:** Yürüme animasyonu artık gerçekte kat edilen mesafeye bağlı (`moved / (speed·dt)`), joystick girdisine değil.
+  Kenara dayanınca bacaklar duruyor. Doğrulama: kenarda Speed01 = 0.00.
+- **Joystick (`PlayerControls`):** Sol altta kalıcı (rest 250,250, alpha 0.55). Dokununca parmağın altına kayıyor, bırakınca dönüyor.
+- **Envanter (`Items/Items.cs`, `Items/Inventory.cs`, `UI/InventoryUI.cs`, `UI/SlotView.cs`):** 36 slot (0–8 hotbar, 9–35 çanta).
+  Add: önce aynı stack, sonra boş. Remove: önce çanta. Swap aynı eşyayı birleştiriyor.
+  UI: hotbar alt-orta (92 px slot, 100 adım), ÇANTA butonu, panel 9×3 + hotbar satırı, dokun-dokun ile yer değiştirme.
+  İkonlar şimdilik palet renkli kutu + 3 harf. Başlangıç: Olta, Çekiç, 12 Tahta, 4 Halat | çanta: 2 Varil, 5 Hurda.
+- **Aksiyonlar (`Player/PlayerActions.cs`):** Butonlar sağ altta (sol başparmak joystick'te). YAP: karakterin baktığı eksende ilk boş
+  hücreye karo ekliyor (4 Tahta + 2 Halat, pop-in animasyonu). VUR: kol savurma. OLTA/SAR: `HookThrower`.
+- **Olta (`Player/HookThrower.cs`):** Balistik atış (9 m/s ileri + 5 m/s yukarı). Suya düşünce Waves.Height'ı takip edip Current ile sürükleniyor.
+  SAR ile 9 m/s geri geliyor. 18 m'yi geçince otomatik sarılıyor. LineRenderer halat sarkma ile çiziliyor (URP/Unlit Rope.mat).
+- **POV (`Core/CameraModes.cs`, `Core/FirstPersonLook.cs`):** PlayRig altında CM_Play (orbit) + CM_FirstPerson
+  (HardLockToTarget → kafadaki Eye, PanTilt World, FOV 68). Geçişte bakış yönü korunuyor, 0.45 s blend.
+  POV'da kafa ShadowsOnly (gölgesi kalıyor).
+- **Tuzak:** Pasif GameObject'te Awake çalışmaz. `TouchOrbit`/`FirstPersonLook` bileşen referansını lazy alıyor.
+- **Görsel düzeltmeler:** Sea smoothness 0.6→0.35 (alçak güneşte beyaz parlamalar). Seçili slot çerçevesi Foam
+  (Accent, Olta ikonuyla karışıyordu). Oltayı sarma etiketi "SAR" (Çekiç'in "ÇEK"iyle karışıyordu).
+- **Doğrulama:** Kenarda Speed01 = 0. YAP → 5 karo, Tahta 12→8, Halat 4→2. Olta 11 m'de suya düştü. Konsol 0 hata/uyarı.
+  Görüntüler: `Docs/hud-thirdperson.png`, `Docs/hud-pov.png`, `Docs/hud-inventory.png`.
+- **Klavye:** WASD, sürükle, V POV, E/Tab çanta, 1–9 hotbar, B yap, Space vur, Q olta/sar, Esc pause.
+- **Commit:** `6fe6f49` — HUD: joystick, hotbar + bag inventory, action buttons, hook, POV
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
@@ -107,15 +138,10 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - Başlıktan oyuna geçişte siyah fade yerine Cinemachine blend (2.2 s) kullanıldı. Bu, shell floor'undan bilinçli bir sapma.
 
 ## Açık kalanlar / sonraki adım
-- `Waves.Current()` akıntı davranışı (kullanıcının katkısı bekleniyor).
+- `Waves.Current()` akıntı davranışı ve `CastawayController.SwayStep()` (kullanıcının katkısı bekleniyor).
+- Kancaya enkaz takılması (enkaz spawn sistemi), VUR'un hedefleri, gerçek eşya ikonları.
 - ~~Oyuncu karakteri~~ (yapıldı, üçüncü şahıs). Sıradaki: enkaz spawn'ı + toplama (kanca), karo ekleme UI'ı.
 - Yelken/kürek: salın Rigidbody'sine kuvvet uygulayan bileşenler olacak. Yön TouchOrbit.Yaw / kamera yönünden gelecek.
 - Ses floor'u, game-feel, done-gate scorecard (oynanabilir döngü oluşunca).
 - Leaderboard / Remote Config kaynaklarının dashboard'da oluşturulması (insan adımı).
 - Template'ten kalan `Assets/Scenes/SampleScene.unity` ve TutorialInfo silinebilir.
-
-### 8. Eylemsizlik salinimi iskeleti
-- **Neden:** Kullanici sordu: adam durdugunda denizin tersine hareket etmeli mi? Cevap: s�rt�nme kaymayi �nler (ahsap�ayakkabi ~25�30� s�rt�nme a�isi, sal en fazla 9� egiliyor). Eylemsizlik g�vde salinimi olarak g�r�n�r.
-- **Ne yapildi:** `CastawayController.FeltPush` = karakter �er�evesinde (gravity - g�verte ivmesi), sonlu fark + low-pass. `SwayStep` yay�s�n�m adimi TODO olarak kullaniciya birakildi. G�vde rotasyonu `(6�speed + sway.x, 0, -sway.y)`.
-- **Commit:** `1384b3c` � Castaway balance sway scaffold
-- **Sonraki:** firtinada egim > s�rt�nme a�isi ise kayma; `SwayStep` kullanici yazacak.
