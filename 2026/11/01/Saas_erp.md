@@ -22,10 +22,29 @@
 - **Ne yapıldı:** Stok Kontrolleri tablo kutusu `w-0 min-w-full overflow-x-auto` (tablonun min-content genişliği sayfa flex düzenini büyütmesin); `tr-TR.json` menü/başlık: "İade Tipleri", "Satış Temsilcileri".
 - **Commit:** `71466773`
 
+### 4. S1c tevkifat seçici UX (f4e3bf33) ve local UX kontrolü
+- **Ne yapıldı:** Toplamlar/alt bilgide tevkifat + "Ödenecek (önizleme)"; sabit oranlı kodda oran salt-okunur (650 düzenlenebilir); combo "Kodu temizle" + "Kod seçin".
+- **Local UX (f4e3bf33, scratchpad/uxlocal6-notes.md):** A (S2 kısmi dönüşüm 4+6, silmede iade, kaynak teklif linki) PASS-WITH-NOTES; B (tevkifat) PASS-WITH-NOTES; C (Stok Kontrol 390px scrollWidth=390, menü adları) PASS. Artık: UXT-TKL-6 teklifi (Kabul, silinemez — yalnız taslak silinir).
+- **Commit:** `f4e3bf33`
+
+### 5. Tevkifat kodu baştan seçim + sahte "kaydedilmemiş" uyarısı
+- **Neden:** UX: kod hücresi oran girilmeden gizliydi (sabit oranlı kodlarda sıra ters); İptal ile çıkınca sonraki yenilemede yanlış uyarı.
+- **Ne yapıldı:** `invoice_create.page.tsx` cellHiddenFor kaldırıldı; `receipt-detail-control.tsx` combo aria-label = kolon başlığı; `use-unsaved-changes.ts` `data-unsaved-ignore` (İptal/Geri) izlemeyi başlatmaz, unmount'ta sıfırlanır; "Tevkifat:" 11 dil.
+- **Sonuç:** frontend gate 3219 yeşil.
+- **Commit:** `6c318c79`
+
+### 6. E12 S3 — satış siparişi sevk takibi
+- **Neden:** QA riski: satış siparişinde sevk miktarı/durumu yürümüyordu. Kurul koşulları C1–C10 (scratchpad e12s3-proposal.md).
+- **Ne yapıldı:** Domain `SalesReceiptFulfillmentChangedEvent`; Shared ayrı `IOrderShipmentQuery` (satınalma portu değişmedi); Inventory `OrderShipmentQueryService` (3052+3053−3002−3003, malzeme/varyant/birim/cari eşleşmesi, 1000'lik parçalar) + `SalesFulfillmentSignal`; Orders `SalesFulfillment`, Outbox handler (önce kalemler, 40P01 log+retry, Id sıralı kilit); `UpdateOrderReceipt` canlı sevk guard'ı + durum yeniden türetme; `OpenExposureSales` (Sevk Edildi satış faturaya kadar riskte); `BackfillSalesFulfillment` (SuperAdmin endpoint+handler, kuru koşu varsayılan, 40P01/40001 parça atlanır); FE Kalan sütunu (+X fazla), açık sipariş setleri.
+- **Dokunulan dosyalar:** 39 dosya (bkz. commit); runbook `docs/runbooks/sales-fulfillment-backfill.md`.
+- **Sonuç / doğrulama:** backend 8096, frontend 3222, Postgres `SalesShipmentPostgresTests` 8/8; migration yok; DBA + security post-check PASS(-WITH-NOTES), must-fix'ler uygulandı.
+- **Commit:** `a6344514`
+
 ## Kararlar
 - S2: `user` rolünde `order.create/edit` yok → teklif oluşturma/düzenleme artık yalnız owner/admin/manager (POST /orders ile tutarlı). Kullanıcı onayı bekleniyor.
 
 ## Açık kalanlar / sonraki adım
-- S1c tevkifat seçici UX düzeltmeleri (wte10, sürüyor): toplamlarda tevkifat/ödenecek ön izleme, kodlu satırda oran salt-okunur, kod temizleme, placeholder.
-- 390px düzeltmesinin tarayıcıda doğrulanması.
-- Sonraki E12 dilimi: S3 satış sevk takibi (öneri + kurul).
+- S3 local UX kontrolü (Kalan sütunu, durumlar) — a6344514 üzerinde.
+- S3 backfill: PROD öncesi sahip onayı (runbook).
+- Sahte "kaydedilmemiş" uyarısı diğer editörlerde (talep/sipariş/teklif/fiş) de olabilir — takip.
+- Sonraki E12: S4 (iskonto irsaliyeye, açık siparişler, link guard), S5, S6, S7, S11, S12.
