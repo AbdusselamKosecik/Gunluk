@@ -184,6 +184,25 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - **Commit:** `48358e4` — Android APK build
 - **Not:** Aktif build target artık Android. Editor'de Play çalışmaya devam ediyor.
 
+### 13. Raft Builder Kit (Asset Store, Anni) — inceleme, henüz import YOK
+- **Neden:** Kullanıcı paketi indirdi; projeye almadan önce uyumu ölçmek.
+- **Ne yapıldı:** `.unitypackage` (tar.gz) scratchpad'e açıldı, `pathname` dosyalarından liste çıkarıldı; binary FBX'ler küçük bir Python parser'la (Vertices / PolygonVertexIndex dizileri, zlib) üçgen sayısı + ölçü için okundu.
+- **Konum:** `%APPDATA%/Unity/Asset Store-5.x/Anni/3D ModelsProps/Raft Builder Kit.unitypackage` (151 MB)
+- **Komutlar:**
+  ```bash
+  tar --force-local -xzf "<paket>" -C <scratch>   # Git Bash'te C: yolu için --force-local şart
+  ```
+- **Bulgular:**
+  - 95 prefab, 91 FBX, 18 materyal, 54 PNG; **hiç C# script yok** (saf art paketi).
+  - Materyaller zaten **URP Lit** (shader guid 933532a4…) → pembe olmaz. Tek istisna kullanılmayan `New Material.mat`.
+  - Dokular 2048² Albedo + Normal + MetallicSmoothness, stilize el boyaması; toplam 144 MB PNG.
+  - `SkyboxHDRI HAVEN/autumn_field_puresky_4k.exr` 70 MB + `SampleScene` → import'ta hariç tutulmalı (repo şişer, GitHub 50 MB uyarısı).
+  - Birim cm: Floor modülü **2.0 × 2.0 m**, duvar 2 m × 1.5/3 m, merdiven 2 m. Bizim `RaftGrid.TileSize` 1.5 m → uyuşmuyor.
+  - Poligon: zemin 1–2.2k tri, eşyalar 200–3.8k tri, toplam ~80k → mobil için makul.
+  - Yiyecek/balık/FloatingRoll/WoodFloor gibi 34 prefabta Rigidbody + Collider hazır → denizde yüzen enkaz için doğrudan kullanılabilir.
+  - Yelken (Sail/SailBase/SailFull) ve Paddle var → planlanan yelken/kürek yönlendirmesine model hazır.
+- **Sonuç:** Proje değişmedi, commit yok. Karar kullanıcıda: grid 2 m'ye mi geçilir, kit 0.75'e mi ölçeklenir.
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
