@@ -69,6 +69,18 @@
 - Arda'ya bilgi: ClickUp z8v9xnjvpq (CreateInvoiceFromOrder değişikliği + KR-16 risk by-pass).
 - S5a kodlaması wte9'da sürüyor.
 
+### 12. E12 S5a — siparişten/irsaliyeden kısmi satış faturası
+- **Neden:** QA ENT-SS-05/06; kullanıcı kararı (her iki yoldan, kısmi, mükerrer engel).
+- **Ne yapıldı:** Shared `InvoiceSourceLock` (hashtextextended, sıralı, lock_timeout, 55P03→409; guard'larda `TryAcquireWithTimeoutAsync` eski değeri geri yükler), `IInvoicedQuantityQuery` (Reserved/Posted/Credited), okuyucu portlar; Finance `InvoicedQuantityQuery`, `InvoiceSourceFlow`, `InvoiceSourceMath` (dip paya göre, son fatura kalan), `InvoiceFromSourceBuilder`, `CreateInvoiceFromOrder` (yeniden yazıldı) + `CreateInvoiceFromDispatch` + `GetInvoiceSourceLines` (order:read/inventory:read); `UpdateInvoice` F1 (kaynak id yalnız satır Id eşleşmesinde, başlık kilidi OrderReceiptId dahil); Orders `OrderInvoicedGuard`, Inventory `DispatchInvoicedGuard`; FE `invoice-source-dialog.tsx`, sipariş detay Faturala + Faturalanan/Kalan + rozet, irsaliye Faturala, fatura kaynak bağlantısı.
+- **Migration:** `20261101083704..083800_E12S5_InvoiceSource{Columns,Indexes,Check,CheckValidate}`.
+- **Kurul:** F1–F13. Post: DBA BLOCK (kilitten önce okunan kaynak yeniden okunmuyordu; guard timeout yok) → düzeltildi → PASS. Güvenlik: OrderReceiptId yalnız tüm satırlar bağlıysa (KR-16 by-pass genişlemesin).
+- **Sonuç:** backend 8247, frontend 3262, PG 8 (deterministik yarış + timeout). DEV başlık-bağlı eski fatura sayımı 0.
+- **Rebase:** Arda d2bd3d87 (KR-16 dilim 2, liste fiyatı, sevk taslağı) ve 0e30b34f ile çakışmalar elle çözüldü.
+- **Commit:** `8186cfea`
+
+### 13. E12 S12a — iplik paketleme (kurul)
+- İlk öneri (menüye paketleme sayfası) Skeptic BLOCK: sayfa çıktıyı emir satırının (elyaf) malından kuruyor → stoğa iplik girmiyor. Revize: sunucu iplik çıktısını order.InventoryId'den türetir, elyaf oranla düşer, lot takipli iplikte paket başı lot, otomatik fason kapalı. Kurul Y1–Y14 (`scratchpad/e12s12a-proposal.md`). PR1 (backend) wte7'de sürüyor.
+
 ## Kararlar
 - S2: `user` rolünde `order.create/edit` yok → teklif oluşturma/düzenleme artık yalnız owner/admin/manager (POST /orders ile tutarlı). Kullanıcı onayı bekleniyor.
 
@@ -76,5 +88,5 @@
 - S4: staging EXPLAIN (K6), PROD kuru sayım (K10) — sahip onayı.
 - S3 backfill: PROD öncesi sahip onayı (runbook).
 - Sahte "kaydedilmemiş" uyarısı diğer editörlerde (talep/sipariş/teklif/fiş) de olabilir — takip.
-- S5a (sürüyor) → S5b risk → S6, S7, S11, S12.
+- S5a local UX (8186cfea) → S5b risk → S12a PR1/PR2 → S6 (Arda KR-16 dilim 2 sonrası irsaliye riski ertelenmiş), S7 (Arda cariye özel liste fiyatını yaptı; kalan: alış fiyatı + geçerlilik), S11.
 - Kurul kararı: siparişe başlıktan bağlı eski faturalar varsa PO seçeneği (uyarı + onay) uygulandı; CTO engel istemişti — kullanıcı değiştirebilir.
