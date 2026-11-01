@@ -146,6 +146,27 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
   indirme komutu yok, `%APPDATA%/Unity/Asset Store-5.x` boş. Kullanıcı Package Manager ▸ My Assets ▸ Download/Import yapacak.
 - **Commit:** `6064c9c` — Single context action button, Axe, upright castaway
 
+### 11. Köylü karakter + tilki pet (Asset Store)
+- **Neden:** Kullanıcı iki ücretsiz paket aldı: Toon Fox (pet) ve Low Poly Medieval Peasants (karakter). Birini seçip kullanmak istedi.
+- **İndirme:** CLI ile yapılamıyor. Kullanıcı Package Manager ▸ My Assets ▸ Download/Import yaptı → `Assets/Fox`, `Assets/Polytope Studio`.
+- **İnceleme:** Köylüler Humanoid rig ama HİÇ animasyon yok. Shader Built-in surface shader (URP'de pembe olur).
+  Tilki Generic rig, 30 klip, controller'da parametre yok. Malzemesi `Standard (Specular)` (URP'de pembe olur).
+- **URP düzeltmesi (köylü):** Paketin içindeki `Lowpoly_Characters/URP/PT_Peasants_Free_URP_17.unitypackage`
+  (sadece shader'lar) import edildi: `AssetDatabase.ImportPackage(path, false)`. Shader tag'i artık UniversalPipeline.
+- **Karakter:** `PT_Male_Peasant_01` seçildi. Builder prefab'ı Castaway altına instantiate ediyor, 1.75 m'ye ölçekliyor,
+  tabanı güverteye oturtuyor. Eye = Head bone child. Hand = RightHand bone. POV'da `*_head` renderer gizleniyor.
+- **Prosedürel humanoid animasyon (`CastawayController`):** LateUpdate'te kemikler bind (T-poz) rotasyonuna resetleniyor,
+  sonra karakter eksenlerinde (right/forward/up) parent→child sırasıyla döndürülüyor. Kollar fwd ekseninde ±72° aşağı;
+  bacak salınımı ±32°; diz max(0, ±cos)·50°; kol salınımı ters; gövde eğilmesi + sway. Aksiyon: sağ kol +35° → −140°.
+  Animator kapalı (yalnızca avatar/kemik bulmak için).
+- **Tilki (`PetFollower`):** Raft-local. Hedef: sahibinin 0.75 m arkası + 0.55 m sağı; güverte dışındaysa yedek noktalar.
+  0.9 m'den uzaksa yürü (1.3 m/s), 2.4 m'den uzaksa koş (3.2 m/s). 4 s durursa `Fox_Sit1` → `Fox_Sit2_Idle`.
+  `CrossFadeInFixedTime(stateName)`. Kendi URP Lit malzemesi `Fox.mat` (BC + normal + AO). Boy 0.75 m (ölçek 0.25).
+- **Ortak:** `RaftGrid.IsWalkable(local, margin)` (4 köşe).
+- **Doğrulama:** Konsol 0 hata. Köylü ve tilki URP'de doğru renkte, tilki oturma durumuna geçti. Görüntüler: `Docs/peasant-fox*.png`.
+- **Repo:** Asset paketleri (123 MB, en büyük dosya 23 MB) LFS'siz commit edildi (private repo).
+- **Commit:** `040a434` — Peasant character model + fox pet (Asset Store packs)
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
