@@ -167,6 +167,23 @@ Sıfırdan yeni oyun projesi. Hedef: açık denizde enkaz toplayıp salı büyü
 - **Repo:** Asset paketleri (123 MB, en büyük dosya 23 MB) LFS'siz commit edildi (private repo).
 - **Commit:** `040a434` — Peasant character model + fox pet (Asset Store packs)
 
+### 12. İlk Android APK
+- **Neden:** Kullanıcı APK istedi.
+- **Eksik modüller:** `android` modülü kuruluydu ama `AndroidPlayer/SDK|NDK|OpenJDK` boştu. Kuruldu:
+  ```bash
+  unity install-modules -e 6000.6.7f1 -m android-sdk-ndk-tools -m "android-open-jdk-17.0.18+8" --accept-eula
+  ```
+- **Build (`Editor/AkintiBuild.cs`, menü Akinti ▸ Build Android APK):** com.tekbirsoft.akinti, 0.1.0 (code 1), IL2CPP,
+  ARM64, landscape auto-rotate, debug imza, `Builds/Android/Akinti.apk`. Sonuç satırı `build-result.txt`'ye yazılıyor.
+- **Nasıl çalıştırıldı:** Proje açık Editor'de kilitli olduğu için `unity build` (batch) kullanılamadı. Eval ile
+  `EditorApplication.delayCall += AkintiBuild.BuildAndroid` çağrıldı, sonuç dosyası arka planda beklendi.
+  Gerçek Editor log'u: `X:/Oyun/Akinti/Logs/Editor.log` (%LOCALAPPDATA%'daki değil).
+- **Sonuç:** Succeeded, 288 s, 0 hata. APK 46 MB (rapordaki 929 MB sıkıştırılmamış toplam).
+  `aapt2 dump badging`: targetSdk 36, arm64-v8a. `apksigner verify` OK.
+- `.gitignore`: Polytope URP shader `.unitypackage`'ları istisna yapıldı (`*.unitypackage` kuralı yüzünden dışarıdaydı).
+- **Commit:** `48358e4` — Android APK build
+- **Not:** Aktif build target artık Android. Editor'de Play çalışmaya devam ediyor.
+
 ## Kararlar
 - Tür Raft'a benziyor ama oyun özgün: kendi hikâyesi ve kimliği olacak, Raft'a özgü öğeler kopyalanmayacak. Çalışma adı "Akinti".
 - Mobil hedef: uGUI + TMP (UI Toolkit değil), Mobile kalite kademesi.
