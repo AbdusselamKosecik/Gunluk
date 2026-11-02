@@ -24,3 +24,13 @@ Kullanıcı: ürün etiketinde ad ortalanmasın; uzun kayıtta baştaki kod gör
 
 ## Açık kalanlar / sonraki adım
 - Gerçek yazıcıda uzun büyük harfli adla deneme; gerekirse genişlik katsayıları ayarlanır.
+
+### 3. Ürün adı değiştirilmeden basılır
+- **Neden:** Kullanıcı: kod 6824, ad "6824 Venedik Balensiz Desteksiz Mikro Sütyen"; etikete "Venedik …" geliyordu (13.10.2026'daki
+  "ad kodla başlıyorsa kod kırpılır" kuralı). Ad olduğu gibi gelmeli.
+- **Ne yapıldı:** `UrunEtiketi.UrunAdi` (kırpma) kaldırıldı; `KodAdMetni`: ad Sentez'deki haliyle; "kod yazılsın" açıksa ve ad kodla
+  başlamıyorsa başına kod eklenir (çift kod yok); ad boşsa kod. Koli MODEL satırı da aynı fonksiyonu kullanıyor.
+- **Dokunulan dosyalar:** `Paketleme/Ekranlar/Veri/UrunEtiketi.cs`, `KoliEtiketi.cs`, `Paketleme.Tests/UrunEtiketiTestleri.cs`
+- **Sonuç:** 165 test geçti. Yama: `dagitim/paketleme-yama-2026-11-02b.zip` (Paketleme.dll, Paketleme.Desktop.dll, .exe; 1,7 MB);
+  tam paket `paketleme-win-x64-2026-11-02.zip` yeniden üretildi.
+- **Commit:** `889fa12` — Etiket: urun adi degistirilmeden basilir
