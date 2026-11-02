@@ -87,3 +87,21 @@ yıldıza göre istatistik. Herkes görsün, şirket durumu ve "hangi üründe n
 - Hepsiburada iade ucu doğrulanamadı (doküman bot korumalı) — erişim bulunursa `IIadeKaynagi` eklenir.
 - **Tutarsızlık:** yukarıdaki 1. bölümdeki `7786f82` / göç `018_cok_zamanli_cron.sql` bu repoda ve GitLab origin/main'de YOK
   (repoda 018 = `018_rayic_hesaplari.sql`). Başka bir klonda kalmış olabilir.
+
+### 4. Hepsiburada dokümanı tarayıcıyla incelendi, talep (iade) çekimi eklendi (20:55)
+- **Neden:** curl ile portal bot korumasına takılıyordu; kullanıcı tarayıcıyla bakılmasını istedi.
+- **Bulgular (Chrome DevTools MCP ile):**
+  - Portal: `https://developers.hepsiburada.com/tr/companies/hepsiburada` → "Talep Entegrasyonu" → "Talep Listeleme & Aksiyonları".
+  - OpenAPI (swagger 2) doğrudan: `https://developers.hepsiburada.com/api/v1/public/docs/hepsiburada/talep-listeleme/v1.0/openapi`
+  - `GET https://oms-external.hepsiburada.com/claims/merchantId/{merchantId}` — `beginDate`/`endDate` (yyyy-MM-dd HH:mm, talep OLUŞTURMA tarihi),
+    `offset`, `limit`, `User-Agent` zorunlu; yanıt kök dizi, toplam `X-Total-Count` başlığında. Test ortamı `-sit` ekli.
+  - `model.Claim`: claimDate, claimType, customerName, explanation, id, number, orderDate, orderNumber, priceAmount, quantity, sku, status...
+    Kılavuz tablosunda ayrıca `Reason` (PoorQuality, SizeTooSmall, SizeTooLarge, ChangedMindOrUnlikedIt, ...) ve `line{lineItemId, merchantSku, productName}`.
+  - Yorum ucu YOK (portal araması "review" → sonuç yok; "yorum" yalnızca ticket kılavuzu).
+- **Ne yapıldı:** `HepsiburadaSaglayici : IIadeKaynagi` (`IadeleriGetirAsync`, `public static IadeOku`, `TurkiyeSaati`, sebep kodu → Türkçe,
+  sebep yoksa talep tipi). Şemada Hepsiburada'ya `IadeCekme`. `PazaryeriIadesi.SiparisKalemNo` + göç 022'de `siparis_kalem_no`
+  (+ `COL_LENGTH` ile ekleme); depo kayıttan sonra barkod/ürün adı/stok kodunu `pazaryeri_siparis_kalemleri` (siparis_no + kalem_no) ile tamamlar.
+- **Komutlar:** `dotnet test tests/SentezServis.Core.Tests` (727 geçti); LocalDB'de 011+022, barkodsuz HB talebi → barkod 8680000777 tamamlandı, ürün listesine girdi.
+- **Commit:** `b1f1edc` — Musteri sesi: Hepsiburada talep (iade) cekimi, barkod siparis kaleminden tamamlanir
+- **Açık:** Canlı HB hesabında henüz çağrılmadı; `reason`/`line` alanları OpenAPI modelinde yok, kılavuzdan alındı — ilk canlı çekimde ham yanıt kontrol edilmeli.
+  Tarih alanları sipariş tarafıyla aynı biçimde (UTC varsayımı) okunuyor; HB yerel saat gönderiyorsa 3 saat kayar.
