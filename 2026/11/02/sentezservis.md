@@ -105,3 +105,19 @@ yıldıza göre istatistik. Herkes görsün, şirket durumu ve "hangi üründe n
 - **Commit:** `b1f1edc` — Musteri sesi: Hepsiburada talep (iade) cekimi, barkod siparis kaleminden tamamlanir
 - **Açık:** Canlı HB hesabında henüz çağrılmadı; `reason`/`line` alanları OpenAPI modelinde yok, kılavuzdan alındı — ilk canlı çekimde ham yanıt kontrol edilmeli.
   Tarih alanları sipariş tarafıyla aynı biçimde (UTC varsayımı) okunuyor; HB yerel saat gönderiyorsa 3 saat kayar.
+
+### 5. Canlı ilk dolum: musteri-sesi-topla (21:47 – 00:23, VPN üzerinden)
+- **Neden:** kullanıcı VPN kurdu, görevin çalıştırılmasını istedi. Sunucuda yeni sürüm YOK; görev yerelden canlı DB'ye karşı koşuldu.
+- **Nasıl:** scratchpad'de tek seferlik konsol (`mscalistir`, repoda değil): `appsettings.json` → `Ayarlar` bağlanır; `MigrasyonCalistirici.UygulaAsync()`
+  (canlıya yalnızca göç **022** uygulandı, `sema_surumleri`ne yazıldı), sonra `MusteriSesiToplaJob.RunAsync` sahte `JobContext` ile
+  (`sonGun=365`, argüman: `sonGun sirket pazaryeri`; `MS_DEBUG=1` ile istek bazlı log). Çalıştırma geçmişine (`calistirmalar`) DÜŞMEDİ.
+- **Bulgular:**
+  - Trendyol talep ucu eski tarihlerde YAVAŞ: 200'lük sayfa 33–38 sn. İlk "takılma" buydu (Viumod 365 gün ≈ 45 dk, Viuma ≈ 70 dk + yazım).
+    Tarih süzgeci doğru çalışıyor (size=1 ile toplamlar: Viumod son 14 gün 107, Kasım 2025 14 gün 1298; tarihsiz 134.753).
+  - Hepsiburada canlı yanıtında `line` YOK, ürün adı yok; `merchantSku` doğrudan EAN-13 → düzeltme `96f6348` (stok kodu barkod biçimindeyse barkod;
+    ürün adı aynı barkodlu sipariş kaleminden).
+  - **`pazaryeri-siparis-cek` canlıda ZAMANLANMAMIŞ** (`zamanlamalar.cron` NULL); son çalışma 25.09.2026 elle. Sipariş tablosunda iptaller 24.09'da bitiyor,
+    hiç Hepsiburada siparişi yok → dashboard'daki iptal (1★) sayıları eksik.
+- **Sonuç (canlı `musteri_sesi_iadeler`):** Trendyol 01: 309, 03: 22.588, 04: 41.243; Hepsiburada 03: 409 (7 barkodsuz, 155 adsız), 04: 105 (2 barkodsuz, 17 adsız).
+  En sık sebepler: Beden küçük 18.565, Beden büyük 18.318, Beğenmedim 9.783, Yanlış sipariş 5.793, Teslim edilemedi 3.937.
+- **Açık:** sunucuya yayın (yoksa bu gece görev koşmaz, ekran görünmez); `pazaryeri-siparis-cek` için cron + çalıştırma — kullanıcı onayı bekleniyor.
