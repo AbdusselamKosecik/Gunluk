@@ -38,3 +38,10 @@ Dünkü müşteri sesi ilk dolumu gece 00:23te bitti. Kullanıcı: yorumlar alı
 - Canlı sunucunun `appsettings.json`'ına `SentezServis:Baglantilar:Logo` eklenmeli (yoksa açılış doğrulaması "tanımlı değil" uyarır, ekran 503 döner); sunucudan 192.168.1.11:1433 erişimi doğrulanmalı.
 - `logo1` sysadmin → canlı için salt okunur kullanıcı önerildi.
 - Sunucuya yayın (müşteri sesi + Logo) hâlâ yapılmadı; `pazaryeri-siparis-cek` cron'u boş (dünden açık soru).
+
+### 2. Yayın paketi
+- **Ne yapıldı:** `powershell -File deploy/yayinla.ps1` (PS 5.1'de `*>&1` yönlendirmesi vite uyarısını hata sayıp betiği durdurdu; ayrı süreçte yönlendirmesiz çalıştırıldı) → `yayin/`; `Compress-Archive yayin\*` →
+  `X:\Gitlab\Modasima\sentezservis\SentezServis-2026-11-03-musteri-sesi-logo-cari.zip` (76,8 MB, 18 girdi; zip'ler git'e girmiyor, öncekiler gibi).
+- **İçerik:** commit `b1dd834`'e kadar her şey (müşteri sesi + Hepsiburada talep + Logo cari ekstresi). Arayüz tarihi 2026-11-03 15:57.
+- **Doğrulama:** betik 31 sır boşalttı; `yayin/` içinde Logo parolası ve sa parolası `grep -rlF` ile 0 dosyada. `appsettings.ornek.json` içinde `Baglantilar:Logo` `Password=<DOLDURUN>` ile var.
+- **Kurulumda:** sunucudaki `appsettings.json`'a `SentezServis:Baglantilar:Logo` eklenmeli; `/api/surum` → `arayuzTarihi` 2026-11-03 15:57 olmalı. Göç 022 canlıda zaten uygulanmış (dün), tekrar çalışmaz.
