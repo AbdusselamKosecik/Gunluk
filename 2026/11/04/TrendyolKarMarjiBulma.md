@@ -35,3 +35,26 @@ price-value ve commission-value JSON olarak yazılsın.
 ## Açık kalanlar / sonraki adım
 - Gerçek panel DOM'unda doğrulanmadı; seçici tutmazsa kullanıcıdan satırın HTML'i istenecek.
 - Kullanıcının mesajı "ilk basta" diye yarım kaldı — sonraki adım (muhtemelen bu veriyle kâr hesabı) bekleniyor.
+
+## Ek: v1.2.0 — kutu seçeneğin altına, rate-card için iframe/shadow DOM
+
+### 2. ty-plus çalıştı, rate-card çalışmadı; kutu radyonun yanında kalıyordu
+- **Neden:** Kullanıcı: ty-plus'ta geldi ama "altına getirsek iyiydi"; rate-card'da hiç gelmedi.
+  rate-card DOM'u görülemedi (giriş gerekli). En olası sebepler: içerik iframe'de (içerik betikleri
+  varsayılan olarak yalnız üst çerçevede çalışır) ya da shadow DOM'da (querySelectorAll inmez).
+- **Ne yapıldı:**
+  - Kutu artık seçenek kabının (fiyat+komisyon içeren ata) arkasına konur → seçeneğin altında;
+    `width:100%; flex:0 0 100%; grid-column:1/-1` ile flex/grid içinde de satır kaplar.
+  - `manifest.json` v1.2.0: partner betiği `https://*.trendyol.com/*` (www hariç) + `all_frames: true`.
+  - iframe'de yol kontrolü üst pencereden; başka kökense yalnız veri bulunan radyolara kutu yazılır
+    (model kodu/fiyat/komisyonun hepsi boşsa yazılmaz).
+  - Açık shadow root'lara inen arama (`hepsi`), shadow sınırını aşan üst (`ust`); shadow
+    değişiklikleri gözlemciye düşmediği için 2 sn yoklama.
+  - Konsola `[Kâr Marjı] radyo sayısı: N <url>` (debug) — teşhis için.
+- **Sonuç / doğrulama:** Sahte sayfada 4 normal + 1 shadow DOM seçenek: 5 kutu, hepsi seçenek kabının
+  hemen arkasında. npm test 7/7. Gerçek rate-card'da doğrulama kullanıcıda.
+- **Commit:** `faa4e46` — Partner: JSON kutusu secenegin altina; iframe ve shadow DOM destegi
+
+### Açık
+- rate-card hâlâ gelmezse: kullanıcıdan konsoldaki "[Kâr Marjı]" satırları (Ayrıntılı/Verbose seviye)
+  ve bir seçeneğin outerHTML'i istenecek.
