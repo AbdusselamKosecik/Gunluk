@@ -47,3 +47,47 @@ yorumları Müşteri sesi'nde de iadelerin yanında, arama ekranında ayrıntıl
 ## Açık kalanlar / sonraki adım
 - Canlıya paket: göç 023 + 024 açılışta otomatik; yeni appsettings anahtarı yok.
 - Yerel Host hâlâ açık (http://localhost:81, `yonetici`); iş bitince durdurulup `PrDeneme` silinecek.
+
+---
+
+## Stok Devir Hızı · Superset dashboard'u (01:30–02:00)
+
+### Bağlam
+Kullanıcı `X:\Gitlab\Modasima\new` içindeki 01/02 SQL + 03 md'ye göre Superset dashboard'u ve ürün bazlı devir
+hızı istedi; ardından "paket çıkar, çalışan sistemde deneyeceğim".
+
+### 1. Şema ve veri kontrolü (salt okunur, 192.168.1.3 SentezCore2026)
+- Nesneler DB'de 01:25–01:28'de kurulmuş; DB'deki prosedürde join'ler doğru (`InventoryReceiptItemId`,
+  `InventoryReceiptId`), dosyada yanlıştı.
+- **`ReceiptTypeMap` boş** → `SalesQuantity` toplamı 0, devir boş.
+- Tip profili (cari 120/320, faturalı, giriş/çıkış deposu): SATIS = 120 toptan, 121 perakende, 128;
+  SATIS_IADE = 3 toptan, 2 perakende. 123 / 128 çıkışlarının tamamı, 120'nin 13 haftalık 123 binin 103 bini
+  hariç carilere (VIUMOD 120.01.246, VIUMA 120.01.004, PLS 320.01.001).
+- Hariç hareketler stoktan da atıldığı için stok ~1,4 milyon şişkin (2,55 M → doğrusu 1,17 M).
+
+### 2. SQL düzeltmeleri (`superset/stok-devir-hizi/sql/`)
+- 01: join'ler, `ReceiptTypeMap` MERGE tohumu (yalnız eksikler), boş eşleme için THROW 50002, hariç cariler
+  stokta / satış dışı, `ExcludedIncomingQuantity` / `ExcludedOutgoingQuantity`.
+- 02: `ExcludedOut_13w`, `ExcludedIn_13w`.
+- Kuru çalıştırma: prosedür gövdesi `#Map/#IWS/#ITW` geçici tablolara (python dönüştürücü, scratchpad `kuru.py`) →
+  satış 400.942, iade 17.222, son stok 1.173.951, negatif varyant 1.205 (−56.790 adet), satış bazlı devir 0,12/yıl.
+  Prod'a yazılmadı.
+
+### 3. Dashboard (`olustur.py`, bantdurumekrani kalıbı)
+- Fiziksel dataset `dbo.InventoryTurnoverWeekly`, 21 metrik (md §2 + sevk bazlı devir, kardeş şirket çıkışı,
+  negatif stok, stoklu ürün), 4 sekme / 29 grafik, 7 native filtre (zaman filtresi anlık grafiklerden hariç).
+- Ürün sekmesi: ürün tablosu + koşullu renk, en hızlı/yavaş 25, ölü stok (HAVING), tükenmek üzere, ürün trendi.
+- **Doğrulama:** kuru çıktı (564.792 satır) Docker `mssql/server:2022`'ye BULK INSERT, `apache/superset:latest`
+  + pymssql'e API import 200; tarayıcıda 4 sekme gezildi, 29 `/chart/data` isteğinin hepsi 200, hata yok.
+  ("Tükenmek üzere" 0 satır döndü.) Konteynerler silindi.
+- **Paket:** `superset-stok-devir-hizi-paket-2026-11-05.zip` (README, md, import ZIP, 01, 02).
+- **Commit:** `05fc0be` (ilk hal), `b0736aa` — Superset: Stok Devir Hizi dashboard'u + SQL duzeltmeleri
+
+### Kararlar
+- Kardeş şirket sevkleri satış sayılmadı (kullanıcının tanımı), ama ayrı "sevk bazlı devir" metriği eklendi.
+- DB'ye yazmadım; 01/02 + EXEC'leri kullanıcı çalıştıracak.
+
+### Açık kalanlar
+- ReceiptTypeMap SATIS/SATIS_IADE eşlemesini kullanıcı onaylamalı (özellikle 128).
+- Superset bağlantı kullanıcısı (`superset_okur` varsayıldı), haftalık SQL Agent işi.
+- `X:\Gitlab\Modasima\new` içindeki eski 01 dosyası düzeltilmedi; repo kopyası esas.
