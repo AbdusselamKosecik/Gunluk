@@ -74,3 +74,45 @@ price-value ve commission-value JSON olarak yazılsın.
 - **Sonuç / doğrulama:** Sahte sayfa: 2 satır (ayrıntı biri kardeş, biri iç; 400 ms gecikmeli, 2.
   satırda 2 barkod). 3 kutu doğru barkodla, 4 tıklama (aç+kapat ×2), sonda açık ayrıntı yok. npm test 7/7.
 - **Commit:** `98b83c2` — Partner: satiri acip ilk barkodu oku, JSON'a barkod ekle (v1.3.0)
+
+### 4. v1.4.0 — tıklama yerine API yanıtlarını yakalama
+- **Neden:** Kullanıcı: "dur veya ... buradan değerleri yakalayabilir misin, tüm değerleri JSON
+  getir". Panel ürün listesini şu uçlardan alıyor (kullanıcı örnek yanıt yapıştırdı):
+  - `https://apigw.trendyol.com/partner/sellereng-scout-scw-ty-plus-scout-bff/products?page=0&size=10&sortFilter=FAVORITE_COUNT&stockFilter=IN_STOCK&scheduledFilter=ALL&tyPlusGroupId=…&divisionType=SECOND_SECTION`
+  - `https://apigw.trendyol.com/partner/sellereng-scout-scw-rate-card-scout-bff/products?page=0&size=10&sortFilter=ORDER_COUNT&stockFilter=IN_STOCK&scheduledFilter=ALL&rateCardPriceGroup=…&divisionType=SECOND_SECTION`
+- **Yanıt biçimleri:** `content[]` → ürün (`code` = model kodu, `imageUrl`, `barcodePriceStockDetails[]`,
+  `productPriceStockDetails.rateCardPrices` barem tablosu).
+  - ty-plus kalem: `priceCommissionDto{sellingPrice, discountedPrice, sellerCoveredDiscountedCommission}`,
+    `tyPlusPrices[0]{plusPrice, plusCommission, active}`; `id` metin, `contentId` sayı.
+  - rate-card kalem: `commission`, `price{sellingPrice, discountedPrice, buyerDiscountedPrice, displayPrice}`,
+    `scheduledPrice.scheduledPrice`, `rateCardPrices[].active`; `id` = contentId (sayı).
+  - Her ikisinde `finalPrice{discountedPrice, buyboxOrder, scheduledPrice.name}`.
+- **Ne yapıldı:**
+  - `src/partner-yakala.js` — `world: "MAIN"`, `document_start`, `all_frames`: `fetch` ve
+    `XMLHttpRequest` sarılır, `/scout-bff\/products/` yanıtının kopyası (`res.clone().json()`)
+    `window.postMessage({tkm:'partner-urunler', url, veri}, location.origin)`. Son 30 yanıt tamponda;
+    içerik betiği geç yüklenirse `{tkm:'partner-iste'}` mesajıyla yeniden gönderilir.
+  - `src/partner-veri.js` (UMD, saf): `yanitCevir(url, veri)` → `{kaynak, urunler:[{ozet, ham}]}`;
+    özet: kaynak, contentId, modelKodu, ad, renk, kategori, toplamStok, baremler[{barem 1-4,
+    komisyon, min, max, aktif?}], barkodlar[{barkod, beden, stok, stokKodu?, satisFiyati,
+    indirimliFiyat, komisyon, (ty-plus) plusFiyat/plusKomisyon/plusAktif | (rate-card) aliciFiyati/
+    gorunenFiyat/planlananFiyat, sonFiyat, fiyatTuru?, buybox?}], gorselAnahtari.
+  - `src/partner.js`: ürün ↔ satır eşleme `imageUrl` son klasörü (uuid) ile `<img src>` içinde;
+    satır = görselden yukarı, başka dsmcdn ürün görseli içermeyen en üst ata. Satırın arkasına
+    `div.tkm-urun-json` (TR ise yeni `tr>td colspan`): özet JSON (barkod başına bir satır, geçerli
+    JSON) + "JSON kopyala" + `<details>` Ham JSON. Radyo kutusu barkodu artık API'den
+    (satırın ilk barkodu). Satır açıp kapatma (v1.3.0 kuyruğu) tamamen kaldırıldı.
+  - `manifest.json` v1.4.0: 3 content_scripts girdisi (www; partner MAIN yakala; partner veri+partner).
+- **Dokunulan dosyalar:** `src/partner.js`, `src/partner-veri.js`, `src/partner-yakala.js`,
+  `manifest.json`, `README.md`, `test/partner-veri.test.js`, `test/ornek/{ty-plus,rate-card}.json`
+- **Sonuç / doğrulama:** `npm test` 12/12 (5 yeni: iki biçim, barem, görsel anahtarı, tanınmayan
+  yanıt). Uçtan uca: yerel http sunucuda sahte sayfa, sahte panel fetch'i gerçek ty-plus yanıtını
+  döner → yakalama mesajı geldi, panel yanıtı bozulmadan aldı, kutu doğru satırın altında, radyo
+  `{"modelKodu":"6800","barkod":"8699170321323","price":829.8,"commission":11.2}`. İlk denemede kutu
+  listenin sonuna düşmüştü (yalnız eşleşen görseller sınır sayılıyordu) → tüm dsmcdn görselleri sınır.
+- **Commit:** `05f7d9c` — Partner: scout-bff/products API yanitlarini yakala, satir altina urun/barkod JSON (v1.4.0)
+
+### Açık
+- Gerçek panelde doğrulama kullanıcıda. Tek ürünlük sayfada satır sınırı bulunamaz (kutu en dışa düşer).
+- Görsel eşleşmezse (panel başka CDN/küçültme adresi kullanıyorsa) kutu çıkmaz → konsol
+  `[Kâr Marjı] {"radyo":…,"urun":…,"eslesen":…}` satırına bakılacak.
