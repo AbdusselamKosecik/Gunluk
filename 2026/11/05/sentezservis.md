@@ -91,3 +91,9 @@ hızı istedi; ardından "paket çıkar, çalışan sistemde deneyeceğim".
 - ReceiptTypeMap SATIS/SATIS_IADE eşlemesini kullanıcı onaylamalı (özellikle 128).
 - Superset bağlantı kullanıcısı (`superset_okur` varsayıldı), haftalık SQL Agent işi.
 - `X:\Gitlab\Modasima\new` içindeki eski 01 dosyası düzeltilmedi; repo kopyası esas.
+
+### 4. Kurulum sırası düzeltmesi (02:05)
+- **Neden:** Kullanıcı 02'yi çalıştırınca `Invalid column name 'ExcludedOutgoingQuantity'` (view, tablo eski yapıdayken
+  derlendi). README sırası yanlıştı (01, 02, sonra EXEC'ler).
+- **Ne yapıldı:** README: 01 → `EXEC sp_RefreshInventoryWeeklyStock` → 02 → `EXEC sp_RefreshInventoryTurnoverWeekly`;
+  02 başına `COL_LENGTH` kontrolü + THROW 50003 (anlaşılır mesaj). Paket yeniden üretildi.
