@@ -97,3 +97,9 @@ hızı istedi; ardından "paket çıkar, çalışan sistemde deneyeceğim".
   derlendi). README sırası yanlıştı (01, 02, sonra EXEC'ler).
 - **Ne yapıldı:** README: 01 → `EXEC sp_RefreshInventoryWeeklyStock` → 02 → `EXEC sp_RefreshInventoryTurnoverWeekly`;
   02 başına `COL_LENGTH` kontrolü + THROW 50003 (anlaşılır mesaj). Paket yeniden üretildi.
+
+### 5. superset_okur betiği (02:08)
+- **Neden:** Kullanıcı salt okur şifresini sordu; 192.168.1.3'te böyle bir kullanıcı yoktu (ZIP'te yer tutucu).
+- **Ne yapıldı:** `superset/stok-devir-hizi/superset_okur.sql`: CREATE LOGIN/USER + yalnız
+  `dbo.InventoryTurnoverWeekly` SELECT. Şifre 20 karakter rastgele, yalnız kullanıcıya iletildi; repoda `<şifre>`.
+  Betik DB'de çalıştırılmadı. Paket yeniden üretildi.
