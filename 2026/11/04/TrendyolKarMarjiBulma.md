@@ -116,3 +116,23 @@ price-value ve commission-value JSON olarak yazılsın.
 - Gerçek panelde doğrulama kullanıcıda. Tek ürünlük sayfada satır sınırı bulunamaz (kutu en dışa düşer).
 - Görsel eşleşmezse (panel başka CDN/küçültme adresi kullanıyorsa) kutu çıkmaz → konsol
   `[Kâr Marjı] {"radyo":…,"urun":…,"eslesen":…}` satırına bakılacak.
+
+### 5. v1.5.0 — satır eşleme: ad + model kodu + renk
+- **Neden:** Kullanıcı: "bulmadı" (görsel uuid eşlemesi gerçek panelde tutmadı). Önerisi: model kodu +
+  renk ya da ürün adı (`<span class="overflow-text overflow-text-link">Pierre Cardin 6234 Premium …</span>`,
+  ekranda marka önekli).
+- **Ne yapıldı:**
+  - `partner-veri.js`: `norm` (tr küçük harf, tek boşluk, tüm tire türleri "-"), `eslesmePuani(ozet,
+    {ad, modelKodu, metin}, marka)`: ad eşit / marka+ad eşit / ekran adı " "+ad ile bitiyor → +4,
+    model kodu → +2, (biri tuttuysa) renk satır metninde → +1. `ata(urunler, satirlar)`: tüm çiftler
+    puana göre azalan, açgözlü; her satır ve ürün en çok bir kez. Ürüne `marka` (= `brand`) eklendi.
+  - `partner.js`: çapa = "Model Kodu:" yazan en içteki span (yoksa `.overflow-text-link`);
+    satır = çapadan yukarı içinde tek çapa kalan en dış ata. Ürün havuzu sayfa türüne göre
+    (rate-card / ty-plus) süzülür, anahtar `kaynak:contentId`. Görsel eşleme kaldırıldı.
+  - Sol altta sabit rozet: "Kâr Marjı · N ürün yakalandı · M/K satır eşleşti" (teşhis konsolsuz).
+- **Sonuç / doğrulama:** npm test 15/15 (3 yeni: puan, aynı ad 3 renk, yalnız model kodu).
+  Sahte panel (görselsiz, 3 × "Kadın 6216 Balenli…" Pudra/Siyah/Ekru, marka önekli ad):
+  3/3 doğru renk ve barkod (SİYAH↔Siyah tr küçük harfle), radyolar doğru barkodla.
+- **Commit:** `e702cec` — Partner: satiri ad + model kodu + renk puaniyla esle, durum rozeti (v1.5.0)
+- **Açık:** rozet "0 ürün yakalandı" derse sorun yakalamada (MAIN world betiği / iframe); "N ürün, 0 satır"
+  derse çapa (Model Kodu span'ı) bulunamıyor.
