@@ -58,3 +58,19 @@ price-value ve commission-value JSON olarak yazılsın.
 ### Açık
 - rate-card hâlâ gelmezse: kullanıcıdan konsoldaki "[Kâr Marjı]" satırları (Ayrıntılı/Verbose seviye)
   ve bir seçeneğin outerHTML'i istenecek.
+
+### 3. v1.3.0 — barkod (satırı aç, ilk barkodu oku)
+- **Neden:** Kullanıcı: her satırda `<div data-testid="expanded-toggle" class="expanded-wrapper">`
+  düğmesine basıp altındaki ilk `<span class="barcode-info-item-value">` barkodu JSON'a eklensin.
+- **Ne yapıldı (`src/partner.js`):**
+  - `satirAcici(radyo)`: radyodan yukarı, içinde tam 1 açıcı olan ilk ata → o satırın açıcısı
+    (>1 ise belirsiz, null).
+  - `barkodBul(acici)`: kök düğümde `ACICI, BARKOD` belge sırasıyla taranır; açıcıdan sonra, bir
+    sonraki açıcıdan önceki ilk barkod. Ayrıntı satırın içinde de kardeşinde de olsa çalışır.
+  - Kuyruk tek tek işlenir: barkod DOM'da yoksa `click()`, 150 ms aralıkla 3 sn'ye kadar beklenir,
+    tekrar `click()` ile kapatılır. Sonuç WeakMap önbellekte (açıcı → barkod|null), tekrar basılmaz.
+    Her barkoddan sonra kutular yeniden yazılır.
+  - JSON: `{"modelKodu","barkod","price","commission"}`.
+- **Sonuç / doğrulama:** Sahte sayfa: 2 satır (ayrıntı biri kardeş, biri iç; 400 ms gecikmeli, 2.
+  satırda 2 barkod). 3 kutu doğru barkodla, 4 tıklama (aç+kapat ×2), sonda açık ayrıntı yok. npm test 7/7.
+- **Commit:** `98b83c2` — Partner: satiri acip ilk barkodu oku, JSON'a barkod ekle (v1.3.0)
