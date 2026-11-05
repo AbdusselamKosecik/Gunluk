@@ -59,6 +59,23 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - **Sonuç:** 13/13 test geçti. APK: `android/app/build/outputs/apk/debug/app-debug.apk` (15,9 MB).
 - **Commit:** `068385b` — Etut Vision Android tablet uygulamasi (Kotlin + Compose)
 
+### 5. Etüt Yetkileri ekranı (web, `/EtutRole`)
+- **Neden:** Kullanıcı, Sentez kullanıcılarına etüt rollerinin SQL yazmadan ekrandan atanmasını istedi.
+- **Ne yapıldı:**
+  - **Liste:** `EtutRoleController` + `Views/EtutRole/Index.cshtml` aktif Meta_User kullanıcılarını gösteriyor. `IsUserRole=1` satırları (17 Sentez rol kaydı) hariç; canlı DB'de salt-okunur sorguyla doğrulandı: 277 kullanıcı.
+  - **Yetkiler:** 5 onay kutusu (Etüt yapar / SMV hesaplar / Kontrol eder / Makine tanımlar / Yetki yönetir), satır başına Kaydet. Arama, filtre (yetkili/yetkisiz) ve Sentez rolü filtresi var.
+  - **Erişim:** Ekranı yalnız `CanManageRoles` sahibi açabiliyor. Kimsede yoksa ilk kurulum modu devreye giriyor: giriş yapan herkes açabiliyor, ilk yönetici atanınca kilitleniyor. Son yönetici kendi bayrağını kaldıramıyor.
+  - **Neden yeni bayrak:** Web girişi herkese aynı "user" rolünü veriyor; mevcut `Roles="Admin"` kontrolü (SystemSettings) hiçbir zaman sağlanmıyor.
+  - **Login:** `LoginCommand` artık `UserId` ve `FirstName` claim'i de veriyor ("son değiştiren" bilgisi için). Eski oturumlar yeniden giriş yapmalı.
+  - **Şema:** `UZM_ETUT_UserRole` tablosuna `CanManageRoles`, `UpdatedAt`, `UpdatedBy` eklendi (eski tablo için `ALTER` de var).
+  - Tablolar yoksa ekran, çalıştırılması gereken `sqlcmd` komutunu gösteriyor.
+- **Dokunulan dosyalar:** `Controllers/EtutRole/*`, `Views/EtutRole/Index.cshtml`, `Views/Shared/_Menu.cshtml`, `Controllers/Auth/LoginCommand.cs`, `Etut/Data/*`, `doc/sql/etut_schema.sql`, test SQL'i
+- **Sonuç / doğrulama:**
+  - Derleme temiz, testler 30/30 geçti. (Test `Meta_User` tablosuna yeni kolonlar eklenmesi gerekti.)
+  - Girişsiz `/EtutRole` → 302 Login.
+  - Giriş yapılmış ekran görsel olarak denenmedi: tablolar yok ve test için bir kullanıcı şifresi yok.
+- **Commit:** `9d0332f` — Etut Yetkileri ekrani: Sentez kullanicilarina etut rolu atama
+
 ## Kararlar
 - Tablo öneki `UZM_ETUT_` (projedeki `UZM_GSD_*` geleneğine uyuldu).
 - Uygulama yalnızca çevrimiçi çalışıyor; çevrimdışı eşitleme kapsam dışı.
