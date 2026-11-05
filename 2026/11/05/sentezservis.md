@@ -37,6 +37,20 @@ yorumları Müşteri sesi'nde de iadelerin yanında, arama ekranında ayrıntıl
   aynı (2092/986/1957/2990/16986). `/kayitlar?model=6800` (04.11) → 16 kayıt, 19:02 TR = 16:02Z.
 - **Commit:** `d373aff` — Musteri sesi: satici panelinden yuklenen urun yorumlari da yorum olarak gorunur
 
+### 4. Paket — `SentezServis-2026-11-05-pazaryeri-raporlari.zip`
+- **Neden:** Kullanıcı canlı için paket istedi (pazaryeri raporları + Müşteri sesi panel yorumları).
+- **Ön kontrol:** `git status`'ta kod değişikliği yok (yalnız `docs/sql/depo_yeri_000_kurulum.sql`,
+  pakete girmez), `main` = `origin/main` (`cffa154`).
+- **Komutlar:**
+  ```bash
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/yayinla.ps1   # PS 5.1 oturumundan
+  # doğrudan çağırınca Vite'ın stderr satırı NativeCommandError olup betiği durduruyor → ayrı süreç
+  powershell.exe -NoProfile -Command "Compress-Archive -Path 'yayin\*' -DestinationPath 'SentezServis-2026-11-05-pazaryeri-raporlari.zip' -Force"
+  ```
+- **Karşılaştırma (11-03 paketiyle, Python zipfile):** 18 dosya / 18 dosya, aynı liste; app.js
+  yolları 35 → 36, kaybolan yok, yeni `/pazaryeri-raporlari`. appsettings çıkarıldı (31 sır boşaltıldı).
+- **Kurulum doğrulaması:** `/api/surum` → `arayuzTarihi` = `2026-11-05 08:24`. Göç 023 + 024 açılışta.
+
 ## Kararlar
 - Gece sorulan "iptal/iadeler": dokunulmadı; Excel'lerde yok, Müşteri sesi'nde API'den geliyor.
 - "Yenilenen kayıtları sil": yerel DB'de tekrar yok (her rapor 1 yükleme); yeniden yüklemede
