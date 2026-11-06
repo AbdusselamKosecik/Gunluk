@@ -188,6 +188,23 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - **Paket:** Yeniden publish edildi (JwtKey korundu); zip ve APK güncellendi. Canlı IIS'e kurulmadı (erişim yok).
 - **Commit:** `1b59116`
 
+### 11. Fotoğrafta ölçü: 2 nokta → cm popup → ok uçlu çizgi (çoklu)
+- **İstek:** Resim üzerinde 2 nokta işaretlensin, popup'ta cm girilsin, çizgi ok uçlu olsun, birden fazla ölçü eklenebilsin.
+- **Durum:**
+  - 2 nokta → cm popup → çoklu ölçü ve kayıt (`PUT media/{id}/annotations`) zaten vardı. Kullanıcı görmemiş olabilir, çünkü editör küçük resme dokununca açılıyor ve 500 yüzünden foto yüklenemiyordu.
+  - Eksik olanlar: ok uçları ve okunur etiket.
+- **Ne yapıldı (`MediaTabs.kt`):**
+  - `drawMeasure()` ekran ve dışa aktarma için ortak: çizgi + iki uçta dolu üçgen ok (`Path`), beyaz zeminli yuvarlak etiket "N) xx,x cm".
+  - Etiket çizginin normali yönünde kayıyor (yatayda üste, dikeyde sağa).
+  - Çakışma önleme: denenen konumlar t = 0.5, 0.3, 0.7, 0.2, 0.8 …; dolu dikdörtgenler listesinde `RectF.intersects` ile kontrol.
+  - Foto yüksekliği 520dp ile sınırlandı (`heightIn` + `aspectRatio(matchHeightConstraintsFirst)`); tablette kaydırmadan iki nokta seçilebiliyor.
+  - Yönerge metni güncellendi.
+- **Emülatör testi:**
+  - Yerel backend'le etüt #1'e 800x600 test PNG'si yüklendi.
+  - Yatay 60 cm ve dikey 25,5 cm ölçü eklendi, "İşaretleri kaydet" yapıldı. APK yeniden kurulup açıldığında "2 işaret" sunucudan geri geldi ve etiketler ayrık göründü.
+  - Test fotoğrafı silindi (etüt #1'de aktif medya 0).
+- **Commit:** `5af9012`. APK güncellendi; backend değişmediği için IIS zip'i aynı.
+
 ## Kararlar
 - UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
