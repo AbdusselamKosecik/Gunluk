@@ -160,6 +160,34 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - **IIS'e erişim:** 445 kapalı; 5985 (WinRM) ve 8172 (Web Deploy) açık. Kimlik bilgisi bekleniyor.
 - **Commit:** `7e0f35f`
 
+### 10. Order = Erp_WorkOrder (düzeltme) + emülatörde uçtan uca test
+- **Geri bildirim:** "Model adı/kodu hiç gelmiyor", "Order dediğimiz Erp_WorkOrder". Kullanıcı UZM şifresini emülatör testi için verdi.
+- **Kök neden:** Sipariş kaynağı yanlış seçilmişti (`Erp_OrderReceipt` satış siparişi). Doğrusu üretim iş emri.
+- **Veri tespiti:**
+  - `Erp_WorkOrder` WorkOrderType **15** = üretim iş emri, WorkOrderNo sayısal (96236). Model `Erp_WorkOrderItem.InventoryId` → `Erp_Inventory`; başlıktaki InventoryId boş.
+  - 18.078 iş emrinden yalnız 31'inde birden fazla model var. WorkOrderNo benzersiz.
+  - Tip 30 (33,5 bin satır) bakım kaydı (ResourceId = makine, Maintenance* alanları), kapsam dışı.
+- **Ne yapıldı:**
+  - `EtutOrderLookup` iş emrine çevrildi: OUTER APPLY ile ilk model + yıkama özeti, order no ile başlayanlar önce, model kodu/adıyla da arama. LTRIM/RTRIM (ERP'de " RINSE" gibi boşluklu değerler var).
+  - Android: öneri satırı "96236 — 2282-3025 COURT DENIM SHORT — müşteri". Tek modelde seçim anında dolduruluyor.
+  - Yıkama kuralı: yalnız boşsa ya da önceki otomatik değerse güncelleniyor (`autoWash`). Böylece order değişince yıkama da değişiyor; elle seçilen yıkamaya dokunulmuyor.
+  - UZM'ye (RecId 78) etüt yetkileri verildi (yetki yönetimi hariç, `UpdatedBy=12`). Yetkisizken form salt-okunur açılıyor, order/model alanları hiç açılmıyordu.
+- **Emülatör kurulumu:**
+  ```bash
+  sdkmanager --install "system-images;android-34;google_apis;x86_64"
+  avdmanager create avd -n Etut_Tablet_34 -k "system-images;android-34;google_apis;x86_64" -d pixel_tablet
+  emulator -avd Etut_Tablet_34 -no-snapshot -no-audio -gpu swiftshader_indirect
+  ```
+  - Mevcut AVD'ler API 23'tü, uygulamanın minSdk'i 26.
+  - Arayüz `adb uiautomator dump` + `input tap/text` ile sürüldü (scratchpad'de `ui.py`).
+  - Yerel backend `0.0.0.0:5099` üzerinde paketin JwtKey'iyle çalıştırıldı; emülatörde sunucu `http://10.0.2.2:5099/`.
+- **Doğrulama (emülatör, UZM ile):**
+  - "9623" yazınca öneriler geldi; 96236 seçilince Model no 2282-3025, Model adı COURT DENIM SHORT, Yıkama CUPID oldu.
+  - 96175 tam yazılınca A9191E-1968-1664 / REN HIGH RISE WIDE LEG / YUMA oldu (yıkama CUPID'den güncellendi).
+  - Not: Çok hızlı `adb input text` ile karakterler başka alana kayabildi; karakter başına 0,2 sn ile sorun yok. Gerçek klavyede ayrıca gözlenmeli.
+- **Paket:** Yeniden publish edildi (JwtKey korundu); zip ve APK güncellendi. Canlı IIS'e kurulmadı (erişim yok).
+- **Commit:** `1b59116`
+
 ## Kararlar
 - UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
