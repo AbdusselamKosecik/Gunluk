@@ -56,7 +56,7 @@ dosyasıyla aynı sonucu verip vermediğini kontrol etmek, farkları bulmak. Kod
   Non Denim işçilik masraf merkezi (43), "(2)" sayfalarının amacı.
 
 ## Kararlar
-- Kod değiştirilmedi; önce kullanıcıdan Fashion-Basic/Non Denim birleştirme kuralı ve DB adı için onay alınacak.
+- Sadece "Kayıt kesim" geliştirmesi yapıldı (varsayılan = ay sonu). Fashion-Basic/Non Denim birleştirme ve DB adı için kullanıcı onayı bekleniyor.
 
 ## Açık kalanlar / sonraki adım
 - (Hâlâ açık) Uygulama SentezLive2025'e bağlı; 2026 için kesim filtresi uygulamada ancak DB düzelince görülür.
