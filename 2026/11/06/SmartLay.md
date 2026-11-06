@@ -83,6 +83,39 @@ ekran/alt ekran listesini çıkarmak (malzeme kartı, kategori gibi tanım ekran
 51. ➕ Stok hareket raporu (giriş/çıkış)
 52. ➕ Stok durum / yaşlandırma raporu
 
+### 2. Müşteri kararlarıyla liste revize edildi
+- **Neden:** Açık sorular kullanıcı tarafından cevaplandı (11:33).
+- **Kararlar:** ERP YOK → tüm tanımlar SmartLay'de girilir; kat bilgisi PASTAL bazında;
+  birden fazla serim masası var; Ayarlar standart; Geçmiş = kullanıcının kendi rapor görünümü.
+- **Değişiklikler:**
+  - Çıkarıldı: ERP sipariş eşleştirme, ERP entegrasyon ayarları/logu.
+  - Eklendi: Satınalma Siparişi (uygulama içi) + sipariş satırları; depo girişi siparişe karşı kontrol.
+  - Kumaş Topu Kartı'ndan "kat" alanı kaldırıldı; kat yalnız Pastal'da (planlanan / gerçekleşen).
+  - Masa: Masa tanımı, dashboard'da masa kartları ızgarası, masa detay, görevlendirme masa bazlı,
+    operatör girişte masa seçimi/atanmış masa.
+  - Geçmiş (operatör/depocu) → rapor ekranlarının kullanıcıya filtreli hali, ayrı ekran değil.
+- **Tanım ekranları ve alanları:**
+  - Malzeme Kategorisi: kod, ad, üst kategori, aktif
+  - Malzeme (Kumaş) Kartı: kod, ad, kategori, en (cm), gramaj, renk, birim, tedarikçi, min stok, aktif
+  - Renk: kod, ad, (hex)
+  - Birim: kod, ad (m, kg, adet)
+  - Tedarikçi: kod, unvan, vergi no, iletişim, adres
+  - Model / Ürün Kartı: model kodu, ad, sezon, müşteri, kullanılan malzemeler
+  - Müşteri: kod, unvan
+  - Sezon: kod, ad
+  - Depo / Lokasyon: depo, raf/göz kodu
+  - Serim Masası: kod, ad, uzunluk/en, durum (aktif/bakımda)
+  - Vardiya: ad, başlangıç-bitiş
+  - Fire Nedeni: kod, açıklama
+  - Etiket Şablonu: tip (top/pastal/personel), boyut, alanlar
+  - Barkod Numaralandırma: prefix (KTP-, PST-), tarih formatı, sayaç
+
+## Kararlar (güncel)
+- ERP yok; master data uygulamadan girilir.
+- Kat pastal bazında.
+- Çoklu serim masası.
+- Ayarlar standart; Geçmiş = filtreli raporlar.
+
 ## Kararlar
 - Tanım ekranlarının (E) hiçbiri dokümanda yok ama mockup'taki alanlar (Model, Kumaş türü, Top no,
   Metraj) bunları zorunlu kılıyor → ➕ olarak eklendi; müşteriyle teyit edilmeli.
