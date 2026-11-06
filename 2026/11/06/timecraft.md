@@ -205,6 +205,46 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
   - Test fotoğrafı silindi (etüt #1'de aktif medya 0).
 - **Commit:** `5af9012`. APK güncellendi; backend değişmediği için IIS zip'i aynı.
 
+### 12. Web etüt ekranları + onayda SMV'nin Sentez'e yazılması
+- **İstek:** APK'daki liste ve detay webde de görünsün; webde düzenleme, foto/video izleme ve SMV değiştirme olsun. SMV değişince Sentez'deki operasyon süresi güncellensin.
+- **Veri tespiti:**
+  - Model × operasyon süresi `Erp_InventoryWorkStudy` tablosunda (InventoryId × ProcessId; StandartTime1/2/3, StandartTimeActual; dakika).
+  - Etüt işlem kodları `Erp_Process.ProcessCode` ile birebir eşleşiyor (16/16).
+  - Örnek: A384-2061 / 5206-1 → StandartTime1 = 0,75, StandartTimeActual = 0,7546. Mevcut WorkStudy ekranı StandartTimeActual'ı topluyor.
+- **Kullanıcı kararları (AskUserQuestion):**
+  1. SMV, StandartTime1 **ve** StandartTimeActual alanlarına yazılır.
+  2. Rotada satır yoksa yazılmaz, uyarı verilir.
+  3. Yazım yalnız **onayda** yapılır.
+- **Backend:**
+  - `IEtutSentezSync` / `EtutSentezSync`: `CurrentAsync` okur, `WriteSmvAsync` ile UPDATE … FROM JOIN (UpdatedAt, UpdatedBy = onaylayan).
+  - `TransitionAsync` approve geçişinde `BeginTransaction` açıyor: CommitAsync + yazım + `sentezSync` geçmiş olayı. Hata olursa onay da geri alınıyor.
+  - `StudyDetailDto.Notice` eklendi.
+  - Servise isteğe bağlı 3. parametre eklendi; mevcut testler değişmedi.
+- **Web (`EtutController`, `Views/Etut`):**
+  - Liste: tabletteki filtreler ve sıralama.
+  - Detay:
+    - Bilgi formu; ölçümler saniye olarak (tr virgül/nokta ayrıştırma; değişmeyen ölçümün kaynağı korunuyor), makine.
+    - İşlem kodu seçilince açıklama ve önerilen makine geliyor; order önerisi (`/Etut/Orders`) model, ad ve yıkamayı dolduruyor.
+    - Hesap kartı; SMV & kontrol (SMV değiştir/kaydet, onayla ve Sentez'e yaz, düzeltme iste, temizle).
+    - **Sentez'deki mevcut süre kutusu:** satır yoksa uyarı gösteriyor.
+    - Foto: canvas üzerinde tabletle aynı ok/etiket çizimi, büyük görünüm modalı.
+    - Video: HTML5 `<video>`, `PhysicalFile(enableRangeProcessing)`.
+    - Geçmiş tablosu.
+  - Menüye "Etüt Kayıtları" eklendi.
+- **Android:** Onay sonrası `notice` mesajı gösteriliyor.
+- **Doğrulama:**
+  - 34/34 test. Yeni testler: yazım ve geçmiş, satır yoksa uyarı, yazım hatasında onayın geri alınması, onay dışı geçişte yazım olmaması.
+  - Chrome DevTools ile web girişi (UZM) yapıldı:
+    - Liste 4 gerçek etüdü gösterdi.
+    - Etüt #4 (A384-2061/5210-1) için "rotada yok" uyarısı çıktı.
+    - Etüt #3 (5206-1) için Sentez 0,75 / 0,7546 okundu.
+    - Etüt #1'e yüklenen test fotoğrafında oklar ve etiketler küçük ve büyük görünümde doğru çizildi (test fotoğrafı silindi).
+  - **Gerçek UPDATE SQL'i** `BEGIN TRAN … ROLLBACK` ile denendi: 1 satır güncellendi (0,833), geri alma sonrası değer 0,75 / 0,7546. Canlıya kalıcı yazım yapılmadı.
+  - Uçtan uca onay akışı (gerçek kalıcı yazım) çalıştırılmadı; canlı ERP'yi değiştireceği için kullanıcıya bırakıldı.
+- **Not:** Etüt #3'ün foto ve videosu IIS sunucusunun diskinde; yerel çalıştırmada açılmadı (beklenen durum).
+- **Paket:** Yeniden publish edildi (JwtKey korundu), zip ve APK güncellendi.
+- **Commit:** `bd50080`
+
 ## Kararlar
 - UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
