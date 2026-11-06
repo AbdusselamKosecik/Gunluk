@@ -55,12 +55,32 @@ dosyasıyla aynı sonucu verip vermediğini kontrol etmek, farkları bulmak. Kod
 - Fashion-Basic/Non Denim birleştirme kuralı, Finishing/Washing'den çıkarılan 85 iş emri, kesim tarihi kuralı,
   Non Denim işçilik masraf merkezi (43), "(2)" sayfalarının amacı.
 
+### 6. Muhasebeci cevaplarına göre ayar (Fashion birleştirme + "(2)" özet sayfası)
+- **Cevaplar:** 1-3 Fashion + Fashion-Basic + Non Denim tek bölüm; 4 tüm iş emirleri hesaplanacak (dışlama yok);
+  5 kesim = ayın son günü (zaten varsayılan); 6 "(2)" sayfaları uygulama üretsin; 7 Eğitim Bandı şimdilik atıl.
+- **Ne yapıldı:**
+  - `Query/Overheads.cs`: 3 yerdeki `pp.ProcessName+'-'+w.UD_DikimYeri` →
+    `(case when ltrim(rtrim(w.UD_DikimYeri)) like 'Fashion%' or ltrim(rtrim(w.UD_DikimYeri))='Non Denim' then 'Fashion' else w.UD_DikimYeri end)`.
+  - `700Ler.xaml.cs` 720 Fashion: `CostCenterCode == "42" || "43"`; Non Denim bloğu `sum = 0; item.Debit = 0; main.A720SEWING_NonDenim = 0`.
+  - Hata düzeltme: `Calculate(... x.ProcessName == "SEWING-NonDenim" ...)` → `"SEWING-Non Denim"` (eskiden Non Denim işçiliği hiç dağılmıyordu).
+  - Yeni `AddPoDepartmentOverheadsSummary` (Worksheets[9], ad "PO Department Overheads (2)"), `AddPoOverheads`'tan sonra çağrılıyor.
+    Kolonlar: A-K satır bilgisi + Unit Price (bölüm toplamı / bölüm çıkışı) + Total; M-O 150'ler; P sarf;
+    Q endirekt işçilik (730 Main kalemleri: Teknik..Motorlu taşıt); R diğer 730 (kira, elektrik, ..., kazan kimyasal);
+    S-V direkt 720 (CUTTING / SEWING=Classic+Fashion+NonDenim+Shirt / WASHING / FINISHING); W toplam; Y CONTROL = W − Exit×UnitPrice.
+    Satır 3 genel toplam, satır 4 ana bölüm çıkış adetleri, veri satır 6'dan başlıyor, sonunda SUM satırı.
+  - Şablon tespiti: muhasebecinin dosyasındaki "(2)" sayfaları Mayıs 2020 verisi taşıyor (eski şablon).
+- **Sonuç / doğrulama:** `dotnet build` 0 hata. SentezLive Eylül 2026, kesim 2026-10-01: SEWING-Fashion 27.546 giriş
+  (Excel ile aynı) / 33.182 çıkış (Excel 32.955; fark 4. karar gereği dahil edilen iş emirleri).
+  Uygulama ekranından uçtan uca export denenmedi (uygulama hâlâ SentezLive2025'e bağlı).
+- **Commit:** `1304cc4` — Overheads: Fashion-Basic ve Non Denim SEWING-Fashion altinda birlesti; 'PO Department Overheads (2)' ozet sayfasi
+
 ## Kararlar
-- Sadece "Kayıt kesim" geliştirmesi yapıldı (varsayılan = ay sonu). Fashion-Basic/Non Denim birleştirme ve DB adı için kullanıcı onayı bekleniyor.
+- Kayıt kesim varsayılanı = ay sonu (muhasebeci onayladı).
+- Fashion-Basic + Non Denim → SEWING-Fashion kalıcı kural.
+- 85 iş emri dışlanmayacak; uygulama tüm kayıtları hesaplar.
+- "PO Overheads (2)" ertelendi: önceki ay maliyeti, End Date, Cut/Finish kümülatif adet kaynakları netleşmeli.
 
 ## Açık kalanlar / sonraki adım
-- (Hâlâ açık) Uygulama SentezLive2025'e bağlı; 2026 için kesim filtresi uygulamada ancak DB düzelince görülür.
-- Bağlantı stringini `SentezLive`'a çevirmek (veya yıl seçimine göre parametrik yapmak).
-- `SEWING-Fashion  - Basic` ve `SEWING-Non Denim`'i `SEWING-Fashion`'a eşlemek (Overheads.Sql CASE veya C# tarafında).
-- Muhasebeciye: Finishing/Washing'de çıkarılan 85 iş emrinin kuralı ne?
-- `PO Overheads (2)` sayfası başlıkları eski şablon (May / 2020) — muhasebecinin elle eklediği sayfa.
+- Uygulama SentezLive2025'e bağlı → `SentezLive`'a çevirmek için kullanıcı onayı bekleniyor (2026 verisi sadece orada).
+- "PO Overheads (2)": E (önceki aylar toplam overhead), G (End Date), H (Cut Pcs), I (Finishing kümülatif), J (Remain) kaynakları.
+- `PO Overheads (2)` başlıkları muhasebecinin dosyasında eski (May / 2020).
