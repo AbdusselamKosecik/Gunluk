@@ -36,10 +36,30 @@ dosyasıyla aynı sonucu verip vermediğini kontrol etmek, farkları bulmak. Kod
     85 iş emri (çoğu 1-3 adetlik, ağırlıkla 1-3 Eylül) Excel'de yok. Kayıtlar Eylül'de girilmiş, sonradan
     güncellenmemiş; ProductionType farkı değil. Sebep veride görünmüyor → muhasebeciye sorulacak.
 
+### 4. "Kayıt kesim" — sonradan girilen üretim kayıtlarını hariç tutma
+- **Neden:** Muhasebeci raporu ay kapanışındaki veriyle hazırlanıyor; sonradan (ör. Ekim'de) Eylül tarihli girilen
+  kayıtlar uygulamada adetleri değiştiriyordu (Kesim +16, WO 96097).
+- **Ne yapıldı:**
+  - `700Ler.xaml`: "Kayıt kesim" Label + `CutoffPicker` DatePicker eklendi (kolonlar 7'ye çıktı, TabControl ColumnSpan=7).
+  - `700Ler.xaml.cs`: `DatetimePicker_SelectedDateChanged` → kesim = seçilen ayın son günü (varsayılan).
+    `GetInsertedBefore()` → `CutoffPicker.SelectedDate?.Date.AddDays(1)` (gün sonu dahil, boşsa null = filtre yok).
+    OverHeads sorgusuna `pInsertedBefore` parametresi geçildi.
+  - `Query/Overheads.cs`: WHERE'e `and (@pInsertedBefore is null or p.[InsertedAt] < @pInsertedBefore)`.
+  - Mizan (GL) sorgusuna filtre konmadı — muhasebe rakamları zaten tutuyor.
+- **Sonuç / doğrulama:** `dotnet build` 0 hata. SQL SentezLive'da Eylül 2026 için çalıştırıldı:
+  kesim 2026-10-01 → CUTTING giriş 46.446 (Excel ile aynı); filtresiz 46.462. Diğer bölümler değişmedi
+  (Finishing/Washing farkı sonradan giriş kaynaklı değil).
+- **Commit:** `0e92321` — Overheads: sonradan girilen uretim kayitlarini haric tutan 'Kayit kesim' tarihi
+
+### 5. Muhasebeciye sorular listesi çıkarıldı
+- Fashion-Basic/Non Denim birleştirme kuralı, Finishing/Washing'den çıkarılan 85 iş emri, kesim tarihi kuralı,
+  Non Denim işçilik masraf merkezi (43), "(2)" sayfalarının amacı.
+
 ## Kararlar
 - Kod değiştirilmedi; önce kullanıcıdan Fashion-Basic/Non Denim birleştirme kuralı ve DB adı için onay alınacak.
 
 ## Açık kalanlar / sonraki adım
+- (Hâlâ açık) Uygulama SentezLive2025'e bağlı; 2026 için kesim filtresi uygulamada ancak DB düzelince görülür.
 - Bağlantı stringini `SentezLive`'a çevirmek (veya yıl seçimine göre parametrik yapmak).
 - `SEWING-Fashion  - Basic` ve `SEWING-Non Denim`'i `SEWING-Fashion`'a eşlemek (Overheads.Sql CASE veya C# tarafında).
 - Muhasebeciye: Finishing/Washing'de çıkarılan 85 iş emrinin kuralı ne?
