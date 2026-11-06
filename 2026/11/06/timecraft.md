@@ -127,6 +127,39 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - **Sonuç:** Tabloda iki tam yetkili var: SentezY (12) ve Üretim-04 (126, kullanıcı tarafından ekrandan verilmiş, 07:51 UTC). Yetki ekranı artık yalnız bu ikisine açık.
 - **Not:** Aynı kişi kendi hesapladığı SMV'yi onaylayamaz (kural). Tam akış için onaylayan ikinci bir kişi gerekiyor.
 
+### 9. Order → model doldurma, çoklu medya, medya silme, 500 teşhisi, harf duyarsız arama
+- **İstekler:**
+  - Order seçilince model kodu/adı otomatik gelsin.
+  - Fotoğraf yüklerken 500 hatası alınıyor.
+  - Birden fazla fotoğraf/video eklenebilmeli.
+  - Fotoğraf/video silinebilmeli.
+  - IIS'i ben güncelleyeyim.
+- **Veri kaynağı tespiti (salt-okunur sqlcmd):**
+  - Sipariş: `Erp_OrderReceipt`, ReceiptType=2 (satış). 257 fiş, `ReceiptNo` "00001206" biçiminde.
+  - Kalemler: `Erp_OrderReceiptItem` → `Erp_Inventory`. Model no = `InventoryCode`, ad = `InventoryName`, yıkama = `UD_WashName` (%99,7 dolu).
+  - Bir siparişte ortalama ~20 model var, bu yüzden "tek model otomatik, çoksa listeden seç" yaklaşımı seçildi.
+  - `Erp_WorkOrder` içinde InventoryId boş, kullanılmadı.
+- **Backend:**
+  - `EtutOrderLookup`: `Database.SqlQuery<T>` ile parametreli ham SQL; ERP tabloları EF modeline eklenmedi.
+  - Yeni uçlar: `GET orders?search=`, `GET orders/models?orderNo=`. Order no, sorgu parametresi olarak gidiyor; içinde `/` olabilir.
+- **Collation bulgusu:** SentezLive **Turkish_CS_AS**, yani harf duyarlı ve "i"≠"I": "aritzia" araması "ARITZIA"yı bulmuyordu. Arama `COLLATE Latin1_General_CI_AI` ile yapılıyor (`EtutSql.SearchCollation`). Aynı düzeltme etüt listesi aramasına (yalnız SQL Server'da; SQLite testinde değil) ve Etüt Yetkileri aramasına da uygulandı.
+- **500 teşhisi:**
+  - Paketteki JwtKey ile 30 dakikalık test JWT'si üretildi (sub=12) ve canlıda `auth/me` doğrulandı.
+  - 1x1 PNG yükleme canlıda boş gövdeli 500 verdi. Yerelde aynı istek başarılı oldu (test medyası sonra silindi).
+  - Sonuç: kod değil sunucu. En olası neden, IIS app pool kullanıcısının `App_Data\etut-media` yazma izninin olmaması.
+  - Hata filtresi artık beklenmeyen hataları JSON (`server_error` + tip/mesaj) döndürüp logluyor; `UnauthorizedAccessException` için izin talimatı veriyor.
+- **Android:**
+  - `SuggestField`: Order alanında sunucu önerisi var. Tek model varsa otomatik doluyor; birden fazlaysa Model no alanı listeye dönüşüyor. Yıkama boşsa stok kartındaki yıkama adı yazılıyor.
+  - Video seçimi çoklu (`OpenMultipleDocuments`), seçilen listeden tek tek "Çıkar" yapılabiliyor.
+  - Fotoğraf küçük resminde 🗑 butonu var. Çoklu foto seçimi zaten vardı.
+  - Yükleme sıralı ve her yanıtın sürümünü kullanıyor (409 olmuyor).
+- **Doğrulama:**
+  - .NET 30/30 ve Android 13/13 test geçti.
+  - Yerel API'de `orders?search=1206/aritzia/citizens` ve `orders/models?orderNo=00001207` (2 model + yıkama) çalıştı; `studies?search=adore` küçük harfle bulundu.
+- **Paket:** Yeniden publish edildi, eski `appsettings.Production.json` (JwtKey) korundu. `TimeCraft-iis-20261106.zip` güncellendi, APK `EtutVision-debug.apk` güncellendi.
+- **IIS'e erişim:** 445 kapalı; 5985 (WinRM) ve 8172 (Web Deploy) açık. Kimlik bilgisi bekleniyor.
+- **Commit:** `7e0f35f`
+
 ## Kararlar
 - UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
