@@ -338,3 +338,18 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 ## Açık kalanlar (14)
 - Yeni zip IIS'e kurulmalı ve yeni APK dağıtılmalı. DB sütunu canlıda hazır; eski sürüm sorunsuz çalışır.
 - Webde "Kaydı sil" butonu yönetici girişiyle tarayıcıda görülmedi (SentezY şifresi yok); API ve test üzerinden doğrulandı.
+
+### 15. Serbest ölçüde L / Z köşeleri
+- **Neden:** Firma "Z ve L gibi de olsun" dedi. Önceki düzeltme köşeleri de yuvarlıyordu.
+- **Ne yapıldı:** `StrokeSmoother.smooth` artık önce köşe buluyor (`findCorners`):
+  - Açı, hafif yumuşatılmış kopyada kol boyu k = window+2 (6 örnek) ile ölçülüyor. Eşik 55° (`cornerDegrees`).
+  - Kavis ayrımı: kol boyu 2k'ya çıkınca açı 1,35 katından fazla büyüyorsa bu kavistir, köşe sayılmıyor.
+  - Köşeler arası parçalar ayrı ayrı yumuşatılıp sadeleştiriliyor.
+  - Köşe noktası çıktıda iki kez yazılıyor. Orta noktalı quadratic çizim orada sivri köşe çiziyor; veri biçimi, sunucu ve web değişmedi.
+- **Dokunulan dosyalar:** `android/.../domain/StrokeSmoother.kt`, `StrokeSmootherTest.kt` (L, Z, C/S testleri), `ui/editor/MediaTabs.kt` (ipucu metni)
+- **Sonuç / doğrulama:**
+  - Testler 7/7 geçti: L'de 1, Z'de 2 köşe bulundu, ikisi de 6–8 px içinde; S'de ve R=120 C'de köşe yok.
+  - Emülatörde ±10 px titrek L ve Z çizildi. Kollar düz, köşeler sivri, oklar doğru; kaydedildi.
+  - Test etüdü #8 SentezY token'ıyla silindi (204).
+  - APK yenilendi. IIS paketi değişmedi (sunucu kodu aynı).
+- **Commit:** bkz. git log ("Serbest olcu: L/Z kose bulma")
