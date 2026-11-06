@@ -74,6 +74,21 @@ dosyasıyla aynı sonucu verip vermediğini kontrol etmek, farkları bulmak. Kod
   Uygulama ekranından uçtan uca export denenmedi (uygulama hâlâ SentezLive2025'e bağlı).
 - **Commit:** `1304cc4` — Overheads: Fashion-Basic ve Non Denim SEWING-Fashion altinda birlesti; 'PO Department Overheads (2)' ozet sayfasi
 
+### 7. Uygulamayı ekransız çalıştırıp Eylül 2026 Excel çıktısı + SentezLive geçişi
+- **Neden:** Kullanıcı uygulamanın gerçek Excel çıktısını istedi; ardından "sentezlive çevir" onayı verdi.
+- **Ne yapıldı:**
+  - Projenin scratchpad kopyası (bin/obj/xlsx/csv hariç) yamalandı: App.xaml'dan StartupUri kaldırıldı,
+    `OnStartup`: `FM_MONTH` env varsa `_700Ler` oluşturulup DatetimePicker set edilir, `btnExport_Click` reflection ile çağrılır;
+    700Ler'de `FM_DB` (veritabanı) ve `FM_OUT` (SaveFileDialog yerine dosya yolu) env değişkenleri. Repo koduna bu yama girmedi.
+  - Çalıştırma: `$env:FM_DB="SentezLive"; $env:FM_MONTH="2026-09-01"; $env:FM_OUT="...\Overheads Report-APP-30092026.xlsx"; Start-Process FredericMaliyet.exe -Wait`
+  - Çıktı: `FredericMaliyet/Overheads Report-APP-30092026.xlsx` (untracked, commit edilmedi — mali veri).
+  - **Bulunan hata:** `CalculateAnother` içinde `A730AkaryakıtGiderleri` (730.05.011) için ratio/atama yoktu → başlıkta 141.742,20
+    görünüyor ama iş emirlerine dağılmıyordu. Ratio + `item.A730AkaryakıtGiderleri = Exit * ratio` eklendi.
+  - Tüm bağlantılar `SentezLive2025` → `SentezLive` (700Ler x2, MainWindow, TanimlarManager, TanimlarUpdated). 700Ler varsayılan ay = önceki ay.
+- **Sonuç / doğrulama:** `dotnet build` 0 hata. PO Department Overheads toplamı 87.669.683,65 = muhasebeci (BT2) birebir;
+  730 endirekt 27.825.454,77, diğer 13.329.359,60, sarf 1.290.138,37 hepsi eşit. Çıkış adedi 311.814 vs muhasebeci 308.971 (4. karar: tüm iş emirleri dahil).
+- **Commit:** `3648a6b` — Veritabani SentezLive'a cevrildi; 730.05.011 akaryakit gideri dagitima eklendi
+
 ## Kararlar
 - Kayıt kesim varsayılanı = ay sonu (muhasebeci onayladı).
 - Fashion-Basic + Non Denim → SEWING-Fashion kalıcı kural.
@@ -81,6 +96,6 @@ dosyasıyla aynı sonucu verip vermediğini kontrol etmek, farkları bulmak. Kod
 - "PO Overheads (2)" ertelendi: önceki ay maliyeti, End Date, Cut/Finish kümülatif adet kaynakları netleşmeli.
 
 ## Açık kalanlar / sonraki adım
-- Uygulama SentezLive2025'e bağlı → `SentezLive`'a çevirmek için kullanıcı onayı bekleniyor (2026 verisi sadece orada).
+- ~~SentezLive geçişi~~ yapıldı (3648a6b).
 - "PO Overheads (2)": E (önceki aylar toplam overhead), G (End Date), H (Cut Pcs), I (Finishing kümülatif), J (Remain) kaynakları.
 - `PO Overheads (2)` başlıkları muhasebecinin dosyasında eski (May / 2020).
