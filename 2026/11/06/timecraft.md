@@ -76,7 +76,31 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
   - Giriş yapılmış ekran görsel olarak denenmedi: tablolar yok ve test için bir kullanıcı şifresi yok.
 - **Commit:** `9d0332f` — Etut Yetkileri ekrani: Sentez kullanicilarina etut rolu atama
 
+### 6. IIS yayın paketi (192.168.3.228:81) + APK varsayılan adresi
+- **Neden:** Kullanıcı TimeCraft'ın 192.168.3.228:81 IIS'inde çalışmasını istedi.
+- **Durum tespiti:** Sunucuda eski TimeCraft (net9, framework-dependent) çalışıyor (`/` → 302 Login, `Server: Microsoft-IIS/10.0`). Buradan dosya paylaşımına erişim yok (`net view` → hata 1702), bu yüzden kopyalama elle yapılacak.
+- **Ne yapıldı:**
+  - **Self-contained win-x64 paket:** Proje net10. Sunucuda .NET 10 Hosting Bundle olup olmadığı bilinmiyor, runtime paketin içinde gidiyor. ANCM v2 sunucuda zaten var (eski site çalışıyor), `aspnetcorev2_inprocess.dll` pakette.
+  - **`web.config` (repo kökünde):** `requestLimits maxAllowedContentLength=2147483648`. Publish sırasında aspNetCore handler'ı bu dosyaya kendisi ekliyor.
+  - **`appsettings.Production.json`:** Yalnız paketin içinde, rastgele 48 baytlık `Etut:JwtKey` ile; repoya girmedi. Not: Windows'taki `openssl` çıktısının sonundaki `\r` JSON'u bozdu ("0x0D is invalid"), `sed 's/\r//g'` ile temizlendi.
+  - **`appsettings.Development.json`:** Paketten silindi.
+  - **Android:** `SettingsStore.DEFAULT_URL = "http://192.168.3.228:81/"`, README güncellendi, APK yeniden derlendi.
+- **Komutlar:**
+  ```bash
+  dotnet publish TimeCraft.csproj -c Release -r win-x64 --self-contained true -o X:/Gitlab/fredericTr/timecraft-publish
+  # appsettings.Production.json: {"Etut":{"JwtKey":"<openssl rand -base64 48>"}}
+  ASPNETCORE_ENVIRONMENT=Production ./TimeCraft.exe --urls http://localhost:5188   # smoke test
+  Compress-Archive timecraft-publish\* X:\Gitlab\fredericTr\TimeCraft-iis-20261106.zip
+  ```
+- **Sonuç / doğrulama:**
+  - Paket yerelde Production modunda denendi: `/Auth/Login` → 200; tokensiz API → 401; login → `invalid_credentials`; JwtKey uyarısı yok.
+  - Çıktılar: `X:\Gitlab\fredericTr\TimeCraft-iis-20261106.zip` (172 MB) ve `X:\Gitlab\fredericTr\EtutVision-debug.apk`.
+  - **Sunucuya kopyalanmadı.**
+- **Commit:** `f54f473` — IIS yayini: web.config (2GB upload limiti), APK varsayilan sunucu 192.168.3.228:81
+
 ## Kararlar
+- IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
+- JwtKey yalnız yayın paketinde duruyor. Paket yeniden üretilirse eski `appsettings.Production.json` korunmalı, yoksa tablet oturumları düşer.
 - Tablo öneki `UZM_ETUT_` (projedeki `UZM_GSD_*` geleneğine uyuldu).
 - Uygulama yalnızca çevrimiçi çalışıyor; çevrimdışı eşitleme kapsam dışı.
 - Medya diskte (`Etut:MediaRoot`, varsayılan `App_Data/etut-media`); DB'de yalnız depolama anahtarı tutuluyor.
@@ -84,6 +108,10 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - Düzeltme isteğini hesaplayan kişi de yapabiliyor; yasak yalnız onay için.
 
 ## Açık kalanlar / sonraki adım
+- **IIS'e kopyalama (elle):**
+  - Site durdurulmalı (veya `app_offline.htm` konmalı), mevcut klasör yedeklenmeli, zip içeriği üzerine açılmalı.
+  - App pool identity'ye `App_Data` için Modify izni verilmeli (medya yüklemeleri).
+  - App pool'da ".NET CLR version = No Managed Code" seçili olmalı.
 - **`doc/sql/etut_schema.sql` SentezLive'da henüz ÇALIŞTIRILMADI** (canlı ERP DB, kullanıcı onayı bekleniyor). `UZM_ETUT_UserRole` için kullanıcı yetkileri de girilmeli.
 - Canlıda `Etut:JwtKey` (≥32 karakter) tanımlanmalı; tanımlı değilse her yeniden başlatmada oturumlar düşüyor.
 - IIS arkasındaysa büyük video için `web.config` → `maxAllowedContentLength` artırılmalı.
