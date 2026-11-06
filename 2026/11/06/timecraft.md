@@ -98,7 +98,26 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
   - **Sunucuya kopyalanmadı.**
 - **Commit:** `f54f473` — IIS yayini: web.config (2GB upload limiti), APK varsayilan sunucu 192.168.3.228:81
 
+### 7. Tablet geri bildirimi: "kayıt ekranı yok" + yıkamada arama
+- **Durum:**
+  - Kullanıcı yeni paketi IIS'e kurmuş; `192.168.3.228:81/api/etut` JSON dönüyor.
+  - Şemayı da çalıştırmış (8 `UZM_ETUT_*` tablosu var).
+  - `UZM` (RecId 78) ile girişte "Yeni etüt" görünmedi.
+- **Neden:** `UZM_ETUT_UserRole` tablosunda RecId 78 için satır yok, yani `canStudy=false`. Buton bilerek gizli, kod hatası değil. Ayrıca kullanıcı (`me()`) yalnız uygulama açılışında okunuyordu: web'den yetki verilse bile uygulama yeniden açılmadan görünmezdi.
+- **Ne yapıldı:**
+  - `StudyListViewModel.load()` her yenilemede `me()` çağırıp yetkileri tazeliyor.
+  - Hiç etüt yetkisi olmayan kullanıcıya listede açıklayıcı uyarı gösteriliyor.
+  - `SelectField` seçenek sayısı 8'den fazlaysa aranabilir oluyor: açılınca alan arama kutusuna dönüşüyor, seçim yine yalnız listeden yapılıyor. Bu, listedeki Yıkama (191 seçenek) ve İşlem (16) filtrelerini kapsıyor.
+  - `searchKey()`: Türkçe küçük harf + ı/ş/ğ/ü/ö/ç katlama. Tablet klavyesinde "yikama" yazan da "YIKAMA"yı buluyor. Düzenleyicideki Yıkama `AutoCompleteField`'ı da aynı anahtarı kullanıyor.
+- **Dokunulan dosyalar:** `android/.../ui/common/Components.kt`, `android/.../ui/list/StudyListScreen.kt`
+- **Sonuç:**
+  - Derleme ve 13 test geçti.
+  - APK `X:\Gitlab\fredericTr\EtutVision-debug.apk` dosyasına kopyalandı.
+  - Cihazda denenmedi.
+- **Commit:** `3b91196`
+
 ## Kararlar
+- UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
 - JwtKey yalnız yayın paketinde duruyor. Paket yeniden üretilirse eski `appsettings.Production.json` korunmalı, yoksa tablet oturumları düşer.
 - Tablo öneki `UZM_ETUT_` (projedeki `UZM_GSD_*` geleneğine uyuldu).
