@@ -295,3 +295,46 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 
 ## Açık kalanlar (13)
 - `TimeCraft-iis-20261106.zip` IIS'e kurulmalı; App_Data Modify izni verilmeli.
+
+### 14. Kayıt silme, Reçete kaldırma, foto üzerinde serbest ölçü (titreme düzeltme)
+- **Neden:** Firma üç şey istedi. (1) Tablet ve webde etüt kaydı silinebilsin. (2) Reçete alanı kalksın; "kalacak" yazılmıştı, kullanıcı "kaldırılsın" diye netleştirdi. (3) Foto üzerinde serbest çizim olsun, C/S gibi kavisli çizilebilsin. Uzunluk elle girilecek, yalnız titreme düzeltilecek.
+- **Kararlar (kullanıcı):**
+  - Silme yetkisi: **sadece yetki yöneticisi** (`CanManageRoles`).
+  - Reçete: ekranlardan kaldırılsın.
+- **Ne yapıldı:**
+  - **Silme (yumuşak):**
+    - `EtutStudyService.DeleteAsync` → `IsDeleted=1`, sürüm artar, `delete` audit olayı nedeniyle birlikte yazılır, 409 çakışma kontrolü var.
+    - `EtutPermissions.CanDelete` = `CanManageRoles`; `auth/me` artık `canDelete` döndürüyor.
+    - API: `DELETE /api/etut/studies/{id}?version=&reason=`. Web: detayda "Kaydı sil" (prompt ile neden sorulur). Tablet: üst barda "Kaydı sil" + onay diyaloğu.
+  - **Reçete:** web formunda hidden input'a çevrildi, böylece kaydetme eski değeri silmiyor. Tablet formundan, listeden, sonuç ekranından ve PDF'ten kaldırıldı. DB sütunu duruyor.
+  - **Serbest ölçü (`curve`):**
+    - `UZM_ETUT_Annotation.Points NVARCHAR(MAX) NULL` sütunu eklendi. Canlı DB'de sqlcmd ile eklendi (yalnız UZM_ETUT tablosu; ERP'ye dokunulmadı). `etut_schema.sql` idempotent ALTER içeriyor.
+    - Sunucu doğrulaması: 2–500 nokta, değerler 0..1 aralığında, cm > 0.
+    - Tablet `domain/StrokeSmoother.kt`:
+      1. Eşit aralıklı yeniden örnekleme (aralık = köşegen/150).
+      2. Uçları sabit kayan ortalama (yarıçap 4), 2 tur.
+      3. Douglas–Peucker (tolerans = aralık×0,3).
+    - Tablet ekranı: "Serbest ölçü (çiz → cm)" modu (detectDragGestures). Çizerken ham iz mavi görünüyor; bırakınca düzeltilmiş eğri "? cm" ile çiziliyor, ardından cm diyaloğu açılıyor.
+    - Çizim: `drawMeasurePath` (ikinci derece eğri, uç okları yerel yöne göre, etiket yay ortasında, çakışma önleme); düz ölçü de bunu kullanıyor. Web `drawAnnotations` aynı algoritmanın JS hali.
+- **Dokunulan dosyalar:**
+  - Backend: `Etut/Services/EtutStudyService.cs`, `Etut/Api/EtutApiController.cs`, `Etut/Api/EtutDtos.cs`, `Etut/Data/EtutEntities.cs`, `Etut/Domain/EtutRules.cs`, `Etut/Services/EtutInfrastructure.cs`
+  - Web: `Controllers/Etut/EtutController.cs`, `Views/Etut/Details.cshtml`, `Views/Etut/Print.cshtml`
+  - Doküman: `doc/sql/etut_schema.sql`, `doc/ETUT_API.md`
+  - Android: `android/.../domain/StrokeSmoother.kt` (+ test), `ui/editor/MediaTabs.kt`, `EditorScreen.kt`, `EditorViewModel.kt`, `SmvResultTabs.kt`, `ui/list/StudyListScreen.kt`, `data/Dtos.kt`, `data/EtutApi.kt`
+- **Komutlar:**
+  ```bash
+  sqlcmd -S 192.168.1.22 -d SentezLive -U sa -C -Q "IF COL_LENGTH('dbo.UZM_ETUT_Annotation','Points') IS NULL ALTER TABLE dbo.UZM_ETUT_Annotation ADD Points NVARCHAR(MAX) NULL"
+  JAVA_HOME="/c/Program Files/Android/openjdk/jdk-21.0.8" ./gradlew :app:testDebugUnitTest :app:assembleDebug
+  # yerel test: Etut__JwtKey=test-local-key-... ile çalıştır, SentezY (12) için token scratchpad/mint.py ile üretildi
+  ```
+- **Sonuç / doğrulama:**
+  - .NET testleri 37/37 geçti (silme yetkisi, 409, listeden kalkma, audit, curve doğrulaması). Android `StrokeSmootherTest` 4/4 geçti (±5 px titreşimli S → sapma < 3 px, uçlar sabit).
+  - Emülatör: test etüdü #7'ye adb motionevent ile ±12 px titrek bir S çizildi. Düzgün S ve çift ok çıktı; 23,5 cm girilip kaydedildi.
+  - Web detayında aynı eğri ve "1) 23,5 cm" etiketi doğru göründü. Reçete etiketi yok.
+  - API silme denemesi: UZM 403, eski sürüm 409, SentezY 204; sonra GET 404 döndü. Test etüdü #7 silinmiş durumda (yumuşak).
+  - Paket ve APK yenilendi.
+- **Commit:** `a29699f`
+
+## Açık kalanlar (14)
+- Yeni zip IIS'e kurulmalı ve yeni APK dağıtılmalı. DB sütunu canlıda hazır; eski sürüm sorunsuz çalışır.
+- Webde "Kaydı sil" butonu yönetici girişiyle tarayıcıda görülmedi (SentezY şifresi yok); API ve test üzerinden doğrulandı.
