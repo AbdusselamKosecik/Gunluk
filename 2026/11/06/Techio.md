@@ -38,3 +38,22 @@ Soru: `X:\Gitlab\fredericTr\techtsio-core` (GitLab, branch `FiredEric`, HEAD `ae
 ## Açık kalanlar / sonraki adım
 - `X:\Techio\backend` git'te değil → kayıp riski. GitLab'da ayrı branch'e alınması önerildi.
 - LocationId gerçekten filtrelenecekse SP body + C# parametre adı düzeltilmeli.
+
+---
+
+### 2. Bulk aktarım logu + log ekranı + ekranda versiyon — tasarım (uygulama YOK)
+- **Neden:** Müşteri "kartları gönderdik, değişmemiş" diyor; gönderip göndermediğini ve bizim ne
+  yaptığımızı kanıtlayacak kayıt yok (`BulkInstallController.Post` sadece Serilog dosyasına JSON basıyor).
+- **Ne yapıldı:** Keşif + tasarım dokümanı. Kullanıcı "sen yaz sonra yaparız" dedi.
+- **Dokunulan dosyalar:** `X:\Techio\docs\superpowers\specs\2026-11-06-bulk-aktarim-log-design.md`
+  (kopyası bu repoda: `2026/11/06/Techio-specs/`).
+- **Özet karar:** 2 tablo (`BulkTransferLogs` başlık + ham JSON, `BulkTransferLogItems` varlık/alan bazlı
+  Eklendi/Güncellendi/Silindi/Değişmedi), log hatası aktarımı bozmaz, başlık en başta yazılır;
+  `[Authorize]` okuma API'si; UI'da "Aktarım Logları" ekranı (filtre: tarih, sipariş no, kart kodu, durum);
+  Footer'da `UI v.. · API v..` + `GET api/Version`.
+- **Keşif notları:** kart döngüsünde aynı kodlu diğer kartlar soft-delete ediliyor (silme olayı);
+  model rotaları her gönderimde `ExecuteDeleteAsync` ile silinip yeniden ekleniyor; `Post` transaction'sız.
+
+## Açık kalanlar (tasarım)
+- Kodun yaşayacağı yer: Techio kopyaları git'te değil → önce GitLab'da yeni branch.
+- "Ekrana versiyon yok" = uygulama sürüm numarası diye yorumlandı, teyit bekliyor.
