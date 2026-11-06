@@ -267,3 +267,31 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
 - Release APK imzalama: `android/README.md`.
 - Yapılmayanlar: işaretleme ekranında pinch-zoom, prototip JSON yedeğinin içe aktarımı (§14).
 - `Database.ps1` içinde sa şifresi düz metin olarak repoda duruyor (önceki commit'lerden).
+
+### 13. Web: Excel etüt formu (BENSON- ÖN SÜRME şablonu) + Yazdır/PDF
+- **Neden:** Firma webden şablondaki Excel'i ve tabletteki "Yazdır / PDF" çıktısını istedi.
+- **Ne yapıldı:**
+  - `EtutExcelExport.Build` (ClosedXML), `doc/BENSON- ÖN SÜRME.xlsx` düzenini birebir üretiyor:
+    - A1:D2 başlık; satır 3–8 tarih / operatör / operasyon / "modelNo-modelAdı" / yıkama / order (sayı).
+    - 15 ölçüm satırı (sn, 0.000).
+    - Formüller: TOPLAM `=SUM(B9:B23)/60`, ORTALAMA `=B24/COUNT(...)`; şablondaki sabit `/9` yerine COUNT kullanıldı.
+    - DEMET PAYI 0,03, PAYLAR = makine+dinlenme, STANDART ZAMAN `=B25*(1+B27)+B26`.
+    - AÇIKLAMA "KİMYASAL: …" + not; SMV varsa ayrı satır.
+    - Makine payları tablosu DB'den geliyor; seçili makine sarı ve kalın.
+  - Dosya adı "YIKAMA- İŞLEM.xlsx" (UTF-8 filename*).
+  - `/Etut/Print/{id}`: tabletteki buildResultHtml'in Razor kopyası; açılınca window.print() çağrılıyor, PDF tarayıcıdan kaydediliyor.
+  - Butonlar: detay başlığında ve listede her satırda Excel / PDF.
+- **Dokunulan dosyalar:** `Etut/Services/EtutExcelExport.cs`, `Controllers/Etut/EtutController.cs` (Excel, Print), `Views/Etut/Print.cshtml`, `Views/Etut/Details.cshtml`, `Views/Etut/Index.cshtml`, `tests/TimeCraft.Tests/EtutExcelExportTests.cs`, `doc/BENSON- ÖN SÜRME.xlsx`
+- **Sonuç / doğrulama:**
+  - 35/35 test geçti; ClosedXML formülü hesaplayıp beklenen standart zamanı verdi.
+  - Chrome (UZM): `/Etut/Excel/3` 200 döndü (8 KB), hücreler openpyxl ile kontrol edildi; `/Etut/Print/3` ekran görüntüsü doğru.
+  - Paket yeniden publish edildi (JwtKey korundu), zip 180 MB.
+- **Commit:** `f00aea5`
+
+## Kararlar (13)
+- Şablondaki `ORTALAMA=B24/9` sabiti hataydı; ölçüm adedi COUNT ile alınıyor.
+- PDF sunucuda üretilmiyor; tarayıcının yazdır → PDF yolu kullanılıyor (tabletle aynı yaklaşım, ek kütüphane yok).
+- "Onaya gönderilen SMV onaylanınca Sentez'e" isteği 12. maddede (bd50080) zaten yapıldı; canlıya kurulum bekliyor.
+
+## Açık kalanlar (13)
+- `TimeCraft-iis-20261106.zip` IIS'e kurulmalı; App_Data Modify izni verilmeli.
