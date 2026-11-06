@@ -116,6 +116,17 @@ Hedef: dokümanları projeye eklemek, API yazmak ve Android tablet uygulaması (
   - Cihazda denenmedi.
 - **Commit:** `3b91196`
 
+### 8. SentezY'ye tam etüt yetkisi (DB)
+- **Neden:** Kullanıcı açıkça istedi: "SentezY'ye yetki verir misin, her şeyi yapabilsin".
+- **Ne yapıldı:** `Meta_User` RecId 12 (SentezY, "Sentez Yönetici") için `UZM_ETUT_UserRole`'a satır eklendi. Beş bayrağın hepsi 1, `UpdatedBy=NULL` (script ile yapıldı).
+- **Komut:**
+  ```sql
+  INSERT UZM_ETUT_UserRole(UserId,CanStudy,CanCalcSmv,CanControl,CanManageMachines,CanManageRoles,UpdatedAt,UpdatedBy)
+  VALUES(12,1,1,1,1,1,SYSUTCDATETIME(),NULL);
+  ```
+- **Sonuç:** Tabloda iki tam yetkili var: SentezY (12) ve Üretim-04 (126, kullanıcı tarafından ekrandan verilmiş, 07:51 UTC). Yetki ekranı artık yalnız bu ikisine açık.
+- **Not:** Aynı kişi kendi hesapladığı SMV'yi onaylayamaz (kural). Tam akış için onaylayan ikinci bir kişi gerekiyor.
+
 ## Kararlar
 - UZM'ye yetki DB'ye elle yazılmadı; web'deki Etüt Yetkileri ekranından verilmesi önerildi (kimde yönetici yoksa ilk kurulum modu açık).
 - IIS paketi self-contained: sunucudaki .NET sürümüne bağımlı değil (353 MB açık, 172 MB zip).
