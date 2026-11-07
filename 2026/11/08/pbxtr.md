@@ -34,3 +34,14 @@
 - K3 (#80 ekranı): backend ajanı çalışıyor.
 - BR-OPS-26, BR-AST-167, BR-AST-157 (havuz paketi), BR-QA-138 (25 adaptör), BE-288.
 - Dış bağımlılıklar: BR-SYS-152 (sunucu dışı yedek hedefi), BR-SYS-150 (DNS), sağlayıcı seçimleri, SMTP, QA-126 insan imzası.
+
+### 4. BR-OPS-26 — IMAJ gölgesini yayın betiği kendisi onarır (birleştirme `582e5db0`)
+- **Ne yapar:**
+  - Gölgelenen dosyayı ESKİ imajın tohum dizinindeki (`/opt/pbxtr/asterisk-default`) kopyasıyla bayt bayt karşılaştırır. Eşitse dosya elle düzenlenmemiş demektir: tarihli yedek alınır, dosya kaldırılır, santral ikinci kez yaratılır, edge'ler yeniden katılır ve kapı yeniden koşar.
+  - Host kopyası farklıysa betik durur.
+- **Fail-closed haller:**
+  - Eski imaj okunamazsa OLCEMEDIM der ve durur.
+  - İkinci ölçümde aktif kanal varsa onarım yapmaz.
+  - Onarımdan sonra sağlık bozuksa yedeği geri koyar.
+- **Öz-test (kapi_53) 22/0.** Mesai kapısının dört senaryosu (S9-S12) ve M4 mutasyonu kaldırıldı. Kapı 2026-10-18'de betikten çıkarılmıştı; senaryolar o günden beri hep kırmızıydı ve kapi_53'ü fiilen kaldırıyordu. Commit `c10b48b6`.
+- **Ders:** hep kırmızı kapı = kaldırılmış kapı. Bunu yeni senaryo eklenirken ajan fark etti.
