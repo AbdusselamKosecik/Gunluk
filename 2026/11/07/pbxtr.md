@@ -75,7 +75,29 @@ kesilmişti. Kullanıcı: *"devam edelim"*.
 - **ST-48:** yeni sayaç penceresi 12:33Z; kilit en erken 2026-11-09 12:33Z.
 - **Commit'ler:** `2ada07e5` (backlog 19 kart + yeni BR-BE-292), ClickUp yeni 2, yazılan 18, `--kuru` fark 0.
 
+### 6. Kalıcı kırmızı kapılar, ikinci/üçüncü yayın, E-09 kapanışı
+- **Migration uyumluluk kapısı** (`deploy/migration-compatibility-guard.py`) 2026-10-23'ten beri 7 migration yüzünden kırmızıydı; `--testsiz` yayında koşmadığı için görünmüyordu. Her `Up()` okundu (ekleyici ALTER, CHECK genişletme, `call_events` PK'ye `node`), sunucuda 7/7 uygulanmış → `deploy/migration-contract-onay.blobs` + `yonetim/kurul-kararlari.md` Karar#91 (`49b34c72`).
+- **Çapraz kip envanteri** kırmızıydı (kod 40→43, migration 72→78). pbxtr-qa 7 kullanımı tek tek inceledi: hepsi keşif SELECT'i ya da migration geri doldurması, istekten gelen `tenant_id` çapraz kipte yazılmıyor. `TelefonCaprazKesif` daraltıldı (denetim satırı kip kapandıktan sonra, boş taramada yazılmaz — Ş34-25), `TelefonProjeksiyon` entegrasyon 7/7. `--dondur` + kapı docstring'ine "ÜÇÜNCÜ TUR" gerekçesi; dondurma günü dinamik (`fbeb7431`). Yeni kart BR-SEC-38 (`telephony_nodes_read USING (true)`).
+- **Ağır DDL defteri** birleşmeden sonra bayattı → `python deploy/migration-agir-ddl.py --uret` (191 ad).
+- **Birleştirmeler:** scripter (FE-140/BE-257/258/259), BE-258 arayüzü (editör işlemleri siliyordu — düzeltildi), BR-QA-132 entegrasyon kırmızıları (1329→1336/1339), K4 görüntü (i18n/prototip çakışmaları iki taraf korunarak; `ar.json` +16 anahtar farkı önceden vardı), E-09/K-06 performans, BR-AST-134.
+  - **BR-AST-134 × BR-DB-126 sessiz hata:** iki dal `ProvisioningExtensionSource`'a birer `bool` ekledi; EF ifade ağacındaki konumsal `extension.DeskAutoAnswer` `VideoEnabled`'a düştü. Derleme 0 hata, 2386 birim test yeşil. Düzeltme: araya açık `false`; regresyon `ProvisioningExtensionFlagBindingTests` (gerçek PG, mutasyonla beklenen 1 / gelen 0). Hafızaya: `konumsal-bool-birlesmede-kayar`.
+- **Santral imajı aslında eski çalışıyordu:** 13:50 yayınında yeni imaj exit 78 verince yayın betiği `.env`'i eski imaja geri almış; elle yeniden oluşturma da eskiyi açmış (BR-SEC-37 ölçümü yine doğruydu: yeni giriş betiği düşmeden önce host bind mount'a dosyaları yazmıştı). Doğru santral yayını gölgeleme kapısında durdu: host `pjsip.conf` IMAJ sınıfı dosyayı gölgeliyordu (içerik aynı) → host kopyası `/root/pbxtr-yedek/`e, imaj tohumladı; santral `b3f1bef3`, sapma bekçisi on iddia TAMAM, sır kapısı yeniden doğrulandı.
+- **Yayınlar:** `demo-b3f1bef3b2e3` (compose önce kopyalandı: Panel dizesi `Max Auto Prepare=64;Minimum Pool Size=8`), santral `22-b3f1bef3b2e3`, `demo-48ff4e78ae1a` (BR-AST-134 migration).
+- **E-09:** ölçüm aracına `E09_RPS` açık döngü kipi eklendi (gecikme planlanan andan; koordineli ihmal yok, `6f84f38e`). Sunucuda 20 işçi: 50/100/200 rps'te call-permission p99 12,9/14,7/39,3 ms, route-decision 11,6/11,2/8,9 ms; 300 rps'te tavan (311 ms). Kapalı döngü c=20 p99 93,8 ms = CPU doygunluğunda kuyruk. E-09 Bitti (`40bcdcb4`).
+- **Backlog:** `a0ad351f` (11 kart yayında Bitti + BR-SYS-151), ClickUp yeni 3, `--kuru` fark 0. Açık satır ~140 → 71.
+- **Komutlar:**
+  ```bash
+  python deploy/migration-compatibility-guard.py; python deploy/ci/capraz-kip-envanteri-kapisi.py --dondur
+  python deploy/migration-agir-ddl.py --uret && python deploy/migration-agir-ddl.py --kapi
+  scp pbxtr-demo/docker-compose.yml root@…:/root/ && ssh … install … && compose config -q
+  bash deploy/yerel-yayin.sh --yayinla --testsiz [--santral]
+  ssh … 'mv /etc/asterisk/pjsip.conf /root/pbxtr-yedek/…'   # IMAJ golgesi
+  E09_RPS=200 bash /root/e09-sunucu.sh sonra 3000 20
+  ```
+
 ## Kararlar
+- E-09 ölçütü kapalı döngü azami hız değil, sabit hızda (açık döngü) p99: call-permission çağrı başına bir kez sorulur; 2 vCPU paylaşımlı sunucuda 200 rps'e kadar < 50 ms.
+- Kalıcı kırmızı kapı kapı değildir: migration onayı ve çapraz kip envanteri ölçülüp donduruldu; gerekçe kapı dosyasında ve karar defterinde.
 - Kamailio sır başlığı: IP ayrımı host süreçlerine karşı işe yaramaz (bridge adresine rootsuz süreç de bağlanır) → paylaşılan sır + dialplan kapı bağlamı; panelden originate (`Local/…@-out`) kapıdan geçmez, yalnız endpoint girişleri geçer.
 - BR-AST-134 masa telefonu: Karar #46 nedeniyle NOTIFY yok → kuyruk üyesi INVITE'ına agent ayarına bağlı `answer-after=0`.
 - Bekleyen-çağrı kapısında "kuyruk görünmüyor" iki ayrı durum: komut koştu ama kuyruk yok (yüklü değil → reload serbest) ve komut çıktı vermedi (ölçülemedi → ertele). Ayrım `queue show` çıktısında başka bir kuyruğun ya da `No queues.`'in varlığıyla yapılır.
