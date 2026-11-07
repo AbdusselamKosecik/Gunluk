@@ -149,3 +149,64 @@ Dal: `worktree-agent-ac32c2707996329cd` (push edildi; ana dala birleştirme back
 - Gerçek SMTP/DNS/TLS ile REST/e-posta düğümü uçtan uca ölçülmedi; e-posta commit sonrası gider ama commit sonrası başarısızlıkta geri alınamaz; REST çağrısı istek transaction'ı içinde koşar.
 - İşlemler kapanışta (closure) koşmaz; yalnız adım ilerlemesinde.
 - `dat.csvFile` etiketi hâlâ "CSV dosyası" diyor.
+
+## Ek tur — K-05 PITR canlıda, yedek kapsamı, realtime birleşmesi (16:30–17:15Z)
+
+### 1. K-05 — PostgreSQL WAL arşivi + haftalık taban yedek
+- **Neden:** Ayrı konteyner tatbikatı tam yedekten geri yüklemeyi kanıtladı (281 sn, migration 263=263, policy 145, RLS tablo 121, rol 7). Ama sunucuda `archive_mode=off` idi: RPO 24 saatti ve "dün 14:05'e dön" yapılamıyordu.
+- **Ne yapıldı:**
+  - `pbxtr-demo/docker-compose.yml` postgres servisi: `archive_mode=on`, `archive_command=/usr/local/bin/pbxtr-wal-arsivle %p %f`, `archive_timeout=300`, ayrı `walarchive` hacmi.
+  - Giriş noktası `install -d -o postgres ... /walarchive/wal && exec docker-entrypoint.sh "$$@"`. Gerekçe: adlı hacim, imajda olmayan bir yola bağlanınca root:root oluşur ve postgres arşive yazamaz.
+  - `pbxtr-demo/postgres/pbxtr-wal-arsivle.sh`: zstd sıkıştırır, var olan dosyanın üstüne yazmaz (içerik aynıysa 0, farklıysa 1 döner), atomik rename yapar.
+  - `deploy/pbxtr-taban-yedek.sh` + `.service`/`.timer` (Cumartesi 03:30):
+    - `pg_basebackup -Ft -z -X none` ile `/walarchive/base/<damga>` dizinine yedek alır.
+    - Yedeğin `.backup` dosyası arşive düşene kadar bekler (en çok 120 sn); düşmezse temizlik yapmaz ve exit 1 verir.
+    - En yeni 2 taban yedeği tutar; `pg_archivecleanup -x .zst` ile eski WAL'ı kırpar.
+  - `deploy/pbxtr-yedek-kur.sh` ESLEME tablosuna ve timer döngüsüne eklendi.
+- **Komutlar:**
+  ```bash
+  # once compose (bellek: zorunlu-env-once-compose); sunucu compose HEAD ile birebir oldugu once olculdu
+  scp pbxtr-demo/docker-compose.yml root@176.88.41.220:/home/vuo/pbxtr-demo/
+  scp pbxtr-demo/postgres/pbxtr-wal-arsivle.sh root@...:/home/vuo/pbxtr-demo/postgres/
+  docker compose up -d --no-deps postgres          # 16:41:19 -> healthy 16:41:28 (~9 sn)
+  psql -c "select archived_count, failed_count from pg_stat_archiver"   # 1|0, sonra 5|0
+  systemctl start pbxtr-taban-yedek.service; systemctl enable --now pbxtr-taban-yedek.timer
+  ```
+- **PITR kanıtı:** canlı arşivden alındı, atılır `pitr-dene` konteyneri ve hacmi temizlendi.
+  - `postgres` DB'ye `pitr_isaret` tablosu açıldı. Önce `once` satırı yazıldı, sonra T alındı, ardından `sonra` satırı yazıldı.
+  - Taban yedek açıldı; `recovery_target_time=T` ve `restore_command='zstd -dq /walarchive/wal/%f.zst -o %p'` verildi.
+  - Sonuç: geri dönen yalnız `once` oldu (`recovery stopping before commit`), migration 263. İşaret tablosu canlıdan silindi.
+- **Ders:** işaretsiz ilk deneme `recovery ended before configured recovery target was reached` ile düştü. Hedef an, arşivdeki son işlemden SONRAYA düşmüştü. PITR ölçümünde hedefin iki yanına işaret commit'i konmalıdır.
+- **Commit:** `8346db39` — K-05: PostgreSQL WAL arsivi + haftalik taban yedek (PITR) canlida
+
+### 2. Açıkta kalan dökümler
+- `/var/backups/pbxtr/pre-6fe97e63-20260918-062224.dump` ve `pbxtr-20260822-154728.dump` silindi. İkisi de şifresiz ve 0644'tü (dizin 0700 olduğu için dışarıdan okunmuyordu). Bugün şifreli gece yedekleri var.
+- `pjsip-elle-*`, `br-ast-128-*` ve `asterisk-spool-*`: `chmod -R go-rwx`.
+
+### 3. BR-SYS-153 — gece yedeği Asterisk CDR veritabanını almıyordu
+- **Neden (ölçüldü):** `pbxtr-asteriskcdrdb` konteyneri ayrı bir PostgreSQL. Ne hacim listesinde ne pg_dump'ta vardı, yani CDR'ın mutabakat kaynağı yedeksizdi.
+- **Ne yapıldı:**
+  - `deploy/pbxtr-yedek.sh` içine `ek_pg_dokumleri()` eklendi. `PBXTR_YEDEK_EK_PG=konteyner/db,...` listesindeki her veritabanı için `docker exec pg_dump -Fc` alır ve aynı gpg ile şifreler.
+  - Döküm aynı koşuda `pg_restore --list` ile geri okunur. TABLE DATA sayısı 0 ise koşu BAŞARISIZ yazılır.
+  - Drop-in'e `PBXTR_YEDEK_EK_PG=pbxtr-asteriskcdrdb/asteriskcdrdb` eklendi.
+- **Sonuç:** 17:07Z koşusu `Result=success` ve `ek dokum ... 2 tablo verisi, 110511 bayt` yazdı.
+- **Bilinçli dışarıda:** `pbxtr_telefon`. Türetilmiş bir veritabanı; projeksiyondan yeniden kurulur.
+- **`wf_veri_ops11`:** BR-OPS-11 `lock_timeout` ölçümünden kalmış sentetik veritabanı. İçinde `call_attempts` 200000 satır ve boş migration geçmişi vardı, bağlantı 0'dı. `drop database` ile silindi.
+- **Ders:** oneshot systemd servisi çalışırken `activating` durumundadır. Bu yüzden `until ! systemctl is-active` döngüsü hemen çıkar; doğru koşul `ActiveState=activating` iken beklemektir.
+- **Commit:** `f1043820`
+
+### 4. BR-AST-156/157 birleştirildi (ajan dalı `8ade60c4`)
+- Realtime: `ps_endpoints/ps_aors/ps_endpoint_id_ips` ve `queues` artık `pbxtr_telefon`'dan okunuyor. Satırlar renderer çıktısının ayrıştırılmasıyla üretiliyor.
+  - Kip ayarı `Telephony:Realtime:Mode` = off/shadow/on.
+  - R1 ölçümünden dolayı önbellek süresi 0.
+  - R2 ölçümünden dolayı `tcp_user_timeout=1500` ve `PGCONNECT_TIMEOUT=2`.
+- **Çakışma:** ADR-023'te iki dal da §9 numarasını almıştı. Realtime'ın 45 atfı, K4'ün 10 atfı vardı; bu yüzden realtime §9'da kaldı, K4 §10 oldu. K4 atıfları yedi dosyada güncellendi.
+- **Doğrulama:** solution build 0 hata. Pending model değişikliği yok. Architecture 892/892, Api (Provisioning|Telefon|Platform) 2036/2038 (2 atlandı). `dotnet format` 0, `tsc -b` 0.
+- **Commit:** `bf5e3978` (merge), yayın: `deploy/yerel-yayin.sh --yayinla --testsiz --santral`.
+
+### Yeni kartlar
+- **BR-SYS-152:** yedekler sunucu dışına kopyalanmıyor.
+- **BR-SEC-39:** ARI ile `contact` yazılabiliyor (astdb).
+- **BR-AST-165:** teslim onayı (tenant × düğüm) başına tutulmalı; havuz paketinin önkoşulu.
+- **BR-OPS-25:** `confd-boyut-olc.sh` exit 69 veriyor.
+- K-05, ST-08 ve BR-SYS-153 **Bitti**; AST-156/157 **Devam**.
