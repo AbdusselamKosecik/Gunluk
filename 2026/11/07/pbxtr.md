@@ -87,3 +87,43 @@ kesilmişti. Kullanıcı: *"devam edelim"*.
 - BR-SYS-150 (SIP TLS sertifikası `sip.pbxtr.com`), BR-OPS-23 (host `pjsip.conf` gölgesi, santral imajı push edilmedi, compose elle kopyalanıyor), BR-OPS-24 (provisioning SipServer, RTP 0.0.0.0).
 - BR-BE-291 veri işi.
 - Sprint-50 kapanınca sprint-51 için kullanıcının "başla" demesi beklenir.
+
+---
+
+## Ek tur — backend-dev-1 worktree: BR-FE-140 / BR-BE-257 / BR-BE-258 / BR-BE-259
+
+Dal: `worktree-agent-ac32c2707996329cd` (push edildi; ana dala birleştirme backend-lider'de).
+
+### 1. BR-FE-140 + 257/259 onay satırları
+- **Neden:** üç 2026-10-18 migration'ı (QaFormAnswerOptions, ScripterQueueCampaignAndContactExtra, ScriptStandalone) compatibility kapısında onaysızdı.
+- **Ne yapıldı:** `deploy/migration-contract-onay.blobs` sonuna Karar#90 bloğu (`git hash-object` sha + yol). Sunucuda üçü `__EFMigrationsHistory`'de, `qa_evaluation_scores` 12 satır, `score>100` 0.
+- **Commit:** `edd4efb4`.
+
+### 2. BR-BE-259 — kampanya süzgeci
+- **Ne yapıldı:** `script_responses.campaign_id` (nullable + kısmi indeks, migration `20261107100000_ScriptResponseCampaign`, yalnız EF AddColumn/CreateIndex). Rapor süzgeci: `CampaignId == c` VEYA (null ve kişinin kampanyası c).
+- **Doğrulama:** mutasyon (süzgeç geri) → beklenen 3, gerçek 2 KIRMIZI. Sunucu entegrasyon (DooD) 24/24.
+- **Commit:** `4035ec5c`.
+
+### 3. BR-BE-257 — XLSX içe aktarma + dışa aktarmada serbest alanlar
+- **Ne yapıldı:** `ContactImportXlsx.cs` (BCL ZipArchive + XmlReader, DTD yasak, entry başına okunan bayt sayarak 32 MB tavan, dosya 2 MB, 5000 satır, 64 kolon). Uç `Csv` ya da `Xlsx` (base64) alır. Export ek anahtarların birleşimini kolon olarak yazar (Redact'tan geçer). FE `ContactTransfer.tsx` .xlsx kabul eder; 9 dilde not.
+- **Doğrulama:** 5 yeni test; zip-bomb mutasyonu (`MaxEntryBytes=long.MaxValue`) KIRMIZI. vitest 19/19, `tsc -b` 0.
+- **Commit:** `b098d695`.
+
+### 4. BR-BE-258 — Scripter faz 2 (fonksiyon/veri/REST/e-posta/alt-script/cevap raporu)
+- **Ne yapıldı:** Domain'de `ScriptOperation` + doğrulayıcı + `ScriptSubscriptExpander`; Infra'da `ScripterRestSender` (OutboundHostGuard ön kontrol + ConnectCallback ile çözülen IP kontrolü = DNS rebinding savunması, 5 sn timeout, 64 KB yanıt, yalnız JSON, yalnız https/443), `ScriptOperationRunner`, `EfScripterRestConnectionStore` (sır ISecretProtector ile şifreli, `tenant_settings.scripter_rest_connections` jsonb, migration `20261107110000_ScripterRestConnections`). Uçlar: `GET/PUT /api/v1/scripts/rest-connections` (campaign.write + lisans; kaydetmede SSRF reddi IAuditSink ile denetime), `GET /api/v1/scripts/{id}/report/answers`. ADR: `doc/mimari/ADR-031-scripter-faz2-dugumleri.md`.
+- **Kapı düzeltmesi:** `deploy/migration-agir-ddl.py` generic `AddColumn<T>`'yi görmüyordu → regex genişletildi, öz-test 12/12, defter 171→187 ad.
+- **Doğrulama:** SSRF mutasyonu (ön kontrol kapalı) → 7 REST testi KIRMIZI, geri alınca 53/53. Sunucu entegrasyon (tam migration zinciri + RLS, iki tenant sızıntı testi dahil) 26/26 EXIT=0. Yeni DDL sunucu PG'de ROLLBACK'li ölçüm: üç DDL toplam 45 ms.
+- **Takip düzeltmesi:** red testi yalnız IAuditLog'u değiştiriyordu, red satırı IAuditSink'e gidiyor → test yük altında boş koleksiyon gördü. Sink de yakalayıcıya bağlandı.
+- **Commit:** `7f599cb2`, `659f2fec`.
+
+### Test özeti
+- Api.Tests (namespace parçalı): 1173 + 2366 (4 kırmızı → düzeltildi, Scripter 292/292) + 2421 (2 skip) + Platform/Health 1502.
+- Architecture 857/858 — tek kırmızı `DecisionCodeManifestTests` (backlog.md'de "Bitti (2026-11-07 olc…" satırı, `8be692b6`; bu turun dışı, backlog'a dokunma yasağı).
+- `dotnet format --verify-no-changes` rc=0. kapi_86 rc=0.
+- Compatibility kapısı genel KIRMIZI: bu turun dışındaki 5 migration onaysız (TenantModulesAndExtensionLimits, PbxForwardingPickupFeatureCodes, PbxOutboundRoutesEmergencyPhonebook, PbxFieldFeatures, TelefonOutbox).
+
+### Açık kalanlar
+- BR-BE-258 FE (tasarımcı/koşucu, operations/computed/pressedActions, rapor ekranı) → BR-FE-141 ajanı.
+- Gerçek SMTP/DNS/TLS ile REST/e-posta düğümü uçtan uca ölçülmedi; e-posta commit sonrası gider ama commit sonrası başarısızlıkta geri alınamaz; REST çağrısı istek transaction'ı içinde koşar.
+- İşlemler kapanışta (closure) koşmaz; yalnız adım ilerlemesinde.
+- `dat.csvFile` etiketi hâlâ "CSV dosyası" diyor.
