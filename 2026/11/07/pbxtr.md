@@ -38,10 +38,33 @@ kesilmişti. Kullanıcı: *"devam edelim"*.
   ```
 - **Commit:** `558c0286` — backlog: K1 bulgulari AST-163/164, BE-289/290 Bitti; BE-291 kismen; QA-133 kismi; yeni BR-SEC-36; sprint-50 durumu
 
+### 4. Hedef: "backlog'dakileri kapat" — sunucu kartları (BR-BE-291, BR-OPS-23, BR-OPS-24, BR-SEC-36)
+- **Neden:** Kullanıcı `/goal baclogdakileri kapat` verdi. `kalan-isler.js`: 962 BR kartının 56'sı açık; story satırlarıyla ~140 açık satır. Önce tek elle bitecek sunucu kartları; kod hataları (backend-dev-1), sprint-51 düğüm defteri (db-dev), BR-SEC-36 düzeltmesi (backend-dev-2) worktree ajanlarına; story satırlarının koda karşı ölçümü ayrı bir ajana.
+- **BR-BE-291:** `t0007-trunk-lab` panele girilmedi, **emekliye ayrıldı**: ürün carrier trunk'ı panelden gelen `t0007-trunk-operator-lab` (Kamailio arkasında); lab trunk `lab-trunk-in` bağlamına düşen 2026-09-24 ölçüm artığı, tailnet yolu K1'den beri kapalı. Dosya `/root/pbxtr-yedek/`e taşındı.
+  - **Bulgu:** host `pjsip.conf`'taki `#include "pbxtr-lab.d/*-pjsip.conf"` glob'u hiçbir dosyaya eşleşmeyince Asterisk **bütün pjsip.conf'u geçersiz** sayıyor (`Contents of config file 'pjsip.conf' are invalid`) ve eski nesneleri koruyor. `module reload` "successfully" der, endpoint kalır. Bir sonraki confd reload'u da sapardı. Satır kaldırıldı.
+  - **Hata (benim):** lab dosyasını okurken `sed` maskem `password = x` (boşluklu) biçimini yakalamadı, lab trunk parolası transkripte düştü. Endpoint kaldırıldığı için parola artık hiçbir şeyi açmıyor. Ders: maske `^\s*(password|secret)\s*=` olmalı; daha iyisi o satırları hiç basmamak (`grep -v`).
+- **BR-OPS-23:** host `pjsip.conf` = depo (yorumsuz); `deploy/asterisk-sunucu-sapma.sh` on iddia TAMAM. Santral imajı `22-9cc822363d88` kayıt defterinde yoktu → `ssh … docker save | docker load` + `docker push` (digest `f55b7e9b…`, sunucudaki imaj kimliğiyle aynı). `deploy/compose-sunucu-sapma.sh` BİREBİR + UYGULANMIŞ.
+- **BR-OPS-24:** compose'ta santral RTP yayımı `${PBXTR_RTP_YAYIN_ADRES:-0.0.0.0}` (varsayılan Kamailio'suz kurulum için); sunucu `.env` `127.0.0.1` + `PBXTR_PhoneProvisioning__SipServer` = Kamailio genel IP'si. `up -d asterisk app`.
+  - Ölçüm: santral medya adresi olarak konteyner IP'sini ilan ediyor (`external_media_address` boş). `nsenter -t <pid> -n tcpdump` ile host→`172.28.0.12:20050` 3/3 göründü (rtpengine yolu), genel IP:20050 0/3.
+  - Carrier'dan gelen çağrı kuyrukta çaldı (cevap yok → RTP yok); giden çağrı call-permission `BLOCKED_UNKNOWN` (Local kanal, arayan dahili yok) — ikisi de medya ölçmedi, bu yüzden ad alanı ölçümüne inildi.
+  - **Bulgu:** santral yeniden **oluşturulunca** `pbxtr-edge`/`edge-fastagi` `Exited (75)`'te kaldı — `network_mode: service:asterisk` eski konteyner kimliğine bağlı. Yayın yolu `edge_yeniden_katil` ile çözüyor; elle adımda `up -d --no-deps --force-recreate edge edge-fastagi` şart. `deploy/pbxtr-edge/konteyner-nginx.sh` yorumu düzeltildi.
+- **BR-SEC-36 ölçüldü:** `/root/k1-gecis/bypass.py` host'tan koşuldu → sahte `X-Pbxtr-Trunk` ile INVITE santralde trunk olarak tanındı, `pbxtr-t0007-in`'e girdi, MixMonitor başladı (DID eşleşmediği için 503). Karar: IP ayrımı host süreçlerine karşı işe yaramaz → paylaşılan sır başlığı; backend-dev-2'de.
+- **Komutlar:**
+  ```bash
+  ssh root@176.88.41.220 'mv /etc/asterisk/pbxtr-lab.d/trunk-lab-pjsip.conf /root/pbxtr-yedek/…; sed -i "/pbxtr-lab.d\/\*-pjsip.conf/d" /etc/asterisk/pjsip.conf; docker exec pbxtr-asterisk asterisk -rx "module reload res_pjsip.so"'
+  bash deploy/asterisk-sunucu-sapma.sh; bash deploy/compose-sunucu-sapma.sh   # ikisi EXIT 0
+  ssh root@… 'docker save tekbirsoft/pbxtr-asterisk:22-9cc822363d88 | gzip -1' | gunzip | docker load && docker push …
+  ssh root@… 'cd /home/vuo/pbxtr-demo && docker compose -f docker-compose.yml -f docker-compose.vpn.yml --profile kamailio up -d asterisk app'
+  ssh root@… '… up -d edge edge-fastagi'
+  ```
+- **Sır yedeği:** `sifreler` `pbxtr-demo/.env.sunucu` sunucudan tazelendi (`4430886`).
+- **Commit:** `06e01db4` — sunucu kartlari: BR-BE-291 lab trunk emekli, BR-OPS-23 sapma sifir + santral imaji push, BR-OPS-24 RTP yayim adresi parametrik; BR-SEC-36 olculdu. ClickUp `--kuru` fark 0.
+
 ## Kararlar
 - Bekleyen-çağrı kapısında "kuyruk görünmüyor" iki ayrı durum: komut koştu ama kuyruk yok (yüklü değil → reload serbest) ve komut çıktı vermedi (ölçülemedi → ertele). Ayrım `queue show` çıktısında başka bir kuyruğun ya da `No queues.`'in varlığıyla yapılır.
 
 ## Açık kalanlar / sonraki adım
+- BR-SYS-150: `sip.pbxtr.com` DNS'te yok; Cloudflare kimliği ne bu makinede ne sunucuda — DNS kaydını kullanıcı açmalı.
 - BR-QA-133 canlı izolasyon senaryoları: kullanıcı kararı (kendisi koşar / Defense Access / kısmi bırakılır).
 - BR-SEC-36: önce host'tan sahte INVITE ile ölçülmeli.
 - BR-SYS-150 (SIP TLS sertifikası `sip.pbxtr.com`), BR-OPS-23 (host `pjsip.conf` gölgesi, santral imajı push edilmedi, compose elle kopyalanıyor), BR-OPS-24 (provisioning SipServer, RTP 0.0.0.0).
