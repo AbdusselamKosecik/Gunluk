@@ -60,7 +60,24 @@ kesilmişti. Kullanıcı: *"devam edelim"*.
 - **Sır yedeği:** `sifreler` `pbxtr-demo/.env.sunucu` sunucudan tazelendi (`4430886`).
 - **Commit:** `06e01db4` — sunucu kartlari: BR-BE-291 lab trunk emekli, BR-OPS-23 sapma sifir + santral imaji push, BR-OPS-24 RTP yayim adresi parametrik; BR-SEC-36 olculdu. ClickUp `--kuru` fark 0.
 
+### 5. Story satırlarının ölçümü + ajan dalları + yayın b85a790a
+- **Story ölçümü (salt-okuma ajanı):** 97 açık satır → 26 BAYAT-BİTMİŞ, 7 KAPSAM-KARARI, 23 KOD-İŞİ, 29 CANLI-ÖLÇÜM, 12 DIŞ-BAĞIMLILIK. Üç örnek elle doğrulandı (RecordingPlayer dalga formu, `MapRingGroupEndpoints`, `AnswerAsync`). 33 satır kapatıldı (`8be692b6`).
+  - Yan etki: `DecisionCodeManifestTests` BL-DB-33'ü "planned" sanıyordu → `doc/mimari/decision-code-manifest.json` `telephony.ring-groups` `enforced` (sembol/route/test). Manifest SIKIŞIK biçimde kalmalı: JSON'u yeniden biçimleyince mutasyon testi metin değişimini uygulayamayıp kırmızı oldu (`da2f2a21`).
+  - Yama aracı: `kart.js` kartı satır başındaki `\n| KOD |` ile bulur; aksi hâlde başka satırın bağımlılık sütunundaki atıf "mükerrer" sayılıyordu.
+- **Birleştirilen dallar:** BR-SEC-36 (`320b10c7`), ops (BR-OPS-18 NG-01, BR-C2-1 kapi_89, ST-48 kuralları; `fa125194`), kod hataları (BR-OPS-22, BR-BE-256/262/283 CDR tek satır, BR-AST-132, BR-SEC-33; `ea05e2dd`), santral (BR-SEC-37, BR-AST-133, BR-AST-135; birleştirme), sprint-51 BR-DB-124/125 (`565efac2`, ADR çakışması iki bölüm korunarak), FE bağlama (G-17, BR-FE-148, P-03, P-04, BR-FE-141; `b85a790a`). Her birleştirmeden sonra `dotnet build pbxtr.sln` 0 hata; `dotnet ef migrations has-pending-model-changes --context PbxtrDbContext` → değişiklik yok; `tsc -b` 0.
+- **Yayın sırası (BR-SEC-36):** sır `.env`'e sunucuda üretildi (`openssl rand -hex 32`, yalnız uzunluk 64 basıldı), `sifreler` yedeği (`a843fce`); confd zamanlayıcısı durduruldu; `bash deploy/yerel-yayin.sh --yayinla --testsiz --santral` (bu kip uygulamayı da `demo-b85a790ac935`'e aldı).
+  - **KESİNTİ (benim hatam):** sunucu compose'u eskiydi ve sır değişkenini santrale geçirmiyordu → yeni giriş betiği `exit 78`, santral ~13:50–13:52:28Z kapalı (~2,5 dk). Yayın betiğinin SSH'ı da koptu (EXIT 255). Düzeltme: depo compose'u kopyalandı, `up -d --no-deps --force-recreate asterisk`, ardından edge yeniden katıldı. **Ders:** imaj yeni bir zorunlu env isterse compose ÖNCE sunucuya gider; santral dalı compose'u taşımaz.
+  - Kamailio imajı sunucuda `git archive b85a790a deploy/kamailio | ssh … docker build -t pbxtr-kamailio:6.0.8-b85a790a`; `.env` `PBXTR_KAMAILIO_IMAGE` (yedek `.env.yedek-kam-b85a790a`); `up -d --no-deps kamailio` → healthy; JSONRPC `dispatcher.list`: set 1 + 100–103 `AP`.
+  - confd yeniden başlatıldı → `SONUC: dugum paketi teslim edildi`, `pbxtr-t0007-kam-in` kapısı yüklü, `t0007-1042` bağlamı `pbxtr-t0007-kam-out`.
+  - `deploy/telefon-db/kur.sh --konteyner pbxtr-postgres` (`PBXTR_TELDB_*` .env'den süreç ortamına, basılmadan) → `cdr`/`cel` kuruldu.
+  - sysagent: `dotnet publish src/Pbxtr.SysAgent -c Release` → `install` (yedek `/root/pbxtr-yedek/pbxtr-sysagent.yedek-20261107`), katalog 83 komut.
+- **Canlı ölçümler:** sahte trunk INVITE → `REDDEDILDI` + `Hangup(21)`, MixMonitor yok; carrier→DID kapıdan geçti, kuyruk 1042'yi çaldırdı; host'tan `From: t0007-1042` + `*8` → `kam-out` reddi (BR-SEC-37); NG-01 uygulama kullanıcısıyla (`setpriv --reuid=1654`) exit 0, 1 adet 502, IP `172.28.0.x` (root peer `uid_mismatch` ile reddedildi — doğru).
+- **ST-48:** yeni sayaç penceresi 12:33Z; kilit en erken 2026-11-09 12:33Z.
+- **Commit'ler:** `2ada07e5` (backlog 19 kart + yeni BR-BE-292), ClickUp yeni 2, yazılan 18, `--kuru` fark 0.
+
 ## Kararlar
+- Kamailio sır başlığı: IP ayrımı host süreçlerine karşı işe yaramaz (bridge adresine rootsuz süreç de bağlanır) → paylaşılan sır + dialplan kapı bağlamı; panelden originate (`Local/…@-out`) kapıdan geçmez, yalnız endpoint girişleri geçer.
+- BR-AST-134 masa telefonu: Karar #46 nedeniyle NOTIFY yok → kuyruk üyesi INVITE'ına agent ayarına bağlı `answer-after=0`.
 - Bekleyen-çağrı kapısında "kuyruk görünmüyor" iki ayrı durum: komut koştu ama kuyruk yok (yüklü değil → reload serbest) ve komut çıktı vermedi (ölçülemedi → ertele). Ayrım `queue show` çıktısında başka bir kuyruğun ya da `No queues.`'in varlığıyla yapılır.
 
 ## Açık kalanlar / sonraki adım
