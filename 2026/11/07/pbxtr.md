@@ -286,3 +286,11 @@ Kararlar: `doc/mimari/ADR-024-backlog-kapanis-2026-11-07.md`.
 ### Yeni kartlar
 - BR-SEC-40: alarm_rules.queue_id tenant denetimi yok.
 - BR-AST-166: confd'de ertelenen tür 304'te kalıyor.
+
+### 4. Yayın `5ed75a0a` (app + santral) ve canlı ölçümler (19:50–20:05Z)
+- Bellek baskısı yüzünden sistem tam Integration koşusunu durdurdu; yeniden başlatılmadı. Kanıt olarak etkilenen sınıflar 170/170, Architecture 895/895, FinalDeliveryReport 25/25.
+- Santral yayınından sonra gölgeleme kapısı uyarı verdi: host `/etc/asterisk/asterisk.conf` (Eylül) imajın dosyasını gölgeliyordu. Tek fark BE-285'in `#tryinclude "pbxtr.d/global/systemname.conf"` satırıydı ve `System name` boş kalıyordu.
+  - Çözüm: host kopyası `/root/pbxtr-yedek/asterisk.conf.host-golge-20261107`'ye taşındı, `up -d --force-recreate asterisk` ile imaj dosyayı tohumladı, edge'ler yeniden katıldı. `System name: ast-01`.
+- **Ölçüm:** `channel originate Local/9999@pbxtr-t0007-local application Wait 3` ile uniqueid `ast-01-1794081569.0` oluştu ve `call_events`'e 4 olay `node=ast-01` damgasıyla yazıldı. S11 TAMAM, sapma kapısında kırmızı yok.
+- **BR-BE-293 geri doldurma:** `docker compose exec -T app dotnet Pbxtr.Api.dll cdr-terk-geri-doldur [--kuru]`. Sıra kuru → yaz → kuru: `aday=41` → `yazilan=41` → `aday=0`.
+- Backlog: BE-285 ve BE-293 Bitti, K-06 ölçü (3) sağlandı. Commit `ab25f8ea`.
