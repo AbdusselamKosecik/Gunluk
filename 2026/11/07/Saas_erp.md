@@ -69,3 +69,39 @@ Hedef: "backlog'u tamamlayalım". Kurul onaylı dilimler paralel worktree'lerde 
 - E2 S3 (wte7): çakışma çözümü ve split uyarlaması bitince `prep` ve `ship`.
 - E5 S3 bölme diyaloğu için UX post-check.
 - E7 S3b-2, E6 S3b/S4 ve E2 S4b-2 kurul koşullarını bekliyor.
+
+## Akşam (18:30–22:00)
+
+### 4. Kayıp migration olayı ve düzeltme
+- **Ne oldu:**
+  - E7 S4 (`UX_InventoryReceipt_PackingBox`) ve E10-3b (`InventoryReceiptItem.ExpiryDate`) dev'e migration'sız gitmişti.
+  - Sebep: `prep.sh` yeniden koşuda kaydedilmiş `<tag>-mig` klasörünü kenara alıyordu.
+  - Gözden kaçtı, çünkü PG testleri şemayı `EnsureCreated` ile modelden kuruyor.
+- **Düzeltme:** `d415070e`. Orijinal elle yazılmış gövdeler geri kondu:
+  - `E10_3b_ChemicalExpiryDate`
+  - `E7S4_ApparelFinishedGoodsSourceUnique` (CONCURRENTLY + suppressTransaction)
+- **Doğrulama:** boş `postgres:17` konteynerine (port 55432) tüm zincir `dotnet ef database update` ile uygulandı; indeks ve kolon mevcut. Unit 8989 geçti.
+- **Hat değişiklikleri:**
+  - `prep.sh` mig klasörünü yalnız worktree'de yeni migration varsa kenara alıyor.
+  - Her dilimde `PENDING_CHECK:` satırı basılıyor.
+  - `autoship.sh`, "No changes have been made" görmeden push etmiyor.
+
+### 5. Push edilen dilimler (akşam)
+
+| Commit | Dilim | Not |
+|---|---|---|
+| `e48bf677` | E10-2 | Paketleme ve sarımda atık / yan ürün satırları (`OutputKind` + CHECK, `WasteQuantity`, Ana-only raporlar). PG testi seed düzeltmesi: `StockAllocationDocument` FK; `Receipt` navigasyonu yüklenmediği için toplam SQL'de. |
+| `ecde6651` | E7 S3b-1 | `inventory.ReceiptItemBox`, `BoxShipLock`, `IBoxShippedQuery`. Logistics'te sevk edilmiş koli void/iptal/silme reddi. Sunucu tarafı koli doğrulaması. `CreateReceipt` çakışması: `ExpiryDate` + `BoxIds` birlikte. |
+| `a655e6c9` | E2 S3 | Depolar arası transferde lot/seri taşıma (Direction 0). E5 S3 uyumu: split çocuğu transfer edilebilir; transferden sonra bölünen lotun transferi geri alınamaz. CHECK `(-1,0,1,2)`. Testler 2 parçalı bölmeye çevrildi (bölme en az 2 parça ister). |
+
+- Her dilim için kapılar: unit, typecheck, lint, vitest, PENDING_CHECK, PG karşılaştırması (yalnız dilimde kırılan yok). Ayrıca boş PG17'ye tüm migration zinciri uygulandı.
+
+### 6. RAM olayı
+- Arka plandaki autoship, düşük bellek yüzünden sistem tarafından öldürüldü.
+- Asılı kalan `testhost` (5,2 GB) ve `VBCSCompiler` kapatıldı (`taskkill`, `dotnet build-server shutdown`).
+- Dilimler tek tek yeniden geçirildi.
+
+## Açık kalanlar (akşam sonu)
+- UX post-check: E5 S3 bölme diyaloğu, E10-2 paketleme alt satırları, E2 S3 transfer lot seçici (yerel yığın, yalnız push edilmiş ref).
+- E7 S3b-2: UX tasarım notu gerekli. E6 S3b/S4 ve E2 S4b-2: önceki kurul koşulları bekleniyor.
+- Arda: `orders.variant.no_inventory` mükerrer mesaj.
