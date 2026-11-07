@@ -210,3 +210,31 @@ Dal: `worktree-agent-ac32c2707996329cd` (push edildi; ana dala birleştirme back
 - **BR-AST-165:** teslim onayı (tenant × düğüm) başına tutulmalı; havuz paketinin önkoşulu.
 - **BR-OPS-25:** `confd-boyut-olc.sh` exit 69 veriyor.
 - K-05, ST-08 ve BR-SYS-153 **Bitti**; AST-156/157 **Devam**.
+
+## Ek tur — backend-dev-1 worktree (agent-a980506b47610e081): M-04 / O-05 / BL-LIC-02 / BL-LIC-03 / S24-3
+
+Dal: `worktree-agent-a980506b47610e081` (push edildi; main'e birlestirme ve backlog satirlari ust ajanda).
+Kararlar: `doc/mimari/ADR-024-backlog-kapanis-2026-11-07.md`.
+
+### 1. M-04 + BL-LIC-02 + BL-LIC-03 — commit `d4e7d020`
+- **M-04:** `campaigns.callback_interval_minutes` (NULL = tenant `auto_callback_interval_minutes`), cozum kampanya > tenant > varsayilan (`CallbackPolicy.ResolveInterval`); `callback_entries.campaign_id` kayitta kuyrugun kampanyasindan kopyalanir. Migration `20261107135159_CampaignCallbackInterval`. #30 kampanya formunda alan.
+- **BL-LIC-02:** `locked` kademede muaf olmayan GET de 403 + denetim; kimlik/menu/ws/lisans/cari `[LicenseExempt]` kapali liste (11 rota). Kill switch + aktif cagri korumasi aynen.
+- **BL-LIC-03:** kisitli kipte dialer preview (`DialerLicensePolicy`, `DialerCallDispatcher.ApplyLicenseModeAsync`), gecis basina denetim + canli alarm, #30 serit. Migration `20261107140549_DialerLicensePreview`.
+
+### 2. S24-3 — commit `874bf65e`
+- `departments` + `department_members` (RLS, bilesik FK; kullanici uyeligi `users(id, home_tenant_id)`), uclar `/api/v1/departments` (`department.read/write`, bundle.user), #02 bolumu, #23 departman kirilimi (borc notu kalkti), manifest `telephony.department` enforced. Migration `20261107142901_Departments`.
+- Altin listeler: owner 103, supervizor 84, tenant isletme 87. Entegrasyon sizinti testi (RLS + FK + EF + bayi baglami) gercek PG'de yesil.
+
+### 3. O-05 — commit `64b639c8`
+- `tenant_storage_quotas` (satir yok = kota yok). `tenants` kolonu denendi: gercek PG `42501` (Karar #64 kolon bazli UPDATE yetkisi) -> ayri RLS'li tablo. Migration `20261107160318_TenantStorageQuotas`.
+- `GET /api/v1/storage`, `PUT /api/v1/storage/quota` (tenant.license + global), yukleme kapisi 507 `STORAGE_QUOTA_EXCEEDED`, ses kaydi aktarimi atlanir (cagri etkilenmez), #34 kota cubugu.
+
+### Test ozeti
+- Api.Tests: Platform 1554/1557 (3 skip), Modules iki parca 1921 + 3414 yesil (tek parca kosu 15. dakikadan sonra yuk altinda 133 sahte kirmizi verdi — parcalayinca hepsi yesil).
+- Architecture 880 (son kosu: 4 kirmizi duzeltildi, hedefli tekrar yesil). FE tsc -b temiz, vitest 2542/2542.
+- Integration (Docker, tam zincir): 1329 gecti; kalan kirmizilar ONCEDEN VAR (audit_log/cdr bolum yok, BackgroundJobLocks, FinalDelivery kanonik revizyon, EnumMirror'da baskalarinin 6 CHECK'i).
+- Mutasyonlar: departman HomeTenantId + tasima; O-05 kapi, atlama, IgnoreQueryFilters, purged filtresi — hepsi yakalandi.
+
+### Acik kalanlar
+- Kota yazma ekrani yok (uc hazir). Platform/bayi destek eki ve sesli mesaj kotaya takilmaz (bilinçli).
+- `deploy/migration-compatibility-guard.py` main'de onceden kirmizi (onaysiz eski migration'lar); yeni dort migration bulgu uretmiyor.
