@@ -238,3 +238,51 @@ Kararlar: `doc/mimari/ADR-024-backlog-kapanis-2026-11-07.md`.
 ### Acik kalanlar
 - Kota yazma ekrani yok (uc hazir). Platform/bayi destek eki ve sesli mesaj kotaya takilmaz (bilinçli).
 - `deploy/migration-compatibility-guard.py` main'de onceden kirmizi (onaysiz eski migration'lar); yeni dort migration bulgu uretmiyor.
+
+## Ek tur — realtime canlıda `on`, birleştirmeler, kritik sızıntı (17:20–19:30Z)
+
+### 1. BR-AST-156 — Asterisk realtime canlıya alındı (ADR-023 §9.6 kesme sırası)
+- **Adımlar (sunucu 176.88.41.220):**
+  1. `deploy/telefon-db/kur.sh --konteyner pbxtr-postgres`. 02c tabloları + yetkiler kuruldu. PBXTR_TELDB_* değişkenleri .env'den basılmadan yüklendi.
+  2. Compose'a santral `PBXTR_REALTIME/PBXTR_DUGUM/PBXTR_TELDB_HOST/PBXTR_TELDB_ASTERISK_PASSWORD`, uygulama `PBXTR_Telephony__Realtime__Mode` eklendi. `.env`: `PBXTR_REALTIME=true`, `PBXTR_DUGUM=ast-01`, `PBXTR_REALTIME_MODE=off`. `up -d --no-deps asterisk`, ardından edge'ler yeniden katıldı. `realtime show pgsql status`: Connected. S8 YALNIZ SELECT.
+  3. `PBXTR_REALTIME_MODE=shadow`, app yeniden yaratıldı. `docker exec pbxtr-app dotnet Pbxtr.Api.dll telefon-projeksiyon yeniden-kur` → **KeyNotFoundException**. Aynı komut `-e PBXTR_Telephony__Realtime__Mode=off` ile yeşil (8 tenant, 43 satır); hata realtime yolunda.
+     - **Kök:** `TelefonKaynakOkuyucu` sorgusu `GroupBy(Kind).Select(g => g.OrderByDescending().First()).Select(new{..})`. EF Core bunu `'EmptyProjectionMember'` KeyNotFound hatasıyla çeviremiyor. Sorgu tür başına tek satırlık iki sorguya bölündü.
+     - Yeni `TelefonKaynakOkuyucuRealtimeTests` gerçek PG'de koşuyor: eski sorguyla aynı istisnayla KIRMIZI, düzeltmeyle yeşil. Önceki realtime testleri kaynağı elle kurduğu için bu sorgu hiç koşmamıştı.
+     - CLI artık yığın çerçevelerini de basıyor (istisna mesajını basmıyor).
+     - Yayın `81af581d` sonrası shadow'da yeniden-kur 110 satır yazdı. Parite birebir: 31 tenant endpoint = 31 `ps_endpoints`, 3 kuyruk = 3 `queues`.
+  4. Yeni confd kuruldu, `PBXTR_REALTIME_MODE=on`. İlk tur kanarya t0007 oldu: pjsip mezar taşı yazıldı, ama queues **"BEYANSIZ KUYRUK KAYBI -> general"** ile durdu.
+     - **Kök:** mezar taşı tenant parçasının `[general] persistentmembers=no` satırını da düşürüyor. Bu davranışı değiştirmez, çünkü imajın ana `queues.conf`'u `persistentmembers = no` diyor ve tenant parçalarından önce okunuyor. Ama kayıp kapısı `general`'i kuyruk sanıyordu.
+     - Düzeltme `pbxtr-confd-dugum.sh`'ta. Öz-test F66 canlı defter biçimini (`general` satırı dahil) kullanıyor, M50 mutasyonu eklendi; 356/356.
+     - Öz-testin fikstür defteri `general` taşımadığı için kapı bu durumu hiç görmemişti.
+  5. Ertelenen tür sonraki turlarda 304 aldı. Bu ayrı bir kusur, BR-AST-166 olarak kartlandı. `state.json` etag'i boşaltılınca tam teslim gerçekleşti; üç tenantın pjsip ve queues dosyaları mezar taşına döndü (0 bölüm), `queue reload` koştu.
+- **Doğrulama:**
+  - Endpoint 31 ve kuyruk 3, ikisi de realtime'dan geliyor.
+  - Üyelik `QueueMembershipSyncJob` ile yaklaşık 1 dk'da geri geldi: 12 üye, kesmeden önceki sayı.
+  - S1–S10 yeşil.
+  - Gerçek telefonla test çağrısı yapılmadı; kayıtlı cihaz yok.
+- **Commit'ler:** `240b898d` (okuyucu + compose + env şablonu), `bd93b6eb` (confd general + bayat bekçiler).
+
+### 2. Birleştirilen ajan dalları
+- `81af581d`: BR-BE-292 (kuyruk dışı çağrıda CDR agent) ve BR-QA-137. Kök neden ürün kusuruydu: `idle_in_transaction_session_timeout=15s` aşılıyordu. RawSqlAllowlist 7→8 kabul edildi.
+- `efcbe5f9`: M-04, O-05, BL-LIC-02/03, S24-3 (ADR-024).
+  - i18n JSON çakışmaları iki taraf da korunarak çözüldü, mükerrer anahtar yok.
+  - `doc/ekran-yazma-yollari.md` `PBXTR_WRITE_DOCS=1` ile yeniden üretildi.
+  - `migration-agir-ddl.py --uret` → 194 ad.
+- **QA-138:** **KRİTİK SIZINTI.** `EfAnalyticsQuery.GetQueueSlaAsync` içindeki üç ham SQL'de tenant koşulu yoktu. RLS'nin bayi dalı aktif tenant'ı denetlemediği için bayi kullanıcısı, kendi altındaki tüm tenant'ların kuyruk ve CDR sayılarını görüyordu. Düzeltme yayında: `demo-bd93b6eb`. 40/65 adaptör iki-tenant testli.
+- **Bekçi tazelemeleri:**
+  - EnumMirror'a 3 CHECK eklendi (telephony_nodes.state, node_affinity.object_kind, conference_rooms.video_mode).
+  - st44 kanonik raporu ve insan raporunun şema revizyonu güncellendi.
+  - TenantLeakCoverage genel borç tavanı 51→50→53 (BE-285'in üç yeni yüzeyi gerekçeli kayıt).
+- `df249e6d`: BR-BE-285 çok düğümlü sağlayıcı.
+  - ADR §8.4, §9 realtime bölümünden önceye kondu.
+  - **Karar #92:** `call_events.node DROP DEFAULT`. Migrate ile app arasındaki ~10 sn'lik pencere CEL mutabakatıyla kapanıyor; Down mevcut.
+- BR-BE-293 (ADR-032, tek sayım tanımı + `cdr-terk-geri-doldur`) birleştirildi.
+  - DROP DEFAULT sonrası QA-138 ve BE-293 test fikstürleri 23502 verdi; `node` damgası eklendi.
+  - **Ders:** `Sla*` sınıfları `node` sütunu olmayan ayrı bir şema fikstüründe koşuyor. Aynı yamayı onlara uygulamak 29 kırmızı (42703) üretti ve geri alındı. Fikstürleri körlemesine yamamadan önce hangi şemaya yazdıklarını ölç.
+
+### 3. Yayın öncesi dökümlere rotasyon
+- `staging-yayin.sh`: en yeni 10 `pre-*.dump` tutulur. Sunucuda 75 döküm (2,2 GB) birikmişti; 10'a indirildi (541 MB). Commit `4cee1d66`.
+
+### Yeni kartlar
+- BR-SEC-40: alarm_rules.queue_id tenant denetimi yok.
+- BR-AST-166: confd'de ertelenen tür 304'te kalıyor.
