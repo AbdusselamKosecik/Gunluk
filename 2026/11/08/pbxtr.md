@@ -45,3 +45,14 @@
   - Onarımdan sonra sağlık bozuksa yedeği geri koyar.
 - **Öz-test (kapi_53) 22/0.** Mesai kapısının dört senaryosu (S9-S12) ve M4 mutasyonu kaldırıldı. Kapı 2026-10-18'de betikten çıkarılmıştı; senaryolar o günden beri hep kırmızıydı ve kapi_53'ü fiilen kaldırıyordu. Commit `c10b48b6`.
 - **Ders:** hep kırmızı kapı = kaldırılmış kapı. Bunu yeni senaryo eklenirken ajan fark etti.
+
+### 5. BR-QA-138 son tur ve K-06 kapanışı (birleştirme `316990c9`)
+- Kalan 25 adaptöre iki-tenant sızıntı testi eklendi (4 yeni sınıf, 22/22). Borç tavanı 25 → 0; artık 65/65 adaptör testli.
+- Bayi/platform yüzeylerinde sızıntının tanımı ayrı: bayi B, bayi A'nın tenant'larını göremez. `TenantLeakProbe`'a ikinci bayi `DealerB` eklendi.
+- Yeni sızıntı bulunmadı. Mutasyon 5/5 kırmızı. Leak filtresi 132/132, Architecture 895/895.
+- **K-06 Bitti:** üç ölçü de sağlandı.
+  - Sızıntı 0, 65/65 adaptör.
+  - p99 < 50 ms (E-09).
+  - SLA/terk tek tanımda (BE-293).
+- Yeni kart **BR-SEC-41**: LeaveCalendar userId ve RingGroup yedek hedeflerinin tenant aidiyeti denetlenmiyor. Ölçülmedi.
+- Commit `d1af35b1`.
