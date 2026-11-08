@@ -147,3 +147,10 @@
 - **Koordinator karari:** migration-compatibility-guard CHECK DROP/ADD'de kirmiziydi; yeni yuklemler ust kume, emsal Karar#59/#91 -> **Karar#94** `yonetim/kurul-kararlari.md` + `deploy/migration-contract-onay.blobs` (blob 3617bcc3). Commit `3edb1a5f`.
 - **Dogrulama (main):** guard OK (ONAYLI Karar#94), agir-ddl paritesi 198, capraz-kip iki kapi OK, st44 revizyonu IvrPaymentNode; build 0 hata; Architecture 1020/1020; Api Ivr/Payment/Stasis 259/259; Integration EnumMirror/FinalDelivery/IvrTenantLeak 132/133; tsc -b temiz; vitest 58/58. Ajan: 9 mutasyon kirmizi.
 - **Backlog:** BR-AST-169, M-05, M-09 Bitti (yayin bekliyor); yeni BR-QA-139 (canli tahsilat cagrisi + app_data + CHECK red testi). ClickUp fark 0.
+
+### BR-AST-157 — confd havuz paketi (linux-uzmani ajani) + iki dogrulama notu
+- **Ne yapildi (bd75e0bb, main'e ff):** `ProvisioningNodePool` (saf sinif): Mode=on + kayitli dugum -> kumedeki tum tenant'larin dialplan + sesi; node-bundle/media/rapor ayni kume; saglik esigi = teslim kumesi boyutu. Kurul #77 pin kapisi: kayitli dugumun sakinleri = tum kume (yeni bos ast-02'ye tenant sahibinin pinleyip tum dialplan'i cekme acigi kapandi; entegrasyon mutasyonu 201 ile kanitladi).
+- **Dogrulama (main):** build 0 hata; Api Provisioning/TelephonyCluster/ApiKey 371/371; capraz-kip iki kapi OK. Ajan: Integration (sunucuda gercek PG) 28/28, confd selftest 409/409, 8 mutasyon.
+- **Olcum notu 1 — Architecture 1018 goruldu:** main oncesi 1020'ydi. `--list-tests` iki commit'te ayni; d9fb2827 gecici worktree'de derlenip ikisi TRX ile kosuldu -> ikisi de **1020/1020**, vaka adlari birebir ayni. 1018 eksik kalmis bir kosuydu (olcum kaybi), gerileme degil. Komut: `git worktree add <tmp> d9fb2827` + `dotnet test ... --logger trx` + `grep -o testName= | sort | diff`.
+- **Olcum notu 2 — BR-AST-168 Windows:** tam confd selftest Windows'ta 408/408 (Linux 409; fark Linux'a ozgu izin kapisi, onceki 394/395 ile ayni desen).
+- **Backlog:** BR-AST-157 Bitti (yayin + Mode=on gecisi bekliyor), yeni BR-BE-294 (teslim damgasi okuyuculari dugum basina tabloya). ClickUp fark 0.
