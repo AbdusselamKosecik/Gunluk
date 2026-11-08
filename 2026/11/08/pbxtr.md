@@ -161,3 +161,9 @@
 - **Dogrulama (main):** build 0 hata; Api Recording 235/235; Architecture RawSql/BackgroundJob/Audit/TenantLeak 44/44; capraz-kip iki kapi OK; tsc -b; vitest auditActionParity+AuditScreen 19/19 (ajanin worktree'sinde node_modules yoktu, ben kostum). Ajan: 8 mutasyon kirmizi.
 - **Devreye alma:** yayin -> report kipinde bir dongu (beklenen silinebilir 9) -> `PBXTR_RecordingStorage__SpoolPurgeMode=delete`.
 - **Backlog:** BR-SYS-154 Bitti, yeni BR-SYS-156 (kayip kayitlar: CDR billsec>0 ama dosya/satir yok + bos 44 B WAV karari). ClickUp fark 0.
+
+### BR-SYS-156 — "kayip kayitlar" olculdu: hata yok (backend-dev-2 ajani)
+- **Bulgu:** CDR billsec>0 + dosyali 28 cagrinin 8'i aktarilmis; 20'si 10-24 ve 10-25 test temizliklerinde BILEREK silinmis (bu Gunluk'teki 2026/10/24 ve 2026/10/25 kayitlari birebir dogruluyor). CDR satirlari salt-okur Asterisk DB'de kaldi. (Ders: gunluk "yeniden yapilabilir tarif" oldugu icin kanit oldu.)
+- **Ne yapildi (c96226bf):** kod duzeltmesi yok; `doc/mimari/br-sys-156-kayip-kayitlar-ve-bos-wav-olcumu.md`. Bos 44 B WAV icin RecordingSpoolPurgeJob'a fail-closed dal (CDR'da billsec>0 yok + >=24 sa + kanonik bos baslik), varsayilan kip report.
+- **Dogrulama (main):** build 0 hata; Api Recording 248/248; Architecture ilgili 44/44; Integration SpoolLedger 2/2; capraz-kip iki kapi OK. Ajan: 7 mutasyon kirmizi.
+- **Backlog:** BR-SYS-156 Bitti; yeni BR-SYS-157 (gercek kayip bugun iz birakmaz -> alarm). ClickUp fark 0.
