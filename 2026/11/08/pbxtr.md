@@ -121,3 +121,8 @@
 - **Dogrulama (main'de):** build 0 hata; Architecture ilgili 114/114; Api TelephonyCluster/SystemOps/CommandCatalog 103/103; kapali liste paritesi temiz. Ajan: 54/54 yeni test, 8 mutasyon kirmizi (biri gercek acik: .NET `$` sondaki \n'i kabul ediyordu).
 - **Backlog:** BR-SYS-148 Bitti (kurulum bekliyor), yeni BR-FE-151 (#80 dugmesi). Commit `dc152aef`. ClickUp fark 0.
 - **Sunucu:** KURULMADI. Yayin (50fa1f81..dc152aef) + ajan ikilisi kurulumu yerel bellek bosalinca birlikte.
+
+### BR-FE-151 — #80 Baslat/Durdur dugmesi (frontend-junior ajani, birlestirildi)
+- **Ne yapildi:** `telephonyClusterApi.ts` runClusterNode; `telephonyClusterView.ts` nodeRuntimeActions (sunucu kuraliyla ayni) + runtimeProblemMessage (409 default_node/runtime_state_not_allowed/cikis 75, 503 agent_unavailable); `TelephonyClusterNodes.tsx` dugmeler + TransitionDialog -> ConfirmNodeDialog genellemesi; denetim etiketi + 9 dil i18n.
+- **Dogrulama (main'de):** `npx tsc -b` temiz; `npx vitest run TelephonyClusterScreen auditActionParity` 27/27. Ajan: mutasyon (isDefault kontrolu) kirmizi.
+- **Commit:** `2a0e66b2` (merge ff), backlog ayri commit. ClickUp fark 0. Sunucuya yayin bekliyor.
