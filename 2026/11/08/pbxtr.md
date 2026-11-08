@@ -139,3 +139,11 @@
 - **Olcum (ajan, confd-boyut-olc):** N=50 docker 448 -> 50, uretim T 151 -> 62 sn, tavan ~61 -> ~253 tenant/dugum; gercek santralde 310 ad 5,3 sn, cikti eski yolla bayt bayt ayni.
 - **Dogrulama (main):** kapi_70'in 5 adimi rc=0 (parite, parite oz-test 9/9, privilege, helper, ayrac 14/14); build 0 hata; Architecture ilgili 175/175; Api TelephonyCluster 41/41. Windows tam confd selftest arka planda.
 - **Backlog:** BR-SYS-155, BR-AST-168 Bitti (yayin bekliyor). ClickUp fark 0.
+
+### BR-AST-169 — IVR tahsilat santral tarafi (backend-dev-2 ajani) + Karar#94
+- **Neden:** M-05/M-09'un eksik yarisi: IVR'da tahsilat dugumu, kayit susturma, hanelerin isleyiciye tasinmasi.
+- **Kritik olcum (ajan, sunucuda salt-okur):** AMI kullanicisinin okuma izni `dialplan` sinifini tasiyor -> ADR'deki `Read()` her degeri `VarSet` olayiyla AMI'ye DUZ METIN yayardi. Tasarim degisti: haneler Stasis oturumunda ARI tus olaylarindan toplanir. (Ders: "belge santral degildir" -- ADR'nin adimi olculunce PCI ihlali cikti.)
+- **Ne yapildi (e9ff8e45, merge c4edab39):** IVR tipi `payment` + migration `20261108120000_IvrPaymentNode`; ConfigRenderer: sonuc bosalt -> StopMixMonitor -> TryExec(Stasis(pbxtr,pbxtr-pay)) -> MixMonitor(ab) -> yalniz approved onay dalina (fail-closed); `AriIvrPaymentSessions` + AriStasisApp devri; editor + 9 dil.
+- **Koordinator karari:** migration-compatibility-guard CHECK DROP/ADD'de kirmiziydi; yeni yuklemler ust kume, emsal Karar#59/#91 -> **Karar#94** `yonetim/kurul-kararlari.md` + `deploy/migration-contract-onay.blobs` (blob 3617bcc3). Commit `3edb1a5f`.
+- **Dogrulama (main):** guard OK (ONAYLI Karar#94), agir-ddl paritesi 198, capraz-kip iki kapi OK, st44 revizyonu IvrPaymentNode; build 0 hata; Architecture 1020/1020; Api Ivr/Payment/Stasis 259/259; Integration EnumMirror/FinalDelivery/IvrTenantLeak 132/133; tsc -b temiz; vitest 58/58. Ajan: 9 mutasyon kirmizi.
+- **Backlog:** BR-AST-169, M-05, M-09 Bitti (yayin bekliyor); yeni BR-QA-139 (canli tahsilat cagrisi + app_data + CHECK red testi). ClickUp fark 0.
