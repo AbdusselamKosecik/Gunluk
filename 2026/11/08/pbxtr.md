@@ -173,3 +173,10 @@
 - **Onemli mutasyon:** uretim DI fabrikasi kipi dusurunce derleme yesil ama saglik isi havuzu hic gormuyordu -- test yakaliyor.
 - **Birlestirme:** `InfrastructureServiceCollectionExtensions.cs` iki dalda (BR-SYS-156 + BR-BE-294) otomatik birlesti -> build 0 hata, Architecture TAM 1020/1020, Api 596/596, Integration 10/10, capraz-kip iki kapi OK.
 - **Koordinator karari:** `hazirlaniyor` dugum paketi almaya devam eder (saglik kapisi sart) ama teslim okuyucularinda sayilmaz -> yeni BR-BE-295. Backlog commit ayri, ClickUp fark 0.
+
+### BR-SYS-157 + BR-BE-295 (backend-dev-2 ajani)
+- **BR-SYS-157:** kayip kayit artik kalici iz birakir -- RecordingTransferJob pencere kenarini gecen cagriyi bir kez yargilar; denetim `recording.transfer.lost` + alarm (5104/5105/5106); `pbxtr_sys.etl_cursor` 'recording-transfer-loss' imleci yalniz ileri, ilk kurulumda bugunden baslar (gecmis test silmeleri alarm uretmez).
+- **BR-BE-295 (koordinator karari):** `hazirlaniyor` dugum teslim okuyucularinda sayilmaz, paket almaya devam eder.
+- **Birlestirme (a3686139, ff) + koordinator:** capraz-kip-yazma-daraltma KIRMIZIYDI (ajan "set noktasi degismedi" diye kosmamisti) -- iki aralik yalniz satir kaydi (yazma=yok) -> `--dondur`, commit `2fa2320d`. (Ders: "degismedi" gerekcesiyle kosulmayan kapi bulgu degildir; kapi satir numarasina da bakar.)
+- **Dogrulama (main):** build 0 hata; Api 690/690; Integration 13/13; capraz-kip iki kapi OK; tsc -b temiz. Ajan: Architecture 1020/1020, 12 mutasyon kirmizi.
+- **Backlog:** ikisi Bitti. ClickUp fark 0.
