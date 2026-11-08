@@ -60,8 +60,55 @@
   - **RESUME ile ikinci koşu:** `regen` "ADD FAILED" verdi ve `clday` changelog'u bozdu. Changelog origin'den geri alınıp madde elle eklendi; ardından `gates.sh` ve `ship.sh` koşuldu. Hafıza notu: `autoship-rerun-pitfall`.
   - **Push:** ilk denemede DNS hatası verdi (github.com çözülemedi). Tekrar denendi ve başarılı oldu.
 
+### 4. UX düzeltmeleri — push edildi
+- **Commit:** `cf7c2d85`.
+- **Lot bölme diyaloğu:**
+  - Miktarlar `formatLocale` ile gösteriliyor (Türkçe arayüzde ondalık virgül).
+  - Boş veya geçersiz miktarda satır içi mesaj çıkıyor.
+  - Hatalı girişlere `aria-invalid` eklendi.
+- **Paketleme:**
+  - Ctrl+Insert satır seviyesine taşındı.
+  - Etiket net fireyi gösteriyor.
+  - Alt satır karanlık modda doğru görünüyor.
+  - Pasif durumun sebebi yardım metni olarak yazılıyor.
+- **Transfer:** lot seçilmeden onaylanırsa buton "Lotsuz taşı" diyor.
+- **Atlanan:** atık seçicisinin boş durum ipucu. Paylaşılan grid bileşeninde bunun için bir yuva yok.
+- **Kapılar:** hepsi temiz.
+
+### 5. E7 S3b-2 — push edildi
+- **Commit:** `e2d156c5`.
+- **İçerik:**
+  - `GET /api/v1/logistics/packing-boxes/shippable` (logistics:read).
+  - Fiş detayında koli bilgisi.
+  - Aynı satırda lot ve koli varsa red: `inventory.receipt.box_with_lots`.
+  - Ayar `shipping.apparel.boxRequired`, yalnız Off/Warn.
+  - Ön yüzde koli seçici, Uyar onayı ve sistem parametresi seçimi.
+  - Fiş ekranı standardına 3052 istisnası eklendi.
+- **Hat sorunları:**
+  - `system_parameters.page.tsx`'te E6 S3b-1 ile çakışma çıktı; iki sabit de korunarak çözüldü.
+  - TURKISH_IN_EN: `en_overrides.json`'a eklendi.
+  - RTL guard: `ml-auto`/`mr-auto` → `ms-auto`/`me-auto`.
+- **Doğrulama:**
+  - Unit: 9082 geçti.
+  - Vitest: 3534 geçti.
+  - PG: yalnız bu dilimde kırılan yok.
+- **Açık:** Chrome post-check (390px, karanlık mod) ve 300'den fazla kolide EXPLAIN kanıtı.
+
+### 6. E2 S4b-2 — kodlandı, test hattı RAM yüzünden durdu
+- **Kodlanan:**
+  - wte25'te üç migration: `ChemicalNetting`, `ChemicalNettingValidate`, `DyeingBackfill`.
+  - Netleştirme çekirdeği ve `ReverseChemicalPosting` (inventory:approve).
+  - Modül bazlı erişim filtresi.
+  - Ön yüzde panel, ayarlar ve diyalog.
+  - Maliyet testi, onay ile sarfın eşzamanlı PG testi ve runbook (`docs/runbooks/chemical-netting-backfill.md`).
+- **Bilinen sınır:** Örme ve Boyahane için teorik ihtiyaç henüz hesaplanmıyor. Fark kolonu "—" gösteriyor, Örme uyarı bandı pasif.
+- **Hat durumu:**
+  - 08:52'de sistem, düşük bellek (3,7 GB boş) yüzünden hattı durdurdu.
+  - Yarım kalan migration'lar silindi; asıllar `wt/e2s4b2-mig`'de.
+  - Kullanıcı onayıyla yeniden koşulacak.
+
 ## Açık kalanlar
-- UX düzeltme dilimi (wte27): test hattında.
-- E2 S4b-2 (wte25) ve E7 S3b-2 (wte26): kodlanıyor.
+- E2 S4b-2: test hattını yeniden koşmak (wte25, RESUME; prep artık temiz).
+- E7 S3b-2: Chrome post-check.
 - E6 S3b-2 (otomatik kimyasal sarf poster'ı): S3b-1 push edildiği için artık başlatılabilir.
 - E6 S4: S3b-2 DEV'de bir tur denendikten sonra.
