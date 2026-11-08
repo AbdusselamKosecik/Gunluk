@@ -126,3 +126,10 @@
 - **Ne yapildi:** `telephonyClusterApi.ts` runClusterNode; `telephonyClusterView.ts` nodeRuntimeActions (sunucu kuraliyla ayni) + runtimeProblemMessage (409 default_node/runtime_state_not_allowed/cikis 75, 503 agent_unavailable); `TelephonyClusterNodes.tsx` dugmeler + TransitionDialog -> ConfirmNodeDialog genellemesi; denetim etiketi + 9 dil i18n.
 - **Dogrulama (main'de):** `npx tsc -b` temiz; `npx vitest run TelephonyClusterScreen auditActionParity` 27/27. Ajan: mutasyon (isDefault kontrolu) kirmizi.
 - **Commit:** `2a0e66b2` (merge ff), backlog ayri commit. ClickUp fark 0. Sunucuya yayin bekliyor.
+
+### BR-SYS-147 — Asterisk dugum paketi (linux-uzmani ajani, birlestirildi)
+- **Neden:** dialplan'siz bir dugum saglik kapisini (ARI + systemname) gecip `aktif`'e alinabiliyordu; ast-02'nin confd ve edge'i yoktu. BR-QA-135 ve BR-AST-157'nin on kosulu.
+- **Ne yapildi (e56e53b5):** AN-03 `asterisk-node-health` (yalniz show: pjsip endpoint sayisi, pbxtr-tNNNN baglam sayisi, edge 8790) -> aktif gecisinde 409 health_gate_failed / health_unmeasured; AN-01/AN-02 edge + edge-fastagi yan arabalarini da yonetir; `deploy/pbxtr-confd/pbxtr-confd@.service/.timer` dugum basina confd. Koordinator: `confd-privilege-kapisi.py` hicbir kapidan cagrilmiyordu -> `yerel-kapilar.sh` kapi_70'e eklendi (yalniz ana birimi okur; sablonu ConfdNodeTemplateUnitTests olcer).
+- **Dogrulama (main, merge 63c95d7d):** build 0 hata; Architecture ilgili 171/171; Api TelephonyCluster/SystemOps/CommandCatalog 113/113; parite temiz; confd-privilege OK; vitest TelephonyClusterScreen 20/20. Ajan: Architecture 1002/1002, 8 mutasyon kirmizi.
+- **Backlog:** BR-SYS-147 Bitti (kurulum bekliyor), yeni BR-SYS-154 (kayit tasiyici), BR-SYS-155 (FastAGI yoklamasi + esik). Commit `5753d5d0`. ClickUp fark 0.
+- **Sunucu kurulum sirasi:** `deploy/pbxtr-sysagent/README.md` "Kurulum sirasi" — yayin + ajan ikilisi + defter/env + edge kimlik dizini + confd@ birimi; ilk gercek kosu BR-QA-135.
