@@ -180,3 +180,9 @@
 - **Birlestirme (a3686139, ff) + koordinator:** capraz-kip-yazma-daraltma KIRMIZIYDI (ajan "set noktasi degismedi" diye kosmamisti) -- iki aralik yalniz satir kaydi (yazma=yok) -> `--dondur`, commit `2fa2320d`. (Ders: "degismedi" gerekcesiyle kosulmayan kapi bulgu degildir; kapi satir numarasina da bakar.)
 - **Dogrulama (main):** build 0 hata; Api 690/690; Integration 13/13; capraz-kip iki kapi OK; tsc -b temiz. Ajan: Architecture 1020/1020, 12 mutasyon kirmizi.
 - **Backlog:** ikisi Bitti. ClickUp fark 0.
+
+### backend-dev-2 alt ajani Sonnet'e alindi
+- **Neden:** /usage raporu: kullanimin %16'si `backend-dev-2` alt ajanlarindan; frontmatter'da `model:` yoktu -> Opus'ta calisiyordu.
+- **Ne yapildi:** `.claude/agents/backend-dev-2.md` frontmatter'ina `model: sonnet` eklendi.
+- **Commit:** `d8b4a7c3` — backend-dev-2 alt ajani Sonnet modeline alindi (push ile birlikte bekleyen 4 commit de gitti: 746bb810, 2bf82a0a, c98ad863, 1b8f4bc6).
+- **Acik:** `backend-dev-1` ve `pbxtr-yayin` kopyasi hala modelsiz (Opus). Sonnet'te kalite izlenecek; dusukse geri al.
