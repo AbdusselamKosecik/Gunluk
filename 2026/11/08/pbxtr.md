@@ -113,3 +113,11 @@
 - **Sonuc / dogrulama:** Api Leaves 25/25; Integration leave testleri 5/5; mutasyon (tenant kosulu silindi) -> "SIZINTI ... users.IsTenantUserAsync" KIRMIZI, geri -> yesil.
 - **Commit:** `e60e3707`, backlog `4172c5d1`. ClickUp fark 0.
 - **Not:** yerel bellek ~5 GB bos (msedgewebview2 ~20 GB); yayin 50fa1f81+e60e3707 hala bekliyor.
+
+### BR-SYS-148 — sysagent ile Asterisk dugumu baslat/durdur (ajan isi, birlestirildi)
+- **Neden:** #80 yasam dongusu (BR-BE-287) yeni dugumu (ast-02...) ayaga kaldiramiyordu; BR-QA-135'in on kosulu.
+- **Ne yapildi (linux-uzmani ajani, 6396ee5f, main'e fast-forward):** `src/Pbxtr.SysAgent/AsteriskNodeLifecycle.cs` (sabit docker run sablonu, ad kalibi ast-02..99 + root defteri `/etc/pbxtr/asterisk-nodes.json`, sirlar --env-file 0600, imaj = ast-01'in icerik kimligi, yalniz etiketli konteyner, durdurmada aktif kanal kapisi), katalog AN-01/AN-02 (yalniz #80, paletten 409), uc `POST /system/telephony-cluster/nodes/{name}/runtime`. Belgeler: sysagent README kurulum adimlari, ADR-014 §2.10.5, ADR-023 §8.6/D.
+- **Kararlar:** imaj sabit etiket degil ast-01'in icerik kimligi (etiket her yayinda degisiyor); uc iki yetki ister (telephony.cluster.manage + system.command.run).
+- **Dogrulama (main'de):** build 0 hata; Architecture ilgili 114/114; Api TelephonyCluster/SystemOps/CommandCatalog 103/103; kapali liste paritesi temiz. Ajan: 54/54 yeni test, 8 mutasyon kirmizi (biri gercek acik: .NET `$` sondaki \n'i kabul ediyordu).
+- **Backlog:** BR-SYS-148 Bitti (kurulum bekliyor), yeni BR-FE-151 (#80 dugmesi). Commit `dc152aef`. ClickUp fark 0.
+- **Sunucu:** KURULMADI. Yayin (50fa1f81..dc152aef) + ajan ikilisi kurulumu yerel bellek bosalinca birlikte.
