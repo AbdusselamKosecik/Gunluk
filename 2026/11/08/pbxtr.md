@@ -81,3 +81,26 @@
 - Arka plan ajanlari: BR-AST-167 (confd teslim olcegi), mock saglayicilar + Brevo parola sifirlama.
 - BR-SYS-150: sip.pbxtr.com Cloudflare proxy kapatilinca Let's Encrypt + tls.reload.
 - QA-126 fidelity insan imzasi (ajanlar bitince uret).
+
+### Ajan birlestirmeleri: BR-AST-167 (confd olcegi) + mock saglayicilar / Brevo parola postasi
+- **Neden:** havuz paketi (BR-AST-157) icin confd teslimi tenant sayisiyla dogrusal buyumemeli; kullanici karari IYS/TTS/odeme simdilik mock, parola postasi Brevo.
+- **Ne yapildi:**
+  1. `worktree-agent-adc046e0157ddfae9` (f930f7a8) main'e birlestirildi (d6c46bfd): tek tar akisi ile toplu yazim + olcumde 9 CLI cagrisi; N=50 docker 2273 -> 48. Yeni oz-test F68-F70, mutasyon M52-M54.
+  2. `worktree-agent-aa112d43e157d9824` (5b05a909 + c02fd7f0) birlestirildi: ADR-033 (mock = yapilandirma secimi, bos = fail-closed, simulasyon seridi + saglik satiri), IYS mesaj kanali + marka kodu migration'i `20261108090000_TenantIysBrandCode`, MockTts (bip, 8 kHz), PaymentCard/MockPayment/IvrPaymentProcessor (PCI log testleri mutasyonla), Brevo/SMTP secici parola postasi.
+  3. Birlestirme sonrasi duzeltmeler (50fa1f81): `doc/st44-final-delivery-*.json` databaseSchemaRevision -> TenantIysBrandCode; `capraz-kip-yazma-daraltma` main'de zaten kirmiziydi (4 yeni + 6 kayan aralik, HEPSI yazma=yok) -> `--dondur`.
+- **Komutlar:**
+  ```bash
+  dotnet build Pbxtr.sln                         # 0 hata
+  dotnet test tests/Pbxtr.Architecture.Tests     # 902/902
+  dotnet test tests/Pbxtr.Integration.Tests --filter FinalDeliveryReportTests   # 25/26 (1 atlandi)
+  bash deploy/pbxtr-confd-selftest.sh            # 394/394 (~40 dk Windows'ta)
+  bash deploy/asterisk-kapali-liste-parite.sh    # PARITE TEMIZ
+  python3 deploy/ci/capraz-kip-yazma-daraltma-kapisi.py --dondur
+  ```
+- **Sonuc:** main yesil. Sunucuya compose kopyalandi (yedek `/root/pbxtr-yedek/docker-compose.yml.pre-50fa1f81`; yalniz TTS/odeme saglayici env, varsayilan mock). **Yayin (`yerel-yayin.sh --yayinla --testsiz`) yerel bellek yetersizligi nedeniyle sistem tarafindan durduruldu** -- dotnet format asamasinda, sunucuya imaj gitmedi; uygulama `demo-f4c85d7a75a5` healthy kaldi.
+- **Backlog:** BR-AST-167, F-04, O-06 Bitti (mock); M-05/M-09 Devam; yeni BR-AST-168, BR-AST-169. ClickUp fark 0.
+- **Commit:** `d6c46bfd`, merge aa112d43 dali, `50fa1f81`, backlog commit'i.
+
+## Acik kalanlar (guncel)
+- Yayin 50fa1f81 (bellek bosalinca) -> ardindan Brevo gercek test postasi + TTS/odeme simulasyon seridi canli kontrolu.
+- BR-QA-135, BR-SYS-148, BR-AST-157/168/169, BR-SEC-41, BR-SYS-150 (DNS proxy), QA-126 (insan imzasi), BL-SMS-01 ve BR-SYS-152 ertelendi.
