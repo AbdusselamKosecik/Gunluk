@@ -154,3 +154,10 @@
 - **Olcum notu 1 — Architecture 1018 goruldu:** main oncesi 1020'ydi. `--list-tests` iki commit'te ayni; d9fb2827 gecici worktree'de derlenip ikisi TRX ile kosuldu -> ikisi de **1020/1020**, vaka adlari birebir ayni. 1018 eksik kalmis bir kosuydu (olcum kaybi), gerileme degil. Komut: `git worktree add <tmp> d9fb2827` + `dotnet test ... --logger trx` + `grep -o testName= | sort | diff`.
 - **Olcum notu 2 — BR-AST-168 Windows:** tam confd selftest Windows'ta 408/408 (Linux 409; fark Linux'a ozgu izin kapisi, onceki 394/395 ile ayni desen).
 - **Backlog:** BR-AST-157 Bitti (yayin + Mode=on gecisi bekliyor), yeni BR-BE-294 (teslim damgasi okuyuculari dugum basina tabloya). ClickUp fark 0.
+
+### BR-SYS-154 — kayit spool bosaltma (backend-dev-2 ajani)
+- **Olcum kart onculunu duzeltti:** ast-01'de MinIO'ya tasima zaten calisiyordu (RecordingTransferJob; sesi olan 9/9 dosya kovada + recording_assets). Eksik: spool'dan silme. (Ders: kart onculu olculmeden yazilmaz.)
+- **Ne yapildi (ac087da0, main'e ff):** RecordingSpoolPurgeJob (kilit 47, ARI GET/DELETE recordings/stored), bes fail-closed kapi (tenant, source_ref, tenant onekli depo + ozet, spool SHA-256, >=360 dk), varsayilan kip `report` (silmez); ast-02 kayitlari kendi dugumunun ARI'sinden aktarilir.
+- **Dogrulama (main):** build 0 hata; Api Recording 235/235; Architecture RawSql/BackgroundJob/Audit/TenantLeak 44/44; capraz-kip iki kapi OK; tsc -b; vitest auditActionParity+AuditScreen 19/19 (ajanin worktree'sinde node_modules yoktu, ben kostum). Ajan: 8 mutasyon kirmizi.
+- **Devreye alma:** yayin -> report kipinde bir dongu (beklenen silinebilir 9) -> `PBXTR_RecordingStorage__SpoolPurgeMode=delete`.
+- **Backlog:** BR-SYS-154 Bitti, yeni BR-SYS-156 (kayip kayitlar: CDR billsec>0 ama dosya/satir yok + bos 44 B WAV karari). ClickUp fark 0.
