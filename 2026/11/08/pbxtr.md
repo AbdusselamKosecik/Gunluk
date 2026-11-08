@@ -56,3 +56,28 @@
   - SLA/terk tek tanımda (BE-293).
 - Yeni kart **BR-SEC-41**: LeaveCalendar userId ve RingGroup yedek hedeflerinin tenant aidiyeti denetlenmiyor. Ölçülmedi.
 - Commit `d1af35b1`.
+
+### K3 #80 canli kapi olcumu + Kamailio istemci havuzlama duzeltmesi
+- **Neden:** #80 SIP Proxy ekrani canlida; JSONRPC panel yolunun uc kapisi (kaynak IP, sir basligi, kapali metod listesi) olculmeden BR-BE-286 kapanamazdi.
+- **Ne yapildi:**
+  1. Uygulama konteynerinde curl yok -> `docker run --network container:pbxtr-app curlimages/curl:8.10.1` ile ayni ag ad alanindan olcum (kaynak IP 172.28.0.11 korunur). Sir `docker exec pbxtr-app printenv ...` ile degiskene alindi, basilmadi.
+     Sonuc: dogru sir core.version / dispatcher.list **200**; core.kill / cfg.seti **403**; yanlis sir **403**. Genel IP:5090 refused, nginx'ten timeout.
+  2. Panel API olcumu: superadmin girisi sunucuda (parola .env'den okunup python ile JSON'a, basilmadi), `GET /api/v1/system/telephony-cluster/overview` -> **X-Cross-Tenant: on** basligi sart (yoksa 400 VALIDATION_FAILED).
+  3. **SAHA BULGUSU:** overview'da registeredUsers/activeDialogs/bannedIps `null`. Kamailio dogrudan sorulunca degerler geliyordu -> ayristirici degil. App logu: ilk cagri disindaki her JSONRPC `Unreachable connect`. Sebep: Kamailio xhttp baglanti basina tek yanit verip Connection: close soylemiyor; .NET havuzdaki soketi ikinci POST'ta yeniden kullaniyor, POST idempotent olmadigindan yeniden denemiyor. curl her seferinde yeni baglanti actigi icin gorunmedi.
+  4. Duzeltme: `HttpKamailioRpcClient.CreateHandler()` (PooledConnectionLifetime=0) DI ve testte tek fabrika; her istekte `request.Headers.ConnectionClose = true`.
+  5. Test `KamailioRpcClientConnectionTests`: baglanti basina tek yanit veren, ayni sokette ikinci istekte koparan sahte TCP sunucu + 4 ardisik cagri. Mutasyon (duzeltme geri) -> "CoreUptime: Unreachable connect" KIRMIZI (saha belirtisinin aynisi); geri -> yesil.
+- **Dokunulan dosyalar:** `src/Pbxtr.Infrastructure/Telephony/Kamailio/KamailioRpcClient.cs`, `src/Pbxtr.Infrastructure/DependencyInjection/TelephonyClusterServiceCollectionExtensions.cs`, `tests/Pbxtr.Api.Tests/Modules/SystemAdmin/KamailioRpcClientConnectionTests.cs`, `yonetim/backlog.md`
+- **Komutlar:**
+  ```bash
+  dotnet test tests/Pbxtr.Api.Tests --filter "FullyQualifiedName~KamailioRpcClientConnectionTests|FullyQualifiedName~TelephonyCluster"   # 15/15
+  dotnet test tests/Pbxtr.Architecture.Tests --filter "FullyQualifiedName~Kamailio"   # 20/20
+  bash deploy/yerel-yayin.sh --yayinla --testsiz   # demo-f4c85d7a75a5 healthy
+  ```
+- **Sonuc / dogrulama:** yayin sonrasi overview kamailio: state ok, registeredUsers 0, activeDialogs 0, bannedIps 0 (null degil); son 3 dk logda Unreachable 0. compose-sunucu-sapma TAMAM (BIREBIR + UYGULANMIS). Sunucu .env sifreler reposuna yedeklendi (sha256 iki tarafta 9e6a3017, sifreler 66d30ac).
+- **Commit:** `f4c85d7a` — Kamailio JSONRPC istemcisi havuzlamasin; `a05b4798` — backlog BR-BE-286/287, BR-SEC-35, BR-FE-149 Bitti. ClickUp fark 0.
+
+## Acik kalanlar (bu tur sonu)
+- BR-QA-135 (K3 uctan uca bosaltma/tasima/409/yetkisiz rol olcumu), BR-SYS-148 (sysagent node start/stop).
+- Arka plan ajanlari: BR-AST-167 (confd teslim olcegi), mock saglayicilar + Brevo parola sifirlama.
+- BR-SYS-150: sip.pbxtr.com Cloudflare proxy kapatilinca Let's Encrypt + tls.reload.
+- QA-126 fidelity insan imzasi (ajanlar bitince uret).
