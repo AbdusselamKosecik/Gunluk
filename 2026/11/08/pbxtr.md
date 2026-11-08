@@ -104,3 +104,12 @@
 ## Acik kalanlar (guncel)
 - Yayin 50fa1f81 (bellek bosalinca) -> ardindan Brevo gercek test postasi + TTS/odeme simulasyon seridi canli kontrolu.
 - BR-QA-135, BR-SYS-148, BR-AST-157/168/169, BR-SEC-41, BR-SYS-150 (DNS proxy), QA-126 (insan imzasi), BL-SMS-01 ve BR-SYS-152 ertelendi.
+
+### BR-SEC-41 — iki butunluk sorusu olculdu ve kapatildi
+- **Neden:** QA-138 son turunda "olculmedi" diye acilan kart: izin takviminin userId'si ve RingGroup yedek hedefleri tenant'a ait mi?
+- **Olcum (canli DB, salt okuma):** `pg_constraint` -> `agent_leaves`'te yalniz `tenant_id` FK'si var, **`user_id`'de FK YOK**; `ring_groups`'ta `(tenant_id, fallback_queue_id)` ve `(tenant_id, fallback_extension_id)` bilesik FK'leri var. SQL'i ssh'a heredoc ile degil dosyadan `psql -At < sec41.sql` ile verdim (`$$` kabukta PID'e donusmustu).
+- **Ne yapildi:** `ILeaveCalendar.IsTenantUserAsync` (users global, HomeTenantId kosulu) + `POST /api/v1/leaves` once bunu sorar, degilse 404 (yok/baska tenant ayni cevap). RingGroup'a kod degisikligi yok — DB reddediyor.
+- **Dokunulan dosyalar:** `src/Pbxtr.Domain/Modules/Leaves/ILeaveCalendar.cs`, `src/Pbxtr.Infrastructure/Modules/EfLeaveCalendar.cs`, `src/Pbxtr.Api/Modules/Leaves/LeaveEndpoints.cs`, `tests/Pbxtr.Api.Tests/Modules/Leaves/LeaveEndpointTests.cs`, `tests/Pbxtr.Integration.Tests/Tests/TenantSettingsAdaptersTenantLeakTests.cs`
+- **Sonuc / dogrulama:** Api Leaves 25/25; Integration leave testleri 5/5; mutasyon (tenant kosulu silindi) -> "SIZINTI ... users.IsTenantUserAsync" KIRMIZI, geri -> yesil.
+- **Commit:** `e60e3707`, backlog `4172c5d1`. ClickUp fark 0.
+- **Not:** yerel bellek ~5 GB bos (msedgewebview2 ~20 GB); yayin 50fa1f81+e60e3707 hala bekliyor.
