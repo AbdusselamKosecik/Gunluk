@@ -133,3 +133,9 @@
 - **Dogrulama (main, merge 63c95d7d):** build 0 hata; Architecture ilgili 171/171; Api TelephonyCluster/SystemOps/CommandCatalog 113/113; parite temiz; confd-privilege OK; vitest TelephonyClusterScreen 20/20. Ajan: Architecture 1002/1002, 8 mutasyon kirmizi.
 - **Backlog:** BR-SYS-147 Bitti (kurulum bekliyor), yeni BR-SYS-154 (kayit tasiyici), BR-SYS-155 (FastAGI yoklamasi + esik). Commit `5753d5d0`. ClickUp fark 0.
 - **Sunucu kurulum sirasi:** `deploy/pbxtr-sysagent/README.md` "Kurulum sirasi" — yayin + ajan ikilisi + defter/env + edge kimlik dizini + confd@ birimi; ilk gercek kosu BR-QA-135.
+
+### BR-SYS-155 + BR-AST-168 — FastAGI saglik yoklamasi + confd semantik dogrulama toplu (linux-uzmani ajani)
+- **Ne yapildi (2e1dc0da, main'e ff):** AN-03'e 4573 yoklamasi (cikis koduyla okunur, belirsiz = olculemedi), dialplan esigi parametrik (alt sinir 1). confd semantik dogrulama: tek `ast endpoint-details` (stdin ad listesi, kapali kalip) + tek `queue show` + tek awk; observe sarmalayicisinda tek docker exec + xargs sabit sablon, kabuk yok. helper-selftest ve ayrac-selftest `yerel-kapilar.sh` kapi_70'e baglandi.
+- **Olcum (ajan, confd-boyut-olc):** N=50 docker 448 -> 50, uretim T 151 -> 62 sn, tavan ~61 -> ~253 tenant/dugum; gercek santralde 310 ad 5,3 sn, cikti eski yolla bayt bayt ayni.
+- **Dogrulama (main):** kapi_70'in 5 adimi rc=0 (parite, parite oz-test 9/9, privilege, helper, ayrac 14/14); build 0 hata; Architecture ilgili 175/175; Api TelephonyCluster 41/41. Windows tam confd selftest arka planda.
+- **Backlog:** BR-SYS-155, BR-AST-168 Bitti (yayin bekliyor). ClickUp fark 0.
