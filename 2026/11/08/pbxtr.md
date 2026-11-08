@@ -167,3 +167,9 @@
 - **Ne yapildi (c96226bf):** kod duzeltmesi yok; `doc/mimari/br-sys-156-kayip-kayitlar-ve-bos-wav-olcumu.md`. Bos 44 B WAV icin RecordingSpoolPurgeJob'a fail-closed dal (CDR'da billsec>0 yok + >=24 sa + kanonik bos baslik), varsayilan kip report.
 - **Dogrulama (main):** build 0 hata; Api Recording 248/248; Architecture ilgili 44/44; Integration SpoolLedger 2/2; capraz-kip iki kapi OK. Ajan: 7 mutasyon kirmizi.
 - **Backlog:** BR-SYS-156 Bitti; yeni BR-SYS-157 (gercek kayip bugun iz birakmaz -> alarm). ClickUp fark 0.
+
+### BR-BE-294 — teslim damgasi okuyuculari dugum basina (backend-dev-1 ajani)
+- **Ne yapildi (94d0c36e, merge 1740911b):** havuz (Mode=on) acikken yayin durumu, #57 anahtar listesi ve #37 saglik sayimi `provisioning_node_delivery`'den okur; havuz kapali iken birebir eski davranis. Ortak kural `ProvisioningPoolDelivery` saf sinif.
+- **Onemli mutasyon:** uretim DI fabrikasi kipi dusurunce derleme yesil ama saglik isi havuzu hic gormuyordu -- test yakaliyor.
+- **Birlestirme:** `InfrastructureServiceCollectionExtensions.cs` iki dalda (BR-SYS-156 + BR-BE-294) otomatik birlesti -> build 0 hata, Architecture TAM 1020/1020, Api 596/596, Integration 10/10, capraz-kip iki kapi OK.
+- **Koordinator karari:** `hazirlaniyor` dugum paketi almaya devam eder (saglik kapisi sart) ama teslim okuyucularinda sayilmaz -> yeni BR-BE-295. Backlog commit ayri, ClickUp fark 0.
