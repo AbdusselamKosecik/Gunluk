@@ -39,3 +39,9 @@
 - **Birleştirme sonrası koordinatör:** format kapısı `CrossNodeBusyTests.cs:340` tek satır sonu (ajanın "her dosya CRLF yüzünden kırmızı" iddiası yanlıştı — yalnız bu dosya); yazma daraltma bir satır kayması → `--dondur`. Commit `9677b3d8`.
 - **Doğrulama:** build 0 hata; Api 96/96; Integration gerçek Redis 2/2; çapraz-kip iki kapı OK; format 0.
 - **Yeni kart BR-AST-170:** agent molası (PAUSEALL) yalnız varsayılan düğüme gidiyor. `EfUserQueueMembershipReader` sızıntı testi BR-QA-140 ajanına eklendi.
+
+### 6. BR-AST-170 — agent molası tüm düğümlere (backend-dev-2 ajanı)
+- **Öncül ölçüldü (kod):** `AgentEndpoints.cs:1793` QueueId null → `QueueNodeAsync("")` → yalnız varsayılan düğüm. Ek bulgu: BR-BE-288'in "mola xnode duraklatmasını ezer" garantisini de bozuyordu. Canlıda tek düğüm (ast-01, node_affinity 4 satır), yeniden üretilemez.
+- **Ne yapıldı (87525491, ff):** PAUSEALL üyenin kuyruklarının ev düğümlerine paralel (`EfMemberQueueResolver`), `QueuePauseFanOut` sonuç birleştirme (başlatmada kısmi = başarılı + mutabakat onarır; bitirmede kısmi = PARTIAL_NODES red).
+- **Doğrulama (main):** build 0; Api 164/164; Integration 22/22; çapraz-kip iki kapı OK; format 0. Worktree kaldırıldı.
+- **Backlog:** BR-AST-170 Bitti, yeni BR-AST-171 (geçici üyelik + kısmi başarı denetimi). ClickUp fark 0.
