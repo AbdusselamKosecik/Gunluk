@@ -1,0 +1,30 @@
+# pbxtr — 2026-11-09
+
+## Bağlam
+Önceki oturum (2026-11-08) "backlog'u kapat" hedefiyle sürüyordu; oturum, BR-AST-158 (failover) birleştirmesinin doğrulama komutunun ortasında kesildi. Yayın hâlâ kullanıcı onayı bekliyor (yerel bellek yüzünden sistem durdurmuştu); sunucu `demo-f4c85d7a75a5`.
+
+## Yapılanlar
+
+### 1. Kesilen birleştirmenin doğrulanması
+- **Neden:** son komut sonucu kaydedilmeden kesildi; birleştirme commit'i (1b8f4bc6) origin'de vardı ama doğrulama görülmedi.
+- **Ne yapıldı:** build + Api (SystemAdmin/ConfigRenderer/Telefon) + kapılar yeniden koşuldu.
+- **Sonuç:** build 0 hata; Api 1034/1034; env-esleme TAMAM; parite temiz. **İki çapraz-kip kapısı KIRMIZI**: `TelephonyFailoverMonitor.cs:304` yeni çapraz aralık (envanter 44 → 45). Kod okundu: aralık yalnız OKUR (düğüm listesi, referans sayısı, atamalar) + `CrossTenantReadAudit`; kip taşımadan önce aynı transaction'da kapanır; taşıma `EfTelephonyCluster.RelocateTenantAsync` içinde `BeginTenantScope` ile tenant başına. → `capraz-kip-envanteri-kapisi.py` docstring'ine "BESINCI TUR" gerekçesi + iki kapı `--dondur`. Architecture TAM 1027/1027.
+- **Commit:** `04f7620d`.
+
+### 2. Sızan üç sırrın döndürülmesi (güvenlik olayı)
+- **Neden:** BR-AST-158 ajanı sunucu ölçümünde `kamailio-yerel.cfg` `#!substdef` adlarını `grep -o` ile alırken değerleri de bastı: Kamailio DB parolası, RPC sırrı, santral sır başlığı transkripte düştü (ajan kendisi bildirdi).
+- **Ne yapıldı:** her sırrın tüketicileri compose'ta bulundu (RPC: kamailio + app; santral: kamailio + asterisk; DB: kamailio + `pbxtr_tel_kamailio` rolü), biçim kapıları entrypoint'ten okundu (hex 32-128 / [A-Za-z0-9._~-] 16-128), `show log_statement` = none doğrulandı. Tek betik (`sir-dondur.sh`, sunucuda koşup silindi): `.env` yedeği (`/root/pbxtr-yedek/env.pre-rotate-20261109T084806Z`, 600), `openssl rand -hex 32/32/24`, `.env` python ile yerinde (her anahtar tam 1 satır assert), `ALTER ROLE pbxtr_tel_kamailio PASSWORD :'p'` psql `\getenv` ile (değer argv'ye girmez), `docker compose up -d --force-recreate --no-deps kamailio asterisk edge edge-fastagi app`.
+- **Sonuç / doğrulama:** üç servis healthy; app yeni RPC sırrını taşıyor; `dispatcher.list` yeni sır 200 / ESKİ sır **403**; Kamailio son 1 dk DB auth/bağlantı hatası 0 (2 "password" satırı TLS `private_key_password` bilgi satırıydı — maskeli okundu); asterisk sır hatası 0. `.env` sifreler'e: sha256 iki tarafta `08c3343c`, sifreler commit `542c023`.
+- **Kalıcı ders:** memory `env-okurken-degeri-kes` altıncı vaka + tekrar kullanılabilir rotasyon tarifi.
+
+### 3. Backlog
+- BR-AST-161 Bitti (REALTIME_FIELD; planın REALTIME biçimi yanlıştı), BR-AST-158 Bitti (varsayılan `gozlem`), BR-BE-288 Kısmen (Kamailio 486 dilimi; pbxtr QueuePause senkronu kaldı), yeni BR-QA-140 (failover yürütücüsü sızıntı testi). ClickUp fark 0. Commit `1b223884`.
+
+## Kararlar
+- Failover compose varsayılanı `gozlem` (ilk yayında yanlış pozitif izlenir, sonra `etkin`).
+- Failover çapraz okuma aralığı kabul (yazma yok, taşıma tenant kapsamında).
+
+## Açık kalanlar / sonraki adım
+- Yayın (main sunucunun 50fa1f81 → 1b223884 önünde) kullanıcı "yayını tekrar başlat" bekliyor; ardından Brevo testi, sysagent kurulumu, ast-02, Mode=on, spool `delete`, BR-QA-134/135/139.
+- sip.pbxtr.com DNS-only (BR-SYS-150), QA-126 insan imzası.
+- BR-BE-288 pbxtr dilimi, BR-QA-140.
