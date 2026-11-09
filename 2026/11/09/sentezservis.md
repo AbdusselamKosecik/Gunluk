@@ -55,3 +55,72 @@ Dün yazılan `TrendyolFaturaKontrol.exe`'de bölünmüş siparişler (birden ç
 - Kullanıcı SSMS'te `UZM_E_ReceiptCheckOK.sql` dosyasını çalıştıracak ve yazma yetkili `appsettings.json` hazırlayacak.
 - İptal edilen paketlerin fişleri ve aynı pakete iki fatura kesilmiş fişler hiç işaretlenmiyor; 30 dakikada bir yeniden loglanıyorlar. İstenirse iptal paket "işaretle" ya da "ayrı kolon" olarak ele alınabilir.
 - Trendyol `orders` ucundan `v2/orders` ucuna geçiş.
+
+---
+
+## Tur 2 — Trendyol fatura gönderimi ekranı (otomatik değil)
+
+### Bağlam
+Kullanıcı otomatik yüklemeden çekindi. İstekleri:
+- sentezservis'te bir ekran: gönderilmemişleri bulsun, CRS'ten sorgulasın.
+- Seçilenleri / 10 adet / 100 adet / tamamını gönder düğmeleri.
+- "Otomatik servis yapmayalım."
+- "Servis şimdilik boş kalsın, çalıştırmak istediğimde cron değerini vereyim." Yani bir iş tanımlanacak ama zamanlaması boş olacak.
+
+### 1. Tasarım kararları
+- **"Gönderildi" bilgisinin kaynağı Trendyol:** paketin `invoiceLink` alanı dolu mu diye bakılıyor. ERP'ye hiç yazılmıyor, `UZM_E_ReceiptCheckOK` kolonuna ekran için gerek yok. Host'un ERP bağlantısı salt okur kalıyor.
+- **Ortak çekirdek:** `Core/Fatura/TrendyolFaturaGonderici.cs`.
+  - `ListeleAsync(bas, bit)`: Sentez fişleri → her sipariş için Trendyol'a tek tek sorgu (5 paralel istek, hesabın saniyede 5 istek sınırlayıcısı ayrıca uygulanıyor) → `PaketKarari` → yalnız yüklenmesi gereken fişler için CRS toplu sorgusu → `Degerlendir`.
+  - `GonderAsync(fisIdleri, kuru)`: her fiş için Trendyol paketi ve CRS durumu taze sorgulanıyor, sonra PDF yükleniyor. Bir kilit (semaphore) iki kişinin aynı anda göndermesini engelliyor. Sınır: istek başına en çok 50 fiş.
+  - `Degerlendir`: saf fonksiyon. Sonuçlar: gonderilebilir / gonderildi / crsBekliyor / sureDolmadi / elleBakilmali / crsYok / hata.
+  - Önbellek: Trendyol'da faturası görülen fişler süreç boyunca bellekte tutuluyor. Bir günün ilk listelenmesi ~5 dk sürüyor (1.194 fiş), ikincisi ~5 sn.
+- **Denenip bırakılan yol: toplu Trendyol listesi** (`startDate`/`endDate`).
+  - Trendyol tek sorguda en çok **10.000** paket döndürüyor; değişiklik tarihine göre sorguda sonuç tam 10.000'de kesildi.
+  - Fatura siparişten günler sonra kesildiği için pencere bunu aşıyor: 1.334 siparişin yalnız 283'ü listedeydi.
+  - Oluşturma tarihine göre 2 günlük sorgu 65 sn sürdü.
+- **İş `trendyol-fatura-gonder`:** `DefaultCron = null`. Parametreleri: `gun` (geriye kaç gün, 0 = bugün), `azami`, `deneme`. Değerler: `MaxAttempts = 1`, `Unsafe`, `SingleInstance`.
+
+### 2. Dokunulan dosyalar
+- Core:
+  - `Fatura/TrendyolFaturaGonderici.cs` (yeni)
+  - `Fatura/TrendyolFaturaGonderJob.cs` (yeni)
+  - `Modeller.cs`: denetim eylemi `trendyol-fatura-gonderimi` eklendi.
+  - `TrendyolSaglayici.cs`: paket okuma `PaketleriOku` adıyla ayrıldı.
+- Host:
+  - `Api/TrendyolFaturaUclari.cs` (yeni).
+    - `GET /api/trendyol-fatura/liste`: giriş yapan herkese açık.
+    - `POST /api/trendyol-fatura/gonder`: müdahale yetkisi ve CSRF istiyor, her istek denetime yazılıyor.
+  - `Program.cs`: servis, iş ve uç kayıtları eklendi.
+- Web:
+  - `api/trendyolFatura.ts`
+  - `pages/TrendyolFaturaSayfasi.tsx` ve `.test.tsx`
+  - `App.tsx` (`/trendyol-fatura` rotası)
+  - `Layout.tsx` (menü: Operasyon → "Trendyol fatura gönderimi")
+  - `api/index.ts`
+- Ekran:
+  - Filtreler: tarih aralığı (en çok 7 gün), durum süzgeci (varsayılan "Trendyol'da olmayanlar").
+  - Düğmeler: Seçilenleri / İlk 10'u / İlk 100'ü / Tamamını gönder. Gönderim 10'arlı öbeklerle yapılıyor; Durdur düğmesi ve Deneme kutusu var.
+  - Her gönderimden önce onay satırı çıkıyor. Satır bazında sonuç gösteriliyor.
+- Testler:
+  - Core: `TrendyolFaturaDegerlendirmeTestleri` (12 test). Toplam 789 test geçti.
+  - Web: 5 yeni test. Toplam 95 test geçti. oxlint temiz.
+
+### 3. Canlı doğrulama (salt okur, scratchpad'deki `deneme-liste` programı)
+- Host bilerek başlatılmadı: zamanlayıcı canlı işleri tetikleyebilirdi. Bunun yerine Core servisi, Host'un appsettings dosyasıyla doğrudan çağrıldı.
+- 08.11 sonucu:
+  - 1.194 fiş: 1.171 Trendyol'da zaten faturalı, 23 elle bakılmalı (iptal edilmiş paket, aynı pakete iki fatura).
+  - Gönderilebilir fiş yok; dün "faturası yok" görünen fişler bu arada yüklenmiş.
+- `GonderAsync` deneme modunda:
+  - 1271643 → zatenVar (barkod eşleşti).
+  - 1230415 → atlandı (aynı pakete 2 fatura).
+  - Olmayan kimlik → hata.
+
+### 4. Paket
+- Komut: `deploy\yayinla.ps1` → `yayin\`. İçinden `appsettings.json` çıkarılıp `SentezServis-2026-11-09-trendyol-fatura.zip` oluşturuldu (~81 MB). Zip commit edilmedi.
+- **Commit:** `bf2cd0e` — Trendyol fatura gonderimi ekrani + zamanlamasiz is
+
+### Açık kalanlar
+- Sunucuya kurulum kullanıcıda; kurulum sırasında mevcut appsettings korunmalı.
+- Gerçek bir yükleme henüz hiç yapılmadı. İlk gönderimin "Deneme" kutusu işaretliyken, sonra 1–2 fişle yapılması önerildi.
+- Konsol uygulaması `TrendyolFaturaKontrol` repoda duruyor ama artık önerilmiyor. Ekran ve iş onun yerini aldı.
+- İş için cron değeri kullanıcı istediğinde verilecek.
