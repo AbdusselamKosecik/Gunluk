@@ -28,3 +28,14 @@
 - Yayın (main sunucunun 50fa1f81 → 1b223884 önünde) kullanıcı "yayını tekrar başlat" bekliyor; ardından Brevo testi, sysagent kurulumu, ast-02, Mode=on, spool `delete`, BR-QA-134/135/139.
 - sip.pbxtr.com DNS-only (BR-SYS-150), QA-126 insan imzası.
 - BR-BE-288 pbxtr dilimi, BR-QA-140.
+
+### 4. X: diski doldu (0 bayt) — birleşmiş worktree temizliği
+- **Neden:** BR-BE-288 ajanı `ENOSPC` ile hiç yazamadı; `df` X: 301G/301G.
+- **Ne yapıldı:** `.claude/worktrees` 18 GB, 42 worktree. Her biri ölçüldü (`git status` temiz + dalı `git branch --merged main`): 41'i temiz ve birleşmiş → `git worktree remove --force` + `prune` (dallar duruyor). Koşan QA-140 ajanının worktree'sine dokunulmadı. Sonuç: 18 GB boş.
+- **Diskin geri kalanı kullanıcının verisi** (Gitlab 74,5G, untitled 70G, Test 37G, Oyun 13G, GitHub ölçüm zaman aşımı) — dokunulmadı. X:'te vhdx yok. Ders: her birleştirmeden sonra worktree kaldırılır.
+
+### 5. BR-BE-288 pbxtr dilimi (backend-dev-2 ajanı) + BR-AST-170 kartı
+- **Ne yapıldı (d8ec173e, merge 828241d8):** CrossNodeBusyCoordinator + `xnode-busy` ikinci alanı + kullanıcı başı Redis kilidi + QueueMembershipSyncJob mutabakatı; diğer düğümün geri yolladığı duraklatma olayı agent molası sanılıp `on_call`'ı eziyordu — üç yerde filtrelendi; ACW koruması.
+- **Birleştirme sonrası koordinatör:** format kapısı `CrossNodeBusyTests.cs:340` tek satır sonu (ajanın "her dosya CRLF yüzünden kırmızı" iddiası yanlıştı — yalnız bu dosya); yazma daraltma bir satır kayması → `--dondur`. Commit `9677b3d8`.
+- **Doğrulama:** build 0 hata; Api 96/96; Integration gerçek Redis 2/2; çapraz-kip iki kapı OK; format 0.
+- **Yeni kart BR-AST-170:** agent molası (PAUSEALL) yalnız varsayılan düğüme gidiyor. `EfUserQueueMembershipReader` sızıntı testi BR-QA-140 ajanına eklendi.
