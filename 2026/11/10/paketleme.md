@@ -31,3 +31,14 @@ SentezServis "Koli listesi" (hazır barkodlu koliler; bkz. 2026/11/10/sentezserv
 - **Commit:** `c3bdb75`
 - **Yama:** `dagitim/paketleme-yama-2026-11-10-koli-qr.zip` (1,6 MB: Paketleme.dll, Paketleme.Desktop.dll/.exe); baz
   `dagitim/paketleme-win-x64` artık bu sürüm. 02.11b yaması kurulu makineye uygulanır.
+
+## Ek — etiket üst boşluğu (15:50)
+- **Neden (kullanıcı):** "etiketlerde (paket) yazdırırken yukarıdan biraz boşluk bırakabilir misin, 3 mm gibi".
+- **Ne yapıldı:** `ZplEtiket.UstKayma(mm)` → `^LT` (±120 nokta). `Ayarlar.EtiketUstMm` (varsayılan **3**) ürün etiketi yazıcısındaki
+  ürün/paket, hata barkodu ve koli QR (2'li) etiketlerine; `KoliEtiketUstMm` (varsayılan 0) 10×10 koli etiketi ve 100×100 QR'a.
+  Ayarlar ekranında "Üst boşluk (mm)" ve "Koli etiketi üst boşluk (mm)" (−5…15). Etiketin tamamı kayar; 20 mm etikette alt satır
+  (barkod numarası / MADE IN EGYPT ~18,6 mm) 3 mm ile kenara yaklaşır — gerçek yazıcıda bakılacak.
+- **Doğrulama:** 173 test geçti (3 yeni). Gerçek yazıcıda basılmadı.
+- **Commit:** `20b61ad`
+- **Yama:** `dagitim/paketleme-yama-2026-11-10-koli-qr.zip` yeniden üretildi (1,7 MB; Koli QR + üst boşluk; 02.11b üstüne).
+- Not: Ortak/ (ZplEtiket, Ayarlar) yalnız paketlemede değişti; diğer uygulamaların Ortak kopyalarına taşınmadı.
