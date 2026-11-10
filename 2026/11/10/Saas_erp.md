@@ -73,8 +73,20 @@
   - Vitest: 3618 geçti.
   - PG: 304 testte yalnız bu dilimde kırılan yok (24 hata baseline ile aynı).
 
+### 5. UX post-check ve düzeltme — `684cf3e7c`
+- **Kontrol:** yerel yığın, E2 S4b-2 + E6 S3b-2. Sonuç PASS-WITH-NITS, düzeltilmesi şart bir maddeyle.
+- **Şart madde:** Boyahane emrindeki çıkış özeti iplik metinlerini gösteriyordu. Kurul koşulu 14 karşılanmıyordu.
+- **Düzeltmeler:**
+  - Panel metni artık emir tipine göre seçiliyor (`issue_summary_copy.logic.ts` + vitest).
+  - Onay bandı karanlık modda doğru renkleri kullanıyor.
+  - 390px'te diyalog başlığı kapatma düğmesiyle çakışmıyor.
+  - "batch" → "parti".
+  - "sonraki sürümde" yardım metinleri güncellendi.
+  - Otomatik sarf anahtarına erişilebilir ad verildi.
+- **Gates:** ilk koşuda TC_FAIL çıktı, ama sebep kod değildi: npm "Illegal instruction" ile çöktü. Tekrar koşunca temiz geçti (vitest 3626).
+- **Not:** Karşılanan kolonu, onay bandı ve iş satırı çipleri canlı görülemedi; MitoTex'te verisi yok. Kodda incelendi.
+
 ## Açık kalanlar
-- E2 S4b-2 ve E6 S3b-2 için UX post-check (yerel yığın) sürüyor.
 - E6 S4: kurul koşulu gereği S3b-2'nin DEV'de bir pilot turu bekleniyor (DEV deploy ve gerçek kullanım gerekir).
 - ClickUp `z8v9xnkd22`:
   - karışık koli bağlama ve Engelle modu,
