@@ -42,3 +42,13 @@ SentezServis "Koli listesi" (hazır barkodlu koliler; bkz. 2026/11/10/sentezserv
 - **Commit:** `20b61ad`
 - **Yama:** `dagitim/paketleme-yama-2026-11-10-koli-qr.zip` yeniden üretildi (1,7 MB; Koli QR + üst boşluk; 02.11b üstüne).
 - Not: Ortak/ (ZplEtiket, Ayarlar) yalnız paketlemede değişti; diğer uygulamaların Ortak kopyalarına taşınmadı.
+
+## Ek (17:35) — Koli QR: sevk edilmeyenleri tekrar yazdır
+- **Neden:** kullanıcı "sevk edilmeyenleri tekrar yazdır diyebilir misin paketlemede".
+- **Ne yapıldı:** Sevk bilgisi yeni alan olmadan `Erp_Box.InventoryReceiptId` (sevkiyatmobil irsaliyeye okuttuğunda dolar).
+  `KoliQrEtiketi.ListeAsync(..., yalnizSevkEdilmemis)` + `KoliQrKaydi.SevkEdildi`; ekranda "Yalnız sevk edilmemişler"
+  onay kutusu (varsayılan açık), 🚚 sütunu, "Sevk edilmeyenleri tekrar yazdır" düğmesi (basılmamış süzgecini kapatır,
+  sevk edilmemişleri listeler, hepsini seçer; basım yine Yazdır → onay ile).
+- **Dosyalar:** `Paketleme/Ekranlar/Veri/KoliQrEtiketi.cs`, `KoliQrViewModel.cs`, `KoliQrView.axaml`, `UygulamaMetinleri.cs`.
+- **Doğrulama:** `dotnet test Paketleme.Tests` 173 geçti. Yayım + farklar.py: değişen Paketleme.dll, Paketleme.Desktop.dll/.exe.
+- **Paket:** `dagitim/paketleme-yama-2026-11-10-koli-qr-b.zip` (1,7 MB; öncekinin yerine, 02.11b üstüne). Taban `dagitim/paketleme-win-x64` güncellendi, uygulama açıldı.
