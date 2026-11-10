@@ -24,3 +24,10 @@ SentezServis "Koli listesi" (hazır barkodlu koliler; bkz. 2026/11/10/sentezserv
 ## Açık kalanlar
 - Canlı: koli-liste.sql (kullanıcı), SentezServis yaması, masaüstündeki 2277.xlsx (338 koli) / 2278.xlsx (432 koli) yüklenmesi,
   sonra QR baskısı. Paketleme yaması çıkarılmadı.
+
+## Ek — tablosuz (15:40)
+- Koli QR listesi `Erp_Box.SpecialCode = 'KLY'` + içerik Erp_BoxItem/Variant; basıldı = `Erp_Box.IsPrinted/PrintedAt/PrintedBy`
+  (UZM_KoliListe kaldırıldı, kullanıcı isteği). Liste SQL'i canlıda salt okunur denendi (PK1 kolileriyle, çalışıyor).
+- **Commit:** `c3bdb75`
+- **Yama:** `dagitim/paketleme-yama-2026-11-10-koli-qr.zip` (1,6 MB: Paketleme.dll, Paketleme.Desktop.dll/.exe); baz
+  `dagitim/paketleme-win-x64` artık bu sürüm. 02.11b yaması kurulu makineye uygulanır.

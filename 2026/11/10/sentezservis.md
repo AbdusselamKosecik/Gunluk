@@ -65,3 +65,24 @@ Kullanıcı: "Bizim web servise barkod listesi yüklememiz lazım. Hazır barkod
 - Canlı: betik çalıştırma, appsettings iki anahtar, yazmayı birlikte açma; yazma yolu (koli aç/stoğa al) canlıda denenmedi
   (UZM_KoliListe canlıda yok; DDL kullanıcıda).
 - Seri/tahsis tasarımı (depo) — UZM_ tablo izni sorusu cevap bekliyor.
+
+## Ek (15:20–15:45) — yeni tablo kaldırıldı, gerçek listeler doğrulandı
+
+### 5. Mock karışıklığı
+- Kullanıcı tarayıcıda açık kalan mock sayfasındaki "fiş 00000123"ü gerçek sandı ("fiş yok ortada", "Boxlar yok").
+  Canlıda hiçbir şey yazılmamıştı. Mock sekmesi kapatıldı, vite durduruldu. **Ders:** mock denemesinden sonra sekmeyi kapat.
+
+### 6. UZM_KoliListe kaldırıldı (kullanıcı: "koli-liste.sql'e ne gerek var… standart yürüyen sistemin arasına gireceğiz,
+yeni alan falan ne"; "SpecialCode vardır oraya yaz")
+- Listeden gelen koli: `Erp_Box.SpecialCode = 'KLY'`, `Explanation` = "dosya · web kullanıcısı" (50), QR basıldı
+  `IsPrinted/PrintedAt/PrintedBy`; içerik Erp_BoxItem/Variant'tan (OUTER APPLY + FOR XML bedenler). `db/sentezcore/koli-liste.sql` silindi.
+- Canlı şema: `Erp_Box.BoxCode` nvarchar(**25**) → barkod sınırı 50'den 25'e.
+- Doğrulama (salt okunur canlı): masaüstü `2277.xlsx` (338 koli, 00000006 NZR-2277 EKRU 4+4) ve `2278.xlsx` (432 koli,
+  00000007 NZR-2278 6+6) — **tüm satırlar geçerli**. Test: `KoliListeSorguCanliTestleri` (KOLI_LISTE_DOSYA ile).
+- Testler 319 geçti + 3 canlı; vitest 61.
+- **Commit:** `75a0800` — Koli listesi: yeni tablo yok - listeden gelen koli Erp_Box.SpecialCode='KLY'
+- **Paket:** `SentezServis-yama-2026-11-10-koli-listesi.zip` (73 MB, exe + app.js + KURULUM.txt; SQL yok) yeniden üretildi.
+
+## Açık kalanlar (güncel)
+- Kurulum: yama + appsettings iki anahtar (`KoliListeYazmaAcik`, `KoliListeSentezKullaniciId`); ilk koli açma/stoğa alma canlıda birlikte.
+- sevkiyatmobil koruması (SpecialCode KLY koliyi mamul girişte reddet) — yapılmadı.
