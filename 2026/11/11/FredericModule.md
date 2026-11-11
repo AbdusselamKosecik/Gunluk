@@ -53,3 +53,28 @@ Varyant → Barkod'a yazmak (Get → kontrol → PostData).
 - Renk/beden kodları Amerika ↔ Sentez aynı mı? Değilse `UpcCodeMapper` doldurulacak.
 - Model filtresi `InventoryType=6 / InventorySubType=1` doğru mu teyit.
 - İsteğe bağlı: "Seçilen UPC'leri Excel indir" (doc §7) eklenmedi.
+
+---
+
+## Ek tur (gece) — "Dosya okunamadi" hata detayi yok
+
+### 2. Dosya okuma hatalarinin gorunur ve dayanikli hale getirilmesi
+- **Neden:** Kullanici: "dosya okunamadi diyor ama hata detayi yok". Pencere yalnizca `ex.Message` gosteriyordu;
+  inner exception ve tur kayboluyordu. Ilk surum `new ExcelPackage(FileInfo)` ile dosyayi dogrudan aciyordu (Excel'de acikken kilit sorunu riski).
+- **Ne yapildi:**
+  - `UpcSourceReader.Read`: dosya `FileShare.ReadWrite|Delete` ile `byte[]`'a alinir; once EPPlus, olmazsa ExcelDataReader
+    (`Encoding.RegisterProvider(CodePagesEncodingProvider.Instance)` + `ExcelReaderFactory.CreateReader`, .xls de okunur).
+    Ikisi de basarisizsa mesajda iki hata birlikte + "Farkli Kaydet .xlsx" onerisi.
+  - Okuma ham "Sheet(Name, List<string[]>)" yapisina indirildi; baslik eslestirme/satir olusturma ortak `Parse`'ta.
+  - Baslik bulunamazsa her sayfanin okunan basliklari ve eksik alanlar mesajda listelenir.
+  - `Describe(ex)`: `Tur: mesaj -> InnerTur: mesaj` zinciri.
+  - PM: hata penceresi zinciri gosterir; tam `ex.ToString()` `Belgeler\FredericUpcLog\OkumaHatasi_yyyyMMdd_HHmmss.txt`.
+- **Dokunulan dosyalar:** `Bussines/UpcTransfer/UpcSourceReader.cs`, `PresentationModels/UpcTransferPM.cs`
+- **Dogrulama:** scratch kopyada `dotnet build` 0 hata (Dlls junction yeniden kuruldu: `mklink /J scratch\bt\Dlls X:\GitHub\Sentez-Core\Dlls`).
+  net6 konsol testi (EPPlus.Core 1.5.4 + ExcelDataReader 3.6.0 + reader kaynak dosyasi) 5/5 PASS: xlsx metin+sayi UPC,
+  kilitli (FileShare.Read) dosya, BOM'lu `;` CSV, yanlis baslik mesaji, bozuk xlsx'te iki okuyucu hatasi.
+  Kullanicinin gercek dosyasindaki asil hata henuz bilinmiyor — yeni surumle tekrar denenince mesaj/log ile gorulecek.
+- **Commit:** `abd7658` — UPC aktarim: dosya okuma hatasinda detay goster, kilitli/sorunlu dosyalari oku
+
+### Notlar
+- Kullanici `FredericModule.csproj`'de Y:\ HintPath'lerini `..\Dlls\x64\` yapmis (commit edilmemis, dokunulmadi).
