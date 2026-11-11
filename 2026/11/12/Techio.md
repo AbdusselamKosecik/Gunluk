@@ -46,3 +46,29 @@ Kaynak: `X:\Techio\backend` (.NET 10) + `X:\Techio\ui` (Vue 3). İkisi de git'te
 - Kurulumda `appsettings.json` canlı bağlantıya çevrilmeli.
 - `01_eksik_SPler.sql` canlıda kullanıcı tarafından çalıştırılacak.
 - Techio kaynakları hâlâ git'te değil.
+
+---
+
+### 3. Fashion (10.10.10.200) — 04.11.2026 12:05-12:20 herkese 15 dk HARICI DURUM (HAZIR, ÇALIŞTIRILMADI)
+- **Neden:** Kullanıcı talebi; o gün 12:10-12:15 arası hiç kayıt yok (üretim durmuş).
+- **Keşif (salt okuma):** `LostTimes` Code=10 "HARICI DURUM" (Id 1EF61346-…, AffectProductivity=1).
+  `REPORT_F_EfficiencyReport`: TotalWorkingHours = PDKS `EntryControl.WorkedTime` (yoksa 540),
+  Net = Total − (KZ01+KZ10+KZ11+KZ02) − Repair. KZ10 = `FC_New_Transection_Group_View_PDKS` içinde
+  `IsLostTime=1 AND IsIllegal=0 AND Code='10'` satırlarının takvim süresi (`GetWorkingTimeFromTwoDate`) → üretim
+  satırlarıyla çakışma bu raporu bozmaz. 9 bantta pencere = 900 sn. Trigger'lar kapalı.
+  Bu DB'de hiç elle kayıp zaman yok (136k satır hepsi CreatedType=2). Cihaz harici durumları `IsIllegal=1` → raporda sayılmıyor olabilir (ayrı konu).
+- **Hedef kitle:** cihaz kaydı olan, DeviceType<>4, len(Code)>3, ilk kayıt <12:05 ve son kayıt >12:20 → 165 kişi (2 kişi dışarıda).
+- **Script:** `01_harici_durum_ekle.sql` (tek transaction, sayı 150-180 dışıysa rollback, etiket `ChangedExp='TOPLU HARICI DURUM 2026-11-04 12:05-12:20'`,
+  CreatedType=4, alanlar kişinin 12:05'teki kaydından), `02_geri_al.sql`. Kopya: `2026/11/12/Techio-fashion/`.
+  Önce raporu: `X:\Techio\Fashion-harici-durum-2026-11-04\rapor_ONCE.txt`.
+- **Durum:** Kullanıcı onayı bekleniyor; çalıştırılmadı.
+
+### 4. Dikim (172.16.1.2) — QualityControlQuantityList çiftleme analizi (salt okuma)
+- **Ham veri temiz:** `OrderItemVariantProduction` (QualityType>1, 01.10-11.11) silinmiş kayıt 0, çift gönderim 0.
+  `FC_New_Transection_OnlyQuantity_View` 6 haftada 62 grupta cihaz/makine/bant farkıyla bölünme, toplam 22 adet fazla (önemsiz).
+- **Ölçüm 01-11.11.2026, CalculatorQuantity toplamı:**
+  ana SP 115.006 | R0 67.220 | R1 67.220 | R2 91.560 | R3 67.220 | R4 91.560 (doğru = 67.220, tamir adedi hepsinde 396).
+- **Kök neden:** Calc (sipariş, tamirci, tamir op) seviyesinde; ana SP satırı (hata, kontrolcü, kontrol op, **OrderItemVariantId** — select'te yok ama GROUP BY'da)
+  seviyesinde → aynı üretim her satıra tekrar yazılıyor (en çok 7 kez). R2/R4 hata kodu seviyesinde → aynı sipariş üretimi her hata türünde tekrar.
+  R2 Oran ×100, diğerleri değil (tutarsız).
+- **Durum:** Düzeltme önerisi kullanıcıya sunuldu, SP'lere dokunulmadı.
