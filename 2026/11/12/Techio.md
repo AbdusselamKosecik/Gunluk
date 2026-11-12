@@ -114,3 +114,7 @@ Kaynak: `X:\Techio\backend` (.NET 10) + `X:\Techio\ui` (Vue 3). İkisi de git'te
   silinip yerine HARICI geldi (54 kişide Standart Dışı azaldı). `rapor_ONCE.txt` / `rapor_SONRA.txt` klasörde.
 - **Geri alma:** `02_geri_yukle_20261104.sql` (@DoCommit=1) günü yedek anına döndürür.
 - **Dosyalar:** `X:\Techio\Fashion-harici-durum-2026-11-04\` (kopya `2026/11/12/Techio-fashion/`).
+- **Son kontrol ve onay (03:5x):** 168 HARICI (12:05-12:20, IsIllegal=0, sebep=HARICI DURUM), sebepsiz 0, aralıkta başka kayıt 0,
+  gün toplam adet 185.862 = yedek 185.862, sağ parça KZ düzeltmesi 3. ±1 saatte 5 aynı-kişi zaman çakışması var ama hepsi
+  orijinal cihaz kayıtları (ms yuvarlama; yedekte 6 vardı). Açık transaction: MERKEZANALIZ replikasyon ajanı (02:35'ten beri, bizimle ilgisiz)
+  → Fashion değişiklikleri replikasyonla merkeze akacak. Kullanıcıya onaylandı.
