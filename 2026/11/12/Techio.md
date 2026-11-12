@@ -89,3 +89,28 @@ Kaynak: `X:\Techio\backend` (.NET 10) + `X:\Techio\ui` (Vue 3). İkisi de git'te
 - **Uygulama:** `01_duzelt.sql` (PARSEONLY OK → tek transaction, yedek + ALTER). Sonrası canlı doğrulama aynı sayılar.
 - **Dosyalar:** `X:\Techio\Dikim-QC-ciftleme-2026-11-12\` (kopya `2026/11/12/Techio-dikim-qc/`).
 - **Kalan:** `FC_New_Transection_OnlyQuantity_View` cihaz/makine farkıyla nadir bölünme (6 haftada 22 adet) — dokunulmadı.
+
+### 6. Fashion 04.11.2026 12:05-12:20 HARICI DURUM — "araya girme" yöntemiyle UYGULANDI
+- **Neden:** Kullanıcı: "X:\Test altındaki gibi araya girmemiz lazım, yanlış olmuş". (#3'teki üst üste ekleme yaklaşımı
+  hiç çalıştırılmamıştı; DB temizdi. O scriptler `ESKI_yanlis_yaklasim/` altına alındı.)
+- **Kaynak şablon:** `X:\Test\fashion_losttime_fix.sql` (30.06.2026 15:00-15:15), `fashion_01_yedek_al.sql`, `fashion_02_geri_yukle.sql`.
+  Mantık: 12:05'i kapsayan kayıt EndDate=12:05 (EndQ aynı); aralık içi kayıtlar (+Items, +Reason) silinir; 12:20'yi kapsayan kayıt
+  StartDate=12:20, StartQ=Qboundary (sayaç zinciri içerideki adedi sağa taşır); 12:05-12:20 HARICI (Code 10) eklenir;
+  tek kaydı aralığı tamamen kapsayan (overlap) kişilerde kayıt ikiye bölünür (üretim sol parçada).
+- **Ön analiz:** 168 kişi = 86 normal + 82 overlap; 77 iç kayıt (122 adet); zincir uyumu %99,5; uç durum yok.
+- **Şablondan farklar:** (a) yeni HARICI satırlarda IsRepair/IsIllegal=0 (rapor KZ10 IsIllegal=0 arar);
+  (b) `ChangedExp='HARICI DURUM 2026-11-04 12:05-12:20'`; (c) overlap kaydı kayıp zamansa sağ parça da kayıp zaman;
+  (d) bütünlük kontrolü = günün TÜM kayıt adedi korunmalı (yalnız üretim değil: 2806 ESMA TARDU'da iç 1 adet IsIllegal kayıt,
+  sağdaki kayıp zaman kaydına zincirle geçiyor → üretim toplamı -1 görünüyordu, rapor etkisi 0) + aralıkta başka kayıt yok + herkeste 1 HARICI.
+- **Akış:** 03 TEST (rollback) ×3 → yedek tabloları `*_yedek_20261104` (kullanıcı 03:34'te SSMS'ten almış; mevcut veriyle birebir
+  aynı olduğu doğrulandı, 16.536 satır, fark 0) → kullanıcının 03:37 SSMS denemesi eski kontrol yüzünden kendini ROLLBACK etti
+  (değişiklik yok) → düzeltilmiş script @DoCommit=1 ile COMMIT (168 HARICI, gün toplamı 185.862 = 185.862).
+- **Sonradan düzeltme (c):** rapor karşılaştırmasında 2 kişide net çalışma +32/+34 çıktı → overlap kaydı kayıp zaman olan 3 kişide
+  (7362 MAKINE ARIZA, 2828 MAKINE ARIZA, 2530 SETUP) şablon sağ parçayı üretim açmıştı. 3 satır IsLostTime=1 + orijinal sebep ile düzeltildi
+  (`ChangedExp='HARICI 2026-11-04 sag parca KZ'`). Not: sqlcmd'de UPDATE için `-I` (QUOTED_IDENTIFIER ON) şart (computed/indexed nesneler);
+  ChangedExp en fazla 50 karakter.
+- **Sonuç (REPORT_F_EfficiencyReport 04.11):** 167 kişi; 165'inde Harici +15; performansı artan 141, aynı 26, azalan 0; net artan 0.
+  Harici almayan 2 kişi o saatte işte değil. Net düşüşün bazılarında 15'ten az olması doğru: aralıktaki Standart Dışı vb. kayıp zamanlar
+  silinip yerine HARICI geldi (54 kişide Standart Dışı azaldı). `rapor_ONCE.txt` / `rapor_SONRA.txt` klasörde.
+- **Geri alma:** `02_geri_yukle_20261104.sql` (@DoCommit=1) günü yedek anına döndürür.
+- **Dosyalar:** `X:\Techio\Fashion-harici-durum-2026-11-04\` (kopya `2026/11/12/Techio-fashion/`).
