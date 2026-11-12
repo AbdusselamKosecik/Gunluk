@@ -72,3 +72,20 @@ Kaynak: `X:\Techio\backend` (.NET 10) + `X:\Techio\ui` (Vue 3). İkisi de git'te
   seviyesinde → aynı üretim her satıra tekrar yazılıyor (en çok 7 kez). R2/R4 hata kodu seviyesinde → aynı sipariş üretimi her hata türünde tekrar.
   R2 Oran ×100, diğerleri değil (tutarsız).
 - **Durum:** Düzeltme önerisi kullanıcıya sunuldu, SP'lere dokunulmadı.
+
+### 5. Dikim (172.16.1.2) — QC çiftleme DÜZELTİLDİ (ana SP, R2, R4)
+- **Neden:** Kullanıcı "sistemi ve çıktıyı bozmadan çiftlemeleri düzelt" dedi.
+- **Kural:** Kolon adı/sırası/tipi aynı (backend Dapper modeli ve UI grid'i değişmiyor). R0/R1/R3 zaten doğru, dokunulmadı.
+- **Ne yapıldı:**
+  - Ana SP: `p.OrderItemVariantId` GROUP BY'dan çıktı; CalculatorQuantity `Calc` CTE ile (sipariş, tamirci, tamir op) seviyesinde
+    bir kez hesaplanıp `ROW_NUMBER()` ile kombinasyonun ilk satırına yazılıyor, diğerlerinde 0 (korele alt sorgu da kalktı).
+  - R2: payda = (kişi, op) için tamir gördüğü siparişlerdeki üretim (R1 ile aynı); Calc ilk hata satırında; Oran gerçek payda ile, ×100 korundu.
+    → R2 hata oranları toplamı = R1 oranı (doğrulandı, 0 fark).
+  - R4: payda = dönem toplamı (her sipariş/kişi/op bir kez); Calc ilk satırda; Oran gerçek payda ile.
+  - Eski tanımlar `<ad>_yedek_20261112` olarak DB'de duruyor; `02_geri_al.sql` eskiye döndürür.
+- **Test:** önce `#` geçici prosedürlerle eski/yeni yan yana (01-11.11.2026):
+  ana 322→316 satır (fark yalnız görünmez varyant bölünmesi; görünen satır kümesi birebir aynı), Calc 115.006→67.220;
+  R2 91.560→67.220 (166 satır aynı); R4 91.560→67.220 (12 satır aynı); tamir 396 hepsinde.
+- **Uygulama:** `01_duzelt.sql` (PARSEONLY OK → tek transaction, yedek + ALTER). Sonrası canlı doğrulama aynı sayılar.
+- **Dosyalar:** `X:\Techio\Dikim-QC-ciftleme-2026-11-12\` (kopya `2026/11/12/Techio-dikim-qc/`).
+- **Kalan:** `FC_New_Transection_OnlyQuantity_View` cihaz/makine farkıyla nadir bölünme (6 haftada 22 adet) — dokunulmadı.
