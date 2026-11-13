@@ -134,3 +134,33 @@ Demo: admin@smartlay.local / Admin123! · depocu D0001 · operatör P0001 · cih
 - ACL'nin "başka cihaz topic'ine yazma" senaryosu gerçek bağlantıyla test edilmedi (kodda var).
 - TLS 8883, EF migrations, ERP entegrasyonu yok. Ozan Bey'in 17 sorusunun cevabına göre sözleşme güncellenecek.
 - Depo sayfası 1280×800'de top kartı açıkken hafif kayıyor.
+
+---
+
+## Ek tur (14:00) — SQL Server + otomatik migration
+
+### SQL Server varsayılan, açılışta EF Core migration
+- **Neden:** Karşı taraf (Ozan Bey ekibi) MS SQL Server üzerinde deneyecek; şema `EnsureCreated` ile kuruluyordu, migration yoktu.
+- **Ne yapıldı:**
+  - Paketler: `Microsoft.EntityFrameworkCore.SqlServer` ve `Microsoft.EntityFrameworkCore.Design` (10.0.*).
+  - `Program.cs`: `Database:Provider` varsayılanı `sqlserver` (`mssql` de kabul), `UseSqlServer(cs, s => s.EnableRetryOnFailure(5))`; `sqlite`/`postgres` deneme için kaldı, bilinmeyen değer → hata.
+  - Açılış: SQL Server ise bekleyen migration'lar loglanıp `MigrateAsync()`; diğer sağlayıcılarda `EnsureCreatedAsync()` (migration'lar SQL Server'a özgü).
+  - `Data/SmartLayDbDesignFactory.cs`: `IDesignTimeDbContextFactory`; `dotnet ef` her zaman SQL Server'a göre üretir.
+  - `appsettings.json`: `Server=.;Database=SmartLay;Trusted_Connection=True;TrustServerCertificate=True`. `appsettings.Development.json`: `Server=(localdb)\MSSQLLocalDB;Database=SmartLay;...`.
+  - README'ye "Veritabanı: SQL Server + otomatik migration" bölümü (yeni migration, idempotent SQL betiği, yetki notu).
+- **Kodda transaction yok** → `EnableRetryOnFailure` güvenli (retry stratejisi elle açılan transaction'larla çakışır).
+- **Komutlar:**
+  ```bash
+  cd src/SmartLay.Api
+  dotnet add package Microsoft.EntityFrameworkCore.SqlServer --version "10.0.*"
+  dotnet add package Microsoft.EntityFrameworkCore.Design --version "10.0.*"
+  dotnet ef migrations add InitialCreate --output-dir Data/Migrations
+  # PowerShell: $env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --no-launch-profile --urls http://localhost:5080
+  ```
+- **Tuzak:** `dotnet run --no-launch-profile --environment Development` ortamı geçirmedi → Production'da boş Jwt:Key ile açılış durdu. Ortam değişkeni ile çözüldü.
+- **Sonuç / doğrulama:** LocalDB'de veritabanı yokken açılış → `Veritabanı migration uygulanıyor: 20261113105738_InitialCreate`. Simülatör 13 olay hepsi ACK; rapor SQLite ile birebir (15.110 mm, %99,3; TOP-001 Tükendi 46.790, TOP-002 58.100 stokta). `__EFMigrationsHistory` 1 satır. Yeniden açılışta migration tekrar çalışmadı, veri korundu. `dotnet test` 16/16. Deneme DB'si (LocalDB SmartLay) sabah temiz demo için silindi.
+- **Commit:** `bc6a458` — SQL Server varsayılan veritabanı, açılışta otomatik EF Core migration (Ozanlar reposunda remote yok → push yapılamadı).
+
+### Açık kalanlar
+- Ozanlar reposu için GitHub/GitLab remote açılmalı.
+- Sahadaki SQL kullanıcısının CREATE DATABASE yetkisi yoksa DB önceden boş açılmalı.
