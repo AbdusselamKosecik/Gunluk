@@ -83,3 +83,54 @@ Klasör git reposu değil; kodda değişiklik yapılmadı, sadece analiz.
 - Word'ü Ozan Bey'e gönder, cevapları al.
 - Ozanlar klasörü için git repo + remote açılmalı.
 - Cevaplar gelince tasarım dokümanı (brainstorming → yazılı tasarım) ve plan.
+
+---
+
+## Devam (12:15–12:50) — Uygulama yazıldı
+
+### 4. Karar ve kapsam
+- Ozan Bey görev dağılımını onayladı ("bu şekilde yap"). Hedef: **sabaha çalışır demo**.
+- Local git: `X:\Yazilim\Ozanlar` (branch `main`, **remote yok**).
+- Kararlar (benim): .NET 10 + EF Core, **SQLite** varsayılan (Docker çalışmıyordu; `Database:Provider=postgres` ile PostgreSQL),
+  **gömülü MQTTnet 5 broker** (ayrı Mosquitto gerekmez, `Mqtt:EmbeddedBroker=false` ile harici), React + Vite + Mantine.
+
+### 5. Sunucu (`src/SmartLay.Api`)
+- `Devices/DeviceProtocolService.cs`: COORE v0.2.4 sözleşmesi. authenticate_operator / validate_pastal / validate_roll;
+  olay → tek SaveChanges (commit) → sonra ACK; `event_id` + parmak izi (event_type|seq|uptime|pastal|roll|layer|boot_id)
+  ile tekrar=ACK, farklı içerik=ACK false `event_id_conflict` + DeviceEventConflicts. LAB ve source_mode'suz olay karantina.
+  Stok: kümülatif `gross_roll_mm`'den sadece düşülmemiş fark (PastalRoll.BookedMm). roll_ended & roll_change_started ikisi de anlaşılır.
+- Sözleşmeye eklenen opsiyonel alanlar: yanıtlarda `server_time`, `pastals[]`, `rolls[]`, `defect_reasons[]`;
+  olaylarda `defect_codes[]`, `defect_mm`, `remaining_mm`, `boot_id`.
+- `Devices/MqttHosting.cs`: gömülü broker (kullanıcı=deviceId, cihaz başına parola hash, topic ACL) + köprü client.
+- Controller'lar: auth (admin e-posta/şifre, depocu barkod), users, master/{kind}, models, pastals, rolls (depo in/out/measure/defects),
+  devices (parola bir kez gösterilir), dashboard, reports (pastal/model/top/tedarikçi/operatör), import (Excel ClosedXML).
+- Paket notu: EF/JwtBearer/Identity **10.0.*** sabitlendi (11.0 sadece net11). MQTTnet 5'te server ayrı paket `MQTTnet.Server`;
+  `SessionItems` non-generic IDictionary → `e.SessionItems[key] is string id`.
+
+### 6. Simülatör + testler
+- `src/SmartLay.Simulator`: gerçek MQTT ile cihaz taklidi (giriş, pastal, top, kat, top değişimi + fire kodu, pastal bitişi, ACK'e kadar tekrar).
+- `tests/SmartLay.Tests`: 16 test (SQLite in-memory) — hepsi geçti.
+- Uçtan uca: API (1884/5091 test portları) + simülatör → 13 olay ACK ✓; rapor verim %99,3; TOP-001 13.210 mm tüketim, 46.790 mm fark;
+  yanlış cihaz parolası reddedildi; tokensız API 401.
+
+### 7. Web (`web/`) — paralel alt ajanla yazıldı
+- Yönetim: canlı pano (3 sn), pastallar, kumaş stoğu, ana veriler (Excel), kullanıcılar, cihazlar (olay/çakışma), raporlar (CSV).
+- Depo tableti `/depo`: ürün giriş/çıkış, barkod üret + Code128 etiket, kalan metraj ölç, çoklu fire, bugünkü işlemler.
+- Ajanın bulduğu 2 API açığı düzeltildi: top yazma uçları ilişkileri yüklemiyordu; SQLite tarihleri Kind=Unspecified → UTC ValueConverter.
+- Doğrulama: `tsc --noEmit` temiz, `npm run build` → `src/SmartLay.Api/wwwroot`; tarayıcıda pano/depo/rapor ekranları kontrol edildi, konsol hatasız.
+
+### Komutlar
+```bash
+calistir.cmd                                   # web derle + http://localhost:5080
+dotnet run --project src/SmartLay.Simulator -- --layers 3
+dotnet test
+```
+Demo: admin@smartlay.local / Admin123! · depocu D0001 · operatör P0001 · cihaz SL-DEMO0001 / demo-device-pass.
+
+- **Commitler (Ozanlar, local):** `ca11ae2` sunucu+API, `12e3267` simülatör+testler+README, `aebbac7` web + API düzeltmeleri.
+
+## Açık kalanlar (güncel)
+- **Ozanlar reposunun remote'u yok** → push yapılamadı. GitHub/GitLab'da repo açılmalı (HDD riski).
+- ACL'nin "başka cihaz topic'ine yazma" senaryosu gerçek bağlantıyla test edilmedi (kodda var).
+- TLS 8883, EF migrations, ERP entegrasyonu yok. Ozan Bey'in 17 sorusunun cevabına göre sözleşme güncellenecek.
+- Depo sayfası 1280×800'de top kartı açıkken hafif kayıyor.
