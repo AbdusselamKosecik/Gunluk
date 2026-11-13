@@ -164,3 +164,46 @@ Demo: admin@smartlay.local / Admin123! · depocu D0001 · operatör P0001 · cih
 ### Açık kalanlar
 - Ozanlar reposu için GitHub/GitLab remote açılmalı.
 - Sahadaki SQL kullanıcısının CREATE DATABASE yetkisi yoksa DB önceden boş açılmalı.
+
+---
+
+## Ek tur (20:10) — Dağıtım paketi, kurulum/kullanım kılavuzu, dosya logu
+
+### 1. Windows servisi + dosya logu
+- **Neden:** Karşı taraf sahada deneyecek; servis olarak çalışmalı ve "loglara nereden bakacakları" dokümanda olmalı (kullanıcı isteği). Önceden log yalnız konsoldaydı.
+- **Ne yapıldı:**
+  - `Microsoft.Extensions.Hosting.WindowsServices` + `builder.Host.UseWindowsService(ServiceName=SmartLay)`; servisken ContentRoot = exe klasörü.
+  - `Serilog.AspNetCore` + `Serilog.Sinks.File`: `logs/smartlay-YYYYMMDD.log`, günlük, 30 gün, 50 MB'da bölünür. Ayar: `Log:Path`, `Log:RetainDays`.
+  - **Tuzak:** `builder.Logging.AddSerilog()` kendi provider'ına Trace filtresi ekliyor → `Logging:LogLevel` yok sayıldı, DEBUG satırları doldu. Çözüm: `builder.Logging.AddProvider(new SerilogLoggerProvider(fileLog, dispose:true))`.
+  - `AppDomain.UnhandledException` → açılış hataları (Jwt key, SQL) dosyaya `[FTL] Uygulama durdu` olarak düşer (doğrulandı).
+  - `DeviceProtocolService.HandleRequestAsync` sarmalandı: her cihaz sorgusu `Sorgu kabul` / `Sorgu RED: cihaz kind barkod -> reason` loglanır. Broker'a `Cihaz bağlantısı kapandı` logu.
+  - `Microsoft.Extensions.Identity.Core` referansı kaldırıldı (NU1510, framework'te var). `appsettings.json`: `Urls=http://0.0.0.0:5080`.
+- **Dokunulan:** `src/SmartLay.Api/Program.cs`, `SmartLay.Api.csproj`, `appsettings.json`, `Devices/DeviceProtocolService.cs`, `Devices/MqttHosting.cs`
+
+### 2. Simülatör
+- `--dump <klasör>`: gidip gelen tüm MQTT mesajlarını sıralı JSON dosyalarına yazar (ilk satır `// topic:`).
+- **Hata bulundu/düzeltildi:** seq her çalıştırmada 1'den başlıyordu → ikinci çalıştırmada event_id çakışması (sunucu doğru reddetti, panoda 5 çakışma). Artık başlangıç `UnixSeconds*100` (veya `--seq`).
+
+### 3. Dağıtım paketi
+- `publish.ps1`: web build → `dotnet publish -r win-x64 --self-contained` (api + simulator single-file) → `dotnet ef migrations script --idempotent` → `docs/build-docs.js` → `deploy/*` kopyala → `dist/SmartLay_v<ver>.zip` (91 MB). `appsettings.Development.json` paketten silinir.
+- `deploy/Betikler`: `ayar-olustur.ps1/.cmd` (SQL sunucu/kullanıcı sorar, `SqlConnectionStringBuilder`, master'a bağlantı testi, Jwt key + MQTT servis parolası rastgele, admin parolası boşsa üretip bir kez gösterir, `-Demo`, parametreyle sorusuz), `calistir.cmd`, `servis-kur.cmd` (sc create delayed-auto + failure restart), `servis-kaldir.cmd`, `guvenlik-duvari.cmd` (5080, 1883), `loglari-ac.cmd`, `simulator-demo.cmd`. Betikler ASCII (cmd/PS5.1 kodlama sorunu olmasın).
+- `deploy/Ornekler`: açıklamalı `appsettings.Production.ornek.json` (JSON yorum destekli), `baglanti-dizeleri.txt` (+ CREATE LOGIN/dbcreator/db_owner), `veritabani-sema.sql`, Excel şablonları (`/api/import/{kind}/template`'ten indirildi), `MQTT/` (simülatör `--dump` ile gerçek trafik + red örneği `unknown_operator`).
+- **Komut:** `powershell -ExecutionPolicy Bypass -File .\publish.ps1 [-Version 1.0.0]`
+
+### 4. Kurulum ve Kullanım kılavuzu (Word)
+- `docs/build-docs.js` (docx npm 9.x) → `docs/out/SMARTLAY_Kurulum_Kilavuzu.docx`, `SMARTLAY_Kullanim_Kilavuzu.docx`; ekran görüntüleri `docs/img/01..13.png` (Chrome DevTools MCP, 1366x800, demo + yavaş simülatörle canlı pano).
+- Kurulum: gereksinimler, paket içeriği, SQL hazırlığı, ayar betiği, deneme/servis kurulumu, otomatik migration + sürüm yükseltme, cihaz bağlantısı, **7. Loglar — nereye bakılır** (log dosyası, Olay Görüntüleyicisi, konsol, panel olayları/çakışmalar, aranacak ifadeler tablosu, Debug seviyesi, destek için gönderilecekler), sorun giderme tablosu, red kodları, ayarlar, kaldırma.
+- Kullanım: roller, giriş, günlük akış, Canlı Pano, Pastallar (form alanları), pastal detayı, stok, depo ekranı, ana veriler + Excel, kullanıcılar, cihazlar (olaylar/çakışmalar), raporlar, simülatör, kavramlar, SSS.
+- `validate.py` ile ikisi de PASSED. Word/LibreOffice bu makinede render edilemedi (COM 0x80080005) → sayfa görüntüsü kontrol edilemedi; metin yapısı XML'den kontrol edildi.
+- Doküman yazarken arayüz kontrolü: `home_reference`, `trim_cut` etiketleri eksikti → `web/src/labels.ts` eklendi.
+
+### 5. Doğrulama
+- Zip temiz klasöre açıldı → `ayar-olustur.ps1 -WindowsAuth -Demo` (LocalDB) → SQL testi BAŞARILI, admin parolası üretildi → exe açıldı, migration uygulandı → simülatör 13 olay ACK → üretilen parolayla giriş → çakışma 0. İkinci simülatör çalıştırması `pastal_not_open` (doğru) ve logda `Sorgu RED` satırı. Zip içinde Production/Development ayarı ve log yok.
+- `dotnet test` 16/16. Test DB'leri (SmartLayPaket, SmartLayZipTest) silindi.
+- **Commit:** `a1511a2` — Dağıtım paketi: kurulum betikleri, örnekler, Kurulum/Kullanım kılavuzu, dosya logu (Ozanlar'da remote yok → push yapılamadı).
+
+### Açık kalanlar
+- Ozanlar reposu remote (GitHub/GitLab) — hâlâ yok.
+- Word dokümanlarının sayfa düzeni gözle kontrol edilmeli (bu makinede render yok).
+- `servis-kur.cmd` gerçek servis olarak denenmedi (yönetici yetkisi gerekiyor); exe konsol modunda ve zip'ten test edildi.
+- TLS, ERP entegrasyonu.
