@@ -54,3 +54,32 @@ Klasör git reposu değil; kodda değişiklik yapılmadı, sadece analiz.
 - Ozan'a sorulacaklar: depo ekranı kimde, operatör tablet mi DWIN mi, fire nedeni alanı, event_id sıfırlanma,
   red olayında kuyruk davranışı, response'lara zengin pastal/top bilgisi.
 - Backend iskeleti (broker + event/ack handler + PostgreSQL) henüz başlanmadı.
+
+---
+
+## Devam (05:00–05:50)
+
+### 2. Teknoloji ve kapsam kararı
+- **Karar (kullanıcı):** Bizim taraf .NET + React ile yapılacak. Cihaz (ESP32 + DWIN + donanım + emniyet) Ozan Bey/COORE'da.
+- **Karar (kullanıcı):** Depo giriş/çıkış ekranı kesin olarak **bizde**.
+- **Öneri (benim):** Veritabanı PostgreSQL (COORE SQL şablonu ona göre), broker Mosquitto.
+- Bizim kapsam: MQTT broker + .NET cihaz köprüsü, React admin, ana veriler (müşteri/tedarikçi/sezon/model/kumaş rolü,
+  ERP'siz Excel import), depo + stok + fire nedenleri, raporlar.
+
+### 3. Görev dağılımı + Ozan Bey'e sorular Word dosyası
+- **Neden:** Kimin neyi yaptığını yazılı netleştirip Ozan Bey'e soru listesi göndermek.
+- **Ne yapıldı:** docx-js (npm `docx`) ile Word üretildi. İçerik: 1) Özet, 2) Görev dağılımı tablosu
+  (34 madde, Sorumlu = COORE / Abdusselam / Ortak, renkli), 3) 17 soruluk tablo (Konu / Soru / Neden önemli / boş Cevap sütunu).
+- **Sorular (özet):** fire kodları + kalan metraj, ekranda model/kat/kumaş bilgisi, event_id sıfırlanması (boot_id),
+  accepted:false'ta kuyruk, server_time/RTC, pastal bitirirken düzeltme olayı, kalan top metrajı, operatör ekranı DWIN mi tablet mi,
+  top barkodu kaynağı, authenticate_ vs validate_operator, responses/status şeması, completed_layers anlamı,
+  roll_ended/roll_started durumu, deviceId ve masa sayısı, TLS/CA güncelleme, "22-23-30-31-32-33" ekranları, takvim.
+- **Dosyalar:** `X:\Yazilim\Ozanlar\SMARTLAY_Gorev_Dagilimi_ve_Sorular.docx`; üretici script scratchpad'de `make_doc.js`
+  (yeniden üretim: `npm i docx` → `node make_doc.js <cikti.docx>`).
+- **Doğrulama:** docx skill `validate.py` → "All validations PASSED". Görsel render yapılamadı (LibreOffice yok, Word COM açılmadı).
+- **Not:** `X:\Yazilim\Ozanlar` git reposu değil → Word dosyası uzak depoya gitmedi. Repo açılması gerekiyor.
+
+## Açık kalanlar (güncel)
+- Word'ü Ozan Bey'e gönder, cevapları al.
+- Ozanlar klasörü için git repo + remote açılmalı.
+- Cevaplar gelince tasarım dokümanı (brainstorming → yazılı tasarım) ve plan.
