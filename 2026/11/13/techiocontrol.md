@@ -84,6 +84,24 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
   sözdizimi hatasız. 8/8 test geçti. Servis bu makineye **kurulmadı**.
 - **Commit:** `2499ed3` — Windows Servisi olarak calisma + kurulum betikleri
 
+### 6. Kurulum paketi
+- **Neden:** Kullanıcı sunucuya taşınacak bir paket istedi (SentezPlaning-paket-*.zip geleneği).
+- **Ne yapıldı:** `scripts/paket-yap.ps1`: self-contained `win-x64` publish → `app\`, yanına `servis-kur.ps1`,
+  `servis-kaldir.ps1`, `KURULUM.txt` → `X:\Gitlab\fredericTr\TechioControl-paket-<yyyy-MM-dd>-<sha>.zip`.
+  `servis-kur.ps1` artık yanında `app\TechioControl.exe` varsa paketten kuruyor, yoksa repodan derliyor (o da self-contained).
+  Güncellemede sunucudaki `appsettings.Local.json` ezilmiyor, `logs\` korunuyor.
+  `appsettings.Local.json` (SQL şifreleri) pakete giriyor, yoksa yalnızca örnek dosya konuyor.
+- **Dokunulan dosyalar:** `scripts/paket-yap.ps1`, `scripts/KURULUM.txt`, `scripts/servis-kur.ps1`
+- **Komutlar:**
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\paket-yap.ps1
+  ```
+- **Sonuç / doğrulama:** Paket 38.5 MB. Zip açılıp `app\TechioControl.exe --once --dry-run` çalıştırıldı
+  (74 aday, 3 gönderilecek; log `app\logs\` altına yazıldı). ps1 betikleri sözdizimi hatasız.
+  Servis kurulumu gerçek olarak denenmedi (yönetici + servis kaydı gerektiriyor).
+- **Paket:** `X:\Gitlab\fredericTr\TechioControl-paket-2026-11-13-ed7113d.zip` (yalnızca diskte; içinde şifre olduğu için repoya girmedi)
+- **Commit:** `ed7113d` — Kurulum paketi: scripts/paket-yap.ps1 + paketten kurulum
+
 ## Kararlar
 - İlk sürümde Görev Zamanlayıcı önerildi; kullanıcı isteğiyle **Windows Servisi**ne geçildi (`--once` konsol modu korundu).
 - 69'a yazma yalnızca mevcut `BulkInstall` API'si üzerinden yapılıyor; doğrudan DB'ye yazılmıyor.
