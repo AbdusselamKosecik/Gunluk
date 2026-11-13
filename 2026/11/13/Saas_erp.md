@@ -50,3 +50,27 @@ Bu yüzden hazır olan dilimler testsiz push edildi. Yapılan kontroller: günce
 - **E7 S3b-3a (karışık koli, wte32):** yarım. Backend kuralları ve migration hazır; ön yüz, i18n ve testler eksik. Bu yüzden publish edilmedi.
 - **E6 S4:** DEV pilot turu bekleniyor (`z8v9xnkd69`).
 - **S3b-3b Engelle:** pilot sonrasına ertelendi.
+
+### 5. E7 S3b-3a — karışık (asorti) koli birden çok irsaliye satırına bağlanır (23:40)
+- **Neden:** gerçek MitoTex kolileri tek kolide 8 beden taşıyor. Eskiden bir koli yalnız tek 3052 satırına bağlanabiliyordu, bu yüzden karışık koliler seçilemiyordu.
+- **Kurul:** kurul kararı `wt/e7s3b3-proposal.md`'de. S3b-3a onaylandı, S3b-3b (Engelle modu) ertelendi.
+- **Ne yapıldı:**
+  - migration `E7S3b3a_MixedBoxClaim`. Down adımı, satır varsa RAISE ile durur.
+  - `ReceiptBoxRules`/`ReceiptBoxClaim` kuralları ve `box_incomplete` hata kodu.
+  - `GetShippableBoxes` artık her koli için `lines` döndürüyor ve `ContentInvalid` alanını taşıyor.
+  - Ön yüz:
+    - `receipt-box-mixed.ts`: `planMixedBoxBind` ve kaldırma zinciri;
+    - dağıtım önizleme, kaldırma onayı ve satır seçici diyalogları;
+    - `use-receipt-box-binding` hook'u;
+    - i18n x11 ve changelog.
+- **Kapılar:**
+  - BE unit 69 ve PG 26 hedefli test geçti.
+  - Tip kontrolü, lint ve vitest 3837 temiz, `PENDING_CHECK` temiz.
+  - PG karşılaştırmasında `ONLY_IN_SLICE` boş.
+  - DEV standby'da DBA ön kontrolü: ihlal 0, satır 0.
+- **Commit:** `0f298e542` — feat(inventory,logistics): E7 S3b-3a karisik (asorti) koli 3052 irsaliyesine birden cok satira baglanir
+- **UX post-check:**
+  - **Karar:** APPROVE-WITH-CONDITIONS, BLOCK yok. Notlar `wt/uxlocal16-notes.md`'de.
+  - **Shippable API:** UE1 için 10 karışık koli dönüyor, her biri 8 satırlı.
+  - **Eksik veri:** satış siparişi 00000001 taslakta (Status 0), bu yüzden açık sipariş listesi boş geliyor. Chrome'da uçtan uca yürüyüş bu veri yüzünden yapılamadı.
+  - **Kod incelemesi:** koşul 3'teki alt toplam koli sayısı eksikti. Bu eksik 11-14 günlüğünde düzeltildi.
