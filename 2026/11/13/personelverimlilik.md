@@ -46,3 +46,20 @@ Kullanıcı: "69'dan bakmayacaksın, Fashion ve Dikim'e bakman lazım."
 ## Açık kalanlar / sonraki adım
 - Kullanıcı "olması gereken" ile tam takvim süresini (okutma olmasa da) payda istiyorsa ikinci bir verim sütunu eklenebilir.
 - Paketteki `System.Security.Cryptography.Pkcs` 9.0.11 NU1903 uyarısı (ClosedXML/SqlClient bağımlılığı).
+
+### 3. Tek exe, şifreler exe içinde
+- **Neden:** Kullanıcı: "tek exe yapalım, şifreler uygulamanın içinde olsun."
+- **Ne yapıldı:** csproj'da `appsettings.json` ve (varsa, gitignore'daki) `appsettings.Local.json` `EmbeddedResource` (LogicalName aynı) yapıldı;
+  `Program.cs` ayarı `GetManifestResourceStream` + `AddJsonStream` ile okuyor, exe yanında `appsettings.Local.json` varsa onu üstüne yazıyor.
+  Release için csproj'a win-x64, SelfContained, PublishSingleFile, IncludeNativeLibrariesForSelfExtract, EnableCompressionInSingleFile, DebugType=none eklendi.
+- **Dokunulan dosyalar:** `src/PersonelVerimlilik/PersonelVerimlilik.csproj`, `src/PersonelVerimlilik/Program.cs`, `README.md`
+- **Komutlar:**
+  ```bash
+  dotnet publish src/PersonelVerimlilik -c Release -o ../PersonelVerimlilik-program
+  ```
+- **Sonuç / doğrulama:** Klasörde sadece `PersonelVerimlilik.exe` (44 MB, sıkıştırmayla 95 → 44 MB). Yanında ayar dosyası olmadan 7411 / 12.11.2026 aynı sonuç (%69,3).
+  `git grep 204571` → repoda şifre yok. Program kullanıcının ekranında açıldı.
+- **Commit:** `5169b20` — Tek exe: ayarlar (sifreler dahil) derlemede exe'ye gomulur
+
+## Not
+- Exe şifreyi düz metin olarak taşır (gömülü kaynak, exe'den çıkarılabilir). Sadece iç ağda paylaşılmalı.
