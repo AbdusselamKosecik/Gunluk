@@ -146,6 +146,18 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - **Not:** Sipariş başka bir sebeple (eksik kart / operasyon farkı) gönderildiğinde BulkInstall rotayı baştan yazar,
   yani o modelin 69'daki süreleri de Sentez değerleriyle değişir.
 
+### 10. Gönderimde 69'daki rota sürelerinin korunması
+- **Karar (kullanıcı):** "Süreleri 69'daki değerlerle değiştir." Başka bir sebeple gönderimde 69 süreleri ezilmesin.
+- **Ne yapıldı:** `Services/RotaSureKoruyucu.cs`: paketteki `ModelRoutes[].StandartTime`, 69'da aynı operasyon varsa 69 değeriyle değiştiriliyor.
+  Eşleme kod (trim, büyük/küçük harf duyarsız) + kod içinde Sıra sırasıyla yapılıyor. Yeni operasyon Sentez süresiyle gidiyor.
+  `Kontrolcu`: `Genre` + `KartFiltresi` sonrasında, `Gonder` öncesinde uygulanıyor ve korunan adım sayısı loglanıyor. 6 yeni test, toplam 23/23.
+- **Doğrulama (gönderimsiz, scratchpad'de küçük konsol: Genre → Koruyucu → EtutKarsilastirici):**
+  95519: önce 77 süre farkı, 77 korundu, sonra 0. 95938: süre farkı 0, kalan yalnızca `rotada yok: 1398-3; 1398-4`.
+- **Ek kontrol:** BulkInstall `Operations.AverageStandardTime` (global) değerini de Sentez `p.StandartTime*60` ile güncelliyor.
+  4173 ortak operasyondan yalnızca 1'i farklı (kod `15`: 69=300, Sentez NULL). Bu yüzden dokunulmadı.
+- **Commit:** `81a4d29` — Gonderimde 69'daki rota sureleri korunur (RotaSureKoruyucu)
+- **Paket:** `X:\GitlabredericTr\TechioControl-paket-2026-11-13-81a4d29.zip`
+
 ## Kararlar
 - İlk sürümde Görev Zamanlayıcı önerildi; kullanıcı isteğiyle **Windows Servisi**ne geçildi (`--once` konsol modu korundu).
 - 69'a yazma yalnızca mevcut `BulkInstall` API'si üzerinden yapılıyor; doğrudan DB'ye yazılmıyor.
@@ -153,7 +165,7 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - Bağlantı şifreleri repoya girmiyor: `appsettings.Local.json` (örnek: `appsettings.Local.example.json`).
 
 ## Açık kalanlar / sonraki adım
-- 69'daki tam sayı rota süreleri: tek başına gönderim sebebi değil (karar verildi). Başka sebeple gönderimde süreler Sentez'e döner; bu istenmiyorsa paketteki süreleri 69 değerleriyle değiştirmek gerekir.
+- 69'daki rota süreleri: gönderim sebebi değil ve gönderimde korunuyor (karar verildi). Tam sayı sürelerin kaynağı hâlâ bilinmiyor.
 - localserver `SeriCache` silinmiş ana kart satırını da kabul ediyor (`c.Id = isnull(ParentId,Id)`, IsDeleted kontrolü yok); kalıcı çözüm orada.
 - Canlı gönderim henüz yapılmadı (sadece `--dry-run`). İlk canlı tur: `dotnet run --project src/TechioControl -- --once`.
 - Servisi sunucuya kurmak: önce `servis-kur.ps1 -KuruCalisma`, loglar doğruysa `-KuruCalisma` olmadan.
