@@ -102,6 +102,40 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - **Paket:** `X:\Gitlab\fredericTr\TechioControl-paket-2026-11-13-ed7113d.zip` (yalnızca diskte; içinde şifre olduğu için repoya girmedi)
 - **Commit:** `ed7113d` — Kurulum paketi: scripts/paket-yap.ps1 + paketten kurulum
 
+### 7. 96052 "ESLESME HATASI" incelemesi
+- **Neden:** Kullanıcı bildirdi: 96052 bantta eşleşme hatası veriyor.
+- **Bulgular:**
+  - Mesaj `localserver/TechtsioService/.../Server/Providers/UTS23/Uts23Service.cs:876` (case 9 CardSerial):
+    `GetModelCheck(cihaz.OperationId, kart.ModelId)` false ise → `CurrentDeviceListManager.cs:1277`
+    `select top 1 Id from ModelRoutes where ModelId=.. and OperationId=.. and IsDeleted=0`.
+  - Kart bulma: `Bussiness/GetDatas.cs` `SeriCache`, `Code` ile aktif satırı buluyor ama
+    model ve sipariş bilgisini **`isnull(ParentId,Id)` satırından** (demetin ana kartı) alıyor.
+  - Hat sunucusu `172.16.1.2` (DIKIMANALIZSRV), 69 = MERKEZANALIZ. 96052 verisi ikisinde aynı.
+    69'daki `TransferData` job'ı (her gün 04:00) yalnızca Transections'ı 172 → 69 taşıyor.
+  - **Kök neden:** `A6D2DB02` kartı 69/172'de hâlâ **95519'da aktifti** (model 2334-1989). 96052'nin modeli 2282-1248.
+    Bantta okutulunca 95519'un modeli geliyordu, rota eşleşmiyordu. Servis bunu sabah 05:04'te "1 kart 69'da yok (A6D2DB02)"
+    olarak yakalamıştı. Saat 12:00'de 96052 yeniden gönderilmiş görünüyor (silinmiş ve aktif iki 96052 satırı var); şu an düzgün.
+  - 96052'nin rotası (82 operasyon) Sentez etüdüyle birebir aynı.
+- **Komut örneği:** `sqlcmd -S 172.16.1.2 -d TechtsioMerkez ... "select c.Code, o.No, c.IsDeleted, c.ParentId ... where c.Code='A6D2DB02'"`
+
+### 8. Etüt/rota farkı kontrolü
+- **Neden:** Kullanıcı istedi ("etüt farklılıklarını da kontrol edelim"). ESLESME HATASI'nın ikinci nedeni:
+  etüde sonradan eklenen operasyon rotada olmuyor.
+- **Ne yapıldı:** `SentezDeposu.EtutSql` (Genre qEtut ile aynı distinct kolonlar) ve `MerkezDeposu.RotaSql`
+  (Orders → OrderItems → ModelRoutes → Operations). `EtutKarsilastirici.Farklar` → `EtutFarki(FarkTuru, Aciklama)`;
+  türler: Operasyon (eksik/fazla/adet), Süre (tolerans 0.001), Sıra, SonOperasyon. Kodu boş etüt satırı yok sayılıyor (BulkInstall da atlıyor).
+  `Kontrolcu`: operasyon farkı varsa gönder. Yalnızca süre/sıra farkı varsa `EtutSureFarkiniGonder` (varsayılan false) açıksa gönder,
+  değilse turda tek satır logla. Etüdü olmayan model gönderilmiyor. Gönderim sonrası doğrulama rotayı da kontrol ediyor.
+- **Bulgu:** İlk denemede 28 sipariş fark gösterdi; çoğunda 69 rotasındaki tüm süreler **tam sayı** (95519: 84/84, 96097: 88/88;
+  14 vs 14.97). Kaynak bulunamadı: techtsio-core DTO'ları decimal, Sentez'de ilgili trigger/job yok.
+  69 `Models.UpdatedAt` değerleri Sentez etüt `UpdatedAt` ile saniyeler içinde örtüşüyor, yani etüdü 69'a yazan başka bir entegrasyon var.
+  Bu yüzden süre farkı otomatik ezilmiyor.
+- **Sonuç:** 78 aday; gönderilecek 1: **95938** (`rotada yok: 1398-3, 1398-4`). Süre farkı olan 27 iş emri yalnızca loglanıyor. 17/17 test geçti.
+- **Dokunulan dosyalar:** `Services/EtutKarsilastirici.cs` (yeni), `SentezDeposu.cs`, `MerkezDeposu.cs`, `Kontrolcu.cs`,
+  `GonderimKarari.cs`, `Ayarlar.cs`, `appsettings.json`, `tests/.../EtutKarsilastiriciTests.cs`, `README.md`
+- **Commit:** `20fa751` — Etut/rota farki kontrolu (ESLESME HATASI onlemi)
+- **Paket:** `X:\Gitlab\fredericTr\TechioControl-paket-2026-11-13-20fa751.zip`
+
 ## Kararlar
 - İlk sürümde Görev Zamanlayıcı önerildi; kullanıcı isteğiyle **Windows Servisi**ne geçildi (`--once` konsol modu korundu).
 - 69'a yazma yalnızca mevcut `BulkInstall` API'si üzerinden yapılıyor; doğrudan DB'ye yazılmıyor.
@@ -109,6 +143,8 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - Bağlantı şifreleri repoya girmiyor: `appsettings.Local.json` (örnek: `appsettings.Local.example.json`).
 
 ## Açık kalanlar / sonraki adım
+- 69'daki tam sayı rota sürelerinin kaynağı bilinmiyor (bilinçli mi, entegrasyon hatası mı?). Karar verilince `EtutSureFarkiniGonder`.
+- localserver `SeriCache` silinmiş ana kart satırını da kabul ediyor (`c.Id = isnull(ParentId,Id)`, IsDeleted kontrolü yok); kalıcı çözüm orada.
 - Canlı gönderim henüz yapılmadı (sadece `--dry-run`). İlk canlı tur: `dotnet run --project src/TechioControl -- --once`.
 - Servisi sunucuya kurmak: önce `servis-kur.ps1 -KuruCalisma`, loglar doğruysa `-KuruCalisma` olmadan.
 - Etüdü olmayan model (`Genre` → "Modelde Etut Bulunamadı") her turda HATA loglar; gerekirse susturma/bildirim eklenebilir.
