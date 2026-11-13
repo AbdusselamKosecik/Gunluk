@@ -60,13 +60,37 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
   ```
 - **Commit:** `700cac8` — TechioControl: kesimi tamamlanip 69'a gitmemis siparisleri otomatik gonder
 
+### 5. Windows Servisi olarak çalışma
+- **Neden:** Kullanıcı Görev Zamanlayıcı yerine Windows Servisi istedi.
+- **Ne yapıldı:** `Microsoft.Extensions.Hosting.WindowsServices 10.0.0` eklendi.
+  `KontrolServisi.cs` (BackgroundService): açılışta 30 sn bekliyor (SQL/ağ hazır olsun), sonra `PeriodicTimer` ile
+  her `AralikDakika` (15) dakikada bir tur atıyor; bir turdaki hata servisi durdurmuyor.
+  `Program.cs`: `--once` verilirse konsolda tek tur, verilmezse `Host.CreateApplicationBuilder` + `AddWindowsService("TechioControl")`.
+  Tek kopya mutex'i: SYSTEM hesabındaki servisin oluşturduğu mutex'i kullanıcı konsolu açamayınca
+  `UnauthorizedAccessException` alıyor; bu durum "servis çalışıyor" olarak yorumlanıyor (çift gönderim olmuyor).
+- **Dokunulan dosyalar:** `src/TechioControl/KontrolServisi.cs`, `Program.cs`, `TechioControl.csproj`,
+  `scripts/servis-kur.ps1`, `scripts/servis-kaldir.ps1`, `README.md`
+- **Kurulum betiği:** `dotnet publish -c Release -r win-x64 -o C:\Servisler\TechioControl`, `appsettings.Local.json`
+  kopyalanıyor, `New-Service`, `sc config start= delayed-auto`, `sc failure ... restart/60000 x3`,
+  `-KuruCalisma` verilirse binPath `--dry-run` ile kuruluyor. Tekrar çalıştırmak güncelleme yapıyor.
+- **Komutlar:**
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\servis-kur.ps1 -KuruCalisma   # önce kuru
+  powershell -ExecutionPolicy Bypass -File scripts\servis-kur.ps1                # gerçek
+  powershell -ExecutionPolicy Bypass -File scripts\servis-kaldir.ps1
+  ```
+- **Sonuç / doğrulama:** Servis gövdesi konsolda `--dry-run` ile çalıştırıldı: 30 sn sonra tur atıldı (74 aday, 3 gönderilecek).
+  Aynı anda ikinci kopya exit=2 ile reddedildi. `--once --dry-run` hâlâ çalışıyor. publish başarılı, ps1 betikleri
+  sözdizimi hatasız. 8/8 test geçti. Servis bu makineye **kurulmadı**.
+- **Commit:** `2499ed3` — Windows Servisi olarak calisma + kurulum betikleri
+
 ## Kararlar
-- Ayrı bir konsol uygulaması; `--once` + Görev Zamanlayıcı (15 dk) önerildi. Windows Service yerine bu seçildi çünkü daha basit ve hata sonrası kendiliğinden yeniden çalışıyor.
+- İlk sürümde Görev Zamanlayıcı önerildi; kullanıcı isteğiyle **Windows Servisi**ne geçildi (`--once` konsol modu korundu).
 - 69'a yazma yalnızca mevcut `BulkInstall` API'si üzerinden yapılıyor; doğrudan DB'ye yazılmıyor.
 - "Sipariş miktarının fazlasını geçmiş" = `kesim >= sipariş` (EsikOrani=1.0, ayarlanabilir).
 - Bağlantı şifreleri repoya girmiyor: `appsettings.Local.json` (örnek: `appsettings.Local.example.json`).
 
 ## Açık kalanlar / sonraki adım
 - Canlı gönderim henüz yapılmadı (sadece `--dry-run`). İlk canlı tur: `dotnet run --project src/TechioControl -- --once`.
-- Sunucuya kurulum: `dotnet publish -c Release -o C:\TechioControl` + `schtasks` (README'de).
+- Servisi sunucuya kurmak: önce `servis-kur.ps1 -KuruCalisma`, loglar doğruysa `-KuruCalisma` olmadan.
 - Etüdü olmayan model (`Genre` → "Modelde Etut Bulunamadı") her turda HATA loglar; gerekirse susturma/bildirim eklenebilir.
