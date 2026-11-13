@@ -136,6 +136,16 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - **Commit:** `20fa751` — Etut/rota farki kontrolu (ESLESME HATASI onlemi)
 - **Paket:** `X:\Gitlab\fredericTr\TechioControl-paket-2026-11-13-20fa751.zip`
 
+### 9. Süre farkı kararı
+- **Karar (kullanıcı):** Etütte yalnızca süre/sıra/son-operasyon farkı varsa sipariş **gönderilmez**.
+- **Ne yapıldı:** `EtutSureFarkiniGonder` ayarı kaldırıldı (`Ayarlar.cs`, `appsettings.json`, `README.md`). `Kontrolcu.Karar` içinde sabit kural;
+  süre farkları her turda yalnızca bilgi satırı olarak loglanıyor.
+- **Sonuç:** Kuru çalışma: 78 aday, gönderilecek 1 (95938, operasyon farkı), 27 süre farkı yalnızca loglandı. 17/17 test geçti.
+- **Commit:** `2d1cf1a` — Sure farki gonderim sebebi degil: EtutSureFarkiniGonder ayari kaldirildi
+- **Paket:** `X:\GitlabredericTr\TechioControl-paket-2026-11-13-2d1cf1a.zip`
+- **Not:** Sipariş başka bir sebeple (eksik kart / operasyon farkı) gönderildiğinde BulkInstall rotayı baştan yazar,
+  yani o modelin 69'daki süreleri de Sentez değerleriyle değişir.
+
 ## Kararlar
 - İlk sürümde Görev Zamanlayıcı önerildi; kullanıcı isteğiyle **Windows Servisi**ne geçildi (`--once` konsol modu korundu).
 - 69'a yazma yalnızca mevcut `BulkInstall` API'si üzerinden yapılıyor; doğrudan DB'ye yazılmıyor.
@@ -143,7 +153,7 @@ sipariş 69'da yoksa **veya** kartları 69'da yoksa gönderilmemiş sayılır.
 - Bağlantı şifreleri repoya girmiyor: `appsettings.Local.json` (örnek: `appsettings.Local.example.json`).
 
 ## Açık kalanlar / sonraki adım
-- 69'daki tam sayı rota sürelerinin kaynağı bilinmiyor (bilinçli mi, entegrasyon hatası mı?). Karar verilince `EtutSureFarkiniGonder`.
+- 69'daki tam sayı rota süreleri: tek başına gönderim sebebi değil (karar verildi). Başka sebeple gönderimde süreler Sentez'e döner; bu istenmiyorsa paketteki süreleri 69 değerleriyle değiştirmek gerekir.
 - localserver `SeriCache` silinmiş ana kart satırını da kabul ediyor (`c.Id = isnull(ParentId,Id)`, IsDeleted kontrolü yok); kalıcı çözüm orada.
 - Canlı gönderim henüz yapılmadı (sadece `--dry-run`). İlk canlı tur: `dotnet run --project src/TechioControl -- --once`.
 - Servisi sunucuya kurmak: önce `servis-kur.ps1 -KuruCalisma`, loglar doğruysa `-KuruCalisma` olmadan.
