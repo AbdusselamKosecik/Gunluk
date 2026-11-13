@@ -63,3 +63,23 @@ Kullanıcı: "69'dan bakmayacaksın, Fashion ve Dikim'e bakman lazım."
 
 ## Not
 - Exe şifreyi düz metin olarak taşır (gömülü kaynak, exe'den çıkarılabilir). Sadece iç ağda paylaşılmalı.
+
+### 4. Windows Form + detay
+- **Neden:** Kullanıcı: "şunu Windows Form yapalım, detayda ekleyelim."
+- **Ne yapıldı:**
+  - `Hesaplayici` her okutmanın döneme düşen payını `DetaySatiri` (dönem, dönemdeki süre, hedef, sayılan adet) olarak üretir; moladan geçen okutma 2 satır.
+  - Veri çekme `Raporlayici`'ya taşındı (gömülü ayar yükleme + Dikim/Fashion döngüsü).
+  - `AnaForm` (kodla, designer yok): üstte Sicil + Başlangıç/Bitiş DateTimePicker + Hesapla (AcceptButton) + Excel'e aktar + personel adı;
+    SplitContainer: Dönemler grid'i (gün toplamı kalın/mavi, verim rengi ≥85 yeşil, ≥65 turuncu, altı kırmızı) ve seçilen dönemin Detay grid'i; StatusStrip.
+  - Excel'deki "Hareketler" sayfası "Detay" oldu (dönem, dönemdeki süre, hedef, sayılan adet, durum).
+  - csproj: WinExe, net10.0-windows, UseWindowsForms; test projesi de net10.0-windows. Konsol modu kaldırıldı.
+- **Dokunulan dosyalar:** `src/PersonelVerimlilik/{AnaForm,Raporlayici,Program,Hesaplayici,Modeller,ExcelYazici}.cs`, csproj'lar, `tests/.../DetayTests.cs`, `README.md`
+- **Komutlar:**
+  ```bash
+  dotnet test     # 9/9
+  dotnet publish src/PersonelVerimlilik -c Release -o ../PersonelVerimlilik-program   # tek exe 55 MB
+  ```
+- **Sonuç / doğrulama:** UI Automation ile form açıldı, 7411 girildi, Hesapla tıklandı: 13.11.2026 dönemler %90,1 / %92,1 / %59,3 / -, gün %83,8 (791/944);
+  detay "10 okutma, hedef 365, sayılan 329" = özet satırıyla aynı. Detayda decimal'ler `35,0000000000` görünüyordu → "0.##" biçimi.
+  Kullanıcının Excel'de açık tuttuğu `Raporlar\Verimlilik_7411_2026-11-13_143818.xlsx` silinmedi.
+- **Commit:** `bdfe96c` — Windows Form: sicil/tarih girisi, donem ozeti, secilen donemin okutma detayi, Excel'e aktar
