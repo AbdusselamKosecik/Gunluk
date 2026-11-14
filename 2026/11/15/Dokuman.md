@@ -14,3 +14,10 @@ Kullanıcı `Modfex_Workflow.pdf` (iş akışı el kitabı v1.0, 22 adım, 9 bö
 
 ## Açık kalanlar / sonraki adım
 - Kullanıcı dosyadaki cevapları dolduracak; cevaplara göre seri/tahsis, kesilen adet kaydı ve 🟢 raporlar planlanacak.
+
+### 2. Kullanıcı cevapları ve değerlendirme (F bölümü)
+- **Neden:** Kullanıcı md dosyasına cevapları yazdı; netleşenleri ve açık kalanları ayırmak.
+- **Kararlar (kullanıcı):** mal kabul = fiş 1; numune onayı Elif Hanım ekibi → 17, red → iade fişi; kesime 129, iade 29 (günlük); aksesuar banda 17; kesilen adet uygulamadan girilip Sentez kesim kayıtlarına yazılacak; alan 42 sorumlusu Reyhan + Seyhan Hanım, Sentez'de depo olarak kalır; tahsis Sentez tablolarıyla (gerekirse kolon/alt tablo eklenebilir); Nour için adım yok (son inspection); G1–G6 biz yazarız; raporlar Superset + günlük e-posta + Telegram.
+- **Canlı kontrol (salt okunur):** kullanılan fiş tipleri 1,10,16,17,29,99,100,101,120,129,130; depolar RecId 1 General, 40 Reserved, 41 Product (M), 42 Uretim (U); kesim alanları `Erp_WorkOrderProduction` (SentForCutting, Cutter, CuttingLoss, UD_CuttingApprove); `Erp_InventoryAllocation.SerialCardId` mevcut; UZM_Pastal*/UZM_KesimGiris tabloları boş.
+- **Açık sorular (F2):** kabul/karantina deposu, adım 8 fişi, iade fiş tipi (101?), 129/29 gün sonu tetikleyicisi, aksesuar sarfı, kesim ekranı, kurulum sırası, rapor alıcıları/saat.
+- **Commit:** Dokuman `git log -1` — İş akışı: kullanıcı cevapları ve F bölümü
