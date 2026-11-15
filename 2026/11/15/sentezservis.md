@@ -32,3 +32,15 @@ barkod tanımlamak gerekiyor; Sentez'in kendi ekranı varyant barkodunda hata ve
 ## Açık kalanlar
 - Sunucuya kurulum + appsettings `BarkodYazmaAcik`, `KoliListeSentezKullaniciId` (kullanıcıyla).
 - İlk barkodlar: T-KMS-001, T-AKS-001, T-IPL-001 varyantları.
+
+## Ek (00:05, 16.11) — yerelde çalıştırma
+- **Neden:** Kullanıcı barkod ekranını hemen kullanmak istedi ("sentez servisi direk çalıştır, 0.2'de mssql"). Docker denemesi gereksizdi, kaldırıldı.
+- **Ne yapıldı:** `src/SentezServis.Host/appsettings.json` (gitignore'da): BaglantiCumlesi = 192.168.0.2 / SentezServis,
+  SentezCoreBaglantiCumlesi = 192.168.0.2 / SentezCore (uzman), `ArkaPlanKapali: true`, `BarkodYazmaAcik: true`,
+  `KoliListeSentezKullaniciId: 1`, TabanAdres http://localhost:8563.
+- **Kod:** yeni ayar `SentezServis:ArkaPlanKapali` → ZamanlayiciServisi, BildirimDagiticiServisi ve açılıştaki
+  HayaletleriKapatAsync çalışmaz (canlı DB'ye bağlı ikinci kopya iş/e-posta tekrarlamasın, canlıdaki süren çalıştırmalar kapanmasın).
+  Canlı sema_surumleri 018'de; bekleyen göç yok.
+- **Komut:** `cd src/SentezServis.Host && dotnet run --launch-profile SentezServis.Host --urls http://localhost:8563`
+- **Sonuç:** `/api/surum` → derleme 55cbc76, `/barkod-tanimlari` 200. Giriş canlı SentezServis kullanıcılarıyla.
+- **Commit:** `4fe02dd`
