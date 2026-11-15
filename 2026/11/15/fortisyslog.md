@@ -65,3 +65,16 @@ Sunucuda: `.\deploy\kur.ps1 -Kaynak .\publish -FortiGateIp 192.168.0.1` (firewal
   ```
 - **Commit:** `62693c9` — build: .NET 8 -> .NET 10
 - **Not:** Sunucuya (192.168.0.2) .NET 10 Runtime kurulmalı (veya `publish.ps1 -SelfContained`).
+
+### 5. Sunucu kurulum zip'i (deploy/paketle.ps1)
+- **Neden:** Sunucuya (192.168.0.2) tek dosyayla taşıma; her seferinde aynı içerik.
+- **Ne yapıldı:** `paketle.ps1` publish.ps1'i `dist/<ad>/app` hedefine çalıştırır, yanına kur.ps1, kaldir.ps1,
+  appsettings.Production.example.json (kur.ps1 bunu `$PSScriptRoot`'tan arar → kökte olmalı), sql/,
+  tools/Send-TestSyslog.ps1, KURULUM.txt koyar; içinde appsettings.Production.json varsa hata verir; Compress-Archive.
+  Ad: `FortiSyslog-<yyyyMMdd>-<commit>[-dirty][-sc].zip`. `-SelfContained` geçirilebilir. `dist/` .gitignore'a eklendi.
+  PS 5.1 Türkçe karakter için .ps1 ve .txt UTF-8 BOM ile kaydedildi.
+- **Dokunulan dosyalar:** `deploy/paketle.ps1`, `deploy/KURULUM.txt`, `.gitignore`, `README.md`
+- **Komutlar:** `powershell -ExecutionPolicy Bypass -File deploy/paketle.ps1`
+- **Sonuç:** `dist/FortiSyslog-20261115-0f35272.zip` (5.5 MB, 91 dosya), Production.json yok.
+- **Commit:** `0f35272` — deploy: paketle.ps1
+- **Sunucuda:** zip aç → `Get-ChildItem -Recurse | Unblock-File` → `.\kur.ps1 -Kaynak .\app -FortiGateIp 192.168.0.1`
