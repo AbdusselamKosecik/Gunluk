@@ -47,3 +47,21 @@ Sunucuda: `.\deploy\kur.ps1 -Kaynak .\publish -FortiGateIp 192.168.0.1` (firewal
 - publish klasörünü 192.168.0.2'ye kopyalayıp kur.ps1 çalıştırmak, appsettings.Production.json girmek.
 - SQL şemasını (sql/00, sql/01) sunucuda çalıştırmak (yapılmadıysa).
 - FortiGate CLI'yi uygulayıp `SELECT TOP 50 ... FROM dbo.FortiGateLogs` ile doğrulamak.
+
+### 4. .NET 8 → .NET 10 geçişi
+- **Neden:** Kullanıcı isteği; .NET 10 LTS (Kasım 2028'e kadar destek), .NET 8 Kasım 2026'da desteği bitiriyor.
+- **Ne yapıldı:** İki csproj'da `TargetFramework` → `net10.0`. Paketler: Microsoft.Extensions.* 10.0.15,
+  Microsoft.Data.SqlClient 6.1.8 (7.x major sürüm bilerek alınmadı — kırıcı değişiklik riski),
+  Serilog.Extensions.Hosting 10.0.0, Serilog.Settings.Configuration 10.0.1, Sinks.Console 6.1.1, Sinks.File 7.0.0,
+  Sinks.EventLog 4.0.0 (aynı). Test: Test.Sdk 18.12.0, xunit 2.9.3, runner 3.1.5 (xunit v2 korunuyor).
+  README + publish.ps1'de ".NET 8 Runtime" → ".NET 10 Runtime".
+- **Dokunulan dosyalar:** `src/FortiSyslog/FortiSyslog.csproj`, `tests/FortiSyslog.Tests/FortiSyslog.Tests.csproj`, `README.md`, `deploy/publish.ps1`
+- **Komutlar:**
+  ```bash
+  rm -rf src/FortiSyslog/obj tests/FortiSyslog.Tests/obj
+  dotnet build -c Release            # 0 uyarı / 0 hata (SDK 10.0.401)
+  dotnet test -c Release --no-build  # 22/22
+  powershell -File deploy/publish.ps1  # runtimeconfig: Microsoft.NETCore.App 10.0.0
+  ```
+- **Commit:** `62693c9` — build: .NET 8 -> .NET 10
+- **Not:** Sunucuya (192.168.0.2) .NET 10 Runtime kurulmalı (veya `publish.ps1 -SelfContained`).
