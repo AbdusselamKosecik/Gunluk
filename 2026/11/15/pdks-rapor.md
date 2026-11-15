@@ -44,3 +44,11 @@ ZKBio Time (BioTime, 192.168.0.2, DB `zkbiotime`) kişi kodlarının Den (bordro
 - Den'de 000180 Haneen Khamis / 000181 Hanin Khamees mükerrer olabilir.
 - Test kaydı 099999 — kullanıcının kararı.
 - pdks-rapor için remote tanımlanmalı.
+
+## Ek — 19:05 Departmanlar (Den'e göre)
+- **Neden:** BioTime departmanları Den ile tutarsızdı (ör. Den LINE 1'deki 51 kişi BioTime'da 16 farklı departmanda).
+- **Ne yapıldı:** Den `DEPXX.MAS` sırasıyla 18 yeni departman: `DEN01` ADMINISTRATION … `DEN18` SERVICE (TRANSPORT) (`personnel_department`, company_id=1, parent yok). Den Excel çıktısındaki DEPARTMENT'a göre 332 kişi taşındı. "Department Unassigned" (13, çoğu yeni işe girenler 000349–000361) ve Den'de olmayanlar eski departmanlarında kaldı.
+- **Kontrol:** `auth_user_auth_dept`, `att_departmentschedule/policy/deptattrule` boş → departman kapsamı/vardiya etkisi yok. `dept_code` unique (company_id, dept_code), collation Turkish_100_CI_AS → isim yerine `DENnn` kodu seçildi.
+- **Betik:** `kod-degisimi/departman_tasi.sql` (kuru + COMMIT, sayı doğrulamalı). Sonra `bio-cache` restart.
+- **Sonuç:** acilan 18, tasinan 332/332.
+- **Açık:** eski boş departmanların silinmesi (kullanıcı), cihaz Clear + Sync, 5504 Marwan (Den 000330) / 5540 Aya (Den 000362) kodları.
