@@ -30,3 +30,18 @@ oraya girerek hareket hâlinde sayım"; sayım bitince eski depo 130 ile sıfır
 - Ertelenen küçükler: tükenmiş seriye "zaten sayıldı" mesajı; eski varyantsız kartın 17'si varyantsız; silinmiş varyantlı barkodda takılma;
   kapat ekranında hızlı depo değişiminde liste karışabilir; barkod okumada da fiş kilidi alınıyor.
 - Sonraki: 3 tahsisleme, 4 Selvedge inspection, 5 kesimhane seri okutma.
+
+## Ek (gece, kullanıcı istekleri)
+
+### Terminalde ayarlar düğmesi görünmüyordu
+- **Neden:** 480 px ekranda üst bardaki üç dil düğmesi ⚙'yi ekran dışına itiyordu (adb screencap ile görüldü).
+- **Ne yapıldı:** dar ekranda (Android) dil seçici tek düğme (TR → EN → ع), ayırıcı gizli. `KabukView.axaml`, `KabukViewModel.cs` (`DarEkran`, `DilDongu`).
+- **Commit:** `48083d3`. Cihaz kilitli olduğu için yeni üst barın ekran görüntüsü alınamadı; kullanıcı kontrol edecek.
+
+### 10 haneli seri + Excel "Seri no" + tekrar bas
+- **İstek:** "Tekrar etiket bas butonu koyar mısın. Serileri de direkt 10 karakterli sıra numarasına göre oluşturur musun, Excel'den aktardıklarımız hariç."
+- **Ne yapıldı:** `SonrakiSeriKodu` D10; MAX yalnız 10 haneli kodlardan (eski 8 haneliler sayılmaz, yeni sıra 0000000001'den başlar).
+  Excel şablonuna isteğe bağlı 9. sütun "Seri no": doluysa o kod aynen (adet 1, dosyada tekil, Sentez'de yok — `SeriNoAdetBir/Tekrar/Var/Uzun`),
+  sıra numarası ilerlemez. Sayım listesinde serili kalemde "Bas" düğmesi.
+- **Sonuç:** 108/108 test (DB dahil). APK PM66'ya kuruldu; Windows zip yenilendi.
+- **Commit:** `874aaf1`
