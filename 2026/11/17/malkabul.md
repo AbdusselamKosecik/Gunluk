@@ -77,3 +77,16 @@ oraya girerek hareket hâlinde sayım"; sayım bitince eski depo 130 ile sıfır
 ### Açık kalanlar
 - Sahada ilk deneme: Order 4547 gibi gerçek bir Order'la tahsis → üretime ver → iade.
 - Adım 8 raf yerleştirme, 11 pastal kontrolü, 14 pastal verimi raporu, 16–17 bantsayim kesilen adet kontrolü, 20 "42'de bekleyen" görünümü, Selvedge inspection raporu.
+
+## Ek 3 (gece): kalan workflow adımları
+
+- **İstek:** "Kalanların hepsini bitir, testleri sonra yaparız."
+- **Adım 8 (raf yerleştirme):** kullanıcı iptal etti ("hiçbir yerde raf yeri kullanmıyoruz"); kod yazılmadı.
+- **Adım 11 (pastal hazır mı):** önce `UZM_Pastal`'a bakılıyordu. Kullanıcı "Sentez'in WorkOrderProduction'ından kontrol edeceğiz" dedi.
+  - Yeni kural: kumaş (ihtiyaç tipi 1) üretime verilirken Order'ın `Erp_WorkOrderProduction` kaydında `ProcessId = 167`, `MarkerNo` dolu ve silinmemiş bir satır olmalı; yoksa `PastalHazirDegil`.
+  - Ayar `PastalKontrolu` (varsayılan açık) ve `HammaddeDepoId` ayarlar ekranına eklendi. Canlıda pastal no'lu kesim kaydı çok az; açık kalırsa kumaş çıkışı durur.
+  - Test: pastal yokken red, eklenince geçiyor. 133/133. Commit `9fa1f32`. APK yeniden kuruldu.
+- **Adım 16–17:** bantsayim'de zaten var (`UretimDeposu.cs`: `KesimAsildi`, iş emri + varyant applock altında tüm bantların okutması ≤ kesilen). Kod değişmedi.
+- **Adım 20 ve 14:** ayrı dosya `sentezservis.md`.
+- **Selvedge:** ayrı dosya `selvedge.md`.
+- **"Değişikliklerin hepsini kat":** başka repolarda bekleyen yerel değişiklikler de commit edildi: selvedge package-lock, analysis_options, web/index.html (`7255ced`); sentezservis wwwroot/.gitkeep silme (`53c0631`); kesimhane örnek marker PDF ve görseller (`6e92b33`).
