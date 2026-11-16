@@ -45,3 +45,35 @@ oraya girerek hareket hâlinde sayım"; sayım bitince eski depo 130 ile sıfır
   sıra numarası ilerlemez. Sayım listesinde serili kalemde "Bas" düğmesi.
 - **Sonuç:** 108/108 test (DB dahil). APK PM66'ya kuruldu; Windows zip yenilendi.
 - **Commit:** `874aaf1`
+
+## Ek 2 (gece): tahsis, üretime ver 129, iade 29, karantina onayı 17/122
+
+- **İstek:** "Deponun kesime kumaş vermesi ve iade almasını da mobilden yapmamız lazım. Hepsini yapalım, sırayla, ivedi."
+- **Karar (benim, cevap gelmedi):** tahsis hep bütün seri, tek Order'ın tek ihtiyaç satırına; çıkış kısmi olabilir.
+- **Tasarım / plan:** `docs/superpowers/specs/2026-11-17-tahsis-uretim-design.md`, `docs/superpowers/plans/2026-11-17-tahsis-uretim.md`.
+
+### Veri katmanı (`MalKabul/Ekranlar/Veri/`)
+- `TahsisDeposu.cs`: `Erp_InventoryAllocation` satırı (kaynak = serinin tip 1/16 giriş kalemi, `RequirementId`, `WorkOrderItemId`, `SerialCardId`, `InventoryReceiptSubType` = ihtiyaç tipi). Aktif tahsis = tipi 129/29 olmayan silinmemiş satır. Kaldırma: üretime verilmemişse `IsDeleted = 1`.
+- `UretimDeposu.cs`: fiş 129 / 29 günlük tek fiş ('UZMUR'), kalemde `WorkOrderId` + `WorkOrderReceiptItemId`, seri hareketi ve tahsis tablosuna 129/29 satırı. Kısıtlar: başka Order'a tahsisli seri verilmez; tahsissiz seri bu Order'ın ihtiyacına otomatik tahsis edilir; 43'teki seri verilmez; depodakinden fazla verilmez; verilenden fazla iade alınmaz (serili ve serisiz).
+- `KarantinaDeposu.cs`: 43'te bekleyenler (seri + serisiz). Onay = fiş 17 (43 → 1); red = fiş 122, sipariş satırına bağlı ve mal kabul fiyatıyla. Serisiz red en yeni irsaliyeden geriye dağıtılıyor, başlık toplamı yazılıyor.
+- `FisYazimi.cs`: ortak `GunlukBaslikAsync` (cari dahil), `AnaBirimAsync`, `StokAsync`. Ayar: `HammaddeDepoId = 1`.
+
+### Ekranlar
+- **Terminal:** menüye "Üretime ver" ve "Üretimden iade al" eklendi (`UretimViewModel/View`, tek ekran, `iade` bayrağıyla). Akış: Order seç → seri ya da ürün barkodu okut → miktar önerisi → kaydet.
+- **Windows:** "Karantina onayı" (`KarantinaViewModel/View`; red ikinci basışla) ve "Tahsis" (`TahsisViewModel/View`; Order → ihtiyaç → seri okut).
+
+### Son inceleme (opus) ve düzeltmeler
+- Serisiz iade sınırsızdı → 129 − 29 sınırı eklendi.
+- Serisiz onay/red ekrandaki eski miktarla yazıyordu → kilit altında 43 stoğu yeniden okunuyor.
+- Serisiz red tek kaleme yazılıyordu → kalemlere dağıtılıyor.
+- 122 başlık toplamı yazılmıyordu → yazılıyor.
+- Serisiz verme depo stoğuna bakmıyordu → bakıyor.
+- 4 elemanlı tuple sınıfa çevrildi (Android trimming).
+- Her biri için önce kırmızı, sonra yeşil test.
+
+- **Sonuç:** 132/132 test (DB dahil, ROLLBACK). APK PM66'ya kuruldu; Windows zip yenilendi.
+- **Commitler:** `c9a4a15`, `a980959`, `9237836`, `251c197`, `d933f5f`. Workflow dokümanı: Dokuman `81fee72`.
+
+### Açık kalanlar
+- Sahada ilk deneme: Order 4547 gibi gerçek bir Order'la tahsis → üretime ver → iade.
+- Adım 8 raf yerleştirme, 11 pastal kontrolü, 14 pastal verimi raporu, 16–17 bantsayim kesilen adet kontrolü, 20 "42'de bekleyen" görünümü, Selvedge inspection raporu.
