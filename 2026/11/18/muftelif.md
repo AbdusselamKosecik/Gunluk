@@ -53,7 +53,7 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 - **Komutlar:** `powershell -ExecutionPolicy Bypass -File q.ps1 -sqlFile qN.sql` (scratchpad, salt okunur SELECT'ler); `dotnet test` (SentezPlaning 340, OrderTakipWeb 19).
 - **Sonuç / doğrulama:** Hafta 47 canlı: 42 iş emri, ~2 sn. örnek.xlsx ile 34 ortak iş emrinde sipariş/kesim/kumaş/model adı/yükleme tarihi %100 aynı; başlıklar birebir. 95560 günlük yıkama satırları 291/27/1/2/82/233 (referans 232 → o günden beri +1 okutma).
 - **Bulgu:** 95448'de depo 5'e 11.11'de 00028401 no'lu fişle 2602 adetlik ikinci giriş (sağlam 5070 görünüyor) — Sentez'de kontrol edilmeli.
-- **Commit:** `8eb42e6` (SentezPlaning), `10aee48` (OrderTakipWeb). IIS paketi yenilendi: `X:\GitlabredericTr\OrderTakipWeb-IIS-20261118.zip`.
+- **Commit:** `8eb42e6` (SentezPlaning), `10aee48` (OrderTakipWeb). IIS paketi yenilendi: `X:\Gitlab\fredericTr\OrderTakipWeb-IIS-20261118.zip`.
 
 ## Kararlar
 - "Planlama" = SentezPlaning (SentezDashbord değil); hafta verisi önbellekten değil doğrudan Sentez sorgusuyla alınır.
