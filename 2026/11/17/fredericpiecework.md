@@ -33,3 +33,14 @@
 - Sahada test: 2 tur tamir (FT çıkış → YT giriş → YT çıkış → FT giriş → FT çıkış #2 → ... → Finish çıkış).
 - Daha önce 2K olarak 5 deposuna aktarılmış kayıtlar ERP'de elle düzeltilmeli (Explanation='2K', InWarehouseId=5 olan Erp_InventoryReceipt kayıtları).
 - Geçmişte InOutType=4 kaydı var mı DB'de kontrol edilmeli.
+
+### 3. Dağıtım paketi
+- **Neden:** Çoklu tamir + 2K depo düzeltmesini sahaya çıkarmak.
+- **Ne yapıldı:** Mevcut `Properties/PublishProfiles/FolderProfile.pubxml` ile publish (Release, win-x64, framework-dependent .NET 6, single-file). Çıktı zip'lendi.
+- **Komutlar:**
+  ```bash
+  rm -rf bin/Release/net6.0-windows/publish/win-x64
+  dotnet publish FredericPieceWork.csproj -p:PublishProfile=FolderProfile
+  # publish/win-x64 içeriği -> X:/Gitlab/fredericTr/fredericpiecework-paket-2026-11-17-f6fb34d.zip
+  ```
+- **Sonuç / doğrulama:** Zip ~34 MB. exe içinde yeni mesaj metni ("yeni palet") bulundu → yeni kod pakette. Hedef makinede .NET 6 Desktop Runtime gerekli (self-contained değil).
