@@ -42,7 +42,7 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 - **Commit:** `a43c7fa` — feat(order-takip-web): APK order takibinin mobil web surumu
 
 ## Kararlar
-- "Planlama" = SentezPlaning (not SentezDashbord); weekly data is pulled directly from Sentez, not from the cache.
+- "Planlama" = SentezPlaning (SentezDashbord değil); hafta verisi önbellekten değil doğrudan Sentez sorgusuyla alınır.
 - Sağlam = depo 5 girişi (kümülatif) varsayımı; kalite sınıfları uydurulmadı, "Veri yok".
 - Order takip için ayrı uygulama (kullanıcı "yeni web uygulaması" dedi); auth Sentez kullanıcısı, order bazlı ek yetki APK'da yoktu.
 
