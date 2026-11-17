@@ -41,12 +41,29 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 - **Sonuç / doğrulama:** 19 test (318/317/1, 24/19/5, ayrı departman, negatif bakiye…). 320/375/390/430 px iki sekmede yatay taşma yok; giriş zorunlu modda tokensız 401. IIS paketi: `X:\Gitlab\fredericTr\OrderTakipWeb-IIS-20261118.zip` (sır içermez).
 - **Commit:** `a43c7fa` — feat(order-takip-web): APK order takibinin mobil web surumu
 
+
+### 3. Excel çıktısı `örnek.xlsx` düzeninde + canlı Sentez kontrolü (VPN)
+- **Neden:** Planlama, Yükleme Kontrolü çıktısını kendi haftalık dosyası (`C:aaa\örnek.xlsx`, sayfa "Week 47") biçiminde istedi. VPN ile Sentez'e erişim açıldı.
+- **Ne yapıldı:**
+  - `YkExcel.OrnekSayfa`: 53 sütun aynı sıra, 2. satır dikey başlıklar (turuncu accent2, tamir sarı, kalite turkuaz), satır 1'de "sentez (kalite kontrol raporu)", `forder` = `"F"&A`, `LA` = sipariş − SUM(müşteriler) formülü, mavi `Total` satırı, A3 dondurma, otomatik filtre, %85 zoom. Dışa aktarım: 1. sayfa bu düzen, 2. sayfa "Yükleme Kontrolü" (risk/sevk/aksiyon). Şablon da aynı düzende.
+  - Doğrulayıcı başlığı ilk 5 satırda arar, `Total`/`Toplam` satırını atlar → kullanıcının `örnek.xlsx` dosyası olduğu gibi yükleniyor (34 satır, 0 hata).
+  - Sentez'den yeni alanlar: kumaş kodu (Erp_InventoryReceiptItem 129, OutWarehouse 8, `F[0-9]%` tiresiz, en yüksek miktar), ilk kesim (`UD_FirstCutRPT`). Style = ilk iki parça; Wash = ad + "-PARÇA BOYA" (`UD_WashType`).
+  - Yeni kural: sağlam > kesim → veri uyarısı; uyarılı iş emri Sevke hazır/Planlı/Yakın takip ise "Veri kontrolü".
+  - OrderTakipWeb: Sentez her okutmayı ayrı kayıt tutuyor (95560 yıkama 110 kayıt) → gün+yön satırı (referans tabloyla aynı) + dokununca kayıtlar. Kesim (12, InOut 0) çıkarıldı.
+- **Komutlar:** `powershell -ExecutionPolicy Bypass -File q.ps1 -sqlFile qN.sql` (scratchpad, salt okunur SELECT'ler); `dotnet test` (SentezPlaning 340, OrderTakipWeb 19).
+- **Sonuç / doğrulama:** Hafta 47 canlı: 42 iş emri, ~2 sn. örnek.xlsx ile 34 ortak iş emrinde sipariş/kesim/kumaş/model adı/yükleme tarihi %100 aynı; başlıklar birebir. 95560 günlük yıkama satırları 291/27/1/2/82/233 (referans 232 → o günden beri +1 okutma).
+- **Bulgu:** 95448'de depo 5'e 11.11'de 00028401 no'lu fişle 2602 adetlik ikinci giriş (sağlam 5070 görünüyor) — Sentez'de kontrol edilmeli.
+- **Commit:** `8eb42e6` (SentezPlaning), `10aee48` (OrderTakipWeb). IIS paketi yenilendi: `X:\GitlabredericTr\OrderTakipWeb-IIS-20261118.zip`.
+
 ## Kararlar
 - "Planlama" = SentezPlaning (SentezDashbord değil); hafta verisi önbellekten değil doğrudan Sentez sorgusuyla alınır.
 - Sağlam = depo 5 girişi (kümülatif) varsayımı; kalite sınıfları uydurulmadı, "Veri yok".
 - Order takip için ayrı uygulama (kullanıcı "yeni web uygulaması" dedi); auth Sentez kullanıcısı, order bazlı ek yetki APK'da yoktu.
 
 ## Açık kalanlar / sonraki adım
+- XX işareti ve "-LA WASH" ekinin Sentez karşılığı yok; 95560 ilk kesim Sentez "RPT" vs örnek "1st cut" — planlamayla teyit.
+- 95448 çift depo fişi (00028401) Sentez'de incelenmeli.
+- Kalite sınıfları (2./3. kalite, numune) için kaynak hâlâ eşlenmedi.
 - Şirket ağında: 95560 ve birkaç iş emrinde Sentez/kaynak rapor mutabakatı (sağlam, sevk, FÇ/FG yönü, kalite alanları).
 - SentezPlaning yeni paket (Deploy-IIS) ve sunucuya kurulum; yetki listelerinin tanımlanması.
 - OrderTakipWeb için IIS sitesi/port seçimi, `ConnectionStrings__Sentez` + `Jwt__Key` ortam değişkenleri; Android Chrome / iPhone Safari cihaz testi.
