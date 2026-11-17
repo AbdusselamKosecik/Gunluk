@@ -43,7 +43,7 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 
 
 ### 3. Excel çıktısı `örnek.xlsx` düzeninde + canlı Sentez kontrolü (VPN)
-- **Neden:** Planlama, Yükleme Kontrolü çıktısını kendi haftalık dosyası (`C:aaa\örnek.xlsx`, sayfa "Week 47") biçiminde istedi. VPN ile Sentez'e erişim açıldı.
+- **Neden:** Planlama, Yükleme Kontrolü çıktısını kendi haftalık dosyası (`C:\aaaa\örnek.xlsx`, sayfa "Week 47") biçiminde istedi. VPN ile Sentez'e erişim açıldı.
 - **Ne yapıldı:**
   - `YkExcel.OrnekSayfa`: 53 sütun aynı sıra, 2. satır dikey başlıklar (turuncu accent2, tamir sarı, kalite turkuaz), satır 1'de "sentez (kalite kontrol raporu)", `forder` = `"F"&A`, `LA` = sipariş − SUM(müşteriler) formülü, mavi `Total` satırı, A3 dondurma, otomatik filtre, %85 zoom. Dışa aktarım: 1. sayfa bu düzen, 2. sayfa "Yükleme Kontrolü" (risk/sevk/aksiyon). Şablon da aynı düzende.
   - Doğrulayıcı başlığı ilk 5 satırda arar, `Total`/`Toplam` satırını atlar → kullanıcının `örnek.xlsx` dosyası olduğu gibi yükleniyor (34 satır, 0 hata).
