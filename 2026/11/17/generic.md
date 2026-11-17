@@ -47,3 +47,16 @@ biyometrik fotoğrafların cihazlarda görünmemesi.
   `DATA UPDATE BIOPHOTO` ~331/cihaz ve return_value=0 doğrulanacak.
 - Gelecekte kod değişikliğinde `iclock_biophoto.approval_photo` + biophoto dosya adları da güncellenmeli.
 - Sentez: VatIncluded düzeltmesi + gece sürecinin kaynağı (SWService?) onay bekliyor.
+
+## Ek — 16:15 Profil fotoğrafları + parmak/avuç listesi
+- **Neden:** Kullanıcı profil fotoğraflarının (`personnel_employee.photo`) da düzeltilmesini, olmayanların biyometrik
+  fotoğraftan doldurulmasını istedi. Durum: aktif 357 kişiden yalnız 1'inde (4521) profil fotoğrafı vardı.
+- **Yedek:** `C:\Yedek\biophoto_duzeltme_20261117\photo\` (30 dosya), tablo `zz_bak_employee_photo_20261117` (917).
+- **Ne yapıldı:** Profil ve biyometrik fotoğraf aynı `eav1` şifreli biçimde. Aktif + foto boş kişiler için kaynak sırası:
+  (a) `photo\<eski kod>.jpg` (eski kod = `zz_bak_iclock_biophoto_20261117.approval_photo`) → 15 kişi,
+  (b) `biophoto\<emp_code>.jpg` → 322 kişi. Hedef `photo\<emp_code>.jpg` (kopya), `photo='photo/'+emp_code+'.jpg'`.
+  İlk UPDATE `QUOTED_IDENTIFIER` hatasıyla (Msg 1934) reddedildi → `sqlcmd -I` ile tekrar: COMMIT 337/337.
+- **Sonuç:** Aktif fotoğraflı 338, diskte eksik 0. Kaynağı olmayan 19 aktif kişi (çoğu yalnız avuç/parmak kayıtlı).
+- **Parmak/avuç:** `iclock_biodata` bio_type 1 (parmak), 8 (avuç). Aktif: avuç 23 kişi, parmak 6 kişi; yüz kaydı
+  olmayan aktif kişiler fotoğrafsız kalanlarla örtüşüyor.
+- **Açık:** Cihazlara "Verileri Cihaza Senkronize Et" (Fotoğraf + Bio-Fotoğraf) kullanıcıda; sonra komut logu kontrolü.
