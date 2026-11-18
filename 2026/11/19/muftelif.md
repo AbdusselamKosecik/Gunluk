@@ -51,6 +51,14 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - **Commit:** `b243f3d` — fix(sentez-planing/yukleme-kontrol): kutu dagilimi canli Sentez'e gore
 - **Paket:** `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-b243f3d.zip` (8,6 MB, sır yok).
 
+### 5. Sentez veri girişi önerisi (kanıta dayalı) + sunucu
+- **Neden:** Kod canlıda doğru, ama Adres Tarif 1 / UD_MainType boş olduğu için ekranda veri yok.
+- **Ne yapıldı:** 42–47. hafta kutuları (sipariş + sevk adresi bazında) örnek.xlsx dağılımlarıyla iş emri iş emri karşılaştırıldı → her sipariş tam bir müşteri sütununa düştü (14 sipariş). Stok: MFG Giyim (Avrupa Serbest Bölge, adres 037, sipariş 00001096) = LA STOCK; Entreposage M2 sipariş 00001070 = CANADA (SSENSE) STOCK.
+- **Bulgu:** ITALY / ITALY FME / ITALY-FAS / EMANUEL-NOA aynı SNATT adres kaydını (23482), CANADA 3PL ile CANADA (SSENSE) STOCK aynı Entreposage kaydını (23444) kullanıyor → adres düzeyinde ayrışmaz; bu siparişlere ayrı sevk adresi kaydı gerekir.
+- **Simülasyon (sipariş eşlemesiyle, 47. hafta):** 58 hücrenin 44'ü birebir, 10'u ±%3 (paketlenen − plan), kalan: 95355 henüz kutusuz, 95525 örnekte boş.
+- **Dosyalar (C:\aaaa):** `Sentez_AdresTarif1_Oneri_Siparis.csv`, `Sentez_UD_MainType_Oneri.csv` (171 rota prosesinden 78 kuru işleme tip önerisi), `Sentez_Veri_Girisi_Oneri.sql` (BEGIN TRAN … ROLLBACK; REVOLVE adresindeki irtibat bilgisi Adres Tarif 2'ye taşınır). SET NOEXEC ile derlendi, ÇALIŞTIRILMADI.
+- **Sunucu:** SMB kapalı, WinRM açık ama kimlik yok; canlı siteye kendim kurmadım. Paket: `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-b243f3d.zip`, kurulum IIS-KURULUM.txt adımlarıyla (data/logs/appsettings.json'a dokunmadan).
+
 ## Kararlar
 - "Tüm miktarlar boxların sayısı olacak" → dağılım adedi siparişe bağlı kutulardaki adet (stok sütunları dahil); siparişsiz kutular (2. kalite) girmez.
 - Elle/Excel kaydı Sentez'in önüne geçer (silinmez, geri alınabilir); adres tarifi eşleşmezse adet düşürülmez, uyarı verilir.

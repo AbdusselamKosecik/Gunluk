@@ -37,3 +37,7 @@ Proje: `webproject/FredericOnMaliyet` (WPF, net9.0-windows, Syncfusion, DapperLi
 ## Açık kalanlar / sonraki adım
 - Sentez'de proseslere UD_MainType girilmeli (şu an hepsi boş).
 - Not: bağlantı dizesi (sa parolası) kodda sabit — önceden de böyleydi; ayara taşınmalı.
+
+### 3. UD_MainType önerisi
+- 171 yıkama rotası prosesinden 78 kuru işleme tip önerisi (LAZER 4, ZIMPARA 16, PP SURME 26, KILCIK 19, ESKITME 7, YIPRATMA 6); ıslak adımlar (kurutma, yumuşatma…) bilerek tipsiz — yıkama birim maliyeti/kimyasal/su ile zaten hesaplanıyor, tip verilirse çift sayılır.
+- Dosyalar: `C:aaa\Sentez_UD_MainType_Oneri.csv`, `C:aaa\Sentez_Veri_Girisi_Oneri.sql` (ROLLBACK ile biter, çalıştırılmadı).
