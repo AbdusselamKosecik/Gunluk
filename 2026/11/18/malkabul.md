@@ -178,3 +178,25 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 - **Doğrulama:** 184/184 (DB dahil); test turundan önce ve sonra ayarlar.json md5 aynı.
 - **Commit:** `cf9f754`
 - **Açık:** Aynı kalıp suitin diğer uygulamalarında da olabilir (ekran VM'leri AyarDeposu.Kaydet çağırıyorsa); kontrol edilmeli.
+
+### Terminal mal kabul siparişe göre
+- **Neden:** Kullanıcı: "burada siparişe göre gitmesi lazım. mal alım siparişini seçip ona göre el terminalinde serileri okutmamız lazım. barkodları desktoptan yaptık". Önceki akışta yalnızca irsaliye girilip seri okutuluyordu; seri hangi siparişe aitse oraya yazılıyordu.
+- **Ne yapıldı:**
+  - `IceriAlViewModel`: üç adım — (1) mal alım siparişi seç (`MalKabulDeposu.SiparislerAsync`, aramalı; sıra sayacı eski sonucu atar), (2) irsaliye no (sipariş seçilmeden "SiparisSecin" hatası), (3) seri okut. Okutma `IceriAlIslemi(siparisNo, irsaliye, seri)`; her başarılı okutmadan sonra sipariş satırları (`SatirlarAsync`) yenilenir. "Sipariş değiştir" irsaliyeyi ve listeleri kapatır, "İrsaliyeyi değiştir" siparişi korur.
+  - `MalKabulFisDeposu.SeriIceriAlAsync(..., string? siparisNo = null)`: seri kartının Explanation'ındaki sipariş seçili siparişle eşleşmezse (büyük/küçük harf duyarsız) `SeriBaskaSiparis` [seri, serinin siparişi, seçili sipariş] — fiş yazılmadan, kilit altında. Public imza artık sipariş no ister.
+  - `SerisizEkleViewModel(irsaliye, siparis?)`: mal kabulden açılınca sipariş listesi atlanır, doğrudan seçili siparişin serisiz satırları gelir.
+  - `SiparisSatiri.KabulMetni` (içeri alınan / sipariş) ve `KabulTamam` (satır yeşil).
+  - Metinler: SiparisSecin, SeriBaskaSiparis, SiparisDegistir, MalAlimSiparisi, KabulIlerleme.
+- **Dokunulan dosyalar:** `MalKabul/Ekranlar/IceriAlView(Model).axaml/.cs`, `SerisizEkleViewModel.cs`, `Veri/MalKabulFisDeposu.cs`, `Veri/MalKabulModelleri.cs`, `UygulamaMetinleri.cs`; testler `IceriAlTestleri.cs` (+3: sipariş seçilmeden irsaliye açılmaz, okutma seçili siparişle + satırlar yenilenir, sipariş değiştir), `MalKabulFisTestleri.cs` (+1 DB: başka siparişin serisi reddedilir, fiş yazılmaz; doğru siparişle alınır), `EkranGoruntusuTestleri.cs` (6 ve 6b sipariş seçili, yeni 6a sipariş listesi).
+- **Not:** python düzenleme betiği bash heredoc'ta yine bozuldu (Türkçe/tırnak); betikler scratchpad'e Write ile yazılıp çalıştırıldı.
+- **Komutlar:**
+  ```bash
+  MODFEX_DB_TEST=1 MODFEX_TEST_CIKTI=$TEMP/ekr dotnet test MalKabul.Tests
+  dotnet publish MalKabul.Android -c Release -o $TEMP/mk_apk && cp $TEMP/mk_apk/*Signed.apk dagitim/malkabul-2026-11-18.apk
+  adb -s 1ed69882 install -r dagitim/malkabul-2026-11-18.apk
+  ```
+- **Sonuç / doğrulama:** 188/188 (DB dahil); ayarlar.json md5 test öncesi/sonrası aynı. APK PM66'ya yüklendi (Success).
+- **Commit:** `b8efeb9` — Terminal mal kabul siparise gore ...
+
+## Açık kalanlar (ek)
+- Gerçek siparişle uçtan uca deneme: masaüstünde seri + etiket → terminalde sipariş seç, irsaliye, okut → Karantina onayı.
