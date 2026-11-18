@@ -131,6 +131,21 @@ kalemler de görünsün.
   arayuzTarihi 2026-11-18 12:42 olmalı. `FisAktarimBaglantiCumlesi` sunucu appsettings'ine elle eklenmeli;
   eklenmezse açılışta "tanımlı değil" maili gelir ve aktarım çalışmaz (diğer ekranlar çalışır).
 
+### 6. Hata: Fiş karşılaştırmada fatura tipleri gelmiyordu
+- **Belirti (kullanıcı):** "Fiş karşılaştırma da fis tipleri gelmiyor".
+- **Kök neden:** `Erp_Invoice.ReceiptType` smallint (UdtInt16). `FisTipiSecenegi(int Tip, int FisSayisi)` konumsal
+  bir record ve Dapper bunun için birebir tipli kurucu istiyor. Sonuç: her istekte
+  `A parameterless default constructor or one matching signature (System.Int16 Tip, System.Int32 FisSayisi)
+  is required`. Ön yüz hatayı `catch(() => setTipler([]))` ile yuttuğu için kutu sessizce boş kaldı.
+  Scratch konsolda (`tiplerdeneme`) canlıda tekrar üretildi.
+- **Düzeltme:** record `init` özellikli yapıldı ve sorguya `CAST(ReceiptType AS int)` eklendi. Ön yüz hatayı
+  kutunun altında gösteriyor ("Tip bulunamadı" ve sebep). Koruma testi: bugün eklenen Dapper tiplerinin hepsi
+  parametresiz kurucuya sahip.
+- **Doğrulama:** canlıda 04 için 11 tip geldi (121: 282.660 fiş). .NET 888/888, UI 110/110.
+- **Commit:** `d7bf2ac` — Fis karsilastirma: fatura tipleri gelmiyordu (ReceiptType smallint)
+- **Paket:** `SentezServis-2026-11-18-fis-tipleri-duzeltme.zip` (77 MB, arayüz 13:30). Önceki 18.11
+  paketiyle aynı dosyalar ve aynı 34 menü yolu; appsettings.json yok. **Önceki 18.11 paketinin yerine bu kurulmalı.**
+
 ## Kararlar
 - TL fiyat = NetItemTotal (KDV hariç net). KDV dahil gerekirse ItemTotalVatIncluded'a geçilir.
 - Kod eşleşmesi büyük/küçük harf + boşluk duyarsız.
