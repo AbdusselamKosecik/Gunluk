@@ -31,6 +31,18 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - **Sonuç / doğrulama:** 342 test yeşil (3 yeni: 95280 örneği 1614/37/43/22 → LA 284, stok sütunları, boş/eşleşmeyen adres). **SQL canlıda çalıştırılmadı** — VPN koptu.
 - **Commit:** `4703b33` — feat(sentez-planing/yukleme-kontrol): musteri dagilimi Sentez kutularindan
 
+### 3. Gerçek planlama dosyalarının yüklenmesi (Excel hatası için sertleştirme)
+- **Neden:** Örnek dosya hatasız okunduğu hâlde kullanıcı hata alıyor; okuyucuda gerçek dosyalarda hata üretecek noktalar vardı.
+- **Ne yapıldı:**
+  - `YkExcel.Oku`: iş emri başlığı (cut / İş Emri / FOrder) olan ilk görünür sayfa okunur; eskiden hep 1. sayfa okunuyordu.
+  - `.xlsm` kabul; `.xls` için "xlsx olarak kaydedin" mesajı.
+  - `AdetOku`: formül kayan nokta artığı (1614.0000000001) tam sayı kabul; metin "1.614" / "1,614" / "1 614" → 1614; gerçek kesir (1.5, 1614.4) hâlâ red.
+  - Web: dosya seçici `.xlsm`, yardım metni.
+  - Çevrim dışı kontrol: sunucudan indirilen şablon + dışa aktarım (41 satır) ve örnek.xlsx (34 satır) 0 hata.
+- **Dokunulan dosyalar:** `api/Sentez/YuklemeKontrol/{YkExcel,YkDagilimDogrulama}.cs`, `tests/.../YuklemeKontrolTests.cs`, `web/src/pages/YuklemeKontrolPage.tsx`
+- **Sonuç / doğrulama:** 357/357 test.
+- **Commit:** `a8809eb` — fix(sentez-planing/yukleme-kontrol): gercek planlama dosyalarinin yuklenmesi
+
 ## Kararlar
 - "Tüm miktarlar boxların sayısı olacak" → dağılım adedi siparişe bağlı kutulardaki adet (stok sütunları dahil); siparişsiz kutular (2. kalite) girmez.
 - Elle/Excel kaydı Sentez'in önüne geçer (silinmez, geri alınabilir); adres tarifi eşleşmezse adet düşürülmez, uyarı verilir.
