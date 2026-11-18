@@ -111,6 +111,26 @@ kalemler de görünsün.
   `docs/{api-kontrat.md,baglanti-cumleleri.md}`
 - **Commit:** `77ea6af` — Fis karsilastirma: eksik kalemleri karsi faturaya aktarma
 
+### 5. Paket: `SentezServis-2026-11-18-fis-kons-mahsup.zip` (77 MB)
+- **Ne yapıldı:** HEAD `77ea6af`'ten temiz worktree açıldı. Yerel `appsettings.json` kopyalandı, `web/node_modules`
+  junction ile bağlandı, `deploy/yayinla.ps1` çalıştırıldı. Pakette `appsettings.json` yok; yerine sırları
+  boşaltılmış `appsettings.ornek.json` var (32 değer). Arayüz tarihi 2026-11-18 12:42.
+- **Komutlar:**
+  ```bash
+  git worktree add --detach X:/Gitlab/Modasima/sentezservis-paket-1118 HEAD
+  cmd /c mklink /J <wt>\web\node_modules X:\Gitlab\Modasima\sentezservis\web\node_modules
+  powershell -NoProfile -ExecutionPolicy Bypass -File <wt>\deploy\yayinla.ps1 -Hedef <wt>\yayin
+  Compress-Archive <wt>\yayin\* SentezServis-2026-11-18-fis-kons-mahsup.zip
+  cmd /c rmdir <wt>\web\node_modules ; git worktree remove --force <wt>
+  ```
+  Not: yayinla.ps1 PowerShell aracı içinden çağrılınca Vite'ın stderr uyarısı hata sayılıyor; ayrı
+  `powershell -File` süreciyle çalıştır.
+- **Karşılaştırma (11-09 trendyol-fatura paketiyle):** dosya listesi aynı (18). Menü yolları 31'den 34'e çıktı;
+  hiçbiri kaybolmadı. Yeni yollar `/fis-karsilastirma`, `/kons-fiyat`, `/mahsup-on-kontrol`.
+- **Kurulum (yapılmadı):** sunucuda `servis-kur.cmd "D:\UzmanAdres\SentezServis" 81`. Sonra `/api/surum` →
+  arayuzTarihi 2026-11-18 12:42 olmalı. `FisAktarimBaglantiCumlesi` sunucu appsettings'ine elle eklenmeli;
+  eklenmezse açılışta "tanımlı değil" maili gelir ve aktarım çalışmaz (diğer ekranlar çalışır).
+
 ## Kararlar
 - TL fiyat = NetItemTotal (KDV hariç net). KDV dahil gerekirse ItemTotalVatIncluded'a geçilir.
 - Kod eşleşmesi büyük/küçük harf + boşluk duyarsız.
