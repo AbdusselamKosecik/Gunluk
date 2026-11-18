@@ -100,3 +100,27 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 - **Sonuç:** 167/167 test (DB dahil). Windows zip yenilendi: `dagitim/malkabul-masaustu-2026-11-18.zip`.
 - **Commit:** `a6eee4c` — Masaustu Raf etiketleri ...
 - **Açık:** Etiket henüz yazıcıda denenmedi. Kullanıcı yeni zip'i kurup bir raf etiketi basmalı ve terminalde okutarak denemeli.
+
+### Siparişten seri: toplu oluştur (etiketsiz) → düzelt → toplu bas
+- **Neden:** Kullanıcı: "siparişten seri oluştur dediğimizde 10 adet oluştursun, etiket basmasın; miktarlarını, lotlarını değiştirebilelim, sonra toplu basabilelim". Toplar tek tek tartılıyor, miktarları farklı çıkıyor.
+- **Ne yapıldı:**
+  - `MalKabulDeposu.SeriGuncelleAsync(companyId, userId, serialCardId, miktar, lot)`:
+    - Kilit `MalKabulFisDeposu.KilitAlAsync` (silmeyle aynı; kontrol ile yazma arasında terminal içeri alamaz).
+    - Seri hareketi varsa `SeriIcerideDegismez` hatası.
+    - Doğrulama: miktar > 0; lot kırpılır, boşsa NULL, en çok 50 karakter.
+    - `UPDATE Erp_InventorySerialCard (Quantity, PartyNo, UpdatedAt/By)`. Sentez tablosunda trigger olduğu için `OUTPUT ... INTO @d` kullanıldı.
+  - `SeriGirisViewModel` yeniden yazıldı:
+    - DB ve yazıcı çağrıları değiştirilebilir delegeler (testte sahte); toast'lar `Bildir` üzerinden.
+    - Adet varsayılanı 10 ve oluşturmadan sonra sıfırlanmıyor.
+    - Oluştur etiket basmıyor; yeni seriler listede seçili geliyor.
+    - Satır modeli `SeriSatiri`: Secili, MiktarGirdisi, LotGirdisi, Degisti, Duzenlenebilir (= içeri alınmamış).
+    - "Değişiklikleri kaydet": önce hepsi doğrulanıyor, biri hatalıysa hiçbiri yazılmıyor.
+    - "Seçilileri bas" ve satırdaki "Bas" önce değişenleri kaydediyor, sonra seri kodu sırasıyla basıyor; ilk yazıcı hatasında duruyor.
+    - Sil sonrası liste yeniden yüklenmiyor; seçimler ve kaydedilmemiş girdiler korunuyor.
+  - View: satırda seçim kutusu, miktar ve lot TextBox (içerideyse kapalı), Bas ve Sil; başlıkta Hepsini seç, Değişiklikleri kaydet, Seçilileri bas.
+  - Düğme metni "SERİLERİ OLUŞTUR (etiketsiz)" oldu. Yeni metinler: SerilerGuncellendi, SeriMiktarGecersiz, SeriIcerideDegismez, DegisiklikleriKaydet, SeriTopluAciklama.
+- **Testler:**
+  - `SeriGirisEkraniTestleri` (6): 10 adet etiketsiz ve seçili; yalnız değişen kaydediliyor; basmadan önce kaydedip kod sırasıyla basıyor; geçersiz miktarda hiçbir şey olmuyor; içeride olan atlanıyor; hepsini seç.
+  - DB (ROLLBACK): `Iceride_olmayan_serinin_miktar_ve_lotu_degisir` (MalKabulTestleri), `Iceride_serinin_miktar_lotu_degismez` (MalKabulFisTestleri, gerçek SeriIceriAlAsync ile).
+- **Sonuç:** 175/175 (DB dahil). Windows zip yenilendi, uygulama bu makinede yeniden açıldı.
+- **Commit:** `72a90a3`
