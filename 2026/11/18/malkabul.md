@@ -124,3 +124,37 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
   - DB (ROLLBACK): `Iceride_olmayan_serinin_miktar_ve_lotu_degisir` (MalKabulTestleri), `Iceride_serinin_miktar_lotu_degismez` (MalKabulFisTestleri, gerçek SeriIceriAlAsync ile).
 - **Sonuç:** 175/175 (DB dahil). Windows zip yenilendi, uygulama bu makinede yeniden açıldı.
 - **Commit:** `72a90a3`
+
+### Tahsis sürükle-bırak; üretime verirken top bütün, aksesuar miktarla
+- **Neden:** Kullanıcı istedi:
+  - Masaüstünde tahsis, ihtiyaca göre seri sürükleyerek yapılsın.
+  - Terminalde seri okutularak üretime sevk ve iade alınsın; iadede alınan miktar girilsin.
+  - Toplar parça parça verilmesin, aksesuarlarda miktar yazılsın. Tekli ürünler (= serisiz, kullanıcı cevabı) bunların dışında, değişmez.
+  - Sürüklenecek liste için kullanıcı "seçili ihtiyacın serileri" seçeneğini seçti.
+- **Ne yapıldı:**
+  - `TahsisDeposu.UygunSerilerAsync(b, t, companyId, hammadde, requirementId)` (public sarmalayıcı hammadde = `AyarDeposu.HammaddeDepoId`):
+    - İhtiyacın stoğu, ihtiyaçta renk varsa o renk.
+    - Hammadde deposunda SerialCardTotal > 0; aktif tahsisi yok (`AktifKosul`).
+    - Miktar hammaddedeki miktar, yer en çok miktarın olduğu LocationCode. İlk 500, seri koduna göre.
+  - `UygunSeri` ObservableObject (Secili).
+  - `TahsisViewModel`:
+    - `UygunSerileriGetir` ve `Bildir` delegeleri.
+    - İhtiyaç seçilince uygun seriler yükleniyor; sıra sayacıyla eski yanıt atılıyor.
+    - `BirakAsync(ihtiyac, kodlar)` (görünümden çağrılıyor) ve `SecilileriTahsisEt` komutu.
+    - Okut da aynı `TahsisEtAsync` üzerinden gidiyor: seriler tek tek tahsis ediliyor, reddedilen bildiriliyor, diğerleri devam ediyor. Sonunda `SerilerTahsisEdildi` ve yenileme.
+  - `TahsisView`: üç sütun (Order 260, ihtiyaç ve tahsisliler, uygun seriler 360).
+    - Seri satırında PointerPressed → `DragDrop.DoDragDropAsync(e, DataTransfer(CreateText(kodlar \n)), Copy)`. Avalonia 12 API: DataTransfer, DataTransferItem, `e.DataTransfer.TryGetText()`.
+    - İşaretli seri basıldıysa bütün işaretliler, değilse yalnız o seri taşınıyor; CheckBox'a tıklama sürükleme başlatmıyor.
+    - İhtiyaç satırı bırakma hedefi (`DragDrop.AllowDrop`, DragOver, Drop).
+  - `UretimDeposu.KumasMiAsync`: InventorySubType = 2 ya da kod KMS% / T-KMS% (etiketteki kuralla aynı).
+    - `SeriUretimDurumu.Kumas` eklendi.
+    - `UretimeVerAsync`: kumaşta verilecek miktar depodaki miktara eşit değilse `TopBolunmez` hatası (miktar null ise bütün veriliyor).
+  - `UretimViewModel`: `TopButunVerilir` (vermede ve kumaşta) → miktar kutusu ReadOnly ve uyarı metni; Kaydet hammaddedeki miktarı gönderiyor. İadede ve aksesuarda miktar düzenlenebilir.
+  - Metinler: SerilerTahsisEdildi, UygunSeriler, UygunSeriYok, SurukleBirak, SecilileriTahsisEt, TopBolunmez, TopButunVerilir; TahsisAciklama güncellendi.
+- **Testler:**
+  - DB: `Kumas_topu_parca_parca_verilmez_butun_verilir`, `Seri_durumu_kumas_mi_bildirir`, `Uygun_seriler_hammaddede_tahsissiz_ayni_stok_renk`.
+  - Eski kısmi verme testi T-AKS-001 aksesuarına çevrildi. Test stokları: 87616 T-KMS-001 sub 2, 87617 T-AKS-001 sub 3 serili, 87618 T-IPL-001 serisiz.
+  - Ekran: `TahsisEkraniTestleri` (3), `UretimEkraniTestleri` (+2).
+- **Sonuç:** 183/183 (DB dahil). APK PM66'ya kuruldu ve açıldı. Windows zip yenilendi, uygulama bu makinede yeniden açıldı.
+- **Commit:** `92604ac`
+- **Not:** Bir ara `git checkout -- .` çalıştırıldı (geçici probe sonrası). Ağaç zaten temizdi, kayıp yok. Bundan kaçınılmalı.
