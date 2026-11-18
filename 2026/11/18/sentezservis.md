@@ -37,11 +37,46 @@ kalemler de görünsün.
   tarayıcıda canlı veriyle denenmedi.
 - **Commit:** `e520156` — Fis karsilastirma ekrani: iki sirketin fisini urun kodu bazinda karsilastirir
 
+### 2. KONS fiyat kontrolü ekranı (`/kons-fiyat`)
+- **Neden:** 01/03/04'te barkodlu kartlarda KONS alış/satış fiyatı eksik veya farklı olanları bulmak.
+- **Kullanıcı kararları:** üç kontrol de (eksik, alış≠satış, şirketler arası fark); evren = barkodlu tüm kartlar
+  (silinmemiş, InUse); ürün seviyesi (varyant değil).
+- **Veri:** Kartlar şirket başına ayrı (`Erp_Inventory.CompanyId`), şirketler arası eşleşme `InventoryCode`.
+  Fiyat `Erp_InventoryPriceList` `PriceCode='KONS'`, `PriceType` 1=alış 2=satış; kart+tipte RecId en büyük
+  satır. KONS fiyatları **USD** (`ForexId=1` → `Meta_Forex`); döviz de karşılaştırılır, kur çevrilmez.
+  KDV dahil satır `VatRate` ile hariçe çevrilir. Aynı kart+tipte farklı fiyatlar → "birden çok KONS fiyatı".
+- **Canlı sayılar:** 1.824 kod; alış yok 01:416, 03:245, 04:1.095; alış≠satış ~9/şirket. Sorgu ~1,5 sn.
+- **Dosyalar:** `src/SentezServis.Core/Stok/KonsFiyatKontrolu.cs`, `KonsFiyatDeposu.cs`, `KonsFiyatExcel.cs`,
+  `src/SentezServis.Host/Api/KonsFiyatUclari.cs`, `web/src/api/konsFiyat.ts`, `web/src/pages/KonsFiyatSayfasi.tsx`(+test)
+- **Commit:** `576517e` — KONS fiyat kontrolu ekrani
+
+### 3. Mahsup ön kontrol ekranı (`/mahsup-on-kontrol`) + "01 fişinde boş satır" teşhisi
+- **Neden:** Kullanıcı: gece mahsup sorgusunu çalıştırıp 01'de olmayan barkodları görmek; 01 fişinde boş
+  satırların sebebini bulmak.
+- **Teşhis (`OBJECT_DEFINITION` ile okundu):** `UZM_MahsubBarcode` → `UZM_FindBarcode(2, @Barcode)`;
+  barkod 01'de yoksa `@InventoryId` NULL kalır, yordam DURMAZ, 01 tip 120 fişe stoksuz kalem yazar. Fiyat
+  `PriceType=1, IsPriceDiscount=1, ItemType=1, PriceCode=KONS` bulunamazsa fiyatsız kalem. Ana birim
+  (`IsMainUnit=1`) yoksa UnitItemId NULL. Ayrıca `@Barcode nvarchar(25)` → uzun barkod kesilir.
+- **Canlı:** Konsinye 01 fişleri (19 fiş, 7.652 kalem): 36 stoksuz, 757 fiyatsız; 04 hedef: 1.167 fiyatsız,
+  03 hedef: 99 fiyatsız. Örn. 01 fiş 00006798 (15.11, Konsinye-46) stoksuz kalemler.
+- **Ne yapıldı:** Aday taraması gece işinin kendi metodu (`MahsupDeposu.AdaylariGetirAsync`, kopya değil) ERP
+  salt okur bağlantıda; her aday için 01 ve hedefte FindBarcode ölçütleriyle barkod/birim/fiyat kontrolü
+  (STRING_SPLIT ile toplu). İkinci tablo: son N gün Konsinye-%/KonsinyeHR-% 120/1 fişlerinde stoksuz/fiyatsız kalemler.
+- **Dosyalar:** `src/SentezServis.Core/Stok/MahsupOnKontrolu.cs`, `MahsupOnKontroluDeposu.cs`,
+  `src/SentezServis.Host/Api/MahsupOnKontrolUclari.cs`, `web/src/api/mahsupOnKontrol.ts`,
+  `web/src/pages/MahsupOnKontrolSayfasi.tsx`(+test)
+- **Doğrulama:** .NET 817/817, UI 106/106; SQL'ler sqlcmd ile canlıda denendi. Ekran tarayıcıda denenmedi;
+  aday taraması gece işi kadar sürer (dakikalar).
+- **Commit:** `d3bf1de` — Mahsup on kontrol ekrani
+
 ## Kararlar
 - TL fiyat = NetItemTotal (KDV hariç net). KDV dahil gerekirse ItemTotalVatIncluded'a geçilir.
 - Kod eşleşmesi büyük/küçük harf + boşluk duyarsız.
 
 ## Açık kalanlar / sonraki adım
 - Canlı paket + tarayıcıda gerçek iki fişle deneme.
-- Yeni istek (netleştirme bekliyor): 01/03/04 için barkodu olup satın alma/satış KONS fiyat kodu olmayan
-  veya farklı olan ürünler ekranı.
+- Yordama koruma önerisi: `UZM_MahsubBarcode` içinde FindBarcode sonrası `@InventoryId`/`@Price` NULL ise
+  fiş kesmeden çık (ERP'de yordam değişikliği — kullanıcı onayı gerekir).
+- KONS ekranı tüm KONS satırlarına bakıyor; FindBarcode yalnız `IsPriceDiscount=1, ItemType=1` olanları
+  kullanıyor — gerekirse KONS ekranı aynı süzgece çekilebilir.
+- Fiş karşılaştırmada eksik kalemleri karşı fişe aktarma isteği: ERP'ye YAZMA (B-10 istisnası), soru bekliyor.
