@@ -61,9 +61,9 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 - **Komutlar:**
   ```powershell
   cd SentezPlaning; powershell -ExecutionPolicy Bypass -File .\Deploy-IIS.ps1
-  Compress-Archive -Path .\publish\* -DestinationPath X:\GitlabredericTr\SentezPlaning-paket-2026-11-18-10aee48.zip -Force
+  Compress-Archive -Path .\publish\* -DestinationPath X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-18-10aee48.zip -Force
   cd ..\OrderTakipWeb; dotnet publish api -c Release -o publish\site
-  Compress-Archive -Path publish\site\* -DestinationPath X:\GitlabredericTr\OrderTakipWeb-paket-2026-11-18-10aee48.zip -Force
+  Compress-Archive -Path publish\site\* -DestinationPath X:\Gitlab\fredericTr\OrderTakipWeb-paket-2026-11-18-10aee48.zip -Force
   ```
 - **Sonuç / doğrulama:** `SentezPlaning-paket-2026-11-18-10aee48.zip` (8,4 MB), `OrderTakipWeb-paket-2026-11-18-10aee48.zip` (3,7 MB). İkisinde de bağlantı dizesi ve JWT anahtarı boş, Development ayarları yok, OrderTakipWeb `DemoVeri=false`. Sunucuda `ConnectionStrings__Sentez` ve `Jwt__Key` ortam değişkeni olarak verilmeli. NU1903 uyarısı (System.Security.Cryptography.Pkcs 9.0.13) her iki projede var, güncellenmedi.
 
