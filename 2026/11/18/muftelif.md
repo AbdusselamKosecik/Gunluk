@@ -55,6 +55,18 @@ Sentez (192.168.1.22) bu makineden erişilemedi → canlı veri doğrulaması ya
 - **Bulgu:** 95448'de depo 5'e 11.11'de 00028401 no'lu fişle 2602 adetlik ikinci giriş (sağlam 5070 görünüyor) — Sentez'de kontrol edilmeli.
 - **Commit:** `8eb42e6` (SentezPlaning), `10aee48` (OrderTakipWeb). IIS paketi yenilendi: `X:\Gitlab\fredericTr\OrderTakipWeb-IIS-20261118.zip`.
 
+### 4. Kurulum paketleri (`10aee48`)
+- **Neden:** Kullanıcı sunucuya kurulacak paketleri istedi.
+- **Ne yapıldı:** SentezPlaning `Deploy-IIS.ps1` (web build + publish), OrderTakipWeb `dotnet publish`; ikisi de zip. Eski `OrderTakipWeb-IIS-20261118.zip` silindi, adlandırma diğer paketlerle aynı yapıldı.
+- **Komutlar:**
+  ```powershell
+  cd SentezPlaning; powershell -ExecutionPolicy Bypass -File .\Deploy-IIS.ps1
+  Compress-Archive -Path .\publish\* -DestinationPath X:\GitlabredericTr\SentezPlaning-paket-2026-11-18-10aee48.zip -Force
+  cd ..\OrderTakipWeb; dotnet publish api -c Release -o publish\site
+  Compress-Archive -Path publish\site\* -DestinationPath X:\GitlabredericTr\OrderTakipWeb-paket-2026-11-18-10aee48.zip -Force
+  ```
+- **Sonuç / doğrulama:** `SentezPlaning-paket-2026-11-18-10aee48.zip` (8,4 MB), `OrderTakipWeb-paket-2026-11-18-10aee48.zip` (3,7 MB). İkisinde de bağlantı dizesi ve JWT anahtarı boş, Development ayarları yok, OrderTakipWeb `DemoVeri=false`. Sunucuda `ConnectionStrings__Sentez` ve `Jwt__Key` ortam değişkeni olarak verilmeli. NU1903 uyarısı (System.Security.Cryptography.Pkcs 9.0.13) her iki projede var, güncellenmedi.
+
 ## Kararlar
 - "Planlama" = SentezPlaning (SentezDashbord değil); hafta verisi önbellekten değil doğrudan Sentez sorgusuyla alınır.
 - Sağlam = depo 5 girişi (kümülatif) varsayımı; kalite sınıfları uydurulmadı, "Veri yok".
