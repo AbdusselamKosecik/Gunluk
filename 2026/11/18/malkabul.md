@@ -200,3 +200,21 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 
 ## Açık kalanlar (ek)
 - Gerçek siparişle uçtan uca deneme: masaüstünde seri + etiket → terminalde sipariş seç, irsaliye, okut → Karantina onayı.
+
+### Mal kabul irsaliye no'suz + depo yeri
+- **Neden:** Kullanıcı: "Tedarikçi irsaliyeyi neden istiyorsun, siparişten irsaliye oluşturacağız zaten; depo yeri varsa depo yeri seçip serileri okutmamız lazım" ve "sipariş kapatarak irsaliye oluşturacağız, irsaliye no'sunu girdirmeyeceğiz".
+- **Karar (benim yorumum, kullanıcıya bildirildi):** Fiş = irsaliye, siparişten açılır: **sipariş × gün × depo × cari = bir tip 1 fiş** (UZMMK), DocumentNo boş. Aynı gün aynı siparişe okutmalar aynı fişe, ertesi gün yeni fiş. Yer, depoda tanımlıysa terminalde zorunlu (sunucu yalnız "yer bu deponun mu" denetler — sayım/üretim testleri 43'e yersiz alıyor).
+- **Ne yapıldı:**
+  - `MalKabulFisDeposu`: `SeriIceriAlAsync(companyId, userId, siparisNo, seriKodu, yer)` / iç `(b,t,..,depoId, seriKodu, siparisNo?, yer?)`; `SerisizEkleAsync(.., orderReceiptItemId, variant, miktar, yer)`; irsaliye parametresi ve `IrsaliyeKontrol` kalktı. `BaslikAsync(.., sip)`: bugünkü (ReceiptDate) aynı depo+cari, kalemi bu siparişe bağlı UZMMK fişi (UPDLOCK/HOLDLOCK, fiş kilidi altında) yoksa yeni. Yer `KalemEkle/VaryantEkle/SeriHareketiEkle` `girisYer` ile; `SayimDeposu.YerKontrolAsync`. `IrsaliyeKalemleriAsync` → `SiparisKalemleriAsync(orderReceiptId)` (son 300, yer kodu dahil). `OkutmaSonucu.Yer`, `AltMetin`.
+  - `IceriAlViewModel` baştan: sipariş listesi → seçili sipariş kartı → yer ComboBox (YerVar) → okut. Raf etiketi (kod/barkod `DepoYeri.Eslesir`) okutulunca yer seçilir; yer varsa ve seçilmediyse `MalKabulYerSecin`. Yerler `SayimDeposu.YerlerAsync(MalKabulDepoId)` ile bir kez yüklenir.
+  - `SerisizEkleViewModel(SiparisOzet?, DepoYeri?)`: başlıkta yer; kalem yere yazılır.
+  - `KarantinaDeposu.BekleyenlerAsync`: IrsaliyeNo = `ISNULL(NULLIF(DocumentNo,''), ReceiptNo)` (eski fişlerde belge no, yenilerde fiş no).
+  - Metin: MalKabulYerSecin; OkutulanYok "Bu siparişte henüz okutulan yok".
+- **Testler:** IceriAlTestleri baştan (7: sipariş seçilmeden okutma yok, irsaliyesiz okutma + satır yenileme, yer zorunlu, raf etiketi yer seçer → seri o yere, hata, fazla, sipariş değiştir). MalKabulFisTestleri: belge no null; `Ayni_siparis_ayni_gun_ayni_fis_ertesi_gun_yeni_fis` (ReceiptDate düne çekilir), `Secilen_depo_yeri_kalem_ve_seri_hareketine_yazilir` (41 'M' yerli depo), `Baska_deponun_yeri_reddedilir`; irsaliyesiz / başka tedarikçi testleri kalktı. Diğer DB testlerinden irsaliye argümanı regex ile silindi.
+- **Sonuç:** 187/187 (DB dahil), ayarlar.json md5 aynı. Desktop zip yenilendi ve uygulama yeniden açıldı. APK derlendi (`dagitim/malkabul-2026-11-18.apk`) ama **terminal adb'de görünmedi, yüklenmedi**.
+- **Commit:** `6177bbd` — Mal kabul irsaliye no'suz ...
+
+## Açık kalanlar (ek)
+- APK'yı PM66'ya yükle (adb bağlantısı yoktu).
+- "Sipariş kapatarak irsaliye": sipariş × gün yorumu kullanıcıyla teyit edilmeli; isterse "Kabulü bitir / siparişi kapat" düğmesi (fişi kapatır, sonraki okutma yeni fiş) eklenebilir.
+- `SeriKabulKurallari.IrsaliyeHatasi` ve IrsaliyeGerekli/IrsaliyeBaskaTedarikci metinleri artık kullanılmıyor (temizlenebilir).
