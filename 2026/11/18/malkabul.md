@@ -158,3 +158,23 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 - **Sonuç:** 183/183 (DB dahil). APK PM66'ya kuruldu ve açıldı. Windows zip yenilendi, uygulama bu makinede yeniden açıldı.
 - **Commit:** `92604ac`
 - **Not:** Bir ara `git checkout -- .` çalıştırıldı (geçici probe sonrası). Ağaç zaten temizdi, kayıp yok. Bundan kaçınılmalı.
+
+### Düzeltme: testler kullanıcının ayarlarını siliyordu
+- **Belirti:** Kullanıcı: "her açtığında parametreler neden siliniyor". Masaüstü uygulaması her açılışta sunucu, SQL ve yazıcı alanları boş geliyordu.
+- **Kök neden:**
+  - `%LOCALAPPDATA%\Modfex\malkabul\ayarlar.json` testlerden yazılıyordu.
+  - Ekran görüntüsü testi `SayimViewModel.SeciliDepo = 41` yapıyor; varsayılan "son depoyu hatırla" delegesi `AyarDeposu.Kaydet(AyarDeposu.Gecerli)` çağırıyor.
+  - Test sürecinde Gecerli boş `Ayarlar` olduğu için dosya boş sunucu ve yazıcıyla, SayimDepoId = 41 olarak eziliyordu.
+  - Dosya zamanı (16:11) test turuyla aynı.
+- **Düzeltme:**
+  - `AyarDeposu.YalnizBellekte` bayrağı: true iken `Kaydet` yalnız `Gecerli`yi değiştiriyor, dosyaya yazmıyor.
+  - Test derlemesi `[ModuleInitializer]` ile bayrağı açıyor (`MalKabul.Tests/AyarKorumaTestleri.cs`). DB testleri dosyayı yine okuyor.
+  - TDD: önce derleme hatasıyla kırmızı, sonra yeşil.
+- **Geri yükleme:**
+  - Bozuk dosya `ayarlar.json.bozuk-20261118` olarak saklandı.
+  - Sunucu / Veritabani / SqlKullanici / SqlSifreKorumali / SonSirketId / SonKullanici paketleme ayarlarından kopyalandı. DPAPI CurrentUser ve aynı entropi olduğu için şifre çözülmeden korumalı hâliyle taşındı.
+  - YaziciIp 192.168.0.184:9100.
+  - SayimDepoId 41 kaldı (testin yazdığı değer; kullanıcı kontrol etmeli).
+- **Doğrulama:** 184/184 (DB dahil); test turundan önce ve sonra ayarlar.json md5 aynı.
+- **Commit:** `cf9f754`
+- **Açık:** Aynı kalıp suitin diğer uygulamalarında da olabilir (ekran VM'leri AyarDeposu.Kaydet çağırıyorsa); kontrol edilmeli.
