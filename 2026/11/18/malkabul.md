@@ -84,3 +84,19 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 - PM66'ya APK kurulumu (cihaz USB'ye bağlanınca `adb install -r`).
 - Depocu sayım deposu (ve hammadde) için yerleri Sentez'de tanımlamalı. Barkod alanı doluysa raf etiketi barkodla da okunur, değilse yer kodu barkod olarak basılmalı.
 - Serisiz stokta yer değişimi yok (yalnız seri); gerekirse eklenir.
+
+### Raf (depo yeri) etiketi basımı — masaüstü
+- **Neden:** Kullanıcı: "depo uygulamasından, Desktop aynı yazıcıya depo yerlerini yazdırma işlemi eklermisin". Terminal (sayım, yer değiştir) raf etiketini okutunca yeri seçiyor; etiketin basılması gerekiyordu.
+- **Ne yapıldı:**
+  - `Veri/RafEtiketi.cs`: `Zpl(DepoYeri, Depo, genişlikMm, yükseklikMm, dpi)`. Yerleşim 99×99 mm, 792 noktaya göre çizildi, ayardan ölçekleniyor. İçerik: MODFEX APPAREL, "DEPO YERİ / LOCATION", büyük yer kodu (≤8 karakter 150, ≤12 karakter 110, daha uzunsa 76 nokta), açıklama (2 satır), ortada QR (Sentez Barcode doluysa barkod, değilse LocationCode; terminaldeki `DepoYeri.Eslesir` ikisini de tanıyor), altta "DEPO / WAREHOUSE: kod · ad". `SeriEtiketi.Temiz` internal yapıldı (^ ~ temizliği ortak).
+  - `EtiketBasici.RafBasAsync(DepoYeri, Depo)`: aynı ZplYazici ve ayarlar (aktarıcı ya da doğrudan Zebra).
+  - Yeni ekran `RafEtiketleriViewModel` / `RafEtiketleriView`; ana menüde "Raf etiketleri" girişi.
+    - Depo listesi (varsayılan SayimDepoId, yoksa ilk depo); `SayimDeposu.YerlerAsync` (InUse, kod sırası).
+    - Arama kod, açıklama ve barkodda anında süzüyor.
+    - "Hepsini seç" görünenleri seçiyor. "Seçilileri bas" yalnız görünen seçilileri basıyor; ilk hatada duruyor.
+    - Her satırda "Bas" düğmesi. Yer yoksa `DepodaYerYok` uyarısı.
+  - Metinler: RafEtiketleriBaslik, RafEtiketleriMenuAciklama, RafEtiketleriAra, RafEtiketleriOzet, YerSecin.
+- **Dokunulan dosyalar:** `MalKabul/Ekranlar/Veri/RafEtiketi.cs`, `Veri/SeriEtiketi.cs`, `EtiketBasici.cs`, `RafEtiketleriViewModel.cs`, `RafEtiketleriView.axaml(.cs)`, `AnaMenuView(Model)`, `UygulamaMetinleri.cs`, testler `RafEtiketiTestleri.cs` (3 ZPL + 5 ekran), `UygulamaMetinleriTestleri.cs`, `EkranGoruntusuTestleri.cs` (malkabul-15-raf-etiketleri.png).
+- **Sonuç:** 167/167 test (DB dahil). Windows zip yenilendi: `dagitim/malkabul-masaustu-2026-11-18.zip`.
+- **Commit:** `a6eee4c` — Masaustu Raf etiketleri ...
+- **Açık:** Etiket henüz yazıcıda denenmedi. Kullanıcı yeni zip'i kurup bir raf etiketi basmalı ve terminalde okutarak denemeli.
