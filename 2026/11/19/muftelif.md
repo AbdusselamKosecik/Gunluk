@@ -43,11 +43,19 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - **Sonuç / doğrulama:** 357/357 test.
 - **Commit:** `a8809eb` — fix(sentez-planing/yukleme-kontrol): gercek planlama dosyalarinin yuklenmesi
 
+### 4. Canlı doğrulama (VPN geri geldi) + düzeltme
+- **Bulgu:** `Erp_BoxTotal.Quantity` canlıda boş → adet `Erp_BoxItem.Quantity` (IsDeleted=0). `ShipToAddressId` boş; siparişe özel adres `ShippingAddressId` (AddressId carinin ana adresi).
+- **95280 sevk adresleri:** 008 ARITZIA 2829 Rohr Rd → 1614, 002 SNATT (İtalya) → 43, 029 Entreposage M2 (Montreal) → 22, 007 ARITZIA LP 415 Boyne → 35 (örnekte 37), 001 Citizens of Humanity (LA) → 273. Örnek.xlsx ile aynı.
+- **Ne yapıldı:** SQL BoxItem + Shipping önce; Direction1 "LA" uyarı vermez (LA hesaplanır).
+- **Canlı sonuç (47. hafta):** 40 iş emri, 1173 kutu, 23.384 adet; 22.273 adet adres tarifi boş adreslere, 1.111 adet "CONTACT NAME: JORGE CHAVEZ…" yazılmış adreslere (eşleşmedi uyarısı). Uçtan uca API: 41 iş emri kaynak Sentez; örnek.xlsx önizleme 34/0 → aktar → 95280 Elle (LA 284), 95349 Sentez; geri al → 95280 Sentez. Dışa aktarım + şablon 200.
+- **Commit:** `b243f3d` — fix(sentez-planing/yukleme-kontrol): kutu dagilimi canli Sentez'e gore
+- **Paket:** `X:\GitlabredericTr\SentezPlaning-paket-2026-11-19-b243f3d.zip` (8,6 MB, sır yok).
+
 ## Kararlar
 - "Tüm miktarlar boxların sayısı olacak" → dağılım adedi siparişe bağlı kutulardaki adet (stok sütunları dahil); siparişsiz kutular (2. kalite) girmez.
 - Elle/Excel kaydı Sentez'in önüne geçer (silinmez, geri alınabilir); adres tarifi eşleşmezse adet düşürülmez, uyarı verilir.
 
 ## Açık kalanlar / sonraki adım
-- VPN gelince: `SentezDagilim` SQL'ini 47. haftada çalıştır; 95280 kutularını örnek.xlsx (ARITZIA-2829 1614, ARITZIA-415 37, ITALY 43, CANADA 3PL 22) ile karşılaştır; hangi adres alanının (ShipTo/Shipping/Address) dolu olduğunu teyit et.
+- Sentez'de 1.111 adetlik adreslerde Adres Tarif 1'e irtibat kişisi yazılmış; müşteri sütun adıyla değiştirilmeli.
 - Sentez'de adreslerin Adres Tarif 1'ine müşteri sütun adları girilmeli (ARITZIA-2829, ITALY, UK …); boşken dağılım uyarı verir.
-- Yeni paket + sunucu kurulumu.
+- `SentezPlaning-paket-2026-11-19-b243f3d.zip` sunucuya kurulmalı (192.168.3.228:90).

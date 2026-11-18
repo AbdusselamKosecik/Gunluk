@@ -24,6 +24,11 @@ Proje: `webproject/FredericOnMaliyet` (WPF, net9.0-windows, Syncfusion, DapperLi
 - **Sonuç / doğrulama:** Derleme temiz, 4/4 test. Uygulama ve SQL canlıda çalıştırılmadı (VPN koptu; ayrıca uygulama SentezLive'a tablo oluşturur — kullanıcı açınca oluşacak).
 - **Commit:** `3b784a0` — feat(on-maliyet): yikama operasyonlari Erp_Process.UD_MainType'a gore
 
+### 2. Canlı doğrulama (salt okunur)
+- GetTypes SELECT'i, ürün ekranı rota sorgusu ve toplu Excel YikamaOps alt sorgusu canlı Sentez'de hatasız çalıştı (fiyat tablosu yerine tablo değişkeni; Sentez'e yazılmadı). UD_MainType boş olduğu için sonuçlar boş/0.
+- Sanal tip eşlemesiyle A214C-1554 rotası (5030, 5001, 5049, 5104, 5010, 5013): KILCIK 0,10 · LAZER 0,50 · PP SURME 2×0,30 · ZIMPARA 2×0,20 = 1,60; aynı veriyle `Group()` testi 1,60.
+- **Commit:** `2668e59` — test(on-maliyet): canli rota (A214C-1554) gruplama karsilastirmasi (5/5 test)
+
 ## Kararlar
 - Su ayrı (litre) kalır; "SU" adlı ana tip listeye/hesaba girmez.
 - Davranış farkı: eskiden PP SÜRME ÖN/ARKA her biri Sürme/2, 5924 Kaplama Sprey "(ADT) × ProjectionQty × Sürme" idi; artık her rota operasyonu = 1 × tip adet fiyatı.
@@ -31,5 +36,4 @@ Proje: `webproject/FredericOnMaliyet` (WPF, net9.0-windows, Syncfusion, DapperLi
 
 ## Açık kalanlar / sonraki adım
 - Sentez'de proseslere UD_MainType girilmeli (şu an hepsi boş).
-- VPN'de: `GetTypes` ve YikamaOps SQL'ini canlıda çalıştır.
 - Not: bağlantı dizesi (sa parolası) kodda sabit — önceden de böyleydi; ayara taşınmalı.
