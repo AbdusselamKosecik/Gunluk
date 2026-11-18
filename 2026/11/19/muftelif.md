@@ -49,7 +49,7 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - **Ne yapıldı:** SQL BoxItem + Shipping önce; Direction1 "LA" uyarı vermez (LA hesaplanır).
 - **Canlı sonuç (47. hafta):** 40 iş emri, 1173 kutu, 23.384 adet; 22.273 adet adres tarifi boş adreslere, 1.111 adet "CONTACT NAME: JORGE CHAVEZ…" yazılmış adreslere (eşleşmedi uyarısı). Uçtan uca API: 41 iş emri kaynak Sentez; örnek.xlsx önizleme 34/0 → aktar → 95280 Elle (LA 284), 95349 Sentez; geri al → 95280 Sentez. Dışa aktarım + şablon 200.
 - **Commit:** `b243f3d` — fix(sentez-planing/yukleme-kontrol): kutu dagilimi canli Sentez'e gore
-- **Paket:** `X:\GitlabredericTr\SentezPlaning-paket-2026-11-19-b243f3d.zip` (8,6 MB, sır yok).
+- **Paket:** `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-b243f3d.zip` (8,6 MB, sır yok).
 
 ## Kararlar
 - "Tüm miktarlar boxların sayısı olacak" → dağılım adedi siparişe bağlı kutulardaki adet (stok sütunları dahil); siparişsiz kutular (2. kalite) girmez.
