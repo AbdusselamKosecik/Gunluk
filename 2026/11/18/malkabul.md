@@ -47,3 +47,40 @@ El terminali yazıcı aktarıcısı (`yaziciaktarici.md`) üzerinden basıyor; k
 
 ## Açık kalanlar
 - Windows'ta masaüstü paketinin kurulması (yeni ana menü: Sayım serileri).
+
+---
+
+## Öğleden sonra: depo yeri (13:18–13:45)
+
+### 5. Depo yeri ve yer değişimi
+- **Neden:** Kullanıcı: "El terminalinde depo yeri eklememiz lazım, depo yeri değişimi de; sayımda depo seçtikten sonra depo yeri seçimini yapmamız lazım." Yer kodlarını depocudan istemişler, Sentez'de tanımlanacak.
+  - Dünkü "raf yeri iptal" kararı bununla geri açıldı.
+- **Sentez'de bulunanlar (salt okuma):**
+  - Yerler `Erp_WarehouseLocation` tablosunda (LocationCode, Explanation, Barcode, Corridor/Shelf/Division, InUse). Şu an yalnız depo 41'de (M) 304 yer var; hiçbir fişte kullanılmamış.
+  - Yer kolonları: fiş kalemi ve varyantında `In/OutWarehouseLocationId`, seri hareketinde de aynısı, `SerialCardTotal.WarehouseLocationId`.
+  - Toplamları Sentez tetikleyicileri tutuyor: `EditInventoryTotalD` → `EditWarehouseLocationTotal` → `Erp_WarehouseLocationTotal`. Seri × yer toplamını seri hareketi tetikleyicisi tutuyor.
+- **Yapılanlar:**
+  - **Yazma yardımcıları:** `FisSql` kalem ve varyant insert'lerinde yer kolonları parametre oldu. `FisYazimi.KalemEkle/VaryantEkle/SeriHareketiEkle` isteğe bağlı `girisYer` / `cikisYer` alıyor (varsayılan null, eski çağrılar aynı).
+  - **`FisYazimi.SeriYeriAsync`:** serinin depodaki yeri. Depodan çıkan her seri hareketi bunu çıkış yeri olarak yazıyor: üretime ver 129, karantina onayı 17 ve reddi 122, sayım taşıması 17, sayımı kapat 130 (kapatmada seri × yer gruplu). Yoksa yer toplamı hiç düşmezdi.
+  - **Sayım:**
+    - `SayimDeposu.YerlerAsync(depo)`, `YerKontrolAsync` (hata: YerBuDepodaDegil).
+    - Okut / SeriOlustur / SerisizEkle `yer` alıyor.
+    - `SayimKalemi.Yer`; listede `wl.LocationCode`.
+    - Ayar `SayimYerId`; depo değişince 0'a dönüyor.
+  - **Terminal sayım ekranı:** depodan sonra "Depo yeri" seçimi ve "Yersiz" düğmesi; yer yalnız depoda tanımlıysa görünüyor. Raf etiketi (yer kodu ya da barkodu) okutulunca yer seçiliyor, sonraki seriler o yere yazılıyor.
+  - **Yer değiştir:**
+    - Terminal menüsünde yeni ekran (`YerDegistirViewModel/View`): depo → hedef yer (okut ya da seç) → serileri okut.
+    - Veri tarafı `DepoYeriDeposu.TasiAsync`: fiş 17, giriş = çıkış deposu, giriş yeri hedef, çıkış yeri eski yer, özel kod `UZMYR`, günlük başlık.
+    - Hatalar: SeriBuDepodaDegil, SeriZatenBuYerde, SeriBulunamadi.
+  - **Masaüstü "Sayım serileri":** lotun altında yer kodu görünüyor.
+- **Testler:**
+  - `DepoYeriTestleri` (8, canlı DB, ROLLBACK, depo 41'in gerçek yerleri): yeni seri yere yazılıyor ve yer toplamı artıyor; başka deponun yeri reddediliyor; okutulan seri yere taşınıyor; yer değişiminde depo stoğu aynı, A −20, B +20, özel kod UZMYR; yersiz seri yere konuyor; aynı yer ya da başka depo reddediliyor; yerdeki seri depodan çıkınca yer toplamı düşüyor.
+  - `SayimEkraniTestleri` +3 ve `YerDegistirEkraniTestleri` (4).
+  - Toplam **159/159**.
+- **Commit:** `33ca24c`.
+- **Dağıtım:** APK `dagitim/malkabul-2026-11-18.apk` (PM66 bağlı değildi, kurulmadı), Windows `dagitim/malkabul-masaustu-2026-11-18.zip`.
+
+## Açık kalanlar
+- PM66'ya APK kurulumu (cihaz USB'ye bağlanınca `adb install -r`).
+- Depocu sayım deposu (ve hammadde) için yerleri Sentez'de tanımlamalı. Barkod alanı doluysa raf etiketi barkodla da okunur, değilse yer kodu barkod olarak basılmalı.
+- Serisiz stokta yer değişimi yok (yalnız seri); gerekirse eklenir.
