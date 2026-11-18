@@ -69,6 +69,48 @@ kalemler de görünsün.
   aday taraması gece işi kadar sürer (dakikalar).
 - **Commit:** `d3bf1de` — Mahsup on kontrol ekrani
 
+### 4. Fiş karşılaştırma → eksik kalemleri karşı faturaya aktarma (ERP'ye YAZAR)
+- **Neden:** Kullanıcı: "hedefte olmayanları kaynağa, kaynakta olmayanları hedefe aktarmamız lazım".
+- **Kararlar (kullanıcı):** mevcut fişe ekle · fiyat = kaynak fişin birim fiyatı · yalnız hiç olmayan kodlar ·
+  eşleşme barkodla · "ETTN dolu olabilir ama GİB'e gönderilmediyse değiştirilir". Plan onaylandı
+  (`~/.claude/plans/purrfect-jumping-micali.md`).
+- **Ölçümler:**
+  - `UZM_CreateReceiptItem` ve `UZM_CreateReceiptItemVariant` satır toplamlarını 0 yazıyor, fatura toplamına
+    dokunmuyor; bu yüzden kullanılmadı.
+  - İskontosuz faturalarda kimlik tam tutuyor: `SubTotal=ΣNetItemTotal`, `VatAmount=ΣVatAmount`,
+    `GrandTotal=Sub+KDV` (04/121'de 61.052/61.052). 01/120 toptan faturalar çoğunlukla iskontolu.
+  - Kalem tetikleyicileri `EditInventoryTotal` ile stoku kendisi güncelliyor.
+  - `trg_Erp_InventoryReceiptItem_TrendyolValidation` tetikleyicisi, SpecialCode='Trendyol' olan 121 faturaya
+    siparişsiz kalem eklenmesini ROLLBACK ediyor.
+  - Sentez KDV dahil satırı şöyle tutuyor: UnitPrice brüt 2 hane, NetUnitPrice = brüt/(1+oran) 8 hane.
+- **Ne yapıldı:**
+  - Yeni bağlantı rolü `FisAktarim` (`FisAktarimBaglantiCumlesi`). Yerel `appsettings.json` git dışında;
+    bugün **SentezCore2026Test**'i gösteriyor.
+  - `FisAktarimDeposu`: önizleme ve `AktarAsync` aynı bağlantıdan; tek işlem, UPDLOCK. Hedef faturanın
+    iskontosuz bir kalemi şablon alınıp `INSERT…SELECT` ile kopyalanıyor. Kolonlar sys.columns'tan geliyor;
+    sipariş/iade/iş emri bağları ve metinler NULL, iskonto/maliyet/döviz 0. Ardından fiş ve fatura
+    toplamları kalemlerden yeniden yazılıyor, kimlik yeniden ölçülüyor; tutmazsa geri alınıyor.
+  - Engeller: CRS durumu `Created` dışında her durum (sorulamazsa da), iptal, iskonto, masraf, döviz,
+    tevkifat, birden çok stok fişi, Trendyol, toplamı tutmayan fatura. Muhasebe fişi varsa ayrıca onay.
+  - Uçlar: `POST /api/fis-karsilastirma/onizleme` (giriş), `/aktar` (yönetici + CSRF, denetim
+    `fis-aktarimi`). Ekranda iki düğme, önizleme ve onay modalı (`FisAktarimModal.tsx`).
+  - `FisKarsilastirmaDeposu.OzetOkuAsync` bağlantı alacak şekilde ayrıldı (aynı sorgu).
+- **Doğrulama:**
+  - Canlıda önizleme: 03/121/00329305 → 04/121/00545314 için 3 kod eşlendi (319,90 korundu). ETTN'li
+    04/121/00544569 için CRS "Approved" döndü, engellendi. 01/120/00000752 iskonto, 122 stok fişi ve kimlik
+    engeline takıldı.
+  - **Test kopyasında yazma:** 03/121/00311245 → 04/121/00443234'e 2 kalem eklendi. Toplamlar 339,92 →
+    1.503,37 (KDV 150,34, genel 1.653,71); fatura ve fiş birebir, satırlar Sentez biçiminde, sipariş bağı
+    NULL. İkinci önizlemede eksik 0.
+  - .NET 879/879, UI 109/109, Release derlemesi temiz. Deneme konsolu scratchpad'de (`aktarimdeneme`);
+    "yaz" kipi yalnız Test veritabanı adını kabul ediyor.
+- **Dokunulan dosyalar:** `src/SentezServis.Core/{Ayarlar.cs,Data/BaglantiFabrikasi.cs,Modeller.cs}`,
+  `src/SentezServis.Core/Fatura/{FisAktarimi.cs,FisAktarimDeposu.cs,FisKarsilastirmaDeposu.cs}`,
+  `src/SentezServis.Host/Api/FisKarsilastirmaUclari.cs`, `Program.cs`, `tests/.../FisAktarimTestleri.cs`,
+  `web/src/{api/fisKarsilastirma.ts,components/FisAktarimModal.tsx,pages/FisKarsilastirmaSayfasi*.tsx}`,
+  `docs/{api-kontrat.md,baglanti-cumleleri.md}`
+- **Commit:** `77ea6af` — Fis karsilastirma: eksik kalemleri karsi faturaya aktarma
+
 ## Kararlar
 - TL fiyat = NetItemTotal (KDV hariç net). KDV dahil gerekirse ItemTotalVatIncluded'a geçilir.
 - Kod eşleşmesi büyük/küçük harf + boşluk duyarsız.
@@ -79,4 +121,7 @@ kalemler de görünsün.
   fiş kesmeden çık (ERP'de yordam değişikliği — kullanıcı onayı gerekir).
 - KONS ekranı tüm KONS satırlarına bakıyor; FindBarcode yalnız `IsPriceDiscount=1, ItemType=1` olanları
   kullanıyor — gerekirse KONS ekranı aynı süzgece çekilebilir.
-- Fiş karşılaştırmada eksik kalemleri karşı fişe aktarma isteği: ERP'ye YAZMA (B-10 istisnası), soru bekliyor.
+- **Fiş aktarımı canlıya geçiş:** (1) test kopyasında 04/121/00443234'ü Sentez'de açıp kaydet, toplamlar
+  değişmemeli; (2) sunucu `appsettings.json`'ına `FisAktarimBaglantiCumlesi` ELLE (Database=SentezCore2026);
+  (3) servisi yeniden başlat. O zamana kadar ekran canlıyı karşılaştırır ama aktarım test kopyasına yazar.
+- Bugünkü 4 ekran için paket ve canlı kurulum yapılmadı.
