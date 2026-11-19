@@ -64,3 +64,9 @@ görselde cm zorunluluğu, kronometre duraklatma). Kullanıcı ek not: "yıkama 
 - Kodu NULL kalmış eski etütlere geriye dönük kod atama (açıklama = Sentez adı tam eşleşenler) — onay bekliyor, DB'ye yazılmadı.
 - 50100/51116/51117 gibi 5 haneli yıkama kodları listeye girsin mi — kullanıcıya soruldu.
 - IIS paketi + APK sahaya kurulacak; emülatörde duraklat/cm'siz işaret uçtan uca denenmeli.
+
+### 5. Yayın paketi (23:03)
+- `dotnet publish TimeCraft.csproj -c Release -r win-x64 --self-contained true -o X:/Gitlab/fredericTr/timecraft-publish`
+  (önceki `appsettings.Production.json` / JwtKey yedeklenip geri kondu), `Compress-Archive` →
+  `X:\Gitlab\fredericTr\TimeCraft-iis-20261119.zip` (181 MB). APK → `X:\Gitlab\fredericTr\EtutVision-debug.apk`.
+- Sunucuya kurulmadı; tablete yüklenmedi.
