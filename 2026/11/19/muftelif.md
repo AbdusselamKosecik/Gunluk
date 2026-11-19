@@ -75,3 +75,10 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - **Düzeltme:** `OrderTakip.TamirOzeti`: özet = Yıkama Tamir toplamı; yalnız Finish Tamir varsa yönü çevrilir. `wwwroot/index.html` istemci yedek toplaması kaldırıldı. 2 yeni test, 21/21. Commit `ff2d74e`.
 - **Paketler:** `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-ff2d74e.zip`, `OrderTakipWeb-paket-2026-11-19-ff2d74e.zip` (`dotnet publish -c Release -r win-x64 --self-contained false`, appsettings.Development.json / data / logs hariç). Sunucuya kurulmadı.
 - Kontrol (22:59): `OrderTakipWeb-paket-2026-11-19-ff2d74e.zip` içinde `TamirOzeti` (dll) ve yeni index.html doğrulandı.
+
+### 7. Dağılım yalnız Excel'den; Sentez'den koli
+- **İstek:** "Yükle ekranında veriler sadece Excel'den yüklenerek gelecek; hesapları yine Sentez'den getirecek: koli adetleri ve toplam adetleri."
+- **Ne yapıldı:** Otomatik Sentez dağılımı ve Adres Tarif 1 eşlemesi kaldırıldı (`YkHesap.SentezDagilimEsle`, `YkDagilimKaynak`, `DagilimUyarilari`, "Kaynak" sütunu). Müşteri dağılımı yalnız Excel/elle kaydından. Yeni `YuklemeKontrolSql.Koli`: siparişe bağlı kutular → iş emri başına `Kutu` (COUNT DISTINCT Erp_Box) + `Adet` (SUM Erp_BoxItem.Quantity). `YkOrder.SentezKutu` / `SentezKutuAdet`: Müşteri Dağılımı sekmesi ve detayda "Koli (Sentez)", "Kolideki Adet (Sentez)"; Excel dışa aktarımına iki kolon.
+- **Doğrulama:** 355/355 test, web build temiz. Canlı sorgu denenemedi (VPN koptu); sorgu sabah canlıda doğrulanan kutu sorgusunun adres join'siz hali.
+- **Commit:** `69c0e3c`. **Paket:** `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-69c0e3c.zip` (ff2d74e paketinin yerine).
+- `C:\aaaa\Sentez_Veri_Girisi_Oneri.sql` içindeki Adres Tarif 1 bölümü artık gereksiz (UD_MainType bölümü ön maliyet için geçerli).
