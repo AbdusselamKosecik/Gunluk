@@ -89,3 +89,35 @@ Tarayıcı konsolunda router'dan yaprak `/app/*` rotaları alınıp (`$router.ge
 - 111/111 ekran: menü altına girme, footer binmesi, yatay taşma, body.background → **0**.
 - Konsol hataları: kalanlar düzeltildi ve tek tek tekrar doğrulandı; geriye yalnız FaultyTypes DB hatası kaldı.
 - Production build başarılı (02:0x).
+
+## 12. Saha logu analizi + RunSql sorgu loglama + paket (12:40)
+
+### 12.1 Saha hataları
+- **Neden:** Kullanıcı sahadaki API logunu yapıştırdı (yerel logda bu connection id'ler yok → saha sunucusu).
+- **Bulgular:**
+  - `BulkInstall/RunSql` → `SqlException Named Pipes [53]`, `Class:16`, hata `ExecuteReader → TryRun` içinde
+    (Open'da değil) → SQL Server'ın kendisi başka bir sunucuya gidemiyor (gönderilen SQL/SP'de uzak sunucu).
+    Kullanıcı linked server'larda sorun görmedi → gönderilen sorguyu görmek gerekiyor; RunSql SQL'i loglamıyordu.
+  - `BadHttpRequestException ... MinRequestBodyDataRate` → istemci gövdeyi çok yavaş gönderiyor (ağ). Kod değişikliği yapılmadı.
+- **Karar:** RunSql'in yetkisiz (no `[Authorize]`) olduğu kullanıcıya söylendi; kullanıcı "öyle kalacak" dedi.
+
+### 12.2 RunSql hata loglama
+- **Ne yapıldı:** `con.Open()` + `ExecuteReader` `try/catch` içine alındı; catch'te
+  `Log.Error(ex, "RunSql hatası. Sql: {Sql} | Parametreler: {Parameters}", ...)` ve `throw;` (davranış aynı).
+- **Dokunulan dosyalar:** `backend/Techtsio.Presentation/Controllers/BulkInstallController.cs`
+- **Doğrulama:** Paket exe'si 44399'da çalıştırıldı; `SELECT 1` → 200; `SELECT * FROM Tablo_Yok_Test WHERE Id=@p` → 500 ve
+  logda `RunSql hatası. Sql: "SELECT * FROM Tablo_Yok_Test WHERE Id=@p" | Parametreler: [{"Key":"@p","Value":5}]`.
+
+### 12.3 Paket
+- **Komutlar:** (2026-11-12 tarifinin aynısı)
+  ```bash
+  cd X:/Techio/backend && dotnet publish Techtsio.Presentation/Techtsio.Presentation.csproj \
+      -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o <staging>/api
+  cd <staging>/api && rm -rf wwwroot && cp -r X:/Techio/ui/dist wwwroot && rm -f *.pdb appsettings.Development.json
+  unzip -q X:/Techio/Techio-paket-2026-11-12.zip "sql/*" -d <staging>/api
+  tar.exe -a -c -f X:\Techio\Techio-paket-2026-11-19.zip -C <staging>\api *
+  ```
+- **Sonuç:** `X:\Techio\Techio-paket-2026-11-19.zip` (58.2 MB, SHA256 `CDF9E934…6712`). İçinde bugünkü UI düzeltmeleri
+  (ui/dist 02:04 build) + RunSql loglama + `sql/` (11-12 paketindeki eksik SP scripti). Açılıp test: `GET /` 200.
+- **Dikkat:** `appsettings.json` TEST DB'yi gösteriyor (`192.168.1.69/TechtsioMerkezTest`) — sahada mevcut appsettings korunmalı.
+- **Commit:** yok — `ui` ve `backend` git deposu değil, kod uzak depoya gitmedi.
