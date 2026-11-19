@@ -121,3 +121,20 @@ Tarayıcı konsolunda router'dan yaprak `/app/*` rotaları alınıp (`$router.ge
   (ui/dist 02:04 build) + RunSql loglama + `sql/` (11-12 paketindeki eksik SP scripti). Açılıp test: `GET /` 200.
 - **Dikkat:** `appsettings.json` TEST DB'yi gösteriyor (`192.168.1.69/TechtsioMerkezTest`) — sahada mevcut appsettings korunmalı.
 - **Commit:** yok — `ui` ve `backend` git deposu değil, kod uzak depoya gitmedi.
+
+## 13. MinRequestBodyDataRate hatası sahada sürüyor → tolerans + loglama (16:07)
+- **Neden:** Yeni paket kurulduktan sonra sahada `BadHttpRequestException: Reading the request body timed out ... MinRequestBodyDataRate`
+  tekrar geldi (16:03, 16:05). Log uç noktayı/cihazı söylemiyordu.
+- **Ne yapıldı:**
+  1. `Program.cs` → `.ConfigureKestrel(k => k.Limits.MinRequestBodyDataRate = new MinDataRate(50, TimeSpan.FromSeconds(30)))`
+     (varsayılan 240 B/sn, 5 sn tolerans). Tamamen kapatılmadı: takılı kalan istemci 30 sn sonra yine kesilir.
+  2. `Startup.cs` → mevcut 404 fallback middleware'inde `next()` `try/catch (BadHttpRequestException)`; catch'te
+     `Log.Warning("Eksik/yavaş istek gövdesi: {Method} {Path}{Query} | IP | Content-Length | UA | mesaj")`,
+     cevap başlamadıysa `StatusCode = ex.StatusCode` (408/400). Artık "unhandled exception" EROR yok.
+- **Dokunulan dosyalar:** `backend/Techtsio.Presentation/Program.cs`, `backend/Techtsio.Presentation/Startup.cs`
+- **Doğrulama:** Paket exe'si 44399; ham TCP ile `POST /api/BulkInstall/InsertTransection` Content-Length 2000, 6 bayt gönderip bekleme:
+  - 20 sn bekleyen → kesilmedi (eskiden ~5 sn'de kesilirdi); istemci kapanınca WARN "Unexpected end of request content".
+  - 45 sn bekleyen → ~30 sn'de `HTTP/1.1 408`, WARN satırı path + IP + UA ile.
+- **Paket:** `X:\Techio\Techio-paket-2026-11-19.zip` yeniden üretildi (58.2 MB, SHA256 `1EAC4FAB…5C6C`), tarif §12.3 ile aynı.
+- **Commit:** yok — backend git deposu değil.
+- **Sonraki adım:** Sahada WARN satırlarındaki IP/UA'dan hangi cihazın ağı sorunlu bakılacak; 30 sn de yetmiyorsa cihaz gerçekten kopuyor.
