@@ -1,40 +1,47 @@
-﻿# YoutubeListeIndirici â€” 2026-11-20
+# YoutubeListeIndirici — 2026-11-20
 
-## BaÄŸlam
-SÄ±fÄ±rdan baÅŸlandÄ±. Hedef: verilen YouTube oynatma listesinin tÃ¼m videolarÄ±nÄ±, liste adÄ±yla aÃ§Ä±lan klasÃ¶re indiren bir uygulama.
-Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) â€” yerel: `X:\Yazilim\YoutubeListeIndirici`
+## Bağlam
+Sıfırdan başlandı. Hedef: verilen YouTube oynatma listesinin tüm videolarını, liste adıyla açılan klasöre indiren bir uygulama.
+Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — yerel: `X:\Yazilim\YoutubeListeIndirici`
 
-## YapÄ±lanlar
+## Yapılanlar
 
-### 1. Ä°ndirici uygulamasÄ± (GUI + CLI)
-- **Neden:** KullanÄ±cÄ± liste linki verip videolarÄ± liste adÄ±na gÃ¶re klasÃ¶rlenmiÅŸ indirmek istedi.
-- **Ne yapÄ±ldÄ±:** Python + yt-dlp + ffmpeg. Tek dosya `liste_indirici.py`:
-  - `outtmpl = <hedef>/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s` â†’ klasÃ¶r adÄ± = liste adÄ±.
-  - `ignoreerrors` (silinmiÅŸ/Ã¶zel video listeyi durdurmasÄ±n), `windowsfilenames`, `download_archive=.indirilenler.txt` (tekrar Ã§alÄ±ÅŸtÄ±rÄ±nca sadece yeniler iner).
+### 1. İndirici uygulaması (GUI + CLI)
+- **Neden:** Kullanıcı liste linki verip videoları liste adına göre klasörlenmiş indirmek istedi.
+- **Ne yapıldı:** Python + yt-dlp + ffmpeg. Tek dosya `liste_indirici.py`:
+  - `outtmpl = <hedef>/%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s` → klasör adı = liste adı.
+  - `ignoreerrors` (silinmiş/özel video listeyi durdurmasın), `windowsfilenames`, `download_archive=.indirilenler.txt` (tekrar çalıştırınca sadece yeniler iner).
   - Video: `bestvideo[height<=K]+bestaudio`, `merge_output_format=mp4`. Ses: `FFmpegExtractAudio` mp3 192k.
-  - tkinter arayÃ¼z (URL, klasÃ¶r, kalite, MP3 seÃ§eneÄŸi, log; indirme ayrÄ± thread, log queue ile UI'ye).
-  - ArgÃ¼man verilirse CLI: `python liste_indirici.py <url> [-o klasÃ¶r] [--mp3] [--kalite 1080]`.
-  - VarsayÄ±lan kayÄ±t yeri `~/Videos/YouTube Listeleri`.
+  - tkinter arayüz (URL, klasör, kalite, MP3 seçeneği, log; indirme ayrı thread, log queue ile UI'ye).
+  - Argüman verilirse CLI: `python liste_indirici.py <url> [-o klasör] [--mp3] [--kalite 1080]`.
+  - Varsayılan kayıt yeri `~/Videos/YouTube Listeleri`.
 - **Dokunulan dosyalar:** `liste_indirici.py`, `requirements.txt`, `baslat.bat`, `README.md`, `.gitignore`
 - **Komutlar:**
   ```bash
   python -m pip install -U yt-dlp        # 2026.10.26 kuruldu
   gh repo create YoutubeListeIndirici --private --source . --push
   ```
-- **SonuÃ§ / doÄŸrulama:** `@Google/videos` ile 1 Ã¶ÄŸe mp3 indirildi â†’ `Google - Videos/001 - ....` klasÃ¶rÃ¼ oluÅŸtu.
-- **Commit:** `b9d79ef` â€” YouTube oynatma listesi indirici
+- **Sonuç / doğrulama:** `@Google/videos` ile 1 öğe mp3 indirildi → `Google - Videos/001 - ....` klasörü oluştu.
+- **Commit:** `b9d79ef` — YouTube oynatma listesi indirici
 
 ### 2. watch?v=..&list=.. linklerinin desteklenmesi
-- **Neden:** KullanÄ±cÄ±nÄ±n Ã¶rnek linki `watch?v=THeLVhU53ow&list=PLrAMR0by1bVCQ4C8YBgadCZqWePNGIB_K` biÃ§imindeydi; tek video yerine liste insin diye.
-- **Ne yapÄ±ldÄ±:** `liste_url()` â€” `list` parametresini alÄ±p `https://www.youtube.com/playlist?list=...` Ã¼retir.
-- **SonuÃ§ / doÄŸrulama:** Liste adÄ± "Son", 58 video; 360p ile ilk video `Son/001 - Jess Glynne - ....mp4` olarak birleÅŸik indi.
-- **Commit:** bkz. git log â€” "watch?v=..&list=.. linklerini saf liste linkine Ã§evir"
+- **Neden:** Kullanıcının örnek linki `watch?v=THeLVhU53ow&list=PLrAMR0by1bVCQ4C8YBgadCZqWePNGIB_K` biçimindeydi; tek video yerine liste insin diye.
+- **Ne yapıldı:** `liste_url()` — `list` parametresini alıp `https://www.youtube.com/playlist?list=...` üretir.
+- **Sonuç / doğrulama:** Liste adı "Son", 58 video; 360p ile ilk video `Son/001 - Jess Glynne - ....mp4` olarak birleşik indi.
+- **Commit:** `fea7e49` — "watch?v=..&list=.. linklerini saf liste linkine çevir"
+
+### 3. Aynı adlı listeler çakışmasın
+- **Neden:** Kullanıcının 2. listesi (`PLrAMR0by1bVDX3A8kmYZfrIM9OQCoGVut`) de "Son" adlı; ikisi aynı klasöre karışıp numaralar çakışacaktı.
+- **Ne yapıldı:** `liste_klasoru()` — klasör adını kod seçiyor (`sanitize_filename`), içine `.liste_id` yazıyor. Aynı adlı klasör başka listeye aitse `Ad (liste_id)` kullanılıyor. Liste bilgisi önce `extract_flat` ile alınıyor. `main()` içinde `sys.stdout.reconfigure(utf-8)` (cp1252 konsolda `⧸` vb. karakterler çöküyordu).
+- **Sonuç / doğrulama:** Birim test: `Son`, `Son (PLB)`, tekrar çağrıda aynı klasörler döndü. 2. liste 360p tam indirildi: `Son/001 - Alanis Morissette - Ironic...mp4`, `Son/002 - Gaye Su Akyol - ...mp4`.
+- **Commit:** `6fdfb6e` — Aynı adlı listeler ayrı klasöre (.liste_id işareti), konsol UTF-8
 
 ## Kararlar
-- yt-dlp seÃ§ildi (bakÄ±mÄ± aktif, YouTube deÄŸiÅŸikliklerine hÄ±zlÄ± uyum). Ã‡alÄ±ÅŸmazsa Ã¶nce `python -m pip install -U yt-dlp`.
-- GUI iÃ§in tkinter (ek baÄŸÄ±mlÄ±lÄ±k yok).
+- Not: PowerShell 5.1 `Get-Content` BOM'suz UTF-8'i yanlış okur → günlük dosyalarını Python/Bash ile düzenle.
+- yt-dlp seçildi (bakımı aktif, YouTube değişikliklerine hızlı uyum). Çalışmazsa önce `python -m pip install -U yt-dlp`.
+- GUI için tkinter (ek bağımlılık yok).
 
-## AÃ§Ä±k kalanlar / sonraki adÄ±m
-- Log'da video+ses akÄ±ÅŸlarÄ± iÃ§in iki kez "indirildi" yazÄ±yor (kozmetik).
-- Ä°stenirse .exe paketleme (PyInstaller).
+## Açık kalanlar / sonraki adım
+- Log'da video+ses akışları için iki kez "indirildi" yazıyor (kozmetik).
+- İstenirse .exe paketleme (PyInstaller).
 
