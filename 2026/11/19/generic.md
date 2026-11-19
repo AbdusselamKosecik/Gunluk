@@ -58,11 +58,30 @@ Datas.xlsx hesap adı çevirisi, Sentez KONS fiyat senkronizasyonu.
   UPDATE t SET Price=b.Price, UpdatedAt=b.UpdatedAt, UpdatedBy=b.UpdatedBy FROM Erp_InventoryPriceList t JOIN zz_bak_KONS_PriceList_20261119 b ON b.RecId=t.RecId WHERE t.RecId IN (45350,46707);
   ```
 
+### 4. Devolutions RDM EntryList.csv → mRemoteNG (şifreler dahil)
+- **Neden:** Bağlantılar RDM'den mRemoteNG 1.77.1'e taşınacaktı.
+- **Kaynak:** `C:\Users\abdus\OneDrive\Masaüstü\EntryList\EntryList.csv` (RDM export, 54 satır, düz metin şifre).
+  Sütunlar: ConnectionType, ConnectionSubType, Name, Group, Host, Port, CredentialUserName, CredentialDomain,
+  CredentialPassword, OpenInConsole, WebUrl...
+- **Hedef:** `%APPDATA%\mRemoteNG\confCons.xml` (taze kurulum, boştu → yedek `confCons.xml.bak_20261119`).
+- **Şifreleme (doğrulandı):** mRemoteNG AES-GCM; master parola yoksa anahtar `mR3m`.
+  Format: `base64(salt16 + nonce16 + ciphertext+tag16)`, anahtar = PBKDF2-HMAC-SHA1(parola, salt, 10000, 32 bayt),
+  AAD = salt. Mevcut `Protected` değeri bu yöntemle çözülünce `ThisIsNotProtected` veriyor.
+- **Eşleme:** Folder → Container (7: Abdusselam, Frederic, FredericAdmin, Referencefee, Vuo, mito, viola);
+  RDP → RDP; SSH shell → SSH2 (22); VNC/UltraVNC → VNC. `DOMAIN\user` kullanıcı adı ayrıştırıldı, host boşlukları kırpıldı.
+  SFTP (7 adet) atlandı: mRemoteNG'de SFTP yok ve hepsinin aynı host/kullanıcı/şifreli SSH karşılığı var.
+- **Script:** scratchpad `rdm2mrng.py` → `python -I rdm2mrng.py EntryList.csv %APPDATA%\mRemoteNG\confCons.xml`
+  (önce mRemoteNG kapatıldı, yoksa çıkışta boş listeyi geri yazar).
+- **Sonuç / doğrulama:** 40 bağlantı (31 RDP, 8 SSH, 1 VNC); her birinin şifresi XML'den çözülüp CSV ile
+  karşılaştırıldı → 40/40 eşleşti. mRemoteNG yeniden açıldı, logda hata yok.
+
 ## Kararlar
 - "İstanbul / 01-03-04" → `SentezCore2026` (SentezNewIst'te 04 şirketi yok).
 - Barkod paylaşan farklı ürünlere fiyat yazılmadı (aynı kod şartı).
 
 ## Açık kalanlar / sonraki adım
 - OneDrive engelleme policy'si yönetici olarak çalıştırılmalı.
+- mRemoteNG'de master parola tanımlanmalı (şu an varsayılan anahtarla şifreli); masaüstündeki düz metin
+  `EntryList.csv` silinmeli.
 - Sentez `VatIncluded` NULL düzeltmesi (2026-11-17) hâlâ onay bekliyor.
 - BioTime cihaz senkronu (Yuz1/Yuz2, Fotoğraf + Bio-Fotoğraf) kullanıcıda.
