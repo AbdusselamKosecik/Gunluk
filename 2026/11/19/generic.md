@@ -74,6 +74,9 @@ Datas.xlsx hesap adı çevirisi, Sentez KONS fiyat senkronizasyonu.
   (önce mRemoteNG kapatıldı, yoksa çıkışta boş listeyi geri yazar).
 - **Sonuç / doğrulama:** 40 bağlantı (31 RDP, 8 SSH, 1 VNC); her birinin şifresi XML'den çözülüp CSV ile
   karşılaştırıldı → 40/40 eşleşti. mRemoteNG yeniden açıldı, logda hata yok.
+- **Düzeltme (21:29):** RDP "Network Level Authentication gerekiyor" hatası → XML'de `UseCredSsp` yoktu,
+  mRemoteNG eksik değeri false kabul etti. mRemoteNG kapatıldı, `confCons.xml` içinde tüm ` UseCredSsp="false"`
+  → `"true"` (47 düğüm; yedek `confCons.xml.bak_credssp_20261119`), script'e `UseCredSsp: true` eklendi.
 
 ## Kararlar
 - "İstanbul / 01-03-04" → `SentezCore2026` (SentezNewIst'te 04 şirketi yok).
