@@ -41,3 +41,7 @@ Proje: `webproject/FredericOnMaliyet` (WPF, net9.0-windows, Syncfusion, DapperLi
 ### 3. UD_MainType önerisi
 - 171 yıkama rotası prosesinden 78 kuru işleme tip önerisi (LAZER 4, ZIMPARA 16, PP SURME 26, KILCIK 19, ESKITME 7, YIPRATMA 6); ıslak adımlar (kurutma, yumuşatma…) bilerek tipsiz — yıkama birim maliyeti/kimyasal/su ile zaten hesaplanıyor, tip verilirse çift sayılır.
 - Dosyalar: `C:aaa\Sentez_UD_MainType_Oneri.csv`, `C:aaa\Sentez_Veri_Girisi_Oneri.sql` (ROLLBACK ile biter, çalıştırılmadı).
+
+### 4. Paket (kullanıcı: "ön maliyeti kontrol edip paket çıkar")
+- Kontrol: `dotnet test` 5/5. Canlı Sentez (salt okunur): `Erp_Process.UD_MainType` hâlâ 4187 prosesin hepsinde boş → Parametreler'deki tip listesi Sentez'de tip girilene kadar boş gelir.
+- Paket: `X:\Gitlab\fredericTr\FredericOnMaliyet-paket-2026-11-19-2668e59.zip` (`dotnet publish FredericOnMaliyet -c Release -r win-x64 --self-contained false`; .NET 9 Desktop Runtime gerekir). Bağlantı dizesi kodda sabit (önceden de öyleydi).
