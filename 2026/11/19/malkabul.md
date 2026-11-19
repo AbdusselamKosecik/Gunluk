@@ -51,3 +51,31 @@
   - WH01 / WI01 mevcut 41 / 43'e mi eşlenecek;
   - WI00-Z01 / WS00-S01 kod tutarsızlıkları.
   - Sentez'e henüz yazılmadı.
+
+### Sentez depo/yer aktarım betiği (kararlar alındı)
+- **Kullanıcı kararları:**
+  - konteynerler ayrı depo;
+  - bugünkü depolara dokunulmayacak;
+  - kod düzeltmeleri aynen yapılacak: WI00-Z01 → WI01-Z00, WS00-S01 → WS01-Z00, "Arena" → "Area".
+- **Ne yapıldı:** `malkabul/sentez/depo-yerleri/` klasörü:
+  - `Location Code.xlsx` (düzeltilmiş, 23 konteyner); `C:\aaaa\Location Code - 23 konteyner.xlsx` da güncellendi.
+  - `uret.py`: Excel'den `depo-yerleri.sql` üretir.
+  - `depo-yerleri.sql`:
+    - tek transaction; `-- GOVDE BASLA / BIT` arası test için;
+    - NOT EXISTS ile yalnız ekler; Excel sırasını korumak için Sira kolonu ve ORDER BY.
+  - Depo: CompanyId 2, FollowUpWarehouseLocation 1, InsertedBy 1.
+  - Yer: BarcodeType 1, Barcode = LocationCode, Zone / Rack / Level / Pocket → Corridor / Shelf / Division / ShelfCompartment.
+  - `README.md`.
+- **Önceden kontrol edildi:** Sentez'in UI'dan açtığı depo 44'te depo tablosu dışında yan kayıt yok; yalnız Erp_Warehouse + Erp_WarehouseLocation yeterli.
+- **Test `DepoYeriAktarimTestleri`** (canlıda, ROLLBACK):
+  - +26 depo, +606 yer;
+  - mevcut depo ve yer imzası (CHECKSUM_AGG) değişmez;
+  - WH01 558 yer, CT01–CT23 2'şer yer;
+  - terminal `YerlerAsync` / `Eslesir` raf kodunu bulur;
+  - ikinci çalıştırma bir şey eklemez.
+- **Canlı veri kayması, test düzeltmesi:**
+  - Bugün 10:48'de terminalden gerçek fiş 00000025 açılmış (10 kalem, eski APK). Fiş testleri bu fişi kullanıyordu. `MalKabulFisTestleri.AcAsync`, bugünkü UZMMK fişlerini transaction içinde düne alıyor.
+  - Karantina 43'e 07:47'de "01" yeri eklenmiş. `DepoYeriTestleri` yersiz depo olarak artık 42'yi kullanıyor.
+- **Sonuç:** 191/191; ayarlar.json md5 değişmedi.
+- **Commit:** `08bd082`.
+- **Açık:** Kalıcı yükleme için kullanıcı onayı bekleniyor; Sentez'e henüz yazılmadı.
