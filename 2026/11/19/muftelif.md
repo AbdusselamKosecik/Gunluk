@@ -67,3 +67,10 @@ Sunucuda (192.168.3.228:90) 18.11 paketi (`10aee48`) kurulu.
 - Sentez'de 1.111 adetlik adreslerde Adres Tarif 1'e irtibat kişisi yazılmış; müşteri sütun adıyla değiştirilmeli.
 - Sentez'de adreslerin Adres Tarif 1'ine müşteri sütun adları girilmeli (ARITZIA-2829, ITALY, UK …); boşken dağılım uyarı verir.
 - `SentezPlaning-paket-2026-11-19-b243f3d.zip` sunucuya kurulmalı (192.168.3.228:90).
+
+### 6. Genel Bakış'tan LA ve Tamirde Bekleyen kaldırıldı + OrderTakipWeb tamir 2x
+- **İstek:** "Planlamada Genel listeden LA ile Tamirde bekleyen miktarı alanlarını kaldırıyoruz; OrderTakipWeb'de tamir miktarları 2x yapıyor."
+- **SentezPlaning:** `web/src/pages/YuklemeKontrolPage.tsx` Genel Bakış sekmesi kolonlarından `LA` ve `Tamirde Bekleyen` çıkarıldı, sekme açıklaması güncellendi (diğer sekmeler, kartlar, Excel aynı). Commit `5b590a7`.
+- **OrderTakipWeb bulgusu (canlı, salt okunur, 95694):** Sentez satırları tekrarlı değil. Bir tamir turu 4 kayıt bırakır: 757/2 Finish Tamir çıkış (tamire yollar) → 758/1 Yıkama Tamir giriş → 758/2 Yıkama Tamir çıkış → 757/1 Finish Tamir giriş (dönüş). "Genel tamir durumu" iki departmanı topluyordu → 369/383 (gerçek 191/189).
+- **Düzeltme:** `OrderTakip.TamirOzeti`: özet = Yıkama Tamir toplamı; yalnız Finish Tamir varsa yönü çevrilir. `wwwroot/index.html` istemci yedek toplaması kaldırıldı. 2 yeni test, 21/21. Commit `ff2d74e`.
+- **Paketler:** `X:\Gitlab\fredericTr\SentezPlaning-paket-2026-11-19-ff2d74e.zip`, `OrderTakipWeb-paket-2026-11-19-ff2d74e.zip` (`dotnet publish -c Release -r win-x64 --self-contained false`, appsettings.Development.json / data / logs hariç). Sunucuya kurulmadı.
