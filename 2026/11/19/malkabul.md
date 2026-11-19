@@ -79,3 +79,14 @@
 - **Sonuç:** 191/191; ayarlar.json md5 değişmedi.
 - **Commit:** `08bd082`.
 - **Açık:** Kalıcı yükleme için kullanıcı onayı bekleniyor; Sentez'e henüz yazılmadı.
+
+### Kalıcı yükleme (kullanıcı onayı 16:07)
+- **Nasıl:** `depo-yerleri.sql` tam haliyle (BEGIN TRAN / COMMIT dahil) çalıştırıldı.
+  - Geçici bir xunit runner kullanıldı: `_Yukle.cs`, `MODFEX_DEPO_YUKLE=1`, bağlantı `Veritabani.AcAsync`. Runner çalıştırıldıktan sonra silindi, commit edilmedi.
+- **Sonuç:**
+  - Erp_Warehouse 6 → 32, Erp_WarehouseLocation 305 → 911.
+  - Yeni depolar: WI01=175, WS01=176, WH01=177 (558 yer), CT01–CT23=178–200 (2'şer yer).
+  - Hepsinde FollowUpWarehouseLocation=1. Eski depolar (1, 40–44) aynı.
+- **Test:** `DepoYeriAktarimTestleri` yükleme sonrası duruma uyarlandı: beklenen ekleme = 26 − var olan, 606 − var olan. 191/191.
+- **Commit:** son malkabul commit'i.
+- **Not:** Sentez kullanıcı arayüzünde görünmüyorsa depo listesini yenilemek ya da yeniden giriş yapmak gerekebilir.
