@@ -31,3 +31,23 @@
 - APK'yı PM66'ya yükle (`dagitim/malkabul-2026-11-19.apk`).
 - Sentez'de kümülatif fişi açıp kalem/varyant/seri görünümünü kullanıcıyla kontrol et.
 - "Sipariş kapatarak irsaliye" yorumu (sipariş × gün) teyit; gerekirse "Kabulü bitir".
+
+### Location Code.xlsx — 23 konteyner + Sentez depo/depo yeri planı
+- **Neden:** Kullanıcı `C:\aaaa\Location Code.xlsx` dosyasındaki konteyner sayısını 23 yapmamı ve satırların Sentez'e depo / depo yeri olarak aktarılmasını planlamamı istedi.
+- **Ne yapıldı:**
+  - Dosyada 586 yer vardı: WI01, WS01, WH01 (Z01–Z04 raf/kat/göz + F00) ve CT01–CT13 (her biri Z05-IN / Z05-OUT).
+  - CT14–CT23 eklendi; yeni dosya `C:\aaaa\Location Code - 23 konteyner.xlsx` (606 satır). Excel tablosunun aralığı A1:G607 yapıldı. Orijinal dosyaya dokunulmadı.
+  - Sentez tabloları salt okunur incelendi:
+    - Erp_Warehouse: RecId identity; (CompanyId, WarehouseCode) unique.
+    - Erp_WarehouseLocation: RecId identity; (WarehouseId, LocationCode) unique; Corridor / Shelf / Division / ShelfCompartment / Barcode alanları var.
+    - Mevcut depolar: 1, 2, 41 M (304 PA- yeri), 42 U, 43 K (1 yer: "01"), 44 01.
+- **Plan önerisi:**
+  - Excel'deki depo kolonu (A) → Erp_Warehouse; FollowUpWarehouseLocation = 1.
+  - Kolon F → LocationCode, G → Explanation.
+  - Zone → Corridor, Rack → Shelf, Level → Division, Pocket → ShelfCompartment; Barcode = kod.
+  - Yükleme tek transaction'da, var olan koda dokunmadan yapılacak; önce geri alınarak denenecek.
+- **Açık:** Kullanıcı kararı bekleniyor:
+  - konteyner başına ayrı depo mu, tek konteyner deposu mu;
+  - WH01 / WI01 mevcut 41 / 43'e mi eşlenecek;
+  - WI00-Z01 / WS00-S01 kod tutarsızlıkları.
+  - Sentez'e henüz yazılmadı.
