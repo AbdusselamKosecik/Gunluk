@@ -63,7 +63,7 @@ Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — ye
   Var olan mp3'ler zaten ID3v2.3 idi (`ID3\x03`). Winamp `C:\Program Files (x86)\Winamp` kurulu.
 - **Sonuç / doğrulama:** 2. liste 360p testi: mp4 akışları `h264, aac, mjpeg(attached_pic)`; mp3 `album=Son|track=1|title=Ironic|artist=Alanis Morissette` + mjpeg; m3u8 doğru. GUI smoke test: iki sekme açıldı.
 - **Commit:** `f1e7908`
-- **Gerçek indirme:** iki liste 1080p video + MP3 olarak arka planda başlatıldı (397 GB boş alan vardı).
+- **Gerçek indirme (tamamlandı):** 1. liste 56/58 mp4 (4.0 GB) + 56 MP3, 2. liste 2/2 mp4 + 2 MP3 (266 MB). Yine inmeyen: `Ka7wBGFSuSE` (yaş, cookies.txt bekleniyor), `VV1XWJN3nJo` (ülke engeli). Önceki turdan kökte kalan eski mp3'ler, `Son.m3u8` ve `.indirilenler_mp3.txt` silindi.
 
 ## Kararlar
 - Not: PowerShell 5.1 `Get-Content` BOM'suz UTF-8'i yanlış okur → günlük dosyalarını Python/Bash ile düzenle.
