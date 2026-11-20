@@ -36,6 +36,18 @@ Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — ye
 - **Sonuç / doğrulama:** Birim test: `Son`, `Son (PLB)`, tekrar çağrıda aynı klasörler döndü. 2. liste 360p tam indirildi: `Son/001 - Alanis Morissette - Ironic...mp4`, `Son/002 - Gaye Su Akyol - ...mp4`.
 - **Commit:** `6fdfb6e` — Aynı adlı listeler ayrı klasöre (.liste_id işareti), konsol UTF-8
 
+### 4. Winamp modu (MP3 + etiket + kapak + m3u8)
+- **Neden:** Kullanıcı indirilenlerin Winamp için dönüştürülmesini istedi.
+- **Ne yapıldı:** `--mp3` / arayüzde "Winamp için MP3" seçeneği genişletildi. Postprocessor sırası:
+  `MetadataParser` (post_process: başlıktan `(Official Video)`/`[4K]` vb. REPLACE ile silinir, `(?P<artist>.+?)\s+[-–]\s+(?P<title>.+)` ile sanatçı/şarkı INTERPRET) →
+  `FFmpegExtractAudio` mp3 192k → `FFmpegThumbnailsConvertor` jpg → `FFmpegMetadata` → `EmbedThumbnail`. `writethumbnail=True`.
+  `outtmpl={"default": ..., "pl_thumbnail": ""}`: liste kapağı `000 - Son.jpg` olarak ayrıca yazılmasın diye.
+  Arşiv dosyası moda göre ayrı: `.indirilenler_mp3.txt` / `.indirilenler.txt`.
+  İndirme sonrası `winamp_listesi_yaz()` klasöre `<Liste>.m3u8` yazar (UTF-8, göreli yollar, numara sırasıyla).
+- **Sonuç / doğrulama:** 2. liste ile test: `ffprobe` → `title=Ironic | artist=Alanis Morissette`, mjpeg kapak akışı var; klasörde yalnızca mp3'ler + `Son.m3u8`.
+- **Commit:** `49b55f3` — Winamp modu
+- **Gerçek indirme:** İki liste `--mp3` ile `C:\Users\abdus\Videos\YouTube Listeleri\` altına indiriliyor (`Son\`, `Son (PLrAMR0by1bVDX3A8kmYZfrIM9OQCoGVut)\`).
+
 ## Kararlar
 - Not: PowerShell 5.1 `Get-Content` BOM'suz UTF-8'i yanlış okur → günlük dosyalarını Python/Bash ile düzenle.
 - yt-dlp seçildi (bakımı aktif, YouTube değişikliklerine hızlı uyum). Çalışmazsa önce `python -m pip install -U yt-dlp`.
