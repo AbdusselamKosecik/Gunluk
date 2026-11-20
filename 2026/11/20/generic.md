@@ -23,5 +23,16 @@ görünüyor, 172.16.1.2'de (DIKIMANALIZSRV) görünmüyor — replikasyon hatas
 - **Sonuç:** Replikasyon hatası yok. Cihaz rotada olmayan operasyona (1125-8) atanmış; doğru operasyon büyük
   ihtimalle 1125-9, ya da 1125-8 rotaya eklenmeli.
 
+### 2. Kök neden: uygulama TEST veritabanına bağlı
+- Kullanıcı ısrar etti ("A026-1483'te 1125-8 var") → .69'daki tüm Techtsio DB'lerinde 1125-8 Id'si tarandı.
+- **TechtsioMerkezTest**'te A026-1483 (farklı Id `14202F97-...`) rotasında 1125-8 var; model Test'te bugün
+  10:56'da oluşturulmuş, 12:48'de güncellenmiş. Test replikasyonda değil → 172.16.1.2'ye hiç gitmez.
+- Test ile canlı rota farkı: Test'te **1102-2** (Sort 2, 8.49) ve **1125-8** (Sort 78, 21.114);
+  canlıda yerlerinde **1102-1** (6.852) ve **1125-9** (23.184).
+- .69 üzerindeki uygulama oturumları (host MERKEZANALIZ, sa, SqlClient) **TechtsioMerkezTest**'e bağlı;
+  sadece ANALIZSERVER oturumu canlı DB'de.
+- **Çözüm (kullanıcı kararı bekliyor):** uygulamanın bağlantı dizesini TechtsioMerkez'e çevirmek ve
+  2 rota değişikliğini canlıda yapmak (uygulamadan veya SQL ile).
+
 ## Açık kalanlar / sonraki adım
 - Kullanıcı karar verecek: 172.16.1.79 cihazını 1125-9'a almak mı, 1125-8'i A026-1483 rotasına (.69'da) eklemek mi.
