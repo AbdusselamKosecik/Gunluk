@@ -46,7 +46,7 @@ Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — ye
   İndirme sonrası `winamp_listesi_yaz()` klasöre `<Liste>.m3u8` yazar (UTF-8, göreli yollar, numara sırasıyla).
 - **Sonuç / doğrulama:** 2. liste ile test: `ffprobe` → `title=Ironic | artist=Alanis Morissette`, mjpeg kapak akışı var; klasörde yalnızca mp3'ler + `Son.m3u8`.
 - **Commit:** `49b55f3` — Winamp modu
-- **Gerçek indirme:** İki liste `--mp3` ile `C:\Users\abdus\Videos\YouTube Listeleri\` altına indiriliyor (`Son\`, `Son (PLrAMR0by1bVDX3A8kmYZfrIM9OQCoGVut)\`).
+- **Gerçek indirme (tamamlandı, 308 MB):** 1. liste 56/58, 2. liste 2/2 mp3. İnmeyen 2: `Ka7wBGFSuSE` (yaş doğrulaması → `--cookies-from-browser` gerekir), `VV1XWJN3nJo` (ülkede engelli). İki liste `--mp3` ile `C:\Users\abdus\Videos\YouTube Listeleri\` altına indirildi (`Son\`, `Son (PLrAMR0by1bVDX3A8kmYZfrIM9OQCoGVut)\`).
 
 ## Kararlar
 - Not: PowerShell 5.1 `Get-Content` BOM'suz UTF-8'i yanlış okur → günlük dosyalarını Python/Bash ile düzenle.
@@ -54,6 +54,7 @@ Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — ye
 - GUI için tkinter (ek bağımlılık yok).
 
 ## Açık kalanlar / sonraki adım
+- Yaş kısıtlı videolar için tarayıcı çerezi seçeneği (`cookiesfrombrowser`) eklenebilir.
 - Log'da video+ses akışları için iki kez "indirildi" yazıyor (kozmetik).
 - İstenirse .exe paketleme (PyInstaller).
 
