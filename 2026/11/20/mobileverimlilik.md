@@ -60,3 +60,34 @@ Kullanıcı: "Çalışırken hata veriyor, loginden sonra kayıtlar gelmiyor, ö
   Release, bu makinenin debug anahtarıyla imzalı (build.gradle.kts'de release signingConfig = debug) — önceki
   sürümler de böyle; başka makinede derlenirse imza tutmaz, eskiyi kaldırıp kurmak gerekir.
 - **Commit:** `2f4d09c` — Surum 1.1.2+4
+
+---
+
+## Tur 3 (16:03) — "Barkod okutunca bazen silinmeden kalıyor; bekliyorsa bekliyor işareti"
+
+### Kök neden (`production_screen.dart`, eski onBarcode)
+1. `await controller.onBarcode(...)` → `_barcodeController.clear()`: alan ancak tüm zincir bitince temizleniyordu.
+   Zincir sıralı 5–6 HTTP isteği (_checkBarcode, standart zaman, _getBarcodeData ×2, checkNew→_sendRowToServer,
+   _saveBarcodeToControl); `DioClient` connect/receive timeout 10 sn → VPN'de saniyelerce/dakika bekleme, işaret yok.
+2. `_checkBarcode` ve `_getBarcodeData` try/catch dışında → ağ hatasında exception, `clear()` hiç çalışmıyor → barkod
+   alanda kalıyor ("bazen").
+3. Yeniden giriş koruması yok → bekleme sırasında okutulan barkod öncekinin sonuna ekleniyor / paralel işlem.
+
+### Düzeltme
+- `lib/features/production/screen/barcode_gate.dart` (yeni): `BarcodeGate.run()` — aynı anda tek işlem,
+  `busy` ValueNotifier, try/catch/finally; sonuç `done | rejectedBusy | failed`.
+- `production_screen.dart`: `_handleBarcode` alanı Enter'da HEMEN temizliyor; meşgulken gelen okutma işlenmiyor,
+  turuncu "Önceki barkod işleniyor… TEKRAR okutun: <barkod>" snackbar; hata → kırmızı "Barkod işlenemedi… tekrar okutun".
+  `_BarcodeInput` busy iken turuncu çerçeve + dönen simge + "ISLENIYOR, BEKLEYIN...".
+- **Karar:** Meşgulken gelen okutma kuyruğa alınmadı, reddedilip tekrar okutma istendi. Kuyruktaki barkod eski
+  operasyon/sipariş bağlamıyla işlenip yanlış sayılabilirdi; reddetme + görünür uyarı daha güvenli.
+- Test: `test/barkod_kuyrugu_test.dart` (3 test) önce kırmızı, sonra yeşil. Tüm testler yeşil (şablon `widget_test.dart` hariç, önceden de kırmızı).
+- **Cihazda görsel doğrulama YAPILAMADI:** SM-X110 ekran kilidinde kaldı. Test uygulaması kaldırıldı,
+  `svc power stayon false` ile geri alındı. Bu sırada bağlı olan PM66 el terminaline (1ed69882) dokunulmadı.
+- **Commit:** `98c52fa`; sürüm 1.1.3+5.
+- **APK:** `X:\Gitlab\fredericTr\mobileverimlilik-1.1.3-2026-11-20-98c52fa.apk` (SHA256 `a6363fdd28a8be50…`) —
+  1.1.2'yi de içerir, sahaya bunu kurmak yeterli.
+
+### Açık kalanlar
+- Sahada ilk kurulumda gözle kontrol: okut → turuncu "işleniyor" görünüp kayboluyor mu.
+- Okutma süresinin kendisi uzun (sıralı 5–6 istek). Kısaltmak için istekler birleştirilebilir (tek SP) — ayrı iş.
