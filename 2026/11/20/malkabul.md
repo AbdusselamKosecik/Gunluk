@@ -33,3 +33,42 @@
 ## Açık kalanlar
 - `5a4dee0` için kod gözden geçirmesi yarım kaldı.
 - PM66'ya yeni APK yüklenmedi.
+
+### 3. Emülatör bağlantısı (VPN)
+- **Durum:** Emülatör, VPN üzerinden 192.168.0.2'ye erişiyor.
+  - Ping gidiyor, ~470 ms. 1433 portu açık.
+  - Ana makine bu adrese "Ethernet 2" (10.250.0.10) üzerinden çıkıyor.
+- **Bağlanamama sebebi:** Veritabanı alanına "SenezCore" yazılmıştı ("t" eksik); kullanıcının girdiği şifre doğruydu.
+  - Emülatör klavyesi US düzeninde (hw.keyboard, qwerty2). Türkçe ana makine klavyesiyle yazarken karakter kayabiliyor.
+- **Ne yapıldı:**
+  - Alanlar `adb shell input` ile dolduruldu.
+  - Şifre masaüstü ayarından DPAPI ile çözülüp doğrudan emülatöre yazıldı, hiçbir yere basılmadı. DPAPI entropisi "Modfex.Ortak.Ayarlar", önek "dpapi:".
+  - Yazıcı IP'si 10.0.2.2 yapıldı.
+- **Sonuç:** Giriş ekranında şirket listesi geldi.
+
+### 4. Ayarlar: sayım deposu açılır liste
+- **Ne yapıldı:**
+  - Kullanıcı: "depo seçimlerini combobox yapalım tüm uygulamalarda, depo varsa depo yeri de."
+  - Tüm uygulamalar tarandı. Elle RecId girilen tek alan malkabul ayarlarındaki `SayimDepoId` (NumericUpDown) idi.
+  - Bu alan `ParametreSatiri` ile depo + depo yeri ComboBox'ına çevrildi; "—" seçeneği = yok.
+  - Bağlantı kaydedilmemişse liste görünmez ve kayıtlı değer korunur.
+- **Test:** `AyarlarDepoTestleri` 3 test.
+- **Commit:** `57f615b`.
+
+### 5. Terminal: kaydırılabilir menü + Manuel mal kabul + son seri no
+- **Kullanıcı istekleri:**
+  - Menü küçük ekranda sığmıyor; sürüklenebilsin.
+  - Mobilde okutarak almanın yanında manuel giriş olsun: tek tek renk, kg, lot girilerek.
+  - Etiket basılsın; yazıcı uzakta olduğu için son seri no ekranda yazsın. Depocu numarayı topun üstüne yazacak, etiketler sonra yapıştırılacak.
+- **Ne yapıldı:**
+  - `TerminalMenuView`: ScrollViewer eklendi; yeni düğme "Manuel mal kabul (etiketsiz)".
+  - `SeriOlusturAlViewModel` yeniden yazıldı:
+    - sipariş verilmezse önce sipariş listesi (arama) gelir;
+    - satır = sipariş satırı × renk; yenilemede aynı renk seçili kalır;
+    - miktar başlığında birim yazar ("Top / paket miktarı (KG)");
+    - `SonSeri` (aralık olabilir) + `SonSeriBilgi` (stok · renk · miktar · lot) büyük kartta gösterilir;
+    - etiket basılamazsa kart kırmızı olur.
+  - `EtiketBas` artık sipariş no'yu parametre olarak alıyor.
+- **Testler:** 211/211 (DB dahil).
+- **Commit:** `e4f4b42`.
+- **Dağıtım:** Emülatöre kuruldu (`-p:Emulator=true`). PM66'ya henüz yüklenmedi.
