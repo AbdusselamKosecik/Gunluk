@@ -48,3 +48,21 @@ görünüyor, 172.16.1.2'de (DIKIMANALIZSRV) görünmüyor — replikasyon hatas
 - **Geri alma:** `DELETE FROM TechtsioMerkez.dbo.Cards WHERE Id='D8A54A19-0B10-4435-B6EC-6BB79EE06AE0';`
 - **Not:** App 14:13 itibarıyla `TechtsioMerkez`'e bağlanıyor (Test'e oturum yok). Bugün Test'te 45 model, 388
   operasyon, 2682 rota satırı girildi; prod'a aktarılması kullanıcı kararını bekliyor.
+
+### Sentez — URT-15 (Nil Kara) bugünkü iş emri değişiklikleri, önce/sonra Excel (20:30)
+- **Neden:** Kullanıcı, URT-15'in bugün hangi iş emirlerinde neyi değiştirdiğini önceki/sonraki değerleriyle istedi.
+- **Yer:** 192.168.1.3 (ADAOSRV) `SentezCore2026`. Kullanıcı `Meta_User` RecId 103, UserCode `Urt-15`.
+  (192.168.1.3'e erişim için Techtsio VPN'i kapalı olmalı; 192.168.0.0/16'yı kendine çekiyor.)
+- **Bulgu:** Bugün sadece iş emirlerine dokunulmuş (tip 15, şirket 01): 18 yeni (ana iş emirlerinden -1/-2/-3
+  bölme), 27 güncelleme. `SentezCore2026Logs` OFFLINE ama değişiklik logu `SentezCore2026.dbo.Log_Transaction`
+  içinde: `BOName='WorkOrderCardBO'`, `BORecId`=iş emri RecId, `ItemCode`=iş emri no, `LogData` = UTF-8 JSON
+  `{Erp_WorkOrder:[...], Erp_WorkOrderItem:[...], Erp_WorkOrderItemVariant:[...]}`; her satırda
+  `ChangeColumns` = `{"Cells":[{"Column","Value","BeforeValue"}]}`; `OperationType` yoksa yeni kayıt.
+  Beden/renk adı: `Erp_VariantItem.ItemCode` (Variant1Id=renk, Variant2Id=beden).
+  İş emirleri satış siparişine bağlı değil (OrderReceiptItem.WorkOrderId / OrderItemId boş) → "sipariş durumu"
+  olarak `UD_Durum`, "order durumu" olarak sayısal `Status` verildi (Status için açıklama tablosu yok).
+- **Script:** scratchpad `build.py` (pyodbc + openpyxl; `python -m pip install pyodbc`).
+- **Çıktı:** `C:\Users\abdus\Desktop\URT-15_NilKara_IsEmri_Degisiklikleri_20261120.xlsx`
+  Sayfalar: Özet (45 iş emri, miktar/Status/UD_Durum önce→sonra), Beden-Renk Adetleri (647), Tüm Değişiklikler
+  (838; Pricesize/Wastagesize gürültüsü hariç), Not. Veride değişiklik yapılmadı (salt okuma).
+- **Karar:** Kullanıcı yedekten geri yükleme istemedi (zaten diskte 37 GB yer yoktu); loglardan alındı.
