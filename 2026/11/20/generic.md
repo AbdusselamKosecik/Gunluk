@@ -36,3 +36,15 @@ görünüyor, 172.16.1.2'de (DIKIMANALIZSRV) görünmüyor — replikasyon hatas
 
 ## Açık kalanlar / sonraki adım
 - Kullanıcı karar verecek: 172.16.1.79 cihazını 1125-9'a almak mı, 1125-8'i A026-1483 rotasına (.69'da) eklemek mi.
+
+### Techtsio — Test'teki operasyon kartlarının prod'a aktarımı (14:30)
+- **Neden:** Kullanıcı "1560-6 gibi test'te olup prod'da olmayan operasyon kartları" için "boş geliyor" dedi.
+- **Bulgu:** `Operations`'ta Test'te olup prod'da olmayan kod yok (0). 1560-6 prod'da var (Id 7493AE3D, grup DIKIM;
+  Test'te grup Montaj, makine tipi El işçiliği — bugün Test'te yeni Id ile yeniden açılmış). 1560-6'nın kartı
+  `FDED64FE` prod ve Dikim'de mevcut. `Cards` (TypeId=5 = operasyon kartı) karşılaştırmasında prod'da eksik tek
+  kart `0DDA62FE` → 1355-8 (Test'te 3 kez kaydedilmiş).
+- **Ne yapıldı:** `0DDA62FE` prod `TechtsioMerkez.dbo.Cards`'a eklendi (Test'teki satırın Id'si korunarak,
+  OperationId prod'daki 1355-8 Id'siyle). 172.16.1.2'ye replike olduğu doğrulandı.
+- **Geri alma:** `DELETE FROM TechtsioMerkez.dbo.Cards WHERE Id='D8A54A19-0B10-4435-B6EC-6BB79EE06AE0';`
+- **Not:** App 14:13 itibarıyla `TechtsioMerkez`'e bağlanıyor (Test'e oturum yok). Bugün Test'te 45 model, 388
+  operasyon, 2682 rota satırı girildi; prod'a aktarılması kullanıcı kararını bekliyor.
