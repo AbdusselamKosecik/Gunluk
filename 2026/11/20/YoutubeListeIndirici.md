@@ -48,6 +48,23 @@ Repo: https://github.com/AbdusselamKosecik/YoutubeListeIndirici (private) — ye
 - **Commit:** `49b55f3` — Winamp modu
 - **Gerçek indirme (tamamlandı, 308 MB):** 1. liste 56/58, 2. liste 2/2 mp3. İnmeyen 2: `Ka7wBGFSuSE` (yaş doğrulaması → `--cookies-from-browser` gerekir), `VV1XWJN3nJo` (ülkede engelli). İki liste `--mp3` ile `C:\Users\abdus\Videos\YouTube Listeleri\` altına indirildi (`Son\`, `Son (PLrAMR0by1bVDX3A8kmYZfrIM9OQCoGVut)\`).
 
+### 5. Önce video, sonra MP3 + sekmeli arayüz + çerez
+- **Neden:** Kullanıcı: "video olacak şekilde, önce video kaydedelim sonra mp3'lerini alalım", "bir de UI ekler misin". Yaş kısıtlı video için çerez onayı verdi.
+- **Ne yapıldı:**
+  - `liste_indirici.py` yeniden yazıldı. Doğrudan-mp3 modu kaldırıldı; her zaman video iner:
+    format `bestvideo[vcodec^=avc1]{h}+bestaudio[ext=m4a]/bestvideo{h}+bestaudio/best` (H.264+AAC → Winamp/eski oynatıcı uyumlu), `merge_output_format=mp4`,
+    `writethumbnail` + `FFmpegThumbnailsConvertor(jpg)` + `FFmpegMetadata` + `EmbedThumbnail` (mp4'e kapak gömülür). `--mp3` / checkbox → indirme sonrası `klasoru_donustur()`.
+  - Yeni `winamp_donusturucu.py`: klasördeki mp4/webm/mkv/m4a/flac/... → `<klasör>\MP3\<aynı ad>.mp3`.
+    ffmpeg: `libmp3lame 192k -id3v2_version 3 -write_id3v1 1`, etiketler dosya adından (`NNN - Sanatçı - Şarkı (Official..)` → track/artist/title, album = klasör adı).
+    Kapak sırası: gömülü kapak `0:v:1` → `-ss 5` kare → ilk kare; `-disposition:v attached_pic`. Sonra `MP3\<liste>.m3u8`. Videolar silinmez, çevrilmiş olanlar atlanır.
+  - Arayüz: ttk.Notebook "İndir" / "Dönüştür (Winamp MP3)" sekmeleri, ortak log, "▶ Winamp'te aç" (`os.startfile(m3u8)`), "📁 Klasörü aç".
+  - Çerez: combobox (firefox/chrome/...) veya cookies.txt seçimi → `cookiesfrombrowser` / `cookiefile`. CLI `--cerez`, `--donustur <klasör>`.
+- **Bulgular:** Chrome ve Edge çerezi `Failed to decrypt with DPAPI` (app-bound encryption, yt-dlp #10927) → çözüm cookies.txt (Get cookies.txt LOCALLY eklentisi) veya Firefox. Firefox kurulu değil.
+  Var olan mp3'ler zaten ID3v2.3 idi (`ID3\x03`). Winamp `C:\Program Files (x86)\Winamp` kurulu.
+- **Sonuç / doğrulama:** 2. liste 360p testi: mp4 akışları `h264, aac, mjpeg(attached_pic)`; mp3 `album=Son|track=1|title=Ironic|artist=Alanis Morissette` + mjpeg; m3u8 doğru. GUI smoke test: iki sekme açıldı.
+- **Commit:** `f1e7908`
+- **Gerçek indirme:** iki liste 1080p video + MP3 olarak arka planda başlatıldı (397 GB boş alan vardı).
+
 ## Kararlar
 - Not: PowerShell 5.1 `Get-Content` BOM'suz UTF-8'i yanlış okur → günlük dosyalarını Python/Bash ile düzenle.
 - yt-dlp seçildi (bakımı aktif, YouTube değişikliklerine hızlı uyum). Çalışmazsa önce `python -m pip install -U yt-dlp`.
