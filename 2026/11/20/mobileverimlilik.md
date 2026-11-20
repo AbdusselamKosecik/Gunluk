@@ -47,3 +47,16 @@ Kullanıcı: "Çalışırken hata veriyor, loginden sonra kayıtlar gelmiyor, ö
 ## Açık kalanlar / sonraki adım
 - **Sahadaki FKK tabletlerine yeni APK kurulmalı**; o zamana kadar acil çözüm: ERP'de 5304-7'ye ad girmek
   (sonra Operations.Name dolmalı) — uygulama her girişte listeyi yeniden çektiği için anında düzelir.
+
+---
+
+## Tur 2 (12:08) — Saha APK'sı
+- **Ne yapıldı:** `pubspec.yaml` sürüm `1.1.1+3` → `1.1.2+4` (tabletler güncelleme olarak alsın), release derleme.
+- **Komut:**
+  ```bash
+  JAVA_HOME="C:\Program Files\Android\openjdk\jdk-21.0.8" C:/flutter/bin/flutter.bat build apk --release
+  ```
+- **Çıktı:** `X:\Gitlab\fredericTr\mobileverimlilik-1.1.2-2026-11-20-2f4d09c.apk` (56.3 MB, SHA256 `8f419cb9892ed4d8…`).
+  Release, bu makinenin debug anahtarıyla imzalı (build.gradle.kts'de release signingConfig = debug) — önceki
+  sürümler de böyle; başka makinede derlenirse imza tutmaz, eskiyi kaldırıp kurmak gerekir.
+- **Commit:** `2f4d09c` — Surum 1.1.2+4
