@@ -72,3 +72,25 @@
 - **Testler:** 211/211 (DB dahil).
 - **Commit:** `e4f4b42`.
 - **Dağıtım:** Emülatöre kuruldu (`-p:Emulator=true`). PM66'ya henüz yüklenmedi.
+
+### 6. Üretimden iade order'a bağlı + üretime verde harici seri
+- **Kullanıcı istekleri:**
+  - Üretimden iadede de order seçilsin; yalnız teslim ettiğimiz order'lar listelensin, yalnız teslim ettiğimiz seriler okutulsun.
+  - Üretime verde harici verilebilsin (aynı kumaş, boştaki farklı seri). Onay istensin: "bu fazla verdiğiniz kumaş yönetime raporlanacaktır, lütfen neden verdiğinizi yazınız"; yazmadan ve tamam demeden verilmesin.
+- **Veri katmanı (`UretimDeposu`):**
+  - `UretimdekiOrderlarAsync`: WorkOrderType 15 order'lar içinden tahsis tablosunda 129 − 29 toplamı > 0 olanlar.
+  - `IadeAlAsync(..., workOrderId)`: serinin son 129 tahsisinin order'ı seçili order değilse `SeriBuOrderaVerilmedi`.
+  - `UretimeVerAsync(..., hariciNeden)`:
+    - seri tahsissizse ve neden boşsa `HariciNedenGerekli`;
+    - neden varsa fiş 129 kaleminin `Explanation` alanına "HARİCİ: neden" yazılır (200 karakter sınırı). Yönetim raporu bu alandan çekilir.
+  - `SeriUretimDurumu`'na `TahsisWorkOrderId`, `UretimWorkOrderId`, `UretimOrderNo` eklendi.
+- **Terminal (`UretimViewModel`):**
+  - Order seçimi iki modda da zorunlu; iade modunda liste üretimdeki order'lardan gelir.
+  - İadede okutulan seri başka order'a verilmişse ya da üretimde değilse hemen reddedilir.
+  - Verirken başka order'a tahsisli seri hemen reddedilir. Tahsissiz seride kırmızı uyarı kutusu ve neden kutusu açılır; neden boşken Kaydet reddedilir.
+- **Testler:**
+  - `HariciIadeTestleri` 5 test (DB).
+  - `UretimEkraniTestleri` güncellendi (+4 test).
+  - Eski testlerde tahsissiz seri veren 12 çağrıya `hariciNeden: "test"` eklendi.
+  - Toplam 220/220.
+- **Commit:** `e4c19bd`. Emülatöre kuruldu; PM66'ya kurulmadı.
