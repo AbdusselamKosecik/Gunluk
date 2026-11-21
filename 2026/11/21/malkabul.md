@@ -88,3 +88,19 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   adb -s 1ed69882 install -r com.modfex.malkabul-Signed.apk
   ```
 - Kullanıcı "PM99" yazdı; bağlı tek terminal PM66'ydı (`1ed69882`), o güncellendi. Cihaz saati EET, bizden 1 saat geride.
+
+### 6. Terminal kullanım düzeltmeleri (PM66 geri bildirimi)
+- **Sorunlar:**
+  - Sayımda renk seçimi listesi aşağı taşıyor, kaydırılamıyordu.
+  - Manuel (yeni seri / malzeme seç) arama boşken liste boş geliyordu.
+  - Yer değiştir ekranındaki hedef yer kartı ekranın yarısını kaplıyordu.
+- **Neden:**
+  - Renk listesi sınırsız bir WrapPanel'di.
+  - `SayimDeposu.MalzemeAraAsync` 2 karakterden kısa aramada `[]` döndürüyordu.
+  - Hedef kartı 22 puntoda, satıra sarılan "kod · açıklama" yazıyordu.
+- **Ne yapıldı:**
+  - Renk listesi `ScrollViewer MaxHeight=200` içine alındı (`SayimView`, `UretimView`).
+  - Malzeme araması boşken ilk 50 malzemeyi kod sırasıyla getiriyor; tek harfle de arıyor.
+  - Hedef kartı yalnız yer kodunu yazıyor: tek satır, 20 punto, sığmazsa "…" ile kesiliyor.
+- **Testler:** +2 test; toplam 241/241.
+- **Commit:** `58955bc`. PM66'ya kuruldu (`install -r`).
