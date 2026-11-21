@@ -127,3 +127,8 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - Bütün depo / yer açılır listeleri (12 şablon): kısaltma + tam metin ipucu.
 - **Doğrulama:** Ekran görüntüsü testine gerçek uzunlukta kod eklendi; kısaltma öncesi taşma, sonrası düzgün görünüm görüldü. Testler 241/241.
 - **Commit:** `d493607`. `dagitim/malkabul-masaustu-2026-11-21.zip` yeniden üretildi; exe açıldı.
+- **Ek (`84d6dc1`):**
+  - Kullanıcı "gene üst üste biniyor" dedi; ekran Raf etiketleri.
+  - Mesaj büyük ihtimalle eski exe açıkken geldi. Yine de 640 px'lik dar pencerede açıklamanın "…"ya düştüğü görüldü.
+  - Satır iki satırlı düzene geçti: kod (kalın) üstte, açıklama altta, QR sağda (MaxWidth 230). Hiçbir genişlikte metinler aynı satırı paylaşmıyor.
+  - Zip yeniden üretildi; eski pencere kapatılıp yeni exe açıldı.
