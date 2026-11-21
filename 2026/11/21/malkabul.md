@@ -80,3 +80,11 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - Canlı Selvedge'de 0030 (mal kabul alanları) ve 0031 henüz yok; ikisi de Selvedge servisi yeniden yayınlanınca açılışta uygulanır.
   - O zamana kadar karantinada "Selvedge inspection bilgisi okunamıyor" bandı görünür.
   - Selvedge mobil APK'sı yeniden derlenip dağıtılmalı.
+
+### 5. PM66'ya dağıtım
+- Mal kabul `bf721b8` sürümü release APK olarak derlendi ve `adb install -r` ile kuruldu (ayarlar korundu). Uygulama açıldı.
+  ```bash
+  dotnet publish MalKabul.Android -c Release -o <dir>
+  adb -s 1ed69882 install -r com.modfex.malkabul-Signed.apk
+  ```
+- Kullanıcı "PM99" yazdı; bağlı tek terminal PM66'ydı (`1ed69882`), o güncellendi. Cihaz saati EET, bizden 1 saat geride.
