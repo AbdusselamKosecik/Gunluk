@@ -34,3 +34,13 @@
   - Servis günlüğünde ERR/FTL yok.
   - Malkabul `Canli_selvedge_okunur...` testi artık "hazır" dalından geçiyor.
 - **Geri dönüş gerekirse:** Servisi durdur, `robocopy C:\Server\_yedek\Selvedge-Modfex-Servis-20261121-1310 C:\Server\Selvedge-Modfex-Servis /E`, servisi başlat. 0030 ve 0031 yalnız ekleme yaptığı için eski sürüm bunlarla da çalışır.
+
+### 5. Satın alma inspection (akşam)
+- **Neden:** Kullanıcı: tablette "Satın alma inspection" düğmesi; inspection müşteri order'ı değil satın alma siparişi üzerinden; liste = karantinada malı olan siparişler.
+- **Ne yapıldı:**
+  - API `GET /api/purchase-inspection/orders?search=` (`PurchaseInspectionService`, Dapper, Selvedge bağlantısından `SentezCore.dbo.*` salt okunur). Karantina depoları UZM_Ayar `MalKabulDepoId`/`EskiMalKabulDepoId` (yoksa 43). Seri → ilk giriş kaleminin siparişi; serisiz → en yeni UZMMK kalemi (malkabul ile aynı kural). Siparişin son "Mal Kabul" raporu da döner.
+  - Mobil 1.0.5+6: ana menüde "Satın Alma Inspection" → sipariş listesi (arama, rozet) → MALKABUL anketi (resimli) → Geçti/Kaldı + not → kayıt. Rapor: AuditStage 'Mal Kabul', CustomerOrderId yok, PurchaseOrderNo/WaybillNo/MaterialCode (tek malzemede)/SerialCodes; anket cevabı `qaReportId` ile rapora bağlı.
+  - `qa_reports_api.create`: `customerOrderId` isteğe bağlı + satın alma alanları.
+- **Doğrulama:** SQL canlıda (betik, salt okunur): 5 seri, sipariş `T-00000001`. `flutter test` 6/6, `flutter analyze` yeni hata yok, API derlendi.
+- **Commit:** `4c97ccc` (API), `5f6962f` (mobil). APK: `publish/modfex-qc-1.0.5.6.apk`.
+- **Açık:** Sunucuya kurulum (onay bekliyor), tablete kurulum (bağlı değildi).

@@ -143,3 +143,24 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - ZPL, ZebraSimulator `ZplCizici` ile PNG'ye çizildi: iki satır, ezilme yok; kısa kod eskisi gibi büyük.
   - Testler 244/244.
 - **Commit:** `63b01f5`. Masaüstü zip yenilendi, yeni exe açıldı.
+
+### 10. Karantina onayı satın alma siparişi bazlı + inspection PDF (akşam)
+- **Neden:** Kullanıcı: "karantina onayı satın alma siparişi bazlı olacak, top top değil"; inspection PDF'i son onay ekranında indirilebilmeli.
+  Kararlar (soru-cevap): onay / red siparişin **tamamına** (top seçimi yok); Pass raporu yoksa onay **engellenir**, Fail yalnız red.
+- **Ne yapıldı:**
+  - `KarantinaKurali.OnayDurumu(siparisNo, rapor)`: Onaylanabilir (Pass/Approved) / Kaldi (Fail) / Beklemede (Hold vb.) / RaporYok / SiparisYok.
+  - `InspeksiyonEslestirme.SiparisRaporu`: rapor siparişe `PurchaseOrderNo` ile (boşluk/harf duyarsız), en yenisi. Eski seri/irsaliye eşleşmesi (`Bul`) kaldırıldı.
+  - `KarantinaDeposu.BekleyenlerAsync`: serisiz stok artık bu karantinaya giren en yeni siparişli UZMMK kalemine bağlanıyor (sipariş, irsaliye, tedarikçi) — red de aynı kaleme dayanıyor.
+  - `KarantinaViewModel`: `Siparisler` (KarantinaSiparisi: kalemler, rapor, durum, özet), `SiparisSec`, `Onayla` (engel varsa nedeni söyler, ikinci basış yok), `Reddet` (ikinci basışla), `PdfIndir`.
+  - PDF: `InspeksiyonDeposu.PdfAsync` → Selvedge `/api/auth/login` (aynı Sentez kullanıcı kodu + şifre) → `/api/qa-reports/{id}/pdf`; İndirilenler'e `{ReportNo}.pdf`, açılır. Şifre `Oturum.Sifre`'de yalnız bellekte.
+  - Ekran: solda sipariş kartları (rozet, seçili vurgulu), sağda durum yazısı + rapor + "Rapor PDF'ini indir" + toplar + cevaplar + resimler. Onay düğmesi yalnız Pass'te etkin.
+- **Dokunulan dosyalar:** `MalKabul/Ekranlar/KarantinaViewModel.cs`, `KarantinaView.axaml`, `UygulamaMetinleri.cs`, `Veri/InspeksiyonDeposu.cs`, `Veri/KarantinaDeposu.cs`, `Ortak/Veri/SentezGiris.cs`, testler `InspeksiyonTestleri.cs`, `EkranGoruntusuTestleri.cs`.
+- **Komutlar:** `MODFEX_DB_TEST=1 dotnet test MalKabul.Tests` (canlı DB, rollback).
+- **Sonuç:** 253/253 (canlı DB dahil); ekran görüntüsü kontrol edildi.
+- **Commit:** `8acfadd`.
+- **Not (gece):** 21:29–21:31 masaüstü "açılmıyor" şikâyeti: uygulama kapanmıyordu, VPN kopuk olduğu için "Şirketler okunamadı" (SQL error 64). VPN bağlanınca açıldı.
+
+## Açık kalanlar / sonraki adım
+- Selvedge servisi yeni API ucu (`/api/purchase-inspection/orders`) ile sunucuya kurulmadı — kullanıcı onayı bekliyor.
+- Mobil 1.0.5 tablete kurulmadı (tablet bağlı değildi).
+- Malkabul masaüstü paketi bu sürümle yeniden çıkarılmadı.
