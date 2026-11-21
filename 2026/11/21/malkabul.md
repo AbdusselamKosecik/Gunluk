@@ -132,3 +132,14 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - Mesaj büyük ihtimalle eski exe açıkken geldi. Yine de 640 px'lik dar pencerede açıklamanın "…"ya düştüğü görüldü.
   - Satır iki satırlı düzene geçti: kod (kalın) üstte, açıklama altta, QR sağda (MaxWidth 230). Hiçbir genişlikte metinler aynı satırı paylaşmıyor.
   - Zip yeniden üretildi; eski pencere kapatılıp yeni exe açıldı.
+
+### 9. Raf etiketi: uzun kod iki satır
+- **Kullanıcı:** "15 karakterden sonrasını alt satıra alalım, eziliyor yoksa."
+- **Sebep:** `RafEtiketi.Zpl`, 12 karakterden uzun kodu 76 noktalık yazıyla tek satıra koyuyordu. 20 karakter yaklaşık 900 nokta tutuyor, iç genişlik 736 nokta; Zebra sıkıştırıyordu.
+- **Ne yapıldı:**
+  - `KodSatirlari`: ≤ 15 karakter tek satır (eski boylar). Daha uzunsa ilk 15 karakter içindeki son tireden sonra bölünür (`WH01-Z01-R01-` / `L01-P01`); tire yoksa 15. karakterde.
+  - İki satır `^FB…,2,…,C` + `\&` ile 70 noktada basılıyor; açıklama tek satıra iniyor, QR'a değmiyor.
+- **Doğrulama:**
+  - ZPL, ZebraSimulator `ZplCizici` ile PNG'ye çizildi: iki satır, ezilme yok; kısa kod eskisi gibi büyük.
+  - Testler 244/244.
+- **Commit:** `63b01f5`. Masaüstü zip yenilendi, yeni exe açıldı.
