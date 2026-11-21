@@ -45,6 +45,14 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
 - **Düzeltme:** Arama `@bugun = DateTime.Today` ile yapılıyor (`MalKabulFisDeposu.BaslikAsync`).
 - **Commit:** `251618f`.
 
+### 13. Karantina durum metni + kılavuz sahneleri (gece)
+- **Neden:** Ekran görüntüsünde karantina durum yazısı "{0}" gösteriyordu (Bicimle çağrısı sipariş no'suz).
+- **Ne yapıldı:** `KarantinaViewModel.DurumMetni` → `Ceviri.Ornek.Bicimle(anahtar, s.Baslik)`; test `Durum_metni_siparis_noyu_yazar`
+  (önce RED, sonra GREEN). EkranGoruntusuTestleri'ne giriş, ayarlar, iade, karantina-kaldı sahneleri; sayımı kapat sahnesi
+  örnek kalan stoklarla dolduruldu.
+- **Doğrulama:** `dotnet test MalKabul.Tests` → 151 geçti, 107 atlandı (DB).
+- **Commit:** `d4dd215`.
+
 ## Kararlar
 - Sentez sipariş tamamen gelince başlığı ve satırı kendisi kapatıyor (`IsClosed=1`). Mal kabul kapalı siparişi listelemiyor; bu doğru davranış.
 

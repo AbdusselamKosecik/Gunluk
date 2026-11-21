@@ -44,3 +44,14 @@
 - **Doğrulama:** SQL canlıda (betik, salt okunur): 5 seri, sipariş `T-00000001`. `flutter test` 6/6, `flutter analyze` yeni hata yok, API derlendi.
 - **Commit:** `4c97ccc` (API), `5f6962f` (mobil). APK: `publish/modfex-qc-1.0.5.6.apk`.
 - **Açık:** Sunucuya kurulum (onay bekliyor), tablete kurulum (bağlı değildi).
+
+### 6. Tablet kılavuz ekran görüntüleri (gece)
+- **Neden:** Kılavuza tablet Satın Alma Inspection ekranları lazım; tablet bağlı değil.
+- **Ne yapıldı:** `src/selvedge_mobil/test/kilavuz_ekran_test.dart` — sahte PurchaseInspectionApi / SurveysApi ile Menü,
+  Siparişler, Anket, Sonuç ekranlarını RepaintBoundary.toImage ile PNG'ye çizer (yalnız `KILAVUZ_CIKTI` verilirse).
+- **Püf noktası:** google_fonts testte font indiremez ve aile adı `Sora_700` gibidir; FontLoader ile bu adları yüklemek
+  yetmedi (kutucuk). Çözüm: `gf.assetManifest`'e sahte liste (`google_fonts/Sora-Bold.ttf` …) verip `flutter/assets`
+  kanalını mock'layarak Windows Segoe UI / Consolas döndürmek; çekmeden önce `GoogleFonts.pendingFonts()` beklemek.
+  Ekranlar arasında `pumpWidget(SizedBox())` ile ağaç sıfırlanmalı (yoksa eski ProviderScope kalıyor).
+- **Komut:** `KILAVUZ_CIKTI=<klasor> flutter test test/kilavuz_ekran_test.dart`; tüm testler 7/7.
+- **Commit:** `b798968`.

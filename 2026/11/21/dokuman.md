@@ -14,10 +14,28 @@ Kullanıcı: "İK hariç, inspection dahil depo için kullanma kılavuzu … bir
 - **Doğrulama:** tüm resim/sayfa bağlantıları dosyalara çözülüyor; depo parametreleri canlı UZM_Ayar'dan okundu.
 - **Commit:** `716ad58`.
 
+### 2. Kılavuz HTML + ekran görüntüleri (gece)
+- **Neden:** Kullanıcı "html olarak çıkartalım, ekran görüntülerini çekip düzenler misin" dedi.
+- **Ne yapıldı:**
+  - Yeni görüntüler `kilavuz/depo/img/`: malkabul giriş / ayarlar / üretimden iade / karantina kaldı / sayımı kapat (örnek
+    satırlarla), sevkiyat mobil işlem seçimi / mamul / irsaliyeler / sevk / tamamla, tablet 1-4 (menü, siparişler, anket, sonuç).
+    Kullanılmayan `*-dar.png` iki dosya silindi.
+  - Görseller ilgili md başlıklarının altına eklendi (scratchpad `resimekle.py`); 00'daki dosya adı bağlantıları okunur metne çevrildi.
+  - `kilavuz/html-olustur.py`: markdown-it-py (CommonMark + tablo) ile 5 kılavuzu tek sayfaya çevirir; sol menü (h2), PNG'ler
+    base64 gömülü, alttaki boş alan Pillow ile kırpılır (en alttaki 14 px kenar korunur), md→md bağlantıları sayfa içi
+    çapaya, yazdırmada her kılavuz yeni sayfa. Görüntüler çözülünce sayfa uzadığı için `load`'da #çapaya yeniden kaydırılır.
+  - Çıktı `kilavuz/Depo-Kullanma-Kilavuzu.html` (1,8 MB). README'ye bağlantı + yeniden üretme komutu.
+- **Komutlar:**
+  ```bash
+  python -m pip install --user markdown-it-py pillow
+  python kilavuz/html-olustur.py
+  ```
+- **Doğrulama:** Chrome'da açıldı: menü, tablolar, görseller, çapalar (#k02-3-uretime-ver) doğru.
+- **Commit:** `518890d`.
+
 ## Kararlar
 - Kılavuzlar Markdown (GitLab'da okunur); uygulama değişince aynı gün güncellenecek.
 - Ajan notları: "Şirketler okunamadı" kullanıcıya görünmez, ekrandaki mesaj "Veritabanına bağlanılamadı"; KLY reddi yalnız Mamul Giriş'te; sevkiyatta çevrimdışı okutma yalnız daha önce indirilmiş siparişte.
 
 ## Açık kalanlar / sonraki adım
-- Sevkiyat mobil ve üretimden iade ekranı için ekran görüntüsü yok.
 - Diğer uygulamalar (bantsayim, paketleme, kesimhane…) için kılavuzlar.
