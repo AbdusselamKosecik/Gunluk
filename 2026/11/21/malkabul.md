@@ -115,3 +115,15 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - `dagitim/malkabul-masaustu-2026-11-21.zip` (74,5 MB);
   - `dagitim/malkabul-2026-11-21.apk` (PM66'daki sürüm).
 - `MalKabul.Desktop.exe` açıldı ("Modfex — Mal Kabul" penceresi).
+
+### 8. Masaüstü: uzun depo yeri kodu / adı üst üste biniyordu
+- **Sebep:**
+  - Canlıda en uzun yer kodu 20 karakter (`WH01-Z01-R01-L01-P01`), adı 42 karakter.
+  - Raf etiketleri ekranında kod sütunu sabit 160 px idi (16 pt kalın mono kod yaklaşık 210 px). Sayım listesinde lot/yer sütunu 110 px idi. Metinler kısaltılmadığı için yan sütuna taşıyordu.
+  - Açılır listelerde de kısaltma yoktu.
+- **Düzeltme:**
+  - Raf etiketleri: kod sütunu 240 px (15 pt), QR sütunu 230 px, hepsinde "…" ile kısaltma; satır ipucunda tam "kod · ad".
+  - Sayım listesi: yer sütunu 170 px + kısaltma + ipucu.
+  - Bütün depo / yer açılır listeleri (12 şablon): kısaltma + tam metin ipucu.
+- **Doğrulama:** Ekran görüntüsü testine gerçek uzunlukta kod eklendi; kısaltma öncesi taşma, sonrası düzgün görünüm görüldü. Testler 241/241.
+- **Commit:** `d493607`. `dagitim/malkabul-masaustu-2026-11-21.zip` yeniden üretildi; exe açıldı.
