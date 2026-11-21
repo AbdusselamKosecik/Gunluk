@@ -170,6 +170,16 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
 - **Commit:** bkz. git log (sayım kümülatif).
 - **Not:** Terminal ekranları (içeri al, seri oluşturarak al, sayım) listede her seriyi ayrı satır gösteriyor — kullanıcıya soruldu.
 
+### 12. Güncelleme paketleri (RAR) — 23:02
+- **Neden:** Kullanıcı bugün değişen tüm paketleri `X:\Gitlab\modfex-apparel\publish` altına RAR istedi.
+- **Ne yapıldı:** HEAD'lerden (malkabul `42a5bb1`, selvedge `5f6962f`) derlendi, WinRAR `Rar.exe a` ile paketlendi, `Rar.exe t` ile doğrulandı:
+  - `MalKabul-Masaustu-2026-11-21.rar` (win-x64 tek exe, pdb hariç)
+  - `MalKabul-Terminal-2026-11-21.rar` (`malkabul-2026-11-21.apk`, imzalı)
+  - `Selvedge-Servis-2026-11-21.rar` (`deploy/yayinla.ps1` çıktısı; `appsettings.json` ve `appsettings.Production.json` hariç — sunucudaki elle düzenlenmiş ayarlar korunur, şifre pakette yok)
+  - `Selvedge-Tablet-1.0.5.rar` (`modfex-qc-1.0.5.6.apk`)
+- **Not:** `yayinla.ps1` PowerShell içinden `2>&1` ile çağrılınca vite stderr satırı hata sayılıp duruyor; `powershell.exe -File` ile yönlendirmesiz çalıştı.
+- Sevkiyat mobil bugün değişmedi, paketlenmedi.
+
 ## Açık kalanlar / sonraki adım
 - Selvedge servisi yeni API ucu (`/api/purchase-inspection/orders`) ile sunucuya kurulmadı — kullanıcı onayı bekliyor.
 - Mobil 1.0.5 tablete kurulmadı (tablet bağlı değildi).
