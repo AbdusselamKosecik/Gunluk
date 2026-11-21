@@ -104,3 +104,14 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
   - Hedef kartı yalnız yer kodunu yazıyor: tek satır, 20 punto, sığmazsa "…" ile kesiliyor.
 - **Testler:** +2 test; toplam 241/241.
 - **Commit:** `58955bc`. PM66'ya kuruldu (`install -r`).
+
+### 7. Masaüstü paketi
+- Kullanıcı "deponun desktop uygulamasını" istedi; mal kabul masaüstü kastediliyor.
+- `58955bc` sürümü önceki günlerle aynı komutla derlendi:
+  ```bash
+  dotnet publish MalKabul.Desktop -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o <dir>
+  ```
+- Çıktılar:
+  - `dagitim/malkabul-masaustu-2026-11-21.zip` (74,5 MB);
+  - `dagitim/malkabul-2026-11-21.apk` (PM66'daki sürüm).
+- `MalKabul.Desktop.exe` açıldı ("Modfex — Mal Kabul" penceresi).
