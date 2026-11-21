@@ -40,3 +40,8 @@ Kullanıcı yeni Satın Alma Inspection API'sini (commit 4c97ccc) sunucuya kendi
 - Hata girilmesi sonucu otomatik Kaldı yapmaz; sonucu kalite kontrol seçer.
 - Kumaş hatası tanımlı değilse (migration öncesi) tüm katalog gösterilir.
 - Önce sunucu (migration 0032), sonra tablet 1.0.6 kurulmalı.
+
+### 4. Tablete Selvedge QC 1.0.6
+- **Neden:** Kullanıcı web sunucusunu (migration 0032) kendisi güncelliyor; tablet kurulumu bana bırakıldı.
+- **Komut:** `MSYS_NO_PATHCONV=1 adb -s R83XB0S3C7Y install -r publish/modfex-qc-1.0.6.7.apk`
+- **Sonuç:** com.modfex.selvedge versionName=1.0.6, versionCode=7; uygulama açıldı (process çalışıyor).
