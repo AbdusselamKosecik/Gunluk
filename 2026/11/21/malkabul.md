@@ -52,3 +52,31 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
 - Karantinada onaydan önce uygulamadan yapılan anketleri ve resimleri görmek istiyorlar (kullanıcı "haberin olsun" dedi; kaynak belirlenecek).
 - PM66'ya yeni APK kurulmadı. Masaüstüne yeni build verilmedi (eski exe açıktı).
 - 5a4dee0 kod incelemesi yarım.
+
+### 4. Mal kabul standart anketi + karantinada inspection (anket ve resimler)
+- **İstek:** Mal kabul inspection'ına standart kodlu bir anket eklensin. Karantinada onaydan önce anketler ve resimler görülsün.
+- **Kararlar:**
+  - Kullanıcı "başla" dedi; sorduğum soruları cevaplamadığı için önerdiğim gibi ilerledim.
+  - Anket kodu `MALKABUL`; başlangıç sorularını ben önerdim.
+  - Rapor yoksa onay engellenmez; uyarı + ikinci basış.
+  - Eşleşme önce seriyle, olmazsa irsaliye + siparişle.
+- **Selvedge (`41662a7`):**
+  - `db/migrations/0031_malkabul_anket.sql`: anket QcStage 'Mal Kabul', 9 soru. Sorular: etiket uyumu, renk tonu, en, gramaj, görsel hata (Yok / Az / Çok), koku-nem, ambalaj, fotoğraf (zorunlu), not. Anket zaten varsa dokunulmaz.
+  - Migration canlı Selvedge'de, geri alınan bir işlem içinde iki kez çalıştırılarak denendi; ikinci çalıştırmada kayıt eklemedi.
+  - Mobil `qc_entry_screen.dart`: 'Mal Kabul' aşamasında önce `MALKABUL` yüklenir (FINISH deseni); bulunursa temel anket eklenmez. `flutter analyze` hata/uyarı vermedi.
+- **Malkabul (`bf721b8`):**
+  - `InspeksiyonDeposu`:
+    - Malkabul bağlantısıyla `Selvedge.dbo` okunur (aynı SQL sunucusu).
+    - `COL_LENGTH` ile 0030 kontrol edilir; yoksa ya da veritabanı okunamazsa `Hazir=false` döner ve karantina yine çalışır.
+    - `InspeksiyonEslestirme` saf eşleştirme fonksiyonudur; malzemesi tutan rapor genel rapordan önce gelir.
+  - Resimler `http://192.168.0.2:8085/api/attachments/{id}/view` adresinden gelir (anonim, yalnız raster). Canlıda ek 12 → 200 image/jpeg doğrulandı.
+  - Karantina ekranı:
+    - satırda rozet (rapor yok / Pass / Fail), rozete tıklayınca sağda anket cevapları ve küçük resimler; resme tıklanınca tarayıcıda açılır;
+    - raporsuz ya da Fail kalem onayı ikinci basışla yapılır;
+    - Selvedge hazır değilse uyarı bandı çıkar.
+  - Selvedge adresi `UZM_Ayar.SelvedgeAdresi`'nden okunur; boşsa varsayılan kullanılır.
+  - Testler: `InspeksiyonTestleri` 7; toplam 239/239.
+- **Durum:**
+  - Canlı Selvedge'de 0030 (mal kabul alanları) ve 0031 henüz yok; ikisi de Selvedge servisi yeniden yayınlanınca açılışta uygulanır.
+  - O zamana kadar karantinada "Selvedge inspection bilgisi okunamıyor" bandı görünür.
+  - Selvedge mobil APK'sı yeniden derlenip dağıtılmalı.
