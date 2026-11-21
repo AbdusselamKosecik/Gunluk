@@ -160,6 +160,16 @@ Gece 20.11'den devam. İstek: Tahsis ekranında siparişi olmayan ihtiyaçlara a
 - **Commit:** `8acfadd`.
 - **Not (gece):** 21:29–21:31 masaüstü "açılmıyor" şikâyeti: uygulama kapanmıyordu, VPN kopuk olduğu için "Şirketler okunamadı" (SQL error 64). VPN bağlanınca açıldı.
 
+### 11. Sayım fişinde satırlar birleşmiyordu (gece)
+- **Neden:** Kullanıcı: "depo sayım, okutarak alma, oluşturarak almada birleştirme sorunları var, satırlar birleşmiyor".
+- **Kanıt (canlı, salt okunur):** UZMSY fiş 16 `00000016`: aynı stok + renk + yer 5 seri → 5 ayrı kalem. Mal kabul UZMMK `00000025`: 5 seri tek kalemde (306), birleşme çalışıyor.
+- **Kök neden:** `SayimDeposu` (yeni seri, serisiz, taşıma) her okutmada `FisYazimi.KalemEkleAsync` ile yeni kalem açıyordu; mal kabuldeki kümülatif kural sayımda yoktu.
+- **Ne yapıldı:** `SayimDeposu.KumuleKalemAsync`: günün fişinde aynı stok + birim + tek renk + giriş yeri + çıkış yeri (siparişsiz) kalemi varsa miktar + varyant ona eklenir. Seri hareketi o kaleme bağlanır (`FisYazimi.SeriHareketiEkleAsync` artık RecId döner). `SayimKalemi.HareketId`; liste seri hareketi başına satır; `DegistirAsync(kalemId, hareketId, …)` yalnız o seriyi değiştirir, kalem/varyant farkla.
+- **Dokunulan dosyalar:** `Veri/SayimDeposu.cs`, `Veri/FisYazimi.cs`, `SayimListesiViewModel.cs`, testler `SayimDeposuTestleri.cs`, `SayimListesiTestleri.cs`, `SayimListesiEkraniTestleri.cs`.
+- **Sonuç:** Yeni testler önce kırmızı, sonra yeşil; tüm set 257/257 (canlı DB).
+- **Commit:** bkz. git log (sayım kümülatif).
+- **Not:** Terminal ekranları (içeri al, seri oluşturarak al, sayım) listede her seriyi ayrı satır gösteriyor — kullanıcıya soruldu.
+
 ## Açık kalanlar / sonraki adım
 - Selvedge servisi yeni API ucu (`/api/purchase-inspection/orders`) ile sunucuya kurulmadı — kullanıcı onayı bekliyor.
 - Mobil 1.0.5 tablete kurulmadı (tablet bağlı değildi).
