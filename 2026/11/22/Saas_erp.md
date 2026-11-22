@@ -105,6 +105,23 @@
 - **Bilerek yapılmayan:** boş yeni satırda fiyat 0 (tüm sipariş tipleri, PO/UX kararı).
 - **Ek (`fe07bb5cb`):** docs/design/yetki-maliyet-goruntule.md (6 bölüm) eklendi; barkod placeholder'ı sans + ellipsis, tam metin title ile görünüyor. vitest 3881/3881.
 
+### 9. İş etüdü maliyet maskesi + yeni satırda boş fiyat (z8v9xnma0a B, z8v9xnma0v md.2)
+- **Kurul:** PO, Skeptic, CTO, Security; hepsi APPROVE-WITH-CONDITIONS (`wt/later-proposal.md`).
+  - A (fiş/satır fiyatı): PO SONRA dedi, Skeptic KABUL. Ürün kararı PO'da olduğu için `inventory:price-read` ayrı özellik ticket'ı açıldı (z8v9xnma33).
+- **Ne yapıldı:**
+  - **B:** `GetDetailAsync(…, bool canReadCost)` zorunlu parametre. 4 alan (Labor, Machine, Overhead, StandardCost) GET, Update ve Create yanıtında maskeleniyor.
+    - CTO bulgusu: PUT/POST yanıtı da tam detay döndürüyordu.
+    - UpdateInventory yetkiyi baştan bir kez kontrol ediyor; cost-read yoksa gelen değer yok sayılıyor. Fail-closed.
+    - FE: "Standart Maliyet" kartı gizli.
+  - **C:** `emptyOrderLineRow` ve `initialOrderLineRows` payload'a taşındı, fiyat null başlıyor. emptyOrderLine ve OrderLineForm tipi değişmedi.
+- **Testler:**
+  - InventoryWorkStudyCostMaskTests (10), PermissionService API anahtarı teorisi (4), work-study-cost (3), order-line-new-row (6, önce kırmızı);
+  - unit 9469/9469, vitest 3890/3890, tip kontrolü ve lint temiz.
+  - Tip kontrolü bir kez test dosyasındaki eksik `item` prop'u yüzünden kırıldı, düzeltildi.
+- **Bulgu:** CreateInventory WorkStudy'yi hiç kaydetmiyor. Ayrı hata ticket'ı z8v9xnma34; bugünkü davranış testte kilitli.
+- **Commit:** `d7c71984c` — feat(inventory,orders,security): is etudu maliyet alanlari cost-read ile maskelenir; yeni siparis satiri bos fiyatla baslar
+- **ClickUp:** z8v9xnma0a ve z8v9xnma0v → complete. Yeni: z8v9xnma33 (price-read özelliği), z8v9xnma34 (Create WorkStudy hatası).
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
