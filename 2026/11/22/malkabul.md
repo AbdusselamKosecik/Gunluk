@@ -45,3 +45,12 @@ Satın alma inspection'ına hata girişi eklendi (selvedge 5491a8d); depo masaü
   - **Sayım düzeltmesi başka terminalin girişini eziyordu** → `DegistirAsync(..., ekrandakiMiktar)`; değiştiyse `KalemDegisti`. Masaüstü gördüğü miktarı gönderiyor.
 - Açık bıraktıklarım (rapor edildi): sipariş birimi ≠ ana birim olan serisiz stokta birim karışıklığı; çıkış yer (lokasyon) bilgisi serisizde yazılmıyor; serisiz onayda otomatik tahsis yok; wifi kopmasında çift gönderim.
 - **Sonuç:** 269/269 (DB dahil, rollback).
+
+### 4. Açık kalan serisiz konular kapatıldı (`f4fa6b8`, `a679f50`)
+- **Raf yeri:** `Erp_WarehouseLocationTotal` serisiz stokta da tutuluyor (canlıda 20 satır; 43'te 1 raf var). Serisiz onay/red artık mal kabul kaleminin giriş rafından (`ri.InWarehouseLocationId`) çıkar. Test `Serisiz_onay_karantina_rafindan_cikar` (RED: raf 10'da kalıyordu → GREEN).
+- **Otomatik tahsis:** `TahsisDeposu.SerisizOtomatikTahsisAsync` — onaylanan parça, mal kabul kaleminin sipariş satırına bağlı (Sentez sipariş tahsisi, OrderReceiptType 1) Order ihtiyacına, ihtiyacın kalanı kadar stok tahsisi (InventoryReceiptType 17, kaynak onay kalemi). Test `Serisiz_onay_siparis_ihtiyacina_tahsis_eder_sonra_uretime_verilir` (RED 0 → GREEN 8, sonra tahsisten 8 verildi).
+- **Birim:** canlıda 1099 alım sipariş satırının 0'ı ana birim dışında (UnitId = Meta_UnitSetItem id; ilk sorgu yanlış id uzayını karşılaştırıp 2 sanmıştı). Yine de serisiz mal kabulde ana birim dışı satır `BirimAnaDegil` ile reddediliyor.
+- **Çift kayıt:** terminal sayım ve serisiz mal kabul ekranında bağlantı hatasında panel kapanır, miktar silinir, `KayitBelirsiz` ("listeden kontrol edin"). Test `Serisiz_kayitta_baglanti_koparsa_tekrar_basilamaz` (RED → GREEN).
+- **Canlı veri testi:** `Canli_kesim_kaydi_olan_order_hazir_olmayan_degil` — Order 4547'nin gerçek 167 kayıtları (fixture yok) → hazır; kesim kaydı olmayan Order → değil.
+- **Sonuç:** 272/272 + yeni canlı test (DB dahil, rollback).
+- **Paketler:** `publish/MalKabul-Masaustu-2026-11-22b.rar` (win-x64 tek exe, pdb hariç), `publish/MalKabul-Terminal-2026-11-22.rar` (`dagitim/malkabul-2026-11-22.apk`, imzalı). PM66 bağlı değildi, kurulmadı.
