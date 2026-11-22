@@ -42,12 +42,39 @@
 - **Güvenlik koşulu 6:** kodla kapatıldı. Ek URL'si tenant kapsamlı (PreCostingAttachments.cs:22-23, :94), `MaxUrlExpiryMinutes = 60`.
 - **Commit:** `8a210a61e` — fix(production,security): ProductionController GET'lerine production:read kapisi
 
+### 4. DEV deploy denemesi: 1.0.2.1202 (tamamlanmadı)
+- **Ne yapıldı:**
+  - `wt/wtdeploy` `origin/dev` 8a210a61e'ye alındı. `bash tools/verify.sh all` rc=0.
+  - api-dev ve spa-dev için 1.0.2.1202 ve latest imajları build edildi, 4 etiket push edildi.
+- **Engel:**
+  - Webhook `:56806` "connection refused" veriyor.
+  - .57'de `vuoapp-deploy.service` 2026-11-15 açılışında "Dependency failed" (`Requires=docker.service`) ile düşmüş, `inactive (dead)`.
+  - Başlatmak sudo istiyor; vuo kullanıcısının şifresiz sudo'su yok. Kullanıcıdan şu istendi: `ssh -t vuo@217.131.14.57 "sudo systemctl start vuoapp-deploy"`.
+  - Kalıcı çözüm önerisi: servis dosyasına `Restart=on-failure` ve `RestartSec=10`.
+- **Not:** port 80 URL'si (build-dev.cmd) 301 ile https'e yönleniyor; webhook bu yoldan da çalışmıyor.
+
+### 5. production:cost-read — maliyet verisi ayrı okuma yetkisi
+- **Kurul:** PO, CTO, Skeptic ve Security, hepsi APPROVE-WITH-CONDITIONS. Birleşik karar `wt/costread-proposal.md`'de.
+- **Ne yapıldı:**
+  - Katalogda ve seed'de (owner/admin/manager) `production:cost-read`. Migration yok.
+  - API anahtarı kataloğuna cost-read eklendi.
+  - 10 GET'te read → cost-read; ApiKeyScope yalnız açık 3 uçta cost-read.
+  - Handler içindeki ikinci read kontrolü (GetCostCalculations/ById) cost-read oldu.
+  - FE: CostReadGuard (12 rota), menü gizleme, Tedarik ve sipariş ön doldurmasında yetkisizken GET yok ve fiyat null.
+  - Model standart maliyeti gizlendi. API anahtarı seçicisi, i18n 11 dil, changelog.
+- **Yan düzeltme:** "auth" rate-limit sınırı yapılandırılabilir oldu (`RateLimiting:AuthPermitLimit`, varsayılan 10); test host'u 1000 veriyor.
+  - Neden: Api test koleksiyonu tek kovayı paylaşıyor. İki yetki sınıfı birlikte koşunca girişler kuyrukta 1 dk 40 sn zaman aşımına düşüyordu (5 dk sürüyordu); şimdi 11/11, 5 sn.
+- **Ajan notu:** iki ajan da 20 adım sınırına defalarca takıldı. Arka uç ajanı CRLF/LF karışık tek satırda döngüye girdi; iş devralındı, satır sonu normalize edildi.
+- **Testler:** unit 9455/9455, vitest 3873/3873, tip kontrolü ve lint temiz, integration 11/11.
+- **Commit:** `d908a5f9a` — feat(production,security): production:cost-read - maliyet verisi ayri okuma yetkisi
+- **ClickUp:** z8v9xnkr6b → complete. Takip ticket'ı: z8v9xnm9ye (kesim fiyatı, UnitPrice, piece-labor, fason tutarı, standardCost backend, boş fiyatın 0 kaydı).
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
 
 ## Açık kalanlar
-- production_cost:read: PO kararı bekliyor (`z8v9xnkr6b`).
+- production:cost-read tamamlandı (d908a5f9a). Takip ticket'ı z8v9xnm9ye.
 - Ayrı ticket adayları: garment okumalarında method-level RequireModule boşluğu (CTO koşulu 7c).
 - E7 S3b-3a Chrome yürüyüşü: MİTO için onaylı 5202 sipariş verisi gerekiyor. Varyantsız sipariş satırı riski PO'da.
-- DEV hâlâ 1.0.2.1201; 0f298e542, cccd8c8aa, 2dba98afb, 8a210a61e ve upstream Konfeksiyon işi DEV'de yok. Kullanıcı isterse deploy.
+- DEV hâlâ 1.0.2.1201. Deploy servisi .57'de kapalı, kullanıcının sudo ile başlatması gerekiyor. 1202 imajları d908a5f9a'yı İÇERMİYOR; servis açılınca 1203 build edilip deploy edilecek.
