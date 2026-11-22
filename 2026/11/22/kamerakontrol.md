@@ -196,3 +196,22 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - **Sorun:** Mesai saatinde avlu sürekli dolu → tüm avluyu kaplayan "(deneme)" bölgeleri 5 dk'da bir alarm üretir, Telegram
   grubunu boğar. Geliştirme makinesindeki servis **durduruldu** (gruba mesaj gitmesin). Test kullanıcısı silindi.
 - **Karar bekleniyor:** alarm ne zaman / kime anlamlı? (mesai dışı zaman çizelgesi, kısıtlı küçük bölgeler, kişi sayısı eşiği, yüz tanıma ile çalışanları eleme)
+
+### 12. Sunucuya kurulum (192.168.0.2 / MODFEXSRV)
+- **Neden:** Kullanıcı servisin 0.2'ye, `C:\Server` altına kurulmasını istedi.
+- **Ne yapıldı:**
+  - Sunucu incelendi: WinRM açık, ASP.NET Core 10.0.12 runtime var, diğer servisler `C:\Server\*` altında. DB (100.119.104.122) aynı makinenin Tailscale IP'si, bu yüzden üretimde `Server=localhost`.
+  - `publish\gizli\appsettings.Production.json` (gitignore'lu) dev ayarından üretildi. Şifreleme anahtarı aynı (NVR parolaları bu anahtarla şifreli). OnayMerkezi `http://localhost:8087`.
+  - Spam önlemi: "(deneme)" bölgeleri (Id 4, 5, 6) **pasife alındı** (`UPDATE dbo.Bolge SET Aktif=0`). Kanal izleme açık ama aktif bölge yok, bu yüzden bildirim gitmez.
+  - `deploy\yayinla.ps1` ile paket hazırlandı, robocopy ile `\\192.168.0.2\C$\Server\_guncelleme\kamerakontrol`'e kopyalandı, `Invoke-Command` ile `servis-kur.ps1 -Hedef C:\Server\KameraKontrol` çalıştırıldı.
+  - Hata: PS 5.1'de param varsayılanında `$PSScriptRoot` boş geldi. Düzeltme: `$MyInvocation.MyCommand.Path` yedeği eklendi; varsayılan hedef `C:\Server\KameraKontrol` yapıldı.
+- **Komutlar:**
+  ```powershell
+  powershell -File deploy\yayinla.ps1
+  robocopy publish\kamerakontrol \\192.168.0.2\C$\Server\_guncelleme\kamerakontrol /MIR
+  Invoke-Command -ComputerName 192.168.0.2 { cd C:\Server\_guncelleme\kamerakontrol; powershell -ExecutionPolicy Bypass -File .\servis-kur.ps1 }
+  ```
+- **Sonuç:** `KameraKontrol` servisi Running (NetworkService, delayed-auto, firewall TCP/8090 LocalSubnet). `http://192.168.0.2:8090` yanıt veriyor; panelde ilk açılışta yönetici hesabı oluşturulacak (kullanıcı yok).
+- **Commit:** `6651f2d` — servis-kur: PS 5.1'de boş $PSScriptRoot düzeltmesi
+
+**Açık:** gerçek bölgeleri çiz ve aktifleştir; alarm zaman kuralı kararı hâlâ bekliyor.
