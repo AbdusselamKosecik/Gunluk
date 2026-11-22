@@ -138,3 +138,46 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - BioTime API kullanıcısı (salt okunur) → API'nin biyo-fotoğrafı çözülmüş verip vermediği doğrulanacak.
 - Bildirim kanalı seçimi (panel / e-posta / Telegram / WhatsApp).
 - .244 RTSP portu; kanal yerel adları.
+
+### 10. İnsan algılama + olaylar + OnayMerkezi bildirimi (13:00–13:30)
+- **İstek:** "http://192.168.0.245/ D10 D3 D1 de çalışalım şimdilik". Bildirim: "bizim bildirim sistemimiz vardı oradan
+  göndereceğiz" → **OnayMerkezi** (`onaymerkezi` reposu; 192.168.0.2:8087, `POST /api/olay` + `X-Api-Anahtari`, görsel ≤5 MB,
+  `GerekenOnay=0` türleri Telegram'a butonsuz bildirim). Model indirme izni alındı.
+- **Kanallar:** NVR 245 D1 (avlu/kulübe, kamera 192.168.40.25), D3 (konteyner deposu, .26), D10 (ana kapı, .20); hepsi dış alan,
+  704×576. DB'de yalnız bu üçü `Izlenir=1`, diğer 61 kanal 0.
+- **Model:** `yolox_s.onnx` 35,8 MB, Megvii resmî GitHub 0.1.1rc0, Apache-2.0 (Ultralytics YOLO AGPL olduğu için seçilmedi),
+  SHA-256 `c5c2d13e…8063`. Git dışı: `modeller/README.md` (kaynak + hash), csproj varsa çıktıya/yayına kopyalar.
+  Giriş 640×640 **BGR** 0-255 normalize yok, sol üst letterbox dolgu 114; çıkış [1,8400,85], obj/cls sigmoid'li, ızgara
+  çözümü bizde (adım 8/16/32). **Doğrulama:** RGB verince 10→4 kişi (BGR doğru); kutular çizdirilip gözle kontrol edildi.
+  Fabrika içi kalabalıkta (masa arkasında oturanlar) bazılarını kaçırıyor → eşik 0,5 yerine **0,35**; dış kameralarda 0 yanlış pozitif.
+  Hız: CPU'da ~50-80 ms (kare alma dahil ~300 ms).
+- **Mimari kararlar:**
+  - Kare kaynağı = NVR ISAPI anlık görüntü (RTSP/FFmpeg yok; 3 kanal 1 fps için yeterli).
+  - Bölgeye giriş = **kutunun alt ortası (ayak)** çokgende (ray casting).
+  - `AlarmTakibi`: 2 ardışık kare → alarm; bölge dolu kaldıkça **tek olay**; 30 sn boş → olay kapanır; aynı bölge en az 5 dk ara.
+  - `AlgilamaIscisi`: 30 sn'de bir DB'den hedef tazeleme, kanal başına ayrı Task; hata sürerse geri çekilme (≤30 sn), günlükte ilk ve her 60. hata.
+  - `Olay` tablosu (kutuları çizili JPEG `Kare`), BolgeId FK'siz (SQL Server çoklu cascade yolu), 90 gün saklama.
+- **Dokunulan dosyalar:** `src/KameraKontrol/Algilama/{InsanAlgilayici,Geometri,AlarmTakibi,KareCizici,AlgilamaIscisi}.cs`,
+  `Bildirim/OnayMerkeziIstemcisi.cs`, `Veri/OlayDeposu.cs`, `Api/OlayUclari.cs`, `Ayarlar.cs` (Algilama, OnayMerkezi),
+  `db/tablolar/003_olay.sql`, `wwwroot/{index.html,panel.js,bolge.js,panel.css}`, `tests/.../{AlgilamaTests,OnayMerkeziTests}.cs`,
+  `tools/sahte_nvr.py` (2. argüman: 1. kanal verilen fotoğrafı döner), `deploy/*`. Paketler: Microsoft.ML.OnnxRuntime 1.31.1, SkiaSharp 3.119.4.
+- **Komutlar:**
+  ```bash
+  curl -L -o modeller/yolox_s.onnx https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx
+  KK_MODEL=modeller/yolox_s.onnx KK_ORNEK=<insanli.jpg> KK_EN_AZ=8 dotnet test   # 39/39
+  python tools/sahte_nvr.py 18080 <insanli.jpg>
+  ```
+- **Uçtan uca sonuç:** Sahte NVR (fabrika karesi) → olay 1, 10 kişi, sürekli görünmesine rağmen tekrar olay yok (kural çalışıyor).
+  **Gerçek:** olay 2 D10 ana kapı önünde yürüyen kişi (güven %88), olay 3 D1 avluda el arabası çeken kişi (%65) — ikisi de doğru.
+  Panel Olaylar sekmesi tarayıcıda denetlendi, konsol hatası yok.
+- **Bırakılan durum:** D1/D3/D10'da geçici bölgeler "Avlu (deneme)", "Konteyner alani (deneme)", "Ana kapi (deneme)" + olay 2, 3.
+  Sahte cihaz ve test kullanıcısı silindi.
+- Not: NVR saati sunucudan 1 saat geri görünüyor (NVR 12:17, geliştirme makinesi TR saati 13:17) — Mısır sunucusunda kontrol edilmeli.
+- **Commit:** `92f8e74` — İnsan algılama + olaylar + OnayMerkezi bildirimi
+
+## Açık kalanlar (güncel)
+- OnayMerkezi: panelde `kamera-alarm` olay türü (Gereken onay = 0, Telegram grubu) + KameraKontrol için API anahtarı →
+  `appsettings` `KameraKontrol:OnayMerkezi:ApiAnahtari`.
+- D1/D3/D10 bölgelerini gerçek ihtiyaca göre yeniden çiz / adlandır.
+- Sunucuya kurulum (192.168.0.2, port 8090; dev şifreleme anahtarı prod'a taşınmalı; model dosyası pakete girer).
+- BioTime API kullanıcısı (yüz tanıma); .244 RTSP portu; kanal yerel adları.
