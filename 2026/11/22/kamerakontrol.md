@@ -117,3 +117,24 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - **Karar:** 3. aşamada yüz kaynağı BioTime biophoto JPG'leri (ArcFace ile vektöre çevrilecek); yeniden fotoğraf yok.
 - **Açık:** JPG dosyalarına erişim yolu (BioTime sunucusundaki klasör/paylaşım ya da BioTime web üzerinden).
 - **Commit:** README güncellendi.
+
+### 9. BioTime sunucusu ve yüz fotoğraflarının yeri (12:55)
+- Kullanıcı önce 192.168.0.3 dedi: orası **etki alanı denetleyicisi + dosya sunucusu** (NETLOGON/SYSVOL, `Modfex Data`),
+  BioTime yok. Sonra **192.168.0.2** dedi → doğru: `modfexsrv` (Tailscale 100.119.104.122 ile aynı makine; SQL 1433, 80/81 "Modfex İşlem Merkezi").
+- `\192.168.0.2\C$` altında 4 kurulum: `ZKBioTime`, `ZKBioTime9.4` (boş), `ZKBioTimeOrj` (eski, 540 foto, 2025-10),
+  **`ZKBioTime1` (kullanımda)** → `auth_files\biophoto\<sicil>.jpg`, düz klasör, 1160 dosya, bugün de güncellenmiş.
+  (DB'deki `register_photo` GUID adları diskteki adlarla eşleşmiyor; disk sicil no ile.)
+- Eşleşme: 1160 dosyanın 825'i personele bağlı; **360 aktif personelin 341'inin fotoğrafı var**.
+- **Engel:** Dosyalar JPG değil, **BioTime tarafından şifreli** — hepsi `65 61 76 31 30 31 24` = `eav101$` başlığıyla
+  başlıyor, sonraki bloklar dosyalar arasında aynı (deterministik şifreleme). GDI açamıyor.
+- **Karar:** BioTime şifresi kırılmayacak (üretici korumasını aşmak + her güncellemede kırılır). Fotoğraflar BioTime'ın
+  kendi REST API'si üzerinden alınacak: `ZKBioTime1\attsite.ini` → web `Port=8088`; `POST http://192.168.0.2:8088/api-token-auth/`
+  boş gövdeye 400 döndü (uç var). Salt okunur BioTime API kullanıcısı gerekiyor (kullanıcıdan istenecek).
+- **Port çakışması düzeltildi:** BioTime 8088 kullanıyor → KameraKontrol **8090**'a alındı
+  (`appsettings.json`, `deploy/servis-kur.ps1`, README). Komut: yalnız ini'den port satırları okundu (parola satırları süzüldü).
+- **Commit:** `b4fea1a` — Port 8090'a alındı (8088 BioTime'ın portu); yüz kaynağı ayrıntıları README'de
+
+## Açık kalanlar (güncel)
+- BioTime API kullanıcısı (salt okunur) → API'nin biyo-fotoğrafı çözülmüş verip vermediği doğrulanacak.
+- Bildirim kanalı seçimi (panel / e-posta / Telegram / WhatsApp).
+- .244 RTSP portu; kanal yerel adları.
