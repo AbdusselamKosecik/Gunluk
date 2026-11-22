@@ -54,3 +54,18 @@ Satın alma inspection'ına hata girişi eklendi (selvedge 5491a8d); depo masaü
 - **Canlı veri testi:** `Canli_kesim_kaydi_olan_order_hazir_olmayan_degil` — Order 4547'nin gerçek 167 kayıtları (fixture yok) → hazır; kesim kaydı olmayan Order → değil.
 - **Sonuç:** 272/272 + yeni canlı test (DB dahil, rollback).
 - **Paketler:** `publish/MalKabul-Masaustu-2026-11-22b.rar` (win-x64 tek exe, pdb hariç), `publish/MalKabul-Terminal-2026-11-22.rar` (`dagitim/malkabul-2026-11-22.apk`, imzalı). PM66 bağlı değildi, kurulmadı.
+
+### 5. Kullanıcı kararları ve pastal kuralı (`24af971`)
+- **Canlı tahsis taraması:** Canlıda serisiz bir stoğa yapılmış Sentez stok tahsisi hiç yok. 948 tahsisin hepsi serili stoklara ait, SerialCardId boş (miktar bazlı); en sonuncusu 2026-07-22. Bu yüzden 129/29 akışı canlı stokla çalıştırılamadı; DB testleri canlı veritabanında, kendi verisini oluşturup rollback ile çalışıyor.
+- **Kullanıcıya soruldu (AskUserQuestion):**
+  - Pastal → "Pastal no + kat sayısı".
+  - Sentez'in miktar bazlı eski tahsisleri → "Sayılmasın".
+  - Kurulum → hiçbiri seçilmedi (sunucu, terminal ve masaüstü bekliyor).
+- **Uygulama:** `PastalHazirAsync` artık MarkerNo dolu ve NumberOfPlies > 1 olan 167 kaydı arıyor. Mesaj ve ayar etiketi güncellendi.
+- **Testler:**
+  - Fixture varsayılanı pastal no ve 30 kat.
+  - Test pastal no yok → hayır, kat 1 → hayır.
+  - Canlı Order 4547 → hayır (pastal no/kat yok); aynı kayda P-4547/40 yazılınca → evet (rollback).
+  - Sonuç 273/273.
+- **Sonuç:** Bugünkü canlı veriyle hemen hemen hiçbir Order'a kumaş verilemez. Kesimhane Sentez kesim kaydına pastal no ve kat sayısını girmeli (ya da ayardan kontrol kapatılır).
+- **Paketler yeniden üretildi:** `publish/MalKabul-Masaustu-2026-11-22b.rar`, `publish/MalKabul-Terminal-2026-11-22.rar` (08:35).
