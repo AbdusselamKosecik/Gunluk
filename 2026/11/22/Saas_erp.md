@@ -122,6 +122,18 @@
 - **Commit:** `d7c71984c` — feat(inventory,orders,security): is etudu maliyet alanlari cost-read ile maskelenir; yeni siparis satiri bos fiyatla baslar
 - **ClickUp:** z8v9xnma0a ve z8v9xnma0v → complete. Yeni: z8v9xnma33 (price-read özelliği), z8v9xnma34 (Create WorkStudy hatası).
 
+### 10. Stok kartı oluşturma 1:1 detayları düşürüyordu (z8v9xnma34)
+- **Kurul:** CTO ve Skeptic, ikisi de APPROVE-WITH-CONDITIONS (`wt/createdrop-proposal.md`).
+- **Bulgu:**
+  - CreateInventory yalnız Fabric'i kaydediyordu; Service, FixedAsset, FoodMaster ve WorkStudy kayboluyordu.
+  - Skeptic: FE bu blokları hiç null göndermiyor. `is not null` tetiği her yeni karta boş satır, demirbaş olmayan karta amortisman defteri açardı.
+- **Ne yapıldı:**
+  - Her tip için bir applier (Fabric emsali) ve FE ile aynı tanımlı `HasValues`.
+  - Create baştan cost-read kontrol ediyor. Update applier'a geçti, satır oluşturma davranışı değişmedi.
+- **Testler:** InventoryCreateOneToOneTests (6); red 7/16, green 16/16; unit 9475/9475. d7c71984c'deki kilit bilinçli olarak tersine çevrildi.
+- **Commit:** `ffe540d00`
+- **ClickUp:** z8v9xnma34 → complete. Takip: z8v9xnma3d (Update'in boş satırları), z8v9xnma3e (IsInEnum), z8v9xnma3f (demirbaş para alanı yetkisi).
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
