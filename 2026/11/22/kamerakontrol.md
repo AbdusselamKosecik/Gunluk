@@ -215,3 +215,18 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - **Commit:** `6651f2d` — servis-kur: PS 5.1'de boş $PSScriptRoot düzeltmesi
 
 **Açık:** gerçek bölgeleri çiz ve aktifleştir; alarm zaman kuralı kararı hâlâ bekliyor.
+
+### 13. Bölge alarm çizelgesi (panelden saat + gün)
+- **Neden:** Mesai içinde avlu kalabalık, bölgeler sürekli alarm verir. Kullanıcı saatleri panelden kendisi ayarlamak istedi ("saati parametreden ben yapayım, uygulamadan").
+- **Ne yapıldı:**
+  - `db/tablolar/004_bolge_cizelge.sql`: Bolge tablosuna `Baslangic char(5)`, `Bitis char(5)` (NULL = her saat) ve `Gunler tinyint` (bit0 = Pzt … bit6 = Paz, varsayılan 127) eklendi. Idempotent (`COL_LENGTH`).
+  - `Algilama/Cizelge.cs`: `AktifMi(DateTime)`. Bitiş < başlangıç ise aralık gece yarısını aşar. **Karar:** gecenin sabah kısmı aralığın başladığı güne sayılır (Cuma 19:00 – Cmt 07:00 Cuma'dır). Bitiş saati dahil değildir.
+  - `AlgilamaIscisi`: çizelge dışındaki bölge "boş" sayılır (açık olay kapanır). Kanalın hiçbir bölgesi çizelgede değilse kare alınmaz, 5 sn beklenir (`KanalDurumu.Beklemede`; CPU tasarrufu).
+  - API: bölge girdi/çıktısına `baslangic`, `bitis`, `gunler` ve çıktıya `suAnAktif` eklendi. Doğrulama: saatler ikisi birlikte, SS:dd biçiminde, en az bir gün.
+  - Panel: bölge formunda "Alarm saatleri" (SS:dd metin alanı + "Her saat" düğmesi) ve 7 gün kutusu. Listede "19:00–07:00 · Pzt–Cum" ve "saat dışı" rozeti. Durum satırında "çizelge dışı".
+  - Sorun: `<input type="time">` İngilizce tarayıcıda 12 saatlik gösterdi ve AM/PM kesildi. Metin alanı + pattern'e geçildi. Odaktan çıkınca "19" → "19:00", "7" → "07:00" tamamlanıyor.
+- **Doğrulama:** 59/59 test geçti (20'si yeni `CizelgeTests`). Sunucuda API ile kaydet/oku/400/geri al denendi. Panelden kaydedip ekran görüntüsüyle kontrol edildi. Sunucu saat dilimi Egypt Standard Time (NVR ile aynı), çizelge fabrika saatine göre işler.
+- **Kurulum:** `yayinla.ps1` → robocopy → uzaktan `servis-kur.ps1` (servis güncellendi, migration açılışta uygulandı).
+- **Commit:** `06530bc` — Bölge alarm çizelgesi: panelden saat aralığı ve günler
+
+**Not:** "Ana kapi (deneme)" bölgesinde 19:00–07:00 Pzt–Cum örneği kaldı, bölge hâlâ pasif. Geçici kullanıcı silindi (kullanıcı sayısı 0).
