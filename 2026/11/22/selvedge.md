@@ -45,3 +45,8 @@ Kullanıcı yeni Satın Alma Inspection API'sini (commit 4c97ccc) sunucuya kendi
 - **Neden:** Kullanıcı web sunucusunu (migration 0032) kendisi güncelliyor; tablet kurulumu bana bırakıldı.
 - **Komut:** `MSYS_NO_PATHCONV=1 adb -s R83XB0S3C7Y install -r publish/modfex-qc-1.0.6.7.apk`
 - **Sonuç:** com.modfex.selvedge versionName=1.0.6, versionCode=7; uygulama açıldı (process çalışıyor).
+
+### 5. Sunucu güncelleme kontrolü (0032)
+- **Ne yapıldı:** WinRM ile servis/dosya/log; canlı DB'ye scratchpad dotnet script ile salt-okur sorgu.
+- **Sonuç:** SentezSelvedge Running, kök 200; log "0032_satin_alma_hatalari.sql uygulandi (75 ms)", temiz açılış; appsettings dokunulmamış (10/6).
+  `_sv_SqlMigrations` 0032 kayıtlı; aktif Fabric hata 18, 7xx kod tekrarı 0; MALKABUL anketinde En/Gramaj/Görsel hata yok (kalan: 1,2,6,7,8,9).
