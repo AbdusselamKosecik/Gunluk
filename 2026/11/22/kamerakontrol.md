@@ -230,3 +230,14 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - **Commit:** `06530bc` — Bölge alarm çizelgesi: panelden saat aralığı ve günler
 
 **Not:** "Ana kapi (deneme)" bölgesinde 19:00–07:00 Pzt–Cum örneği kaldı, bölge hâlâ pasif. Geçici kullanıcı silindi (kullanıcı sayısı 0).
+
+### 14. Bölge başına alarm güven eşiği (varsayılan %80)
+- **Neden:** Kullanıcı bölgeleri 17:30–07:00 çizelgesiyle aktif etti. Akşamki 13 olayın çoğunun güveni %35–%46 arasındaydı (gece görüntüsünde yanlış algılama). Kullanıcının isteği: "doğruluk %80'den aşağıysa tetiklenmesin".
+- **Ne yapıldı:**
+  - `db/tablolar/005_bolge_guven.sql`: `Bolge.MinGuven tinyint NOT NULL DEFAULT 80`. Mevcut bölgeler 80 aldı.
+  - `AlgilamaIscisi`: `Icinde(k)` = `k.Guven >= MinGuven/100` ve ayak noktası poligonun içinde. Eşik altındaki kişi karede sarı çizilir ve sayılmaz.
+  - Algılama eşiği (appsettings `GuvenEsigi` 0.35) değişmedi: kutuların görünmesini belirliyor. Alarm eşiği ayrı ve bölgeye özel.
+  - API/panel: `minGuven` alanı (35–99 arası, doğrulamalı). Formda "En az güven (%)" var.
+- **Ödünleşim:** öğleden önceki gerçek kişi olaylarından bazıları %65–%78'di (uzak, küçük insan). %80'de bunlar da kaçar. Gerekirse bölgeye göre düşürülebilir.
+- **Doğrulama:** 62/62 test geçti. Sunucu güncellendi, migration uygulandı (3 bölge MinGuven=80), servis hatasız başladı.
+- **Commit:** `e0bec4d` — Bölge başına alarm güven eşiği (varsayılan %80)
