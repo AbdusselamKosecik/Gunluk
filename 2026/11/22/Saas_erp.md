@@ -94,6 +94,16 @@
 - **Not:** uygulama dark modu sistem ayarından değil, `dark` sınıfıyla açıyor; test için elle eklendi.
 - **ClickUp:** z8v9xnm9ye → complete. Yerel ortam kapatıldı.
 
+### 8. UX küçük notları (z8v9xnma0v)
+- **Ne yapıldı:**
+  - PermissionMatrix modül adları koda göre çevriliyor (tr/en, 29 kod; DB adı fallback). DB'de adlar karışık dildeydi.
+  - Toplu Tedarik Model kolonu GUID yerine kod · ad gösteriyor (inventoryByIdQuery).
+  - document-workspace-shell TabsList yatay kayıyor (production_order_detail emsali).
+  - receipt-detail-control giriş hücrelerine aria-label=column.caption.
+- **Testler:** tip kontrolü ve lint temiz, vitest 3881/3881.
+- **Commit:** `5b15dada4`
+- **Bilerek yapılmayan:** boş yeni satırda fiyat 0 (tüm sipariş tipleri, PO/UX kararı).
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
