@@ -145,11 +145,22 @@
 - **Commit:** `c9092a37e`
 - **ClickUp:** 3d ve 3e → complete. Yeni: z8v9xnma3u (boş satır temizliği, DBA), z8v9xnma3v (nullable enum DTO).
 
+### 12. Nullable enum DTO (z8v9xnma3v)
+- **Kurul:** CTO ve Skeptic, ikisi de APPROVE-WITH-CONDITIONS (`wt/nullenum-proposal.md`).
+  - Skeptic: risk gerçek; güncellemede {} saklı Dyeing değerini sessizce Subcontracting'e çeviriyordu.
+  - CTO: dört runtime tuzağı (validator Enum.IsDefined(null), handler, lifted comparison, null unwrap).
+- **Ne yapıldı:** ServiceType ve DepreciationMethod int? oldu; null = gönderilmedi.
+- **Testler:** unit 9507/9507.
+- **Commit:** `ae3d9b339`
+- **ClickUp:** z8v9xnma3v → complete.
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
 
 ## Açık kalanlar
+- **DEV deploy:** vuoapp-deploy kapalı, sudo bekliyor; 1203 kullanıcının "devam"ını bekliyor. dev, 0f298e542..ae3d9b339 arası 13 commit DEV'de değil.
+- **Backlog (karar bekleyen):** z8v9xnma33 (price-read özelliği), z8v9xnma3f (demirbaş para alanı yetkisi), z8v9xnma3u (boş satır temizliği, DBA), z8v9xnkd69 (E6 S4 DEV pilotu).
 - production:cost-read tamamlandı (d908a5f9a). Takip ticket'ı z8v9xnm9ye.
 - Ayrı ticket adayları: garment okumalarında method-level RequireModule boşluğu (CTO koşulu 7c).
 - E7 S3b-3a Chrome yürüyüşü: MİTO için onaylı 5202 sipariş verisi gerekiyor. Varyantsız sipariş satırı riski PO'da.
