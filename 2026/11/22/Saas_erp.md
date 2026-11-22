@@ -134,6 +134,17 @@
 - **Commit:** `ffe540d00`
 - **ClickUp:** z8v9xnma34 → complete. Takip: z8v9xnma3d (Update'in boş satırları), z8v9xnma3e (IsInEnum), z8v9xnma3f (demirbaş para alanı yetkisi).
 
+### 11. Güncellemede boş detay satırı + enum doğrulaması (z8v9xnma3d, z8v9xnma3e)
+- **Kurul:** CTO ve Skeptic, ikisi de APPROVE-WITH-CONDITIONS (`wt/upd1to1-proposal.md`).
+- **Ne yapıldı:**
+  - Update'te 5 blokta guard: satır yoksa ve blok yalnız varsayılansa satır açılmıyor.
+  - WorkStudy HasValues'a canReadCost parametresi eklendi.
+  - Create'te ortak child validator'lar; Update'te handler kontrolü, saklı değerle aynıysa geçiyor.
+- **Neden handler:** Skeptic'e göre PROD'da geçersiz enum'lu eski kart varsa validator her kaydı 400 ile reddederdi. DEV sayımı 0 (salt okunur), PROD kural gereği ölçülmedi.
+- **Testler:** 22 durum; filtreli 37/37, unit 9496/9496.
+- **Commit:** `c9092a37e`
+- **ClickUp:** 3d ve 3e → complete. Yeni: z8v9xnma3u (boş satır temizliği, DBA), z8v9xnma3v (nullable enum DTO).
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
