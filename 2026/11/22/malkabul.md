@@ -89,3 +89,9 @@ Satın alma inspection'ına hata girişi eklendi (selvedge 5491a8d); depo masaü
 - "Pastal sayısına göre hesap" kullanıcıya soruldu, cevap henüz yok: kesim adedi / kat sayısı ile kumaş miktarı karşılaştırması mı isteniyor?
 - Depo parametrelerinde "Tartılan koli (mamul)" yeri (`MamulYerId`) seçilmeli; sevkiyat mobil mamul girişte bu yeri kullanıyor (sevkiyatmobil günlüğü).
 
+
+### 7. PM66 el terminaline mal kabul kurulumu (09:15)
+- PM66 (adb seri 39916cf0) bağlandı; üzerinde yalnız sevkiyat mobil vardı.
+- `adb install -r malkabul/dagitim/malkabul-2026-11-22.apk` → Success (lastUpdateTime 2026-11-22 09:15:03).
+- Açılış kontrolü: MainActivity ön planda, crash buffer boş; ilk açılışta Bağlantı Ayarları ekranı (adb screencap ile görüldü).
+- SQL bağlantı bilgisi/şifresi kullanıcı tarafından girilecek (şifre adb ile yazılmadı).
