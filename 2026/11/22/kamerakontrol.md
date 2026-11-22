@@ -181,3 +181,18 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - D1/D3/D10 bölgelerini gerçek ihtiyaca göre yeniden çiz / adlandır.
 - Sunucuya kurulum (192.168.0.2, port 8090; dev şifreleme anahtarı prod'a taşınmalı; model dosyası pakete girer).
 - BioTime API kullanıcısı (yüz tanıma); .244 RTSP portu; kanal yerel adları.
+
+### 11. OnayMerkezi bağlandı, Telegram'a ilk bildirimler (14:00)
+- OnayMerkezi zaten kurulu: `http://192.168.0.2:8087` (SentezCore `UZM_` tabloları). Salt okunur kontrol: Telegram grupları
+  "Modfex Onay", "Modfex Bildirim"; olay türü/uygulama yoktu. Kullanıcı panelden açtı: tür `kamera-alarm` (Kamera alarmi,
+  GerekenOnay 0, grup **Modfex Bildirim**, aktif); uygulama kaydı (kodu yanlışlıkla `kamera-alarm` girilmiş — işlevsel engel değil).
+- Anahtar (`om_…`) yalnız `src/KameraKontrol/appsettings.Development.json` (git dışı) → `KameraKontrol:OnayMerkezi:ApiAnahtari`.
+  Kullanıcı anahtarı sohbete yapıştırdı; isterse OnayMerkezi'nde pasif yapıp yenilenebilir.
+- **Yeni:** `POST /api/kanal/{id}/deneme-bildirim` (yönetici) + bölge ekranında "Deneme bildirimi" düğmesi: anlık kareyi
+  `🧪 Deneme — <cihaz> D<no>` olarak gönderir, olay açmaz. **Commit:** `0883229`.
+- **Sonuç:** OnayMerkezi olay 3 (deneme, D10) → Durum 5 Bildirildi, Telegram MesajId 48 ✅. Hemen ardından 3 GERÇEK alarm
+  (olay 6/7/8 → OnayMerkezi 4/5/6, MesajId 49-51): saat 14:01 mola/vardiya — Ana kapı 4, Avlu 10, Konteyner 20 kişi;
+  algılamalar doğru (bölge dışı sarı, içi kırmızı).
+- **Sorun:** Mesai saatinde avlu sürekli dolu → tüm avluyu kaplayan "(deneme)" bölgeleri 5 dk'da bir alarm üretir, Telegram
+  grubunu boğar. Geliştirme makinesindeki servis **durduruldu** (gruba mesaj gitmesin). Test kullanıcısı silindi.
+- **Karar bekleniyor:** alarm ne zaman / kime anlamlı? (mesai dışı zaman çizelgesi, kısıtlı küçük bölgeler, kişi sayısı eşiği, yüz tanıma ile çalışanları eleme)
