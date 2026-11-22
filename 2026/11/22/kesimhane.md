@@ -58,3 +58,14 @@
   3. Alana "Bekliyor #{olay}" yazılır. Gönderim hata verirse alan eski değerine döner.
 - **Testler:** `SentezKesimTestleri`. Canlı TEST01 kaydı (194912) listelenir; gönderim, hatada geri dönüş ve ikinci gönderimin reddi rollback ile test edildi. 19/19.
 - **Headless render:** `kesimhane-1-kesim-listesi.png` kontrol edildi. TEST01 satırında "Telegram'a gönder" düğmesi var; diğer kayıtlarda "Sentez'de pastal no / kat eksik" yazıyor.
+
+### 4. Telegram onay ayarları ekranı (`8dd60dc`)
+- **Kullanıcı:** "Ayarlar yok galiba, ayarları ekrana ekler misin? Telegram'a göndermiyor."
+- **Sebep:** `UZM_Ayar` tablosunda OnayMerkeziAdres ve OnayMerkeziAnahtar yoktu; gönderim "ayarlı değil" hatasıyla duruyordu.
+- **Ne yapıldı:**
+  - Kesim listesine "Telegram onay ayarları" düğmesi eklendi. Yeni `TelegramAyarlariViewModel` ekranında adres (varsayılan http://192.168.0.2:8087) ve anahtar alanları, "Bağlantıyı dene" ve "Kaydet" düğmeleri var.
+  - Bağlantı denemesi `GET /api/olay/0` ile yapılıyor: 404 = anahtar geçerli, 401 = anahtar geçersiz.
+  - `UzmAyar.YazAsync`: önce UPDATE, satır yoksa INSERT.
+  - Ayarlar girilmeden "Telegram'a gönder" basılırsa ayar ekranı açılıyor.
+- **Testler:** 24/24. Headless render `kesimhane-2-telegram-ayarlari.png` kontrol edildi.
+- **Sunucu kontrolü:** 192.168.0.2:8087 ayakta (anahtarsız istek 401 döndü).
