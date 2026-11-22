@@ -69,6 +69,20 @@
 - **Commit:** `d908a5f9a` — feat(production,security): production:cost-read - maliyet verisi ayri okuma yetkisi
 - **ClickUp:** z8v9xnkr6b → complete. Takip ticket'ı: z8v9xnm9ye (kesim fiyatı, UnitPrice, piece-labor, fason tutarı, standardCost backend, boş fiyatın 0 kaydı).
 
+### 6. cost-read takip maddeleri (z8v9xnm9ye) — v2 dilimi
+- **Kurul:** PO, Skeptic, CTO; hepsi APPROVE-WITH-CONDITIONS (`wt/moneyfollow-proposal.md`).
+- **Kararlar:**
+  - kesim fiyatı, Konfeksiyon UnitPrice, piece-labor: KABUL;
+  - fason raporu Tutar ve model standardCost backend maskesi: SONRA, yeni ticket z8v9xnma0a.
+  - Skeptic uyarısı: standardCost maskesi, UpdateInventory.cs:807 koşulsuz yazdığı için saklı değeri null ile ezer.
+- **Ne yapıldı (yalnız FE):**
+  - `applyOrderRowChange` bilinmeyen fiyatı null tutuyor; kayıtta yine 0 gidiyor.
+  - `countUnpricedLines` ve kayıt BAŞARILI olduktan sonra çoğul toast (11 dil). Fason siparişte bildirim yok.
+  - tedarik_bulk ve demand-transfer ön doldurması 0 yerine null.
+- **Hata ve düzeltme:** ar `_zero/_one/_two` metinlerinde `{{count}}` yoktu; i18n testi "en placeholder'ları korunmalı" kuralıyla kırdı. Eklendi.
+- **Testler:** TDD (7 test önce kırmızı: 5 fail / 2 pass), sonra vitest 3881/3881, tip kontrolü ve lint temiz.
+- **Commit:** `198f3c825` — fix(orders,production): fiyati bilinmeyen siparis satiri bos kalir, kayit sonrasi fiyatsiz satir bildirilir
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
