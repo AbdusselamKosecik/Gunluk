@@ -105,3 +105,15 @@ yerine "yapalım" dedi → doğrudan temel kuruldu. Kapsam: **1. aşama** (servi
 - **2. aşama:** RTSP alt akış → FFmpeg kare → ONNX Runtime + YOLO insan tespiti, ayak noktası çokgen içinde mi,
   cooldown, olay kaydı + kare, bildirim kanalı seçimi (panel / e-posta / Telegram / WhatsApp?).
 - **3. aşama:** yüz tanıma (SCRFD + ArcFace ONNX), kişi/yüz kaydı. **KVKK**: açık rıza, aydınlatma, saklama süresi.
+
+### 8. Yüz verisi kaynağı ve rıza (12:50)
+- **Kullanıcı:** Tüm izinler yazılı alındı; PDKS için alınan biyometrik yüzlerin kamera sisteminde kullanımı için de açık
+  rıza alındı (Mısır'da zorunlu olmadığını düşünüyorlar; not: Mısır 151/2020 Kişisel Veri Kanunu biyometriyi hassas sayar,
+  alınan yazılı rıza bunu karşılıyor).
+- **Keşif (yalnız şema/sayı, kişisel veri çekilmedi):** `zkbiotime.dbo.iclock_biophoto` → 821 onaylı (`approval_state=3`)
+  kayıt fotoğrafı, `register_photo` = `<guid>.jpg` (dosya BioTime sunucusunda, DB'de değil). `iclock_biodata`: bio_type 9
+  (görünür ışık yüz, v39) 828, parmak izi (1) 24, tür 8 61 — ZK'ya özel şablon, kullanılamaz. `personnel_employee.photo`
+  = `photo/<pin>.jpg`, 360 aktif personelin 338'inde var.
+- **Karar:** 3. aşamada yüz kaynağı BioTime biophoto JPG'leri (ArcFace ile vektöre çevrilecek); yeniden fotoğraf yok.
+- **Açık:** JPG dosyalarına erişim yolu (BioTime sunucusundaki klasör/paylaşım ya da BioTime web üzerinden).
+- **Commit:** README güncellendi.
