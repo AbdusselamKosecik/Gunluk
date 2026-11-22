@@ -154,13 +154,29 @@
 - **Commit:** `ae3d9b339`
 - **ClickUp:** z8v9xnma3v → complete.
 
+### 13. Demirbaş uçlarına yetki kapısı (z8v9xnma3f) — GÜVENLİK AÇIĞI
+- **Kurul:** PO (seçenek 3: finance), Security (mevcut durum BLOCK; inventory + price-read), CTO hakem (`wt/famoney-proposal.md`).
+- **Bulgu:** InventoryController.cs:1374-1433'teki 8 demirbaş ucunda RequirePermission yoktu. Viewer amortisman ve toplu amortisman çalıştırabiliyor, gider ekleyip silebiliyor (AcquisitionCost değişiyor), yeniden değerleme yapabiliyordu.
+- **CTO kararı:** inventory:*. finance:* bu iş için uygun değil:
+  - finans modülü olmayan kiracıda matriste görünmüyor ve geri alınamıyor;
+  - finance:read herkeste var;
+  - inventory'de eylem adı `edit`, `update` değil.
+- **Ne yapıldı:**
+  - 8 uçta RequirePermission ve ApiKeyScope: read, edit, approve (batch ve revaluation), delete.
+  - FE defter düğmeleri CAN_MANAGE rol listesi yerine usePermission kullanıyor.
+- **Ek düzeltme:** c9092a37e'deki 2 yeni hata kodunun 11 dil çevirisi ve fixture eksikti, dev'de vitest kırmızıydı. Ders hafızaya yazıldı: backend-error-code-vitest.
+- **Testler:** kontrat 8 (önce kırmızı), entegrasyon 4 (gerçek host), FE 2; unit 9545, vitest 3916.
+- **Commit:** `c22020407`
+- **Daha büyük bulgu (P0b, z8v9xnmaem, to do):** InventoryController'da 80 kapısız uç daha var. Viewer stok kartı oluşturup değiştirip silebiliyor. PO onaylı rol etki tablosu ve fail-closed mimari testi gerekli.
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
 
 ## Açık kalanlar
 - **DEV deploy:** vuoapp-deploy kapalı, sudo bekliyor; 1203 kullanıcının "devam"ını bekliyor. dev, 0f298e542..ae3d9b339 arası 13 commit DEV'de değil.
-- **Backlog (karar bekleyen):** z8v9xnma33 (price-read özelliği), z8v9xnma3f (demirbaş para alanı yetkisi), z8v9xnma3u (boş satır temizliği, DBA), z8v9xnkd69 (E6 S4 DEV pilotu).
+- **ÖNCELİK — P0b (z8v9xnmaem):** InventoryController 80 kapısız uç; viewer stok kartı oluşturup silebiliyor. Rol etki tablosu PO onayı bekliyor.
+- **Backlog:** z8v9xnma33 (price-read, demirbaş değer maskesi dahil), z8v9xnma3u (boş satır temizliği, DBA), z8v9xnkd69 (E6 S4 DEV pilotu).
 - production:cost-read tamamlandı (d908a5f9a). Takip ticket'ı z8v9xnm9ye.
 - Ayrı ticket adayları: garment okumalarında method-level RequireModule boşluğu (CTO koşulu 7c).
 - E7 S3b-3a Chrome yürüyüşü: MİTO için onaylı 5202 sipariş verisi gerekiyor. Varyantsız sipariş satırı riski PO'da.
