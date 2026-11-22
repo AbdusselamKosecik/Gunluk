@@ -69,3 +69,23 @@ Satın alma inspection'ına hata girişi eklendi (selvedge 5491a8d); depo masaü
   - Sonuç 273/273.
 - **Sonuç:** Bugünkü canlı veriyle hemen hemen hiçbir Order'a kumaş verilemez. Kesimhane Sentez kesim kaydına pastal no ve kat sayısını girmeli (ya da ayardan kontrol kapatılır).
 - **Paketler yeniden üretildi:** `publish/MalKabul-Masaustu-2026-11-22b.rar`, `publish/MalKabul-Terminal-2026-11-22.rar` (08:35).
+
+### 6. TEST01 ile canlı kesim kaydı doğrulaması (`f4ee4aa`)
+- **Neden:** Kullanıcı TEST01 Order'ına Sentez'den kesim girdi ("pastal sayısını falan hesapları ona göre yapabilirsin").
+- **Canlı veri:** TEST01 = WorkOrder 81574. Kesim kaydı 194912: proses 167, ProductionType 1 (kesilen), MarkerNo `1`, NumberOfPlies 2, 700 adet, iş emri kalemi 94479 (WorkOrderId boş).
+  - TEST01 ihtiyaçları T- test kartlarına bağlı (T-KMS-0120, T-AKS-*, T-AKS-1785 serisiz). Bunların ne stoğu ne alım siparişi var, ne de tahsisi.
+- **Ne yapıldı:** `UretimTestleri.Canli_TEST01_kesim_kaydiyla_kumas_verilir_kesimden_iade_alinir` testi yazıldı, rollback ile çalışıyor. Adımlar:
+  1. Gerçek TEST01 kesim kaydıyla `PastalHazirAsync` → true.
+  2. TEST01 kalemine test kumaşı ihtiyacı eklenir (T-KMS-001 BORDO 250). Top mal kabul edilir, onaylanır ve tahsis edilir.
+  3. Kısmi verme (80) → `TopBolunmez` (eski kural: top bütün verilir).
+  4. Top bütün verilir: 129, 100 adet, kalem WorkOrderId = TEST01.
+  5. Kesimden 25 iade alınır: 29, hammaddede 25.
+  6. Tahsis tablosunda: verilen 100, iade 25.
+- **İlk koşu kırmızıydı:** kısmi 80 → `TopBolunmez`. Bu bir hata değil kural; test kurala göre düzeltildi.
+- **Sonuç:** 274/274 yeşil.
+
+## Açık kalanlar (malkabul)
+- TEST01 malzemelerine gerçek top/stok yok. Canlı 129/29 fişi (rollback'siz) için bir T- kumaşın mal kabulü ve tahsisi gerekir.
+- "Pastal sayısına göre hesap" kullanıcıya soruldu, cevap henüz yok: kesim adedi / kat sayısı ile kumaş miktarı karşılaştırması mı isteniyor?
+- Depo parametrelerinde "Tartılan koli (mamul)" yeri (`MamulYerId`) seçilmeli; sevkiyat mobil mamul girişte bu yeri kullanıyor (sevkiyatmobil günlüğü).
+
