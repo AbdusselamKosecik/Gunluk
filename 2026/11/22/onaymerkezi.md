@@ -39,3 +39,23 @@ Kullanıcı Kesimhane pastal onayının Telegram'dan gelmesini istedi (bkz. kesi
   - appsettings dosyalarının tarihleri değişmedi.
 - **Not:** Aradaki 0460446 yzsorgu değişikliği ayrı kurulur (`yzsorgu/kur.ps1`); bu kurulumla gitmedi.
 - **Kalan:** Panelde `pastal` olay türü kullanıcı tarafından tanımlanacak.
+
+### 4. Yetkiler sayfası ve PDF (`70d49fe`, sunucuya kuruldu)
+- **Kullanıcı:**
+  - "PDF gönderelim. Bir de yetkileri ayarlayalım, onay kısmında."
+  - Onaycı sorusuna cevabı: "Ben ai sor ve bunun gibi tüm işlemlerde kimin ne yapabileceğinin yetkisini vermem lazım."
+  - Grup ve onay sayısı: Modfex Onay, 2 onay.
+- **Canlı durum:** Kullanıcı panelden `pastal` türünü açmış (Modfex Onay grubu, 2 onay, görev PASTAL; Abdusselam ve Büşra).
+  - TEST01 olay 34 reddedildi; olay 36 iki onayla onaylandı.
+  - `UD_CuttingApprove` = "Onay: Büşra Kömürcügil, Abdusselam Kösecik". **Uçtan uca canlıda çalıştı.**
+- **Yetkiler sayfası (`/yetkiler`):**
+  - Kişi × aktif görev tablosu, onay kutularıyla.
+  - Her görevin başlığında neye izin verdiği yazıyor (`YetkiOzeti.IzinVerdikleri`): YZ → /ai /sor, PDKS → /pdks /gelmeyenler /gec, ayrıca görevin bağlı olduğu olay türlerinin adları.
+  - Kaydet, formdaki her görevin kişi listesini baştan yazar. Menüde Görevler'den önce duruyor.
+- **PDF:**
+  - `GorselTuru.Bul` artık `%PDF-` imzasını tanıyor.
+  - `OlayServisi` PDF'i `BelgeGonderAsync` ile gönderiyor (dosya adı başlık.pdf); resimler yine `FotoGonderAsync` ile gidiyor.
+  - YZ değerlendiricileri yalnız resim alıyor (`GorselTuru.Resim`).
+  - Eski bir test PDF'in reddedilmesini bekliyordu; GIF'e çevrildi.
+- **Testler:** `YetkiVePdfTestleri`; toplam 205/205.
+- **Dağıtım:** Önceki kurulumla aynı yöntem. Yedek `C:\Modfex\Sentez_Onaymerkezi.yedek-2026-11-22b`; `/api/surum` = 70d49fe; appsettings tarihleri değişmedi.

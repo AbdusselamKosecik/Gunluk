@@ -84,3 +84,14 @@
   - Onay Merkezi hata kodları okunur hale geldi: `TurBulunamadi` → "pastal olay türü tanımlı değil (panel → Olay türleri)", 401 → anahtar geçersiz.
 - **Test:** 30/30; canlı planlanan kayıtta rollback ile. Headless render: liste ve pastal giriş ekranı.
 - **Karar:** Kullanıcı `pastal` türünü panelden kendisi tanımlayacak (AskUserQuestion).
+
+### 6. Pastal PDF'i (`cf01ff1`)
+- **Kullanıcı:** "PDF gönderelim."
+- **Ne yapıldı:**
+  - Pastal giriş ekranına "PDF seç" eklendi (`DosyaSecici`, git geçmişinden geri alındı).
+  - `PastalPdf` sınıfı:
+    - Doğrulama: `%PDF-` imzası ve en fazla 5 MB.
+    - Kayıt: dosya deposunda `pastal/{order}/{kesim RecId}/`. Tablo değişikliği yok; en son yüklenen PDF geçerli.
+  - Gönderimde `OnayaGonderAsync` son PDF'i olay gövdesinin `gorsel` alanına koyar; Onay Merkezi bunu Telegram'a belge olarak iletir.
+- **Not:** `UZM_Ayar.DosyaKlasoru` canlıda boş, bu yüzden PDF'ler her PC'nin kendi LocalAppData klasörüne yazılıyor. Ortak bir UNC klasör verilirse her PC aynı PDF'i görür.
+- **Test:** 33/33. Headless render'da pastal giriş ekranı PDF ile kontrol edildi.
