@@ -103,6 +103,7 @@
 - **Testler:** tip kontrolü ve lint temiz, vitest 3881/3881.
 - **Commit:** `5b15dada4`
 - **Bilerek yapılmayan:** boş yeni satırda fiyat 0 (tüm sipariş tipleri, PO/UX kararı).
+- **Ek (`fe07bb5cb`):** docs/design/yetki-maliyet-goruntule.md (6 bölüm) eklendi; barkod placeholder'ı sans + ellipsis, tam metin title ile görünüyor. vitest 3881/3881.
 
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
