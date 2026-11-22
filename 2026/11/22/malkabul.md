@@ -95,3 +95,10 @@ Satın alma inspection'ına hata girişi eklendi (selvedge 5491a8d); depo masaü
 - `adb install -r malkabul/dagitim/malkabul-2026-11-22.apk` → Success (lastUpdateTime 2026-11-22 09:15:03).
 - Açılış kontrolü: MainActivity ön planda, crash buffer boş; ilk açılışta Bağlantı Ayarları ekranı (adb screencap ile görüldü).
 - SQL bağlantı bilgisi/şifresi kullanıcı tarafından girilecek (şifre adb ile yazılmadı).
+
+### 8. Pastal onay kontrolü (`772c95c`)
+- **Neden:** Kullanıcı pastalın Telegram'dan onaylanmasını istedi; onay, Sentez kesim kaydının `UD_CuttingApprove` alanına "Onay: …" olarak yazılıyor.
+- **Ne yapıldı:**
+  - `PastalHazirAsync(..., onayGerekli)` eklendi: açıkken alanın `LIKE N'Onay:%'` olması gerekir.
+  - Yeni ayar `PastalOnayKontrolu`, Ayarlar ekranında onay kutusu. Varsayılan kapalı; Onay Merkezi kurulmadan kumaş verme durmasın diye.
+- **Test:** `Pastal_onayi_acikken_yalniz_telegramdan_onaylanan_kesim_kaydi_hazirdir` (canlı TEST01, rollback). 275/275.

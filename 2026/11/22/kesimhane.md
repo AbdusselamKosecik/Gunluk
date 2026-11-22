@@ -35,3 +35,26 @@
   - Olay türü `pastal` tanımlanmalı: grup, gereken onay, görevler.
 - `UZM_Ayar`: `OnayMerkeziAdres` ve `OnayMerkeziAnahtar` girilmeli.
 - Kesimhane masaüstü yeniden derlenip dağıtılmalı; açık olan pencere eski sürüm.
+
+## Düzeltme: pastal Sentez'den (aynı gün, akşam)
+- **Kullanıcı:** "Kesimhane hâlâ bir tablo yüzünden hata veriyor; pastal konusunu Sentez'den yapmayacak mıydık?"
+- **Teşhis:**
+  - Log'da `Invalid object name 'dbo.UZM_KesimGirisBeden'`: db/0002 canlıya hiç kurulmamış.
+  - 17.11'deki kararla pastal Sentez'den okunmalıydı (malkabul öyle çalışıyor). Kesimhane hâlâ eski UZM pastal modülündeydi; yukarıdaki 1. ve 2. madde de yanlışlıkla bu eski modülün üstüne yapıldı.
+- **Karar (AskUserQuestion):** "Sentez'den oku + Telegram onayı".
+- **Onay nerede tutulur (benim kararım):**
+  - Sentez kesim kaydındaki `Erp_WorkOrderProduction.UD_CuttingApprove` alanı (nvarchar(50)). Canlıda hiçbir kayıtta dolu değildi.
+  - DDL gerekmiyor, karar Sentez'de görünüyor, malkabul doğrudan okuyabiliyor.
+
+### 3. Kesimhane yeniden yazıldı (`6d90acd`)
+- **Silinenler:** UZM pastal modülü (PastalForm/Detay, OrderDetay, KesimGiris, GeminiMarker, KesimHesabi, IhtiyacPlani, PastalDeposu), PdfPig bağımlılığı ve örnek PDF'ler.
+- **Yeni ana ekran `KesimListeViewModel`:**
+  - `SentezKesimDeposu.KesimlerAsync` listeler: proses 167, ProductionType 1, son 300 kayıt; pastal no girilmiş olanlar önce.
+  - Sütunlar: order, renk, model, pastal no, kat, adet, tarih, onay durumu.
+- **Pastal hazır:** malkabul kuralıyla aynı, MarkerNo dolu ve NumberOfPlies > 1.
+- **"Telegram'a gönder" akışı (`SentezKesimDeposu.OnayaGonderAsync`):**
+  1. Alan "Bekliyor #0" yapılarak kayıt sahiplenilir; boş ya da "Ret:" değilse gönderilmez.
+  2. Onay Merkezi'ne `tur = pastal`, `kaynakRef = SentezKesim:{RecId}` olayı gönderilir.
+  3. Alana "Bekliyor #{olay}" yazılır. Gönderim hata verirse alan eski değerine döner.
+- **Testler:** `SentezKesimTestleri`. Canlı TEST01 kaydı (194912) listelenir; gönderim, hatada geri dönüş ve ikinci gönderimin reddi rollback ile test edildi. 19/19.
+- **Headless render:** `kesimhane-1-kesim-listesi.png` kontrol edildi. TEST01 satırında "Telegram'a gönder" düğmesi var; diğer kayıtlarda "Sentez'de pastal no / kat eksik" yazıyor.

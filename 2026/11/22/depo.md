@@ -11,3 +11,6 @@
 
 ## Açık kalanlar
 - `Tutanak_kaydi` testi canlı veriden bağımsız hale getirilmeli.
+
+## Not
+- `d51f354` (kumaşsız UZM pastalı) aynı akşam anlamını yitirdi: pastal artık Sentez'den, kesimhane UZM pastalı yazmıyor. Kod zararsız olduğu için bırakıldı.

@@ -20,3 +20,10 @@ Kullanıcı Kesimhane pastal onayının Telegram'dan gelmesini istedi (bkz. kesi
 ## Açık kalanlar
 - Sunucuya kurulum (kullanıcı onayıyla).
 - Panel ayarları: `kesimhane` uygulaması ve `pastal` olay türü.
+
+### 2. Karar Sentez kesim kaydına (`350d70c`)
+- **Neden:** Pastal Sentez'den okunacak (kesimhane günlüğü). Bu yüzden UZM_PastalRevizyon yazımı kaldırıldı.
+- **Ne yapıldı:**
+  - `PastalSonucu.Coz` artık kaynakRef `SentezKesim:{RecId}` arıyor ve şu güncellemeyi yapıyor: `UPDATE Erp_WorkOrderProduction SET UD_CuttingApprove = 'Onay: Ahmet, Mehmet' | 'Ret: Ahmet - neden'`. Yalnız alan `'Bekliyor #{olay}'` iken yazılır.
+  - Zaman aşımı ve iptal alanı NULL yapar, böylece kayıt yeniden gönderilebilir. Değer 50 karaktere kısaltılır.
+- **Test:** DB testi TransactionScope içinde aynı anda tek bağlantıyla yazıldı (iki bağlantı açık kalınca dağıtık işleme yükselip hata veriyordu). 201/201.
