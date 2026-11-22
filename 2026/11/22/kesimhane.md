@@ -69,3 +69,18 @@
   - Ayarlar girilmeden "Telegram'a gönder" basılırsa ayar ekranı açılıyor.
 - **Testler:** 24/24. Headless render `kesimhane-2-telegram-ayarlari.png` kontrol edildi.
 - **Sunucu kontrolü:** 192.168.0.2:8087 ayakta (anahtarsız istek 401 döndü).
+
+### 5. Planlanan kayıtlar ve pastal girişi (`3962367`)
+- **Kullanıcı:** "Planlanandan girmek, getirmek lazım; neden düzenleyemiyorum? Bir de 'tür bulunamadı' hatası veriyor."
+- **Teşhis:**
+  - Planlanan kesim kayıtları `ProductionType 5` (canlıda 25 kayıt, hepsinde kat 1 ve pastal no boş). Liste yalnız tip 1'i getiriyor ve düzenletmiyordu.
+  - "Tür bulunamadı": Onay Merkezi'nde yalnız `kamera-alarm` uygulaması ve türü var. Kesimhane ayarına kamera-alarm'ın anahtarı girilmiş, `pastal` türü yok.
+- **Ne yapıldı:**
+  - Liste artık tip 1 ve 5'i getiriyor; "Tip" sütunu eklendi (Planlanan / Kesilen).
+  - Satırda "Pastal gir" ya da "Düzenle" düğmesi var. `PastalGirisViewModel` ekranında pastal no ve kat girilip Kaydet ya da "Kaydet ve Telegram'a gönder" seçilebiliyor.
+  - `SentezKesimDeposu.PastalGirAsync` Sentez kaydına yazıyor: `MarkerNo`, `NumberOfPlies`, `UpdatedAt`, `UpdatedBy`.
+  - Değer değişirse onay düşer (`UD_CuttingApprove` NULL). Telegram'da bekleyen pastal değiştirilemez.
+  - Doğrulama: pastal no zorunlu ve en fazla 25 karakter (UdtCode). Kat tam sayı ve ≥ 2; Sentez'de 1 "girilmemiş" demek.
+  - Onay Merkezi hata kodları okunur hale geldi: `TurBulunamadi` → "pastal olay türü tanımlı değil (panel → Olay türleri)", 401 → anahtar geçersiz.
+- **Test:** 30/30; canlı planlanan kayıtta rollback ile. Headless render: liste ve pastal giriş ekranı.
+- **Karar:** Kullanıcı `pastal` türünü panelden kendisi tanımlayacak (AskUserQuestion).
