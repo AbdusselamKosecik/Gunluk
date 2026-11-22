@@ -83,6 +83,17 @@
 - **Testler:** TDD (7 test önce kırmızı: 5 fail / 2 pass), sonra vitest 3881/3881, tip kontrolü ve lint temiz.
 - **Commit:** `198f3c825` — fix(orders,production): fiyati bilinmeyen siparis satiri bos kalir, kayit sonrasi fiyatsiz satir bildirilir
 
+### 7. UX post-check (yerel, 198f3c825 + d908a5f9a)
+- **Ortam:** `bash local-up.sh origin/dev`; ux-reviewer hiçbir kaydı kaydetmedi (paylaşılan DEV DB).
+- **Sonuç:** PASS-WITH-NITS, BLOCK yok.
+  - Tedarik → sipariş: fiyat boş geliyor, adet düzenlenince de boş kalıyor.
+  - CostReadGuard, TenantAdminGuard ile aynı.
+  - "Maliyet görüntüle" API anahtarı seçicisinde ve Yetki matrisinde ("Diğer işlemler") görünüyor.
+  - 390px ve dark mod sorunsuz.
+- **Notlar (önceden var olan):** backlog ticket'ı açıldı (sipariş sekmeleri 390px'te taşıyor, boş satırda fiyat 0, aria-label, İngilizce modül adları, Toplu Tedarik GUID).
+- **Not:** uygulama dark modu sistem ayarından değil, `dark` sınıfıyla açıyor; test için elle eklendi.
+- **ClickUp:** z8v9xnm9ye → complete. Yerel ortam kapatıldı.
+
 ## Kararlar
 - prodread güvenlik açığı düzeltmesi DEĞİL; derinlemesine savunma ve gerileme koruması (Skeptic koşulu 1).
 - Asıl açık olan viewer'ın maliyet görmesi ayrı PO ticket'ı: `z8v9xnkr6b` (production_cost:read).
