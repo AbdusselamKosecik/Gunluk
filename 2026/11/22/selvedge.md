@@ -50,3 +50,14 @@ Kullanıcı yeni Satın Alma Inspection API'sini (commit 4c97ccc) sunucuya kendi
 - **Ne yapıldı:** WinRM ile servis/dosya/log; canlı DB'ye scratchpad dotnet script ile salt-okur sorgu.
 - **Sonuç:** SentezSelvedge Running, kök 200; log "0032_satin_alma_hatalari.sql uygulandi (75 ms)", temiz açılış; appsettings dokunulmamış (10/6).
   `_sv_SqlMigrations` 0032 kayıtlı; aktif Fabric hata 18, 7xx kod tekrarı 0; MALKABUL anketinde En/Gramaj/Görsel hata yok (kalan: 1,2,6,7,8,9).
+
+### 6. Mal kabul PDF'i: ayrı şablon
+- **Neden:** Kullanıcı MK-1795297704998 PDF'ini gösterdi: Brand/Season/Style/AQL gibi alanlar hep "-", anket bölümü boştu.
+- **Kök neden (anket):** `LoadSurveyResponsesForOrderAsync` müşteri siparişi yoksa hiç cevap döndürmüyordu; satın alma raporunun anketi yalnız `QaReportId`'ye bağlı.
+- **Ne yapıldı:**
+  - `src/Selvedge.Reports/Templates/PurchaseQaDocument.cs` (yeni): başlık (GEÇTİ/KALDI, rapor no, tarih); Genel tablo yalnız dolu alanlar (satın alma, tedarikçi, irsaliye, malzeme, top sayısı, denetçi, tarih, seri no'lar); KONTROL LİSTESİ (soru/cevap); HATALAR (kod, ad, önem, adet, not; yoksa "Hata girilmedi."); NOT; sonra anket ve hata fotoğrafları birer sayfa.
+  - `QaReportRenderData`: PurchaseOrderNo, WaybillNo, MaterialCode, SerialCodes, `IsPurchaseReceipt` (AuditStage "Mal Kabul"). `QaReportPdfRenderer.Render` buna göre şablon seçer.
+  - `QaReportService.MapToRenderData`: mal kabulde alanları doldurur; `MalKabulYorumunuAyir` tablet yorumundan tedarikçiyi alır, "Sipariş:/Top:/Hata adedi:" parçalarını atar, yalnız serbest notu bırakır.
+  - Anket yükleyici: siparişsiz ama `qaReportId`'li çağrıda QaReportId ile filtreler.
+- **Doğrulama:** scratchpad'de Selvedge.Reports'a bağlı dotnet script ile gerçek verilerle dolu/boş PDF üretildi, PyMuPDF ile görüntülendi.
+- **Commit:** `11e5316`. Paket: `publish/Selvedge-Servis-2026-11-22-pdf.rar` (appsettings hariç). Sunucuya kullanıcı kuracak.
