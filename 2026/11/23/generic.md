@@ -23,3 +23,14 @@
   - Belge bazında (hepsi şirket 2): 21 sipariş, 7 irsaliye, 1 fatura (00000002), 2 iş emri (8500, CKR-001).
 - **Çıktı:** `C:\Users\abdus\Desktop\SentezCore_USD_Kullanim_20261123.xlsx` (Özet, Belgeler, Kur, tablo başına ayrıntı). Betikler scratchpad `usdxl.py`, `usd\*.tsv`.
 - **Açık:** USD silinmeden önce bu kayıtların ne olacağı (TL/LE'ye mi çevrilecek, ForexId NULL mı) ve PrmId=10 değişikliği kullanıcı kararı bekliyor.
+
+### 5. SentezCore USD kurları silindi
+- **Neden:** Kullanıcı "önce kurları direk silelim" dedi (DB yedeği kullanıcıda).
+- **Kontrol:** `Meta_ForexRate`'e FK/trigger yok; `%ForexRateId` kolonlarının hiçbiri USD kur RecId'lerine bakmıyor. Meta_Forex / Meta_ForexRate'te CompanyId yok → **global** (tüm şirketler ortak).
+- **Uygulama (tek transaction, sayı kontrollü):**
+  ```sql
+  select * into zz_bak_MetaForexRate_USD_20261123 from Meta_ForexRate where ForexId=1;  -- 2388
+  delete from Meta_ForexRate where ForexId=1;                                           -- 2388
+  ```
+- **Sonuç:** COMMIT, kalan USD kur 0, toplam kur 4776 (EUR+GBP).
+- **Geri alma:** `insert Meta_ForexRate select * from zz_bak_MetaForexRate_USD_20261123` (RecId identity ise `set identity_insert Meta_ForexRate on` + kolon listesi).
