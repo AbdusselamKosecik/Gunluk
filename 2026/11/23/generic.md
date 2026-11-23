@@ -9,3 +9,6 @@
 
 ### 2. (21.11 devamı) 0.3:8085
 - 192.168.0.3 = DATASRV (MODFEXTR DC); WMI/DCOM (srv02.cred) ile dinleyen portlar listelendi, 8085 yok. 192.168.1.3'te 8085 dışarıdan kapalı, srv02.cred ile WMI erişimi reddedildi. Kullanıcıdan hangi makine olduğu bekleniyor.
+
+### 3. Departman listesi Excel
+- **Ne yapıldı:** scratchpad `depxl.py` (openpyxl) ile `DEPXX.MAS` → `C:\Users\abdus\Desktop\DENDATA_Departmanlar_20261123.xlsx` (sütunlar No, Departman; 18 satır).
