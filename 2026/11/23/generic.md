@@ -34,3 +34,12 @@
   ```
 - **Sonuç:** COMMIT, kalan USD kur 0, toplam kur 4776 (EUR+GBP).
 - **Geri alma:** `insert Meta_ForexRate select * from zz_bak_MetaForexRate_USD_20261123` (RecId identity ise `set identity_insert Meta_ForexRate on` + kolon listesi).
+
+### 6. SentezCore — 02 ve 03 şirketleri tüm verileriyle silindi
+- **Neden:** Kullanıcı 02 ("Sil", RecId 3) ve 03 (VIUMOD, RecId 5) şirketlerini komple silmek istedi; "yedek almadan sil, DB yedeğini aldım" dedi → ek yedek tablosu **alınmadı**, geri dönüş yalnızca kullanıcının tam DB yedeğinden.
+- **Analiz:** 185 CompanyId'li tablodan 23'ünde veri (hareket yok; sadece stok/hizmet kartları, kategori, rota, parametre vb.). FK üzerinden özyinelemeli (RecId bazlı) bağımlı satırlar toplandı + FK'siz `Erp_ServiceTotal.ServiceId` (35). Toplam **131.568 satır** (InventoryVariant 87.990, InventoryBarcode 23.269, InventoryUnitItemSize 10.274, Parameter 2.206, Inventory 2.028 …). 01'den bu satırlara bakan kayıt yok (FK ve ad eşleşmeli FK'siz kolon kontrolü).
+- **Uygulama:** tek transaction, xact_abort; satır düzeyinde gerçek FK kenarlarıyla topolojik sıra; takılırsa yalnız döngüdeki NULL'lanabilir kenarlar koparılacaktı (gerek olmadı). Silinen = hedef kontrolü.
+  - 1. deneme: tablo düzeyi sıralama → döngü, ROLLBACK.
+  - 2. deneme: tüm NULL'lanabilir kenarları NULL'lama → `Erp_CostCenter_IX0` unique ihlali (CompanyId NULL), ROLLBACK.
+  - 3. deneme: COMMIT 131568/131568, döngü kırma 0. Süre ~20 dk (Erp_VariantItem silmesi FK kontrolleri yüzünden yavaş).
+- **Doğrulama:** CompanyId in (3,5) olan satır kalmadı; `Erp_Company` yalnız RecId 2 (01 2025-MODFEX).
