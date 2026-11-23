@@ -72,6 +72,6 @@
   - Kurulan satırlar silinir: `ForexId IN (2,3,17,18)`, InsertedAt 23.11.
 
 ## Açık kalanlar
-- Sunucudaki işin CBE'ye gerçekten erişebildiği yarın 07:00 çalışmasında ya da panelden "şimdi çalıştır" ile görülmeli.
+- ~~Sunucudan CBE erişimi~~ doğrulandı: kullanıcı panelden elle çalıştırdı. `JOB-59510`: başarılı, 1. deneme, 4 sn, 16 satır, "TCMB 20.11, Mısır 22.11". Zamanlama `0 7 * * *` aktif.
 - Mısır'ın resmi tatillerinde CBE 10 günden uzun yayımlamazsa iş hata verir; gerekirse eşik büyütülür.
 - `uzaktan-yayimla.ps1` hâlâ Get-Credential istiyor; kurulum elle yapıldı.
