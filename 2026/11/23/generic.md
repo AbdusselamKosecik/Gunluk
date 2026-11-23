@@ -50,3 +50,9 @@
 - **Sonuç (COMMIT):** OrderReceiptItem 235, InventoryReceiptItem 165, CostCenterTotal 5, OrderReceipt 5, WorkOrderItem 4, InventoryReceipt 4, InitialCostItem 2, InitialCost 2, WorkOrder 2, ReceiptPaymentItem 1, Invoice 1, CurrentAccountReceiptItem 1, CurrentAccountTotal 1. Meta_Forex'te kalan aktif: EUR, GBP, TL, LE.
 - **Dokunulmayanlar (kural dışı):** ForexAmount (ReceiptPaymentItem), ForexDebit/ForexCredit (CurrentAccountReceiptItem), Forex2Rate/Forex3Rate; satır tutarları (Amount vb.) yeniden hesaplanmadı.
 - **Açık:** Ana para parametresi `Erp_Parameter` 2/10 hâlâ 01=TL, genel=LE → USD yapılacak mı.
+
+### 8. SentezCore — masraf yerleri silindi
+- **Neden:** Kullanıcı "masraf yerlerini sil, sonra accountları" dedi.
+- **Analiz:** `Erp_CostCenter` 25 kayıt; FK referansları: Erp_CostCenterTotal 74, Erp_Cash.CostCenterId 5, Erp_Expense.CostCenterId 1. FK'siz `%CostCenter%Id` kolonlarında referans yok.
+- **Uygulama (tek transaction, sayı kontrollü):** `delete Erp_CostCenterTotal` (74) → Erp_Cash/Erp_Expense CostCenterId=NULL (5/1) → Erp_CostCenter self-ref NULL → `delete Erp_CostCenter` (25). İlk denemede beklenen total sayısı 80 (eski tarama, 02/03 dahil) yazıldığı için ROLLBACK; 74 ile COMMIT. Kalan 0.
+- **Accountlar:** cari (`Erp_CurrentAccount` 46; iş emri 1461, sipariş 63, irsaliye 46, fatura 5 … bağlı) mi muhasebe hesabı (`Erp_GLAccount` 371; BankAccountIA 16, GLAccountTotal 6, GLReceiptItem 5, cari GL bağlantısı 2+2) mı — kullanıcıya soruldu.
