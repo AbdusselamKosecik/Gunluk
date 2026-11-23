@@ -43,3 +43,10 @@
   - 2. deneme: tüm NULL'lanabilir kenarları NULL'lama → `Erp_CostCenter_IX0` unique ihlali (CompanyId NULL), ROLLBACK.
   - 3. deneme: COMMIT 131568/131568, döngü kırma 0. Süre ~20 dk (Erp_VariantItem silmesi FK kontrolleri yüzünden yavaş).
 - **Doğrulama:** CompanyId in (3,5) olan satır kalmadı; `Erp_Company` yalnız RecId 2 (01 2025-MODFEX).
+
+### 7. SentezCore — USD döviz kayıtları ana paraya çevrildi, USD silindi
+- **Neden:** Ana para birimi USD olacak; kullanıcı kuralı: USD'li her kayıtta `UnitPrice=ForexUnitPrice, ForexId=NULL, ForexRate=0, ForexUnitPrice=0`, sonra USD'yi sil. Ek yedek alınmadı (kullanıcının tam DB yedeği var).
+- **Ne yapıldı:** Meta_Forex'e bağlı tüm FK kolonlarında `=1` olan tablolar bulundu; tablo başına mevcut kolonlara göre dinamik UPDATE (ForexRate yoksa / UnitPrice-ForexUnitPrice yoksa o kısım atlandı; UpdatedAt=getdate(), UpdatedBy=1). Tek transaction, satır sayısı kontrolü, ardından `delete Meta_Forex where RecId=1`.
+- **Sonuç (COMMIT):** OrderReceiptItem 235, InventoryReceiptItem 165, CostCenterTotal 5, OrderReceipt 5, WorkOrderItem 4, InventoryReceipt 4, InitialCostItem 2, InitialCost 2, WorkOrder 2, ReceiptPaymentItem 1, Invoice 1, CurrentAccountReceiptItem 1, CurrentAccountTotal 1. Meta_Forex'te kalan aktif: EUR, GBP, TL, LE.
+- **Dokunulmayanlar (kural dışı):** ForexAmount (ReceiptPaymentItem), ForexDebit/ForexCredit (CurrentAccountReceiptItem), Forex2Rate/Forex3Rate; satır tutarları (Amount vb.) yeniden hesaplanmadı.
+- **Açık:** Ana para parametresi `Erp_Parameter` 2/10 hâlâ 01=TL, genel=LE → USD yapılacak mı.
