@@ -62,3 +62,8 @@ dotnet build MalKabul.Desktop ; dotnet build MalKabul.Android          # ikisi d
 
 ## Açık kalanlar
 - Dağıtım (Windows paketi + PM66 APK) yapılmadı — kullanıcı onayı bekleniyor.
+
+### 7. Windows masaüstü paketi
+- **Neden:** Kullanıcı masaüstü paketini sordu; son paket 21.11 tarihliydi, seri değiştir yoktu.
+- **Komut:** `dotnet publish MalKabul.Desktop -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -o %TEMP%\mk-pub` → zip.
+- **Sonuç:** `malkabul/dagitim/malkabul-masaustu-2026-11-24.zip` (74.6 MB, 9 dosya, eski paketle aynı düzen; appsettings yok). `dagitim/` gitignore'da. PM66 APK hâlâ kurulmadı.
