@@ -46,6 +46,14 @@ dotnet run <scratchpad>/sqldene/sentestest.cs -- test MalKabul.Tests   # 291/291
 dotnet build MalKabul.Desktop ; dotnet build MalKabul.Android          # ikisi de başarılı
 ```
 
+### 5. Bağımsız kod incelemesi ve düzeltmeler
+- **Bulgu 1 (önemli):** Fiyatlı fişte kalem tutarı ölçekleniyor ama başlık toplamı (SubTotal/GrandTotal) eski kalıyordu →
+  dokunulan fiyatlı fişlerde `MalKabulFisDeposu.ToplamlariGuncelleAsync`. Test `Fiyatli_fiste_baslik_toplami_guncellenir` (1080≠1200 kırmızı → yeşil).
+- **Bulgu 2 (önemli):** Seri aynı fişte birden çok parçada (sayım kapatma iki yer → iki 130 satırı) ise fark iki kez uygulanırdı →
+  miktar değişimi `SeriParcali` hatasıyla engellenir (renk değişimi serbest). Test `Ayni_fiste_parcali_seri_degistirilemez`.
+- **Bulgu 3 (küçük):** Renk satırı kopyası rowversion, Updated/Deleted ve birikim (Inflow/Outflow/Returned/QCRejected) alanlarını taşımaz.
+- Tam set 293/293 (canlı, ROLLBACK).
+- **Commit:** `7e2e11d`
+
 ## Açık kalanlar
-- Bağımsız kod incelemesi sonucu (aşağıya eklenecek).
 - Dağıtım (Windows paketi + PM66 APK) yapılmadı — kullanıcı onayı bekleniyor.
