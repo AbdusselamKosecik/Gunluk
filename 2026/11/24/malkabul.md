@@ -55,5 +55,10 @@ dotnet build MalKabul.Desktop ; dotnet build MalKabul.Android          # ikisi d
 - Tam set 293/293 (canlı, ROLLBACK).
 - **Commit:** `7e2e11d`
 
+### 6. Seri Değiştir APK'da gizli
+- **Neden:** Kullanıcı: "APK olarak çalışıyorsa gizle". El terminali menüsü yalnız Android'de açılıyor (App.axaml.cs IlkSayfa), bu yüzden
+  düğme ve komut `TerminalMenuView/ViewModel`'den kaldırıldı; ekran yalnız masaüstü ana menüsünde.
+- Testler 164 geçti (DB'siz), Android build başarılı.
+
 ## Açık kalanlar
 - Dağıtım (Windows paketi + PM66 APK) yapılmadı — kullanıcı onayı bekleniyor.
