@@ -56,3 +56,10 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
 - **Kuru çalıştırma (yerel kopya):** tüm girişler boşaltıldı; 000040 Kasım 38 giriş (BioTime, 19 gün) → zincir 10 → 12 → 13 (yeni), GEN 14. `goster` ile doğrulandı.
 - **Canlıya yazılmadı:** Den açık (192.168.0.204 ELTXX.MAS'ı tutuyor, 192.168.0.179 ayman.hany, sunucuda RDP oturumu). Kapatılınca: yedek → yaz → kontrol.
 - **Commit:** pdks-rapor (remote yok → push edilemedi).
+
+### 7. Den'e canlı yazım — 000040 Kasım
+- Den 192.168.0.204'te kapatıldı; sunucudaki örnek (oturum 22, PEEEGP PID 21760) kullanıcı onayıyla `Stop-Process` ile kapatıldı. 192.168.0.179 (ayman.hany) PEEEGP.exe açık kaldı (veri dosyası tutmuyordu); kullanıcı "devam et" dedi.
+- Yedek (sunucu): `C:\Yedek\Den_ELT_20261125_2021\` (ELTXX, MODXX, GENXX, EMPXX).
+- Canlı dosyaların hash'i kuru çalıştırma girdisiyle (den2) aynıydı → `den_out` çıktıları `\192.168.0.2\Dendata\Den\Per\Egp\12r\f01\2026\` üzerine kopyalandı, hash doğrulandı.
+- Sonuç: tüm deneme girişleri boş; 000040 Kasım 38 giriş, zincir 10 → 12 → 13, GEN 14.
+- Geri alma: yedek klasördeki 3 dosyayı geri kopyala.
