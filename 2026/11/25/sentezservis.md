@@ -41,7 +41,18 @@ Kullanıcı (mf-s.uzmanadres.com/koli-listesi): "Birden fazla satırda aynı kol
   Koli yazma canlıda denenmedi (test veritabanı yok).
 - **Commit:** `c87c02b` — Koli listesi: ayni KoliBarcode'lu satirlar tek koliye girer (karma koli, orn. 6 kirmizi + 3 sari)
 
+### 2. 0.2 (MODFEXSRV) sunucusuna yayım
+- **Neden:** Kullanıcı "çalıştırır mısın" dedi.
+- **Bulgu:** Sunucuda zaten `f17913e` (23.11, döviz kurları işi) çalışıyordu — döviz işi önceden canlıdaydı; bu yayım
+  yalnız koli listesi değişikliğini ekledi.
+- **Ne yapıldı:** `deploy/yayinla.ps1` ayrı powershell sürecinde. Paket hazırlandı ama süreç kapanmadı: dotnet build
+  sunucuları yönlendirilmiş stdout'u açık tuttu → `dotnet build-server shutdown` ile kapandı. Sonra 22.11'deki gibi
+  elle (Get-Credential'sız): yedek `C:\Server\SentezServis\yedek-2026-11-25-f17913e\` (exe, appsettings.json, wwwroot),
+  `sc stop` → 18 dosya → `sc start`. appsettings.json korundu (tarihi 10.11).
+- **Doğrulama:** `http://192.168.0.2:81/api/surum` ve `https://mf-s.uzmanadres.com/api/surum` → `1.0.0+c87c02b`,
+  arayüz 2026-11-25 15:32 (UTC). Paketteki app.js'te "karma koli" metni var.
+- **Geri dönüş:** servisi durdur, yedek klasörden exe + wwwroot'u geri kopyala, başlat.
+
 ## Açık kalanlar / sonraki adım
-- 0.2'ye yayım bekliyor: HEAD'de 23.11 tarihli `f17913e` döviz kurları işi de var (her gün 07:00 Meta_ForexRate'e yazar);
-  yayımlanırsa o da canlıya girer — kullanıcıya soruldu.
+- İlk karma koli canlıda açılınca Sentez'de içeriği (Erp_BoxItem/Variant) kontrol edilmeli.
 - Paketleme uygulamasının QR etiket ekranı karma koliyi (birden fazla renk) doğru basıyor mu kontrol edilmeli (ayrı repo).
