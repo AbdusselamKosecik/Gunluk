@@ -72,3 +72,11 @@ Hedef: Hizmet stopajı — parametre ekranı + faturadan 56 tipli cari fiş otom
 - **Ne yapıldı:** `WithholdingReceiptSync.CreateReceiptBO` içinde `Init` sonrası iki extension kapatıldı
   (`ContainsKey` korumalı).
 - **Sonuç:** Derleme OK (çıktı DLL'i Live/VS açık olduğu için kopyalanamadı). Canlıda tekrar denenecek.
+
+### 6. Hata düzeltme: "Fiş satırlarına masraf yeri girmelisiniz."
+- **Kök neden:** `Common/Core/Services/ReceiptControlService/ReceiptCostCenterControlExtension.cs:101-106` —
+  `WorkPeriodParameters.CurrentAccountReceiptCostCenterControl` 2/3 ise `Erp_CurrentAccountReceiptItem.CostCenterId`
+  boş satırı reddeder.
+- **Ne yapıldı:** Fiş başlığına faturanın `CostCenterId`'si; fiş satırına fatura satırının `CostCenterId`'si,
+  boşsa fatura başlığınınki yazılıyor (`CostCenterOf`). Kontrol kapatılmadı — iş kuralı, veriyle karşılanıyor.
+- **Not:** Faturada hem satırda hem başlıkta masraf yeri boşsa hata yine çıkar (beklenen davranış).
