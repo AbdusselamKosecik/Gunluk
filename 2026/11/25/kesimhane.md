@@ -28,3 +28,18 @@ Kullanıcı kesim ekranını açtırdı; "Birden fazla pastal girebiliriz. Sonra
 ## Açık kalanlar / sonraki adım
 - Kullanıcı canlıda bir pastal ekleyip Sentez'de yeni kesim kaydını kontrol etmeli.
 - İstenirse: pastal formunda order adedine karşı diğer pastallarda zaten girilen adetler (kalan) gösterilebilir.
+
+### 2. Pastal girişinde Kesilen / Kalan; fark kalana göre
+- **Neden:** Kullanıcı: "100 kesilecekten kesilen miktarı düşmek gerekir" — birden fazla pastalda her pastal order'ın tamamına göre fark gösteriyordu.
+- **Karar (Sentez probu):** Kesilen (tip 1) ile planlanan (tip 5) kayıtlar arasında bağ yok (ParentProductionId hep boş). Kural: beden bazında **Kalan = Order − aynı order kalemindeki diğer kesim kayıtları**; sayılanlar: kesilen kayıtların hepsi + pastalı (MarkerNo dolu) planlananlar. Pastalsız planlanan yalnız plan, sayılmaz. Kalan eksiye düşmez.
+- **Ne yapıldı:**
+  - `KesimVaryant.DigerKesilen`; `VaryantlarAsync` sorgusuna ikinci OUTER APPLY (Erp_WorkOrderProductionVariant ⨝ Erp_WorkOrderProduction, `op.RecId <> p.RecId`, proses 167, silinmemiş, tip 1 veya pastallı tip 5).
+  - `VaryantSatiri.Kesilen / Kalan / KalanSayi`; `FarkMetni`/`FarkVar` artık kesilecek − kalan. Yeni pastal modunda kaynak pastalın adedi de kesilene eklenir.
+  - `PastalGirisView.axaml`: sütunlar Order | Kesilen | Kalan | Sentez'de | Kat başı | Kesilecek | Fark; başlıkta toplam Kesilen ve Kalan. Metinler `KesilenAdet`, `Kalan`, `KesilenIpucu`.
+- **Dokunulan dosyalar:** `Kesimhane/Ekranlar/Veri/SentezKesimDeposu.cs`, `Kesimhane/Ekranlar/PastalGirisViewModel.cs`, `Kesimhane/Ekranlar/PastalGirisView.axaml`, `Kesimhane/Ekranlar/UygulamaMetinleri.cs`, `Kesimhane.Tests/SentezKesimTestleri.cs`
+- **Testler:** `Kalan_orderdan_diger_kesimler_dusulerek_hesaplanir`, `Yeni_pastalda_kaynak_pastal_da_kesilenden_sayilir`, `Kalan_eksiye_dusmez`; DB testinde yeni pastalın 30 adedi kaynağın `DigerKesilen`ine eklenir. `MODFEX_DB_TEST=1 dotnet test Kesimhane.Tests` → 43/43. Ekran görüntüsünde TEST01: order 100, kesilen 100, kalan 0, fark +20.
+- **Commit:** `bed6857` — Pastal girişi: kesilen ve kalan sütunları; fark kalana göre
+
+## Açık kalanlar (güncel)
+- Canlıda pastal ekle + kalan kontrolü kullanıcıda.
+- Kesilen tanımı (pastalsız planlananlar sayılmıyor) kullanıcıyla teyit edilebilir.
