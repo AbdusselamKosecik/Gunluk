@@ -43,3 +43,27 @@ Kullanıcı kesim ekranını açtırdı; "Birden fazla pastal girebiliriz. Sonra
 ## Açık kalanlar (güncel)
 - Canlıda pastal ekle + kalan kontrolü kullanıcıda.
 - Kesilen tanımı (pastalsız planlananlar sayılmıyor) kullanıcıyla teyit edilebilir.
+
+### 3. Pastal girişi Sentez kesim kartı gibi: pastal (Fabric/Desen), renk bazlı giriş, kesilecek %fazla
+- **Neden:** Kullanıcı Sentez ekran görüntülerini verdi (`C:\aaaa\a`: Order formu dağılım/kesilecek, model kartı pastal/kumaş, kesim kartı Fabric/Desen) — "pastal seçimi var Sentez'de, TEST-001 üzerinden gidelim; pastal bazlı kesilecek kumaş belirleniyor; renk bazlı kesebiliriz". Cevap: "pastal birden fazla renk olabilir ama tek tek girsin, Sentez'deki gibi".
+- **Sentez şeması (canlı TEST01 probları, `sqldene/test01..04.cs`):**
+  - Model kartı Pastal sekmesi = `Erp_Inventory.Markers1..10` (TEST-001: 1 Fabric, 2 Desen).
+  - Model kartı Kumaş sekmesi = `Erp_RecipeItem` (`OwnerInventoryId` = model, `RecipeType 1`, `ItemType 1`), `GroupNo` = pastal sırası; `Variant1 = '#;@2'` renk bazlı kumaş; `MarkerWidth/MarkerPieces/MarkerM2Gram`.
+  - Kesim kaydının pastalı = `Erp_WorkOrderProduction.ProductionSubType` (1 Fabric, 2 Desen). Kesim kartındaki Fabric/Desen seçici bu.
+  - Kesilecek % = `Erp_WorkOrder.CuttingExtra` (TEST01: 5), varyantta `Erp_WorkOrderItemVariant.CuttingExtra` (0 = order'ınki).
+  - Kesim kartı "Kesim" = yalnız kesilen (tip 1) kayıtlar, pastal bazlı; planlananlar sayılmaz. Her kesim kaydı tek renk.
+- **Ne yapıldı:**
+  - Depo: `SentezKesim.ModelId / PastalTuru / PastalAdi` (liste sorgusunda CASE ile Markers adı; renk önce kaydın kendi renkleri), `KesimVaryant.Hedef` = CEILING(order × (100 + extra)/100), `DigerKesimlerAsync(recId)` → (varyant, pastal türü, Kesilen = tip 1, Planlanan = pastallı tip 5), `PastallarAsync(modelId)` (Markers + reçete kumaşları), `PastalGirdisi.PastalTuru` → `ProductionSubType` (PastalGirAsync + YeniPastalGirAsync), kumaş seçeneklerine reçete kumaşları eklendi.
+  - Form: pastal ComboBox (seçilince o pastalın reçete kumaşları işaretlenir), renk ComboBox (yalnız o rengin bedenleri; girdi yalnız seçili renk → kayıttaki diğer renkler 0'lanır), eski çok renkli kayıtta uyarı. Sütunlar: Order | Kesilecek(+%) | Kesilen | Planlanan | Kalan | Sentez'de | Kat başı | Bu pastal | Fark (bu pastal − kalan). Yeni pastalda kaynak kaydın adetleri kendi pastalının kesilen/planlananına eklenir.
+  - Liste: pastal sütunu "Fabric · 1"; Telegram açıklaması "Pastal Desen 1 · Kat …".
+- **Dokunulan dosyalar:** `Kesimhane/Ekranlar/Veri/SentezKesimDeposu.cs`, `Kesimhane/Ekranlar/Veri/OnayMerkeziIstemcisi.cs`, `Kesimhane/Ekranlar/PastalGirisViewModel.cs`, `Kesimhane/Ekranlar/PastalGirisView.axaml`, `Kesimhane/Ekranlar/KesimListeViewModel.cs`, `Kesimhane/Ekranlar/KesimListeView.axaml`, `Kesimhane/Ekranlar/UygulamaMetinleri.cs`, `Kesimhane.Tests/SentezKesimTestleri.cs`, `Kesimhane.Tests/EkranGoruntusuTestleri.cs`
+- **Testler:** `Kalan_secili_pastalin_kesilen_ve_planlananlari_dusulerek_hesaplanir`, `Kalan_eksiye_dusmez_ve_hedef_yoksa_order_kullanilir`, `Pastal_secimi_pastalin_kumaslarini_secer_ve_girdiye_yazar`, `Renk_secilir_yalniz_o_rengin_bedenleri_girilir`, `Birden_fazla_renkli_eski_kayit_uyarilir`, `Yeni_pastalda_kaynak_kesim_kendi_pastalinin_kesilenine_sayilir`, `Model_kartinin_pastallari_okunur` (DbFact); yeni pastal DB testi pastal türü 2 ve DigerKesimler ile. `MODFEX_DB_TEST=1 dotnet test Kesimhane.Tests` → 47/47. Render: TEST01 Desen·2 → kesilecek 105, kesilen 80, kalan 25 (Sentez kesim kartıyla aynı).
+- **Commit:** `534ddba` — Pastal girişi Sentez kesim kartı gibi: pastal (Fabric/Desen) seçimi, renk bazlı giriş, kesilecek %fazla
+
+## Kararlar (3)
+- Planlanan (pastallı, henüz kesilmemiş) pastallar ayrı "Planlanan" sütununda ve Kalan'dan düşülür (Sentez "Kesim"e saymıyor; biz ayrı gösteriyoruz).
+- Kesilecek yuvarlama CEILING (Sentez'in yuvarlaması doğrulanmadı; TEST01'de tam sayı).
+
+## Açık kalanlar (güncel)
+- TEST01 planlanan Fabric kaydı (195041) FabricCode = T-KMS-002 ama reçetede Fabric'in kumaşı T-KMS-0120 — o kayıt yeni kuraldan önce girildi; kullanıcı düzeltebilir.
+- Kesilecek yuvarlamasını küsuratlı bir order'da Sentez'le karşılaştır.
