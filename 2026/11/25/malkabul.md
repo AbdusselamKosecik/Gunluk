@@ -66,3 +66,9 @@ kod okutmasını isteyelim"; kararlar: Seri Değiştir'e Sil (seri fişlerden ta
 
 ### 5. Masaüstü paketi
 - **Ne yapıldı:** `dotnet publish MalKabul.Desktop -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -o %TEMP%\mk-pub` → `Compress-Archive` → `malkabul/dagitim/malkabul-masaustu-2026-11-25.zip` (~78,7 MB, gitignored). İçerik: seri silme + Telegram bildirimi + kamera onay QR'ı.
+
+### 6. Canlı SentezCore: muhasebe sıfırlama ön çalışması + 2 satış fişi silindi
+- **Neden:** Kullanıcı "muhasebe tarafında yeniden başlıyoruz"; önce tüm satın alma faturaları / GL hesapları / masraf yerlerinin silinmesini sordu, sonra Sentez'de silerken hata veren satış 00000003 ve 00000004'ün silinmesini istedi.
+- **Ön çalışma (salt okunur):** Erp_Invoice 6 (alım 3, tip 22 1, satış 2) — kullanıcı sonra hepsini Sentez'den sildi, tablo boş. Erp_GLAccount 374 (bağlar: GLAccountTotal 6, CurrentAccount Customer/SupplierGLAccountId 3+3, GLReceiptItem 5 / 1 fiş, BankAccountIA 16). Erp_CostCenter 1 (kod 01; tip 22 fiş kalemi + CostCenterDistribution 1). GL/masraf yeri silme henüz yapılmadı (yedek + kapsam kararı bekliyor).
+- **Satış fişleri:** Erp_InventoryReceipt 738046 (tip 120, 00000003, TEST-10 18 ad, 1 kalem) ve 769442 (tip 120, 00000004, 0 kalem). Sentez silmesini engelleyenler: `UZM_SevkIrsaliye` RecId 1 ve 71 (sevkiyatmobil irsaliye oturumları) ve `Erp_Box` 313750 (PK1-00000001-001) InventoryReceiptId bağı.
+- **Silme (tek işlem, önce ROLLBACK denemesi):** UZM_SevkIrsaliye 1,71 DELETE; Erp_Box 313750 InventoryReceiptId=NULL (kutu ve 10/130 tipli diğer fiş bağları korunur); varyant (2) → kalem (1) → fiş (2) DELETE. ExecuteAsync sayıları tetikleyici güncellemelerini de içerdiği için (16/12) doğrudan COUNT ile doğrulandı; sonra COMMIT. Betik: scratchpad `sqldene/satsil.cs`.
