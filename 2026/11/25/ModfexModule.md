@@ -80,3 +80,15 @@ Hedef: Hizmet stopajı — parametre ekranı + faturadan 56 tipli cari fiş otom
 - **Ne yapıldı:** Fiş başlığına faturanın `CostCenterId`'si; fiş satırına fatura satırının `CostCenterId`'si,
   boşsa fatura başlığınınki yazılıyor (`CostCenterOf`). Kontrol kapatılmadı — iş kuralı, veriyle karşılanıyor.
 - **Not:** Faturada hem satırda hem başlıkta masraf yeri boşsa hata yine çıkar (beklenen davranış).
+
+### 7. Hata düzeltme: 56 fiş cari hesaba yansımıyor ("hesaba katmıyor")
+- **Belirti:** Elle girilen 56 fiş (00000002) çalışıyor, modülün ürettiği (00000001) yansımıyor.
+- **Teşhis (SentezCore_test @ 192.168.0.2, sadece SELECT):** Fiş 26278'in başlığı var (Debit 50,
+  UpdatedAt 10:56:44) ama **hiç satırı yok**. Fatura 557694 10:57:58'de tekrar kaydedilmiş; aynı anda tip 21
+  satırı 1628222 oluşmuş. Bizim satırımız (RecId boşluğu 1628221) o kayıtta silinmiş.
+- **Kök neden:** Sentez `DeleteIntegrationCurrentAccountReceiptService` / `CreateCurrentAccountReceiptIntegrationService`
+  `delete from Erp_CurrentAccountReceiptItem where SourceModule=11 and SourceId=<fatura> and SourceType=<tip> ...`
+  ile eski entegrasyon satırlarını düz SQL siliyor; bizim satırlar bu üçlüyü taşıyordu.
+- **Ne yapıldı:** Satırda `SourceModule/SourceId/SourceType` = NULL; bağ sadece başlıkta. Satıra `TermDate`
+  (elle girilen fişte dolu, bizde boştu).
+- **Onarım:** Mevcut satırsız fiş, fatura tekrar kaydedilince eşitleme satırı yeniden ekler.
