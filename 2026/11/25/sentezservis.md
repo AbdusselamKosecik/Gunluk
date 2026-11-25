@@ -71,6 +71,18 @@ Kullanıcı (mf-s.uzmanadres.com/koli-listesi): "Birden fazla satırda aynı kol
      00000018 → bağlı 4284-2, listede 4284-4 (yalnız uyarı).
 - **Karar bekleyen:** kutuya set mi bileşen mi yazılacak; adet parça mı set mi; SIYAH-BORDO = BORDO-SİYAH kabul mü.
 
+### 4. Set desteği denemesi ve 00000018 ↔ 4284-4 bağı — kullanıcı isteğiyle GERİ ALINDI
+- **İstek:** "customer siparişleri ilgili üretim emirlerine bağla; SIYAH-TEN bir set, tek ürün".
+- **Yapılan, sonra geri alınan:**
+  - `UZM_SiparisWorkOrder`'a 00000018 (584973, kalem 961540) ↔ 4284-4 (61295) satırı eklendi (Olusturan 'koli-listesi');
+    kullanıcı "dur bozma, geri al" dedi → aynı satır silindi. Şu an 00000018 yalnız 4284-2'ye bağlı (önceki hali).
+  - Koli listesinde set desteği (commit edilmedi): sipariş varyantlarından eşleşme, set içeriği UZM_KarmaKoliIcerik,
+    adet parça ÷ set parça, Türkçe harf sadeleştirme, iki parçalı renkte ters sıra. Canlı salt okuma denemesinde
+    00000016 (iş emri 4836-2) ve 00000020 SİYAH-EKRU 90B (siparişte yok) dışında hepsi geçti.
+    `git checkout` ile geri alındı; depo temiz, sunucu c87c02b'de (değişmedi).
+  - Fikir için: set parça sayıları 1230-3 SBT 5, 2073-7 SBT 7, 2076-7 KARIŞIK 7 (tüm bedenlerde).
+- **Not:** 00000016 ↔ 4836-2 bağlanmadı (4836-2 00000015'in, içinde 6816).
+
 ## Açık kalanlar / sonraki adım
 - İlk karma koli canlıda açılınca Sentez'de içeriği (Erp_BoxItem/Variant) kontrol edilmeli.
 - Paketleme uygulamasının QR etiket ekranı karma koliyi (birden fazla renk) doğru basıyor mu kontrol edilmeli (ayrı repo).
