@@ -45,3 +45,14 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
 - **BioTime (salt okunur):** 000040'ın Kasımda 19 günü var (01–25/11, Cuma ve Cumartesi yok), günde 2 okutma (giriş ~08:20, çıkış ~17:45) → 38 giriş.
 - **Den biçimi, düzeltilmiş yorum:** MODXX Kasım bloğu +113/+117 = ELTXX kayıt göstergesi (1 tabanlı; 000040 → 10 = ELT kayıt 9), saat değil. 000001 → 8, 000250 → 9 olan ELT kayıtları boş (silinmiş girişler). ELT kaydı en fazla 15 giriş tutuyor; 38 giriş için kayıt zinciri gerekiyor, ama zincir biçimi (+113 ilk / +117 son? sondaki 3 bayt?) henüz belli değil.
 - **Karar:** Delphi bordro programının ikili dosyasına biçim bilinmeden yazılmadı. Kullanıcıdan Den arayüzünde 15'ten fazla giriş içeren bir deneme (ya da Den'in içe aktarma menüsünün biçimi) istendi.
+
+### 6. Den ELTXX biçimi çözüldü + aktarım betiği (canlıya yazılmadı)
+- **Deneme:** Kullanıcı Den'de 000040 için 01–10/11 arası giriş yaptı; önce/sonra karşılaştırıldı.
+- **Biçim (kesin):**
+  - `ELTXX.MAS` 243 B = **14 giriş × 16 B** + ShortString[10] sicil (@224) + int32 önceki (@235) + int32 sonraki (@239), 1 tabanlı kayıt no. Giriş: uint16 dakika, uint8 D (boş FF), ShortString[10] tarih, 'E', ' '. Den silinen girişi boşaltır (slot boş kalır), kaydı/zinciri silmez.
+  - `MODXX.MAS` ay bloğu +113 ilk, +117 son ELT kaydı (000040 Kasım: 10 → 12).
+  - `GENXX.MAS` int32[0] = sonraki boş ELT kayıt no (kayıt sayısı + 1).
+- **Betik:** `X:\Yazilim\generic\pdks-rapor\den-aktarim\den_elt.py` (`goster`, `yaz ... --hepsini-temizle`). Zinciri yürür, gerekirse sona kayıt ekler, MODXX son ve GEN'i günceller.
+- **Kuru çalıştırma (yerel kopya):** tüm girişler boşaltıldı; 000040 Kasım 38 giriş (BioTime, 19 gün) → zincir 10 → 12 → 13 (yeni), GEN 14. `goster` ile doğrulandı.
+- **Canlıya yazılmadı:** Den açık (192.168.0.204 ELTXX.MAS'ı tutuyor, 192.168.0.179 ayman.hany, sunucuda RDP oturumu). Kapatılınca: yedek → yaz → kontrol.
+- **Commit:** pdks-rapor (remote yok → push edilemedi).
