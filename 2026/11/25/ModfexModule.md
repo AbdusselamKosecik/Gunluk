@@ -92,3 +92,11 @@ Hedef: Hizmet stopajı — parametre ekranı + faturadan 56 tipli cari fiş otom
 - **Ne yapıldı:** Satırda `SourceModule/SourceId/SourceType` = NULL; bağ sadece başlıkta. Satıra `TermDate`
   (elle girilen fişte dolu, bizde boştu).
 - **Onarım:** Mevcut satırsız fiş, fatura tekrar kaydedilince eşitleme satırı yeniden ekler.
+
+### 8. Bozuk 56 fişin temizlenmesi (SentezCore_test)
+- **Neden:** Satırsız kalan fiş 26278 (00000001) arayüzden silinemiyordu ("başka modülden üretilmiş" kontrolü — tasarım gereği).
+- **Bulgu:** Fişe bağlı otomatik muhasebe fişi vardı: Erp_GLReceipt 604769 (SourceModule=3, SourceId=26278), 2 satır
+  (9196 borç / 10201 alacak, 50 TL). Yani 56 cari fiş Sentez tarafından muhasebeye de entegre ediliyor.
+- **Ne yapıldı:** Tek transaction, xact_abort, ön koşul kontrollü: GLReceiptItem(2), GLReceipt(1), CurrentAccountReceipt(1) silindi;
+  CostCenterDistribution / GLReceiptItemInv / GLReceiptIntegration'da kayıt yoktu.
+- **Not:** Fatura 557694 tekrar kaydedilince yeni 56 fiş (yeni kodla, satır kaynak alanları boş) oluşur.
