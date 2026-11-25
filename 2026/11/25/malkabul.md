@@ -43,3 +43,11 @@ kod okutmasını isteyelim"; kararlar: Seri Değiştir'e Sil (seri fişlerden ta
 ## Açık kalanlar (güncel)
 - Onay Merkezi panelinde `seri-degisiklik` türü (gereken onay 0, Telegram grubu) tanımlanmalı — yoksa kayıt `TurBulunamadi` ile durur.
 - DB testleri (sunucu gelince), sonra yeni masaüstü paketi ("yayınla" isteği bekliyor).
+
+### 3. Veritabanı doğrulaması + Onay Merkezi türü
+- **Neden:** Kullanıcı "deneyelim mi kontrol eder misin" dedi; SQL sunucusu tekrar erişilebilir oldu.
+- **Ne yapıldı:**
+  - Seri değiştir/sil testleri canlı veritabanında (ROLLBACK) çalıştırıldı: `dotnet run <scratchpad>/sqldene/sentestest.cs -- test MalKabul.Tests --artifacts-path <scratchpad>/mkart --filter "FullyQualifiedName~SeriDegistir|FullyQualifiedName~SeriSil"` → 29/29 geçti, 0 atlanan.
+  - UZM_Ayar'da `OnayMerkeziAdres`/`OnayMerkeziAnahtar` (CompanyId 2) dolu olduğu görüldü.
+  - Onay Merkezi'nde tür yoktu; kullanıcı "Pastal Onayı grubu"nu seçti. `dbo.UZM_OlayTuru`'na panelin yaptığı INSERT ile eklendi: Kod `seri-degisiklik`, Ad "Seri değişikliği", GrupChatId = pastal grubu, GerekenOnay 0, RetEsigi 1, Aktif 1 → Id 10. Onay Merkezi türü her istekte DB'den okuyor (önbellek yok), servis yeniden başlatma gerekmez.
+- **Sonuç:** Kod tarafı hazır; ilk gerçek değişiklik/silmede gruba mesaj düşmeli (test mesajı gönderilmedi).
