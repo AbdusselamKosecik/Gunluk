@@ -31,3 +31,11 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
 - **Kod:** 5055 Mervat Rasheed Mohamed (id 3049) → 000376. Yedek `C:\Yedek\zkbiotime_kod_degisimi_20261125\zkbiotime_5055_oncesi.bak`. `kod_degistir.sql` (`-I`): kuru 1/1, 766 geçiş → COMMIT.
 - **Fotoğraflar (9 kişi):** `C:\ZKBioTime1\auth_files\photo\<eski>.jpg` ve `auth_files\biophoto\<eski>.jpg` → `<yeni>.jpg` kopyalandı (18 dosya; eskiler yerinde bırakıldı). `personnel_employee.photo` = `photo/<yeni>.jpg` (9 satır). 5055'in fotoğrafı yok.
 - **Cihaz komutları (her iki cihaz):** `DATA DELETE USERINFO PIN=5055`, 000376 USERINFO + avuç BIODATA (Type 8, Index 0–4; yüz şablonu yok), 9 kişi için `DATA UPDATE USERPIC`. Toplam 32 komut, hepsi return 0 (önceki -1100'ler giderildi).
+
+### 4. DENDATA manuel giriş kontrolü (000040)
+- **İstek:** Kullanıcı Den'e 000040 için 01/11/2026 07:40 (D=0, manuel) ve 17:40 (D=0, manuel) girdi; kayıt kontrolü.
+- **Yöntem:** `\192.168.0.2\Dendata` altında son 3 saatte değişen dosyalar → `f01\2026\MODXX.MAS`, `ELTXX.MAS`, `GENXX.MAS`, `CFF\PYRXX.USR`. Kopyalar scratchpad `den\`.
+- **Dosya yapısı (yeni öğrenilen):**
+  - `ELTXX.MAS`: 243 B kayıt = 15 × 16 B giriş + 3 B. Giriş: `word dakika` + `byte D` (boş=FF) + ShortString[10] tarih `dd/mm/yyyy` + `char 'E'` + 1 B. Kayıt 9: `cc01 00 "01/11/2026" E` (460 dk = 07:40) ve `2404 00 "01/11/2026" E` (1060 dk = 17:40). Kayıt 5: başka birinin 01–05/11 girişleri. ELT kaydı ↔ personel bağı EMPXX'te bulunamadı.
+  - `MODXX.MAS`: personel başına 9864 B (EMPXX sırasıyla), 12 × 822 B aylık blok. Kasım bloğu +113 ve +117 = toplam saat. 000040 (EMPXX idx 38, Abbas Tariq Nasr Abbas): `01 0a 00 00 00 0a` → **10 saat** (07:40–17:40). Kasımda saat değeri olan diğerleri: 000001 = 8, 000250 = 9.
+- **Sonuç:** Giriş kaydedilmiş ve Kasım ayı hesabına 10 saat olarak yansımış.
