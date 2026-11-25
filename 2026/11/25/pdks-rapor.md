@@ -39,3 +39,9 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
   - `ELTXX.MAS`: 243 B kayıt = 15 × 16 B giriş + 3 B. Giriş: `word dakika` + `byte D` (boş=FF) + ShortString[10] tarih `dd/mm/yyyy` + `char 'E'` + 1 B. Kayıt 9: `cc01 00 "01/11/2026" E` (460 dk = 07:40) ve `2404 00 "01/11/2026" E` (1060 dk = 17:40). Kayıt 5: başka birinin 01–05/11 girişleri. ELT kaydı ↔ personel bağı EMPXX'te bulunamadı.
   - `MODXX.MAS`: personel başına 9864 B (EMPXX sırasıyla), 12 × 822 B aylık blok. Kasım bloğu +113 ve +117 = toplam saat. 000040 (EMPXX idx 38, Abbas Tariq Nasr Abbas): `01 0a 00 00 00 0a` → **10 saat** (07:40–17:40). Kasımda saat değeri olan diğerleri: 000001 = 8, 000250 = 9.
 - **Sonuç:** Giriş kaydedilmiş ve Kasım ayı hesabına 10 saat olarak yansımış.
+
+### 5. 000040 Kasım kayıtlarını PDKS'den Den'e aktarma — ön inceleme (yazma yapılmadı)
+- **İstek:** Den'deki deneme girişlerini silip 000040'ın Kasım günlük giriş/çıkışlarını BioTime'dan Den'e eklemek.
+- **BioTime (salt okunur):** 000040'ın Kasımda 19 günü var (01–25/11, Cuma ve Cumartesi yok), günde 2 okutma (giriş ~08:20, çıkış ~17:45) → 38 giriş.
+- **Den biçimi, düzeltilmiş yorum:** MODXX Kasım bloğu +113/+117 = ELTXX kayıt göstergesi (1 tabanlı; 000040 → 10 = ELT kayıt 9), saat değil. 000001 → 8, 000250 → 9 olan ELT kayıtları boş (silinmiş girişler). ELT kaydı en fazla 15 giriş tutuyor; 38 giriş için kayıt zinciri gerekiyor, ama zincir biçimi (+113 ilk / +117 son? sondaki 3 bayt?) henüz belli değil.
+- **Karar:** Delphi bordro programının ikili dosyasına biçim bilinmeden yazılmadı. Kullanıcıdan Den arayüzünde 15'ten fazla giriş içeren bir deneme (ya da Den'in içe aktarma menüsünün biçimi) istendi.
