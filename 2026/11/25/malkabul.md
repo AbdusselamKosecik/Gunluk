@@ -63,3 +63,6 @@ kod okutmasını isteyelim"; kararlar: Seri Değiştir'e Sil (seri fişlerden ta
 - **Komutlar:** `dotnet test MalKabul.Tests --artifacts-path <scratchpad>/mkart` → 178 geçti, 135 atlandı (DB), 0 hata.
 - **Doğrulama:** Bu PC'de FlashCap "FHD Webcam" (DirectShow, 1280x720 JPEG) görüyor (dosya tabanlı betikte `PublishAot=false` gerekti; COM kapalı olunca DirectShow çalışmaz). Headless çizimde Sil düğmesi seri okutulduktan sonra Kaydet'in yanında görünüyor. Masaüstü yeni derlemeyle yeniden başlatıldı.
 - **Commit:** `b34dd3a` — Seri silme onay QR'ı PC kamerasından (FlashCap + ZXing)
+
+### 5. Masaüstü paketi
+- **Ne yapıldı:** `dotnet publish MalKabul.Desktop -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -o %TEMP%\mk-pub` → `Compress-Archive` → `malkabul/dagitim/malkabul-masaustu-2026-11-25.zip` (~78,7 MB, gitignored). İçerik: seri silme + Telegram bildirimi + kamera onay QR'ı.
