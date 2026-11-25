@@ -78,3 +78,7 @@ kod okutmasını isteyelim"; kararlar: Seri Değiştir'e Sil (seri fişlerden ta
 - **Ne yapıldı (tek Serializable işlem, önce ROLLBACK denemesi):** Erp_GLAccount'a referans veren 32 FK kolonu (hepsi nullable) tarandı; dolu olanlar NULL yapıldı: Erp_CurrentAccount.CustomerGLAccountId 3, SupplierGLAccountId 3, Erp_BankAccountIA.GLAccountId 16. Erp_GLAccountTotal 6 silindi, Erp_GLAccount 374 (hepsi CompanyId 2) silindi. Muhasebe fişi kalmamıştı (GLReceipt/Item 0, kullanıcı silmiş).
 - **Yedek:** Silinen/boşaltılan tüm satırlar aynı işlem içinde `X:\Gitlab\modfex-apparel\yedek\sentez-glaccount-20261125-123328.json` (Erp_GLAccount, Erp_GLAccountTotal, her FK için RecId+eski değer). Betik: scratchpad `sqldene/glsil.cs`.
 - **Dokunulmayan:** Erp_GLIntegration 607 (Modül 3 / Hizmetler → kod metni 300.01.01, masraf yeri 01; FK değil, kod metni) — yeni planda aynı kod yoksa güncellenmeli. Erp_CostCenter 1 kayıt duruyor.
+
+### 8. Canlı SentezCore: masraf yeri silindi
+- **Neden:** Kullanıcı: "bağlı alanları null atabilirsin".
+- **Ne yapıldı:** `sqldene/mysil.cs` (GL ile aynı kalıp: FK tarama → nullable doluları NULL, null olamayanları raporla, JSON yedek, önce ROLLBACK). Bağlı dolu alan kalmamıştı (tip 22 fişi kullanıcı silmiş); Erp_CostCenterTotal 0, Erp_CostCenter 1 (kod 01) silindi, COMMIT. Yedek: `X:\Gitlab\modfex-apparel\yedek\sentez-costcenter-*.json`.
