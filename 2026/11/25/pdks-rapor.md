@@ -26,3 +26,8 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
 - **Aynı anda:** `modasima` kullanıcısı (192.168.0.176) BioTime arayüzünden 17:43:20 ve 17:43:52'de (sunucu saati) iki cihaza **Tüm Verileri Temizle**, 17:44:14'te **Verileri Cihaza Senkronize Et** yaptı (base_adminlog). Tam senkron 17:45'te bitti: cihaz başına 356 USERINFO, 454 BIODATA, 11 FINGERTMP, 325 USERPIC — hepsi 0. 9 kişi yeni kodlarıyla 23'er komut (USERPIC yok). Eski kodlar temizlikle cihazdan gitti.
 - Not: `yara` (192.168.0.180) aynı saatlerde arayüzden başka kişilerin kodlarını değiştiriyordu (ör. 5430→000292).
 - **Açık:** 9 kişinin fotoğraf dosyası eski kod adında → cihazda kayıt fotoğrafı yok (yüz şablonu var, tanıma etkilenmez). İstenirse `photo/<yeni>.jpg` kopyası + `personnel_employee.photo` güncellemesi.
+
+### 3. 5055 → 000376 ve fotoğraf düzeltmesi
+- **Kod:** 5055 Mervat Rasheed Mohamed (id 3049) → 000376. Yedek `C:\Yedek\zkbiotime_kod_degisimi_20261125\zkbiotime_5055_oncesi.bak`. `kod_degistir.sql` (`-I`): kuru 1/1, 766 geçiş → COMMIT.
+- **Fotoğraflar (9 kişi):** `C:\ZKBioTime1\auth_files\photo\<eski>.jpg` ve `auth_files\biophoto\<eski>.jpg` → `<yeni>.jpg` kopyalandı (18 dosya; eskiler yerinde bırakıldı). `personnel_employee.photo` = `photo/<yeni>.jpg` (9 satır). 5055'in fotoğrafı yok.
+- **Cihaz komutları (her iki cihaz):** `DATA DELETE USERINFO PIN=5055`, 000376 USERINFO + avuç BIODATA (Type 8, Index 0–4; yüz şablonu yok), 9 kişi için `DATA UPDATE USERPIC`. Toplam 32 komut, hepsi return 0 (önceki -1100'ler giderildi).
