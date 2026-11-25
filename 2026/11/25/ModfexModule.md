@@ -62,3 +62,13 @@ Hedef: Hizmet stopajı — parametre ekranı + faturadan 56 tipli cari fiş otom
 - `UD_WithholdingTax` oranı yüzde mi (20) yoksa kesir mi (0.20) — müşteride doğrulanmalı.
 - Yüklü LiveCore.dll'de 56 tipinin Borç/Alacak izinleri doğrulanmalı.
 - Kullanılmayan `Models/Parameter.cs` / `ParameterItem.cs` (JSON) temizlenebilir.
+
+### 5. Hata düzeltme: "Başka modülden üretilmiş cari hesap fişine satır ekleyemezsiniz."
+- **Neden:** İlk canlı denemede fatura kaydı bu hatayla durdu.
+- **Kök neden:** `FinanceModule/BoExtensions/CurrentAccountReceiptDataCheckServiceExtension` —
+  `SourceModule/SourceId` dolu cari fişte değişiklik/satır ekleme-silmeyi engelliyor. Sentez'in kendi
+  `CreateCurrentAccountReceiptIntegrationService`'i (satır 249-253, 536) bu extension'ı ve
+  `UpdateApprovedReceiptControlExtension`'ı `Extensions[name].BusinessObject = null` ile kapatıyor.
+- **Ne yapıldı:** `WithholdingReceiptSync.CreateReceiptBO` içinde `Init` sonrası iki extension kapatıldı
+  (`ContainsKey` korumalı).
+- **Sonuç:** Derleme OK (çıktı DLL'i Live/VS açık olduğu için kopyalanamadı). Canlıda tekrar denenecek.
