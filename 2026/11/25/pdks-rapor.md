@@ -18,3 +18,11 @@ Kullanıcı 9 kişinin eski→yeni kod listesini yapıştırdı (sol yeni Den ko
 
 ## Açık kalanlar
 - Cihazlar (Yuz1 192.168.0.30, Yuz2 192.168.0.29): BioTime yeni PIN'i gönderir, eski PIN cihazda kalır → cihaz temizleme + Sync Data to Device (15.11'den beri bekliyor).
+
+### 2. Cihazlara gönderim (kullanıcı "tamam değiştir")
+- **Yöntem:** `iclock_terminalcommand`'a BioTime'ın kendi komut biçimiyle kayıt (terminal 3042 Yuz1, 3043 Yuz2), kişi başına: `DATA DELETE USERINFO PIN=<eski>` → `DATA UPDATE USERINFO PIN=<yeni>\tName=<first_name>\tPri=0\tPasswd=\tCard=\tTZ=0000000000000000\tGrp=1\tVerify=-1` → `DATA UPDATE BIODATA Pin=..\tNo..\tIndex..\tType..\tMajorVer..\tMinorVer..\tTmp=zk_bio_data_%010d_%02d` (biodata.id, index; avuç Type=8 için Index 0–4) → `DATA UPDATE USERPIC ZK_PERSONNEL_PHOTO_PIN=<yeni>`.
+  - Yer tutucu `zk_bio_data_...` gönderim anında `iclock/utils.pyc getCacheBioData` ile DB'deki BioData'dan çözülüyor (pyc string incelemesi) → elle komut eklemek güvenli.
+- **Sonuç:** 82 komut (41/cihaz); DELETE/USERINFO/BIODATA 0 (başarılı), USERPIC 18 adet `-1100` (fotoğraf dosyası eski kod adıyla: `photo/1550.jpg` vb.).
+- **Aynı anda:** `modasima` kullanıcısı (192.168.0.176) BioTime arayüzünden 17:43:20 ve 17:43:52'de (sunucu saati) iki cihaza **Tüm Verileri Temizle**, 17:44:14'te **Verileri Cihaza Senkronize Et** yaptı (base_adminlog). Tam senkron 17:45'te bitti: cihaz başına 356 USERINFO, 454 BIODATA, 11 FINGERTMP, 325 USERPIC — hepsi 0. 9 kişi yeni kodlarıyla 23'er komut (USERPIC yok). Eski kodlar temizlikle cihazdan gitti.
+- Not: `yara` (192.168.0.180) aynı saatlerde arayüzden başka kişilerin kodlarını değiştiriyordu (ör. 5430→000292).
+- **Açık:** 9 kişinin fotoğraf dosyası eski kod adında → cihazda kayıt fotoğrafı yok (yüz şablonu var, tanıma etkilenmez). İstenirse `photo/<yeni>.jpg` kopyası + `personnel_employee.photo` güncellemesi.
