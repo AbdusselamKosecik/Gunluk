@@ -51,3 +51,15 @@ kod okutmasını isteyelim"; kararlar: Seri Değiştir'e Sil (seri fişlerden ta
   - UZM_Ayar'da `OnayMerkeziAdres`/`OnayMerkeziAnahtar` (CompanyId 2) dolu olduğu görüldü.
   - Onay Merkezi'nde tür yoktu; kullanıcı "Pastal Onayı grubu"nu seçti. `dbo.UZM_OlayTuru`'na panelin yaptığı INSERT ile eklendi: Kod `seri-degisiklik`, Ad "Seri değişikliği", GrupChatId = pastal grubu, GerekenOnay 0, RetEsigi 1, Aktif 1 → Id 10. Onay Merkezi türü her istekte DB'den okuyor (önbellek yok), servis yeniden başlatma gerekmez.
 - **Sonuç:** Kod tarafı hazır; ilk gerçek değişiklik/silmede gruba mesaj düşmeli (test mesajı gönderilmedi).
+
+### 4. Silme onay QR'ı PC kamerasından
+- **Neden:** Kullanıcı: "pc kamerasından okutsun, elle girmesin". Ayrıca "silme butonu desktopta yok" dedi.
+- **Ne yapıldı:**
+  - `MalKabul/Ortak/Donanim/KameraOkuyucu.cs`: `Func<Task<string?>>? Oku` kancası (ExcelDosyasi kalıbı; Android'e kütüphane girmez).
+  - `MalKabul.Desktop/KameraPenceresi.cs`: FlashCap 1.13.0 ile ilk kamerayı açar (1280'e en yakın format), kareyi gösterir, ~5/sn ZXing.Net 0.16.11 ile QR çözer (SkiaSharp → BGRA32 `RGBLuminanceSource`), ilk okunan metinle kapanır; Vazgeç → null. Bozuk kare için `SKCodec.Create` null kontrolü (SKBitmap.Decode istisna atıyordu). `Program.cs` kancayı atar.
+  - `SeriDegistirViewModel.Sil`: kamera yoksa `KameraYok`; varsa `SilOnayBekliyor`, kamerayı bekler; null → iptal (seri seçili kalır); okunan → `OnayliSilAsync`. Onay beklerken okutma kutusuna gelen metin `SilQrKameradan` hatası (klavye/okuyucu ile onay yok).
+  - Yeni metinler: SilQrKameradan, KameraYok, KameraHatasi, KameraBaslik, KameraAciliyor; SilQrOkut "kameraya gösterin".
+  - Testler: ekran testleri kamera akışına göre yeniden yazıldı (6), `KameraQrTestleri` (JPEG/PNG karede QR çözülür, QR yok/bozuk → null).
+- **Komutlar:** `dotnet test MalKabul.Tests --artifacts-path <scratchpad>/mkart` → 178 geçti, 135 atlandı (DB), 0 hata.
+- **Doğrulama:** Bu PC'de FlashCap "FHD Webcam" (DirectShow, 1280x720 JPEG) görüyor (dosya tabanlı betikte `PublishAot=false` gerekti; COM kapalı olunca DirectShow çalışmaz). Headless çizimde Sil düğmesi seri okutulduktan sonra Kaydet'in yanında görünüyor. Masaüstü yeni derlemeyle yeniden başlatıldı.
+- **Commit:** `b34dd3a` — Seri silme onay QR'ı PC kamerasından (FlashCap + ZXing)
