@@ -100,6 +100,20 @@ Kullanıcı (mf-s.uzmanadres.com/koli-listesi): "Birden fazla satırda aynı kol
 - **Bu listede açılmayacak koliler:** EXP2600655–657 ve 659 (00000020 SİYAH-EKRU 90B siparişte yok);
   EXP2600621 (40:174, 46:36) ve EXP2600622 (38:24) 1230-3 SBT 5'li sete bölünmüyor.
 
+### 6. "Siparişe göre" ekranda; adet birebir — yayımlandı
+- **İstek:** "Parametre ekranda olsun; true ise 60 yazıldıysa 60 tane SIYAH-TEN vardır, bölme yapma, birebir çalıştır."
+- **Ne yapıldı:** `DogrulaAsync(ayristirma, bool? sipariseGore, ct)` ve `KoliAcAsync(..., bool? sipariseGore, ct)`;
+  null ise `SentezServis:KoliListeSipariseGore`. `DogrulaIstegi` / `KoliAcIstegi` + `SipariseGore`; `/durum` →
+  `sipariseGore` (sunucu varsayılanı). Ekran: Liste kartında "Siparişe göre" kutusu (değişince önizleme sıfırlanır),
+  dogrula ve koli-ac kendi değerini gönderir. Parça ÷ set bölmesi ve "tam bölünmüyor" hatası kaldırıldı: adet = listedeki adet.
+- **Dokunulan:** `Ayarlar.cs`, `KoliListe/{KoliListeDeposu,KoliListeModelleri}.cs`, `Host/Api/KoliListeUclari.cs`,
+  `web/src/api/koliListe.ts`, `web/src/pages/KoliListesiSayfasi.tsx`, `tests/.../KoliListeTestleri.cs` (yeni imza).
+- **Doğrulama:** .NET 378/379 (bilinen canlı test), UI 66/66; canlı salt okuma kombinasyon testi beden başına 61 adetle
+  (bölünmeyen) — hepsi OK, yalnız 00000020 SİYAH-EKRU 90B siparişte yok.
+- **Commit:** `0f91cc5`. **Yayım:** yedek `C:\Server\SentezServis\yedek-2026-11-25-e48ce8d\`; `/api/surum` → 0f91cc5 (iç/dış);
+  ayar KoliListeSipariseGore=true korunuyor.
+- **Not:** 4. maddedeki "EXP2600621/622 5'e bölünmüyor" artık geçerli değil (bölme yok).
+
 ## Açık kalanlar / sonraki adım
 - İlk karma koli canlıda açılınca Sentez'de içeriği (Erp_BoxItem/Variant) kontrol edilmeli.
 - Paketleme uygulamasının QR etiket ekranı karma koliyi (birden fazla renk) doğru basıyor mu kontrol edilmeli (ayrı repo).
