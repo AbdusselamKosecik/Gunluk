@@ -83,6 +83,23 @@ Kullanıcı (mf-s.uzmanadres.com/koli-listesi): "Birden fazla satırda aynı kol
   - Fikir için: set parça sayıları 1230-3 SBT 5, 2073-7 SBT 7, 2076-7 KARIŞIK 7 (tüm bedenlerde).
 - **Not:** 00000016 ↔ 4836-2 bağlanmadı (4836-2 00000015'in, içinde 6816).
 
+### 5. Koli listesi "siparişe göre" modu (ayarla) — yayımlandı
+- **İstek:** "Parametreye göre direkt siparişe göre yapacak şekilde"; "iş emri sadece bilgi; normalde tek tek üretilip
+  pakette birleştirilir, burada birleşmiş seti direkt almamız lazım". Liste 00000018 için artık 4284-6 diyor
+  (16:45'te açılmış, 00000018'e bağlı, içinde 2073).
+- **Ne yapıldı:** `Ayarlar.KoliListeSipariseGore` (varsayılan false → eski davranış birebir). Açıkken
+  `KoliListeDeposu.SipariseGoreBedenler`: siparişte modelin kendisi ya da tüm bileşenleri bu model olan set kartı aranır
+  (UZM_KarmaKoliIcerik); renk `RenkDerecesi` (1 birebir, 2 Türkçe harf sade, 3 iki parçalı ters; en küçük derece);
+  adet = parça ÷ set parça (tam bölünmezse hata); aynı renk/beden iki kalemdeyse iş emrine bağlı kalem (UZM_SiparisWorkOrder.OrderReceiptItemId).
+  İş emri bulunamaz / model iş emrinde yoksa uyarı ve koliye iş emri yazılmaz. `DogruBeden` + `MamulId` (koli kalemi set kartıyla).
+- **Doğrulama:** scratch konsolda liste kombinasyonları canlıya karşı: ayar kapalı = önceki sonuçlar; açık = hepsi OK,
+  yalnız 00000020 SİYAH-EKRU 90B siparişte yok. Set parça: 1230-3 SBT 5, 2073-7/2076-7 7. .NET 378/379 (bilinen canlı test).
+- **Commit:** `e48ce8d`
+- **Yayım:** yedek `C:\Server\SentezServis\yedek-2026-11-25-c87c02b\` (exe, appsettings, wwwroot); appsettings.json'a
+  `SentezServis:KoliListeSipariseGore: true` eklendi (ConvertFrom/To-Json, UTF-8 BOM'suz); `/api/surum` → e48ce8d (iç ve dış adres).
+- **Bu listede açılmayacak koliler:** EXP2600655–657 ve 659 (00000020 SİYAH-EKRU 90B siparişte yok);
+  EXP2600621 (40:174, 46:36) ve EXP2600622 (38:24) 1230-3 SBT 5'li sete bölünmüyor.
+
 ## Açık kalanlar / sonraki adım
 - İlk karma koli canlıda açılınca Sentez'de içeriği (Erp_BoxItem/Variant) kontrol edilmeli.
 - Paketleme uygulamasının QR etiket ekranı karma koliyi (birden fazla renk) doğru basıyor mu kontrol edilmeli (ayrı repo).
