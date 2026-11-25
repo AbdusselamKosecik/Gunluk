@@ -53,6 +53,24 @@ Kullanıcı (mf-s.uzmanadres.com/koli-listesi): "Birden fazla satırda aynı kol
   arayüz 2026-11-25 15:32 (UTC). Paketteki app.js'te "karma koli" metni var.
 - **Geri dönüş:** servisi durdur, yedek klasörden exe + wwwroot'u geri kopyala, başlat.
 
+### 3. Analiz: EXP2600001–709 koli listesi neden geçmiyor (kod değişikliği yok)
+- **Yöntem:** listedeki tüm (sipariş, iş emri, model, renk, beden) kombinasyonları scratch konsolda
+  `KoliListeDeposu.DogrulaAsync` ile canlıya karşı salt okuma doğrulandı; Sentez'den model varyantları, sipariş
+  içerikleri, iş emri içerikleri, UZM_KarmaKoli tanımları ve UZM_SiparisWorkOrder bağları okundu. Hiçbir kombinasyon geçmedi.
+- **Bulgular:**
+  1. Siparişler SET stok kartında (6816-2, 6813-2, 6800-2, 2073-7, 2076-7, 1230-3, 6825-2, 6826-2, 6201-1); listedeki
+     Model bileşen kartı (6816 …), Renk ise SET rengi (SİYAH-EKRU = 1 SİYAH + 1 EKRU; SBT/KARIŞIK 7 parça).
+     Koli listesi kodu modeli doğrudan arıyor → "renk modelde yok / siparişte yok". Paketleme set kolisinde kutuya
+     SET varyantını (set adedi) yazar, bileşenleri yalnız tezgah stoğu için kullanır.
+  2. Liste adetleri büyük ihtimalle parça (525/7=75, 100'lük 2'li set kolileri; 00000012 SİYAH-TEN 75B 3100 parça ≤ 1700 set×2).
+     1230-3 SBT'de bazı adetler 5'e bölünmüyor (174, 36, 24).
+  3. Türkçe harf: liste SIYAH/LACIVERT/KARISIK/SiYAH, Sentez SİYAH/LACİVERT/KARIŞIK; Normal() yalnız tr ToUpper yapıyor.
+     2073'te hem SIYAH hem SİYAH varyantı var (katlamada tam eşleşme öncelikli olmalı).
+  4. Liste SIYAH-BORDO, sipariş 00000015/16 seti BORDO-SİYAH (6813'te ikisi de var).
+  5. İş emri: 00000016 → bağlı iş emirleri 4558/4559 (25.11 açıldı), listede 4836-2 (00000015'in, içinde 6816).
+     00000018 → bağlı 4284-2, listede 4284-4 (yalnız uyarı).
+- **Karar bekleyen:** kutuya set mi bileşen mi yazılacak; adet parça mı set mi; SIYAH-BORDO = BORDO-SİYAH kabul mü.
+
 ## Açık kalanlar / sonraki adım
 - İlk karma koli canlıda açılınca Sentez'de içeriği (Erp_BoxItem/Variant) kontrol edilmeli.
 - Paketleme uygulamasının QR etiket ekranı karma koliyi (birden fazla renk) doğru basıyor mu kontrol edilmeli (ayrı repo).
