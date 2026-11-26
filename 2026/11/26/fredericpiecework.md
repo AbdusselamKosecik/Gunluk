@@ -50,3 +50,16 @@
 ## Açık kalanlar (ek)
 - Yıkama-Tamir PC'sindeki sürümü kontrol et; `fredericpiecework-paket-2026-11-17-f6fb34d.zip` kurulu mu?
 - Kurulu ise ekrandaki hata mesajıyla tekrar incele.
+
+### 4. Dağıtım paketi (1169b64)
+- **Neden:** Yıkama-Tamir PC'sine çoklu tamir düzeltmesini (f6fb34d) içeren güncel sürümü kurmak.
+- **Komutlar:**
+  ```bash
+  rm -rf bin/Release/net6.0-windows/publish/win-x64
+  dotnet publish FredericPieceWork.csproj -p:PublishProfile=FolderProfile
+  # PowerShell: Compress-Archive publish\win-x64\* -> X:/Gitlab/fredericTr/fredericpiecework-paket-2026-11-26-1169b64.zip
+  ```
+- **Sonuç / doğrulama:** 9 dosya, zip 32.9 MB. exe içinde "tamir turu icin yeni palet", "bu tamir adiminda zaten okutulmus", "paletinde zaten var" metinleri var; "Seri / QR Takip" yok (ayrı projeye taşındı).
+  Not: UTF-16 metin araması bayt hizasına bağlı; tek hizada arayınca yanlış negatif verdi, iki hizada da aranmalı.
+  İşlevsel olarak f6fb34d paketiyle aynı (bugünkü piecework değişikliklerinin net etkisi sıfır).
+- **Kurulum:** Hedef PC'de .NET 6 Desktop Runtime; mevcut kurulumun `Frederic\` klasörü (parameter.json, computer*.json) korunmalı, sadece zip içeriği üzerine yazılmalı.
