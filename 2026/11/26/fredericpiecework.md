@@ -63,3 +63,7 @@
   Not: UTF-16 metin araması bayt hizasına bağlı; tek hizada arayınca yanlış negatif verdi, iki hizada da aranmalı.
   İşlevsel olarak f6fb34d paketiyle aynı (bugünkü piecework değişikliklerinin net etkisi sıfır).
 - **Kurulum:** Hedef PC'de .NET 6 Desktop Runtime; mevcut kurulumun `Frederic\` klasörü (parameter.json, computer*.json) korunmalı, sadece zip içeriği üzerine yazılmalı.
+
+### 5. Pakete SeriTakip.exe eklendi
+- **Neden:** Kullanıcı takip programının da aynı pakette gelmesini istedi.
+- **Ne yapıldı:** SeriTakip tek dosya olarak publish edildi (bkz. `seritakip.md`), `FredericPieceWork.exe` ile aynı köke kondu → piecework'ün `Frederic\parameter.json`'unu doğrudan kullanır. Zip aynı adla yeniden oluşturuldu: `fredericpiecework-paket-2026-11-26-1169b64.zip`, 10 dosya, 33.5 MB.

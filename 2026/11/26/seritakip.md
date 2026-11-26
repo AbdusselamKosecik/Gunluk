@@ -32,3 +32,12 @@ FredericPieceWork içine eklenen "Seri / QR Takip" ekranı (bkz. `fredericpiecew
 ## Açık kalanlar / sonraki adım
 - Sahada gerçek QR ile test; 12=KESIM, 22=DIKIM eşlemesi doğrulanmalı.
 - GitLab'da yeni repo görünürlüğü (private olmalı) kontrol edilmeli.
+
+### 2. Tek dosya publish + piecework paketine ekleme
+- **Komutlar:**
+  ```bash
+  dotnet publish SeriTakip/SeriTakip.csproj -c Release -r win-x64 --self-contained false \
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish
+  ```
+- **Sonuç / doğrulama:** Tek `SeriTakip.exe` (1.6 MB). Scratchpad'de `Frederic\parameter.json` ile yan yana çalıştırıldı → pencere "Seri / QR Takip" açıldı (ayar okundu). Test klasörü silindi. `publish/` gitignore'da.
+- piecework paketinin köküne eklendi (`fredericpiecework-paket-2026-11-26-1169b64.zip`).
