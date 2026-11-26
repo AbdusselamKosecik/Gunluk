@@ -30,3 +30,9 @@
 - Proses ID → ad eşlemesini (özellikle 12 ve 22) kullanıcı doğrulamalı.
 - Kullanıcı adı yerine şimdilik InsertedBy ID gösteriliyor.
 - Sahada gerçek QR ile test.
+
+### 2. Seri / QR Takip ayrı projeye taşındı
+- **Neden:** Kullanıcı ekranı ayrı bir program olarak istedi.
+- **Ne yapıldı:** `SeriTakip.cs`/`.Designer.cs` silindi, `Form1.cs`/`Form1.Designer.cs` `git checkout HEAD~1 --` ile özellik öncesine döndürüldü (menü kaldırıldı). Kod `fredericTr/seritakip` reposuna taşındı (bkz. `seritakip.md`).
+- **Sonuç / doğrulama:** `dotnet build` başarılı.
+- **Commit:** `1169b64` — Seri / QR Takip ekranini ayri projeye tasi (fredericTr/seritakip)
