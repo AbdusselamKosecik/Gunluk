@@ -67,3 +67,11 @@
 ### 5. Pakete SeriTakip.exe eklendi
 - **Neden:** Kullanıcı takip programının da aynı pakette gelmesini istedi.
 - **Ne yapıldı:** SeriTakip tek dosya olarak publish edildi (bkz. `seritakip.md`), `FredericPieceWork.exe` ile aynı köke kondu → piecework'ün `Frederic\parameter.json`'unu doğrudan kullanır. Zip aynı adla yeniden oluşturuldu: `fredericpiecework-paket-2026-11-26-1169b64.zip`, 10 dosya, 33.5 MB.
+
+### 6. Tamirlerde "aynı palette zaten var" kontrolü kaldırıldı
+- **Neden:** Sahada Yıkama-Tamir girişinde "{seri} serisi {palet} paletinde zaten var. Yeni tamir turu icin yeni palet seciniz!" hatası; kullanıcı kontrolün tamirlerde kaldırılmasını istedi. (DB o an erişilemedi, tetikleyen kayıt incelenemedi.)
+- **Ne yapıldı:** `Form1.ReadBarcode` içindeki `IsTamirProcess && ReadedPaletNumbers.Contains(PaletKey(SelectedBox, OrderNo))` dalı silindi, yerine açıklama yorumu. Tamirde tekrar okutma sınırı artık sadece `CanReadTamirAgain` (bu adımda okutma sayısı < önceki adımdan gelme sayısı). `ReadedPaletNumbers` listesi (ekle/sil) yerinde bırakıldı.
+- **Bilinen yan etki:** Aynı gün + aynı kullanıcı + aynı palet + aynı demet için DB kaydı birleşiyor ve `GetClearArrayString` seriyi tekilleştiriyor; aynı seri aynı gün aynı palete 2 kez okutulursa DB'de 1 görünür (kontrolün eklenme gerekçesi buydu).
+- **Dokunulan dosyalar:** `Form1.cs`
+- **Commit:** `c0438cd` — Tamirlerde 'ayni palette zaten var' kontrolunu kaldir
+- **Paket:** `X:/Gitlab/fredericTr/fredericpiecework-paket-2026-11-26-c0438cd.zip` (10 dosya, 33.5 MB, SeriTakip.exe dahil). exe'de "paletinde zaten var" yok, "bu tamir adiminda zaten okutulmus" var. Önceki `…-1169b64.zip` bunun yerini aldı.
