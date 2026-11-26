@@ -40,3 +40,26 @@ Dünkü muhasebe sıfırlamasının (bkz. 2026/11/25/malkabul.md §6–8) devam�
   - GLAccountTotal 0, GLReceipt 0.
   - Erp_GLAccount'tan 160 hesap silindi; kalan 0.
 - **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-glaccount-20261126-144943.json`
+
+### 3. Canlı SentezCore: 1 tipli satın alma irsaliyeleri, seri kartları ve hareketleri silindi
+- **Neden:** Kullanıcı tüm 1 tipli (satın alma) irsaliyeleri, bunlarla giren seri kartlarını ve kartların bütün hareketlerini sildirmek istedi.
+- **Ön inceleme (salt okunur):**
+  - 21 fiş (08.10.2025–22.11.2026), 773 kalem.
+  - Kalemlerin 765'i satın alma siparişine bağlıydı.
+  - Etkilenen stok/depo bakiyesi 102; bunlardan 8'i eksiye düşüyor. Kullanıcıya bildirildi.
+- **Ne yapıldı:** `sqldene/irssil.cs`, tek bir Serializable işlem içinde.
+  - Kümeler: #R = tip 1 fişler, #I = bu fişlerin kalemleri, #S = bu kalemlerde hareketi olan seri kartları.
+  - Erp_InventoryReceipt / ReceiptItem / SerialCard'a giden tüm FK'lar tarandı. Bağlı tablolardaki satırlar silindi:
+    - SerialTransaction 45
+    - SerialCardTotal 45 (seri hareketleri silindikten sonra; tetikleyici bu tabloya yazıyor)
+    - Allocation 910
+    - ReceiptItemVariant 755
+  - Ardından SerialCard 45, ReceiptItem 773 ve Receipt 21 silindi.
+  - Güvenlik kontrolü: tablo sayılarındaki gerçek azalma 21/773/45 değilse COMMIT yapılmıyor. ExecuteAsync satır sayıları stok toplamı tetikleyicileri yüzünden şişik görünüyor (ör. kalem için 8441).
+  - İlk denemede iki hata çıktı ve geri alındı: silinecek kalemlerin fiş FK'sı NULL'lanıyordu, SerialCardTotal ise FK'ya takılıyordu. Düzeltildi; ikinci deneme temiz geçti, sonra COMMIT edildi.
+- **Yedek:** `X:/Gitlab/modfex-apparel/yedek/sentez-irsaliye-tip1-20261126-150701.json` (tüm silinen satırlar).
+- **Sonuç:** Kalan tip 1 fiş: 0.
+
+## Açık kalanlar (güncel)
+- 8 stok/depo bakiyesi eksiye düştü: tip 1 girişlerinden sonra yapılan çıkışlar duruyor.
+- Silinen fişlere bağlı satın alma siparişleri yeniden açık (teslim alınmamış) görünecek.
