@@ -63,3 +63,14 @@ Dünkü muhasebe sıfırlamasının (bkz. 2026/11/25/malkabul.md §6–8) devam�
 ## Açık kalanlar (güncel)
 - 8 stok/depo bakiyesi eksiye düştü: tip 1 girişlerinden sonra yapılan çıkışlar duruyor.
 - Silinen fişlere bağlı satın alma siparişleri yeniden açık (teslim alınmamış) görünecek.
+
+### 4. Canlı SentezCore: 1 tipli satın alma siparişleri silindi
+- **Neden:** Kullanıcı "Satınalma siparişleri 1 tipi silermisin" dedi. §3'te irsaliyeler silindikten sonra bu siparişlere fiş bağı kalmamıştı.
+- **Ne yapıldı:** `sqldene/sipsil.cs`, irssil.cs kalıbıyla yazıldı; önce ROLLBACK denemesi, sonra COMMIT.
+  - Kümeler: #R = Erp_OrderReceipt tip 1 (45 kayıt, 06.10.2025–15.11.2026); #I = bu siparişlerin kalemleri (1099).
+  - FK taraması: kalemler dışında yalnız Erp_OrderReceiptItemVariant (1005) ve Erp_InventoryAllocation.OrderReceiptItemId (1320) bağlıydı; ikisi de silindi.
+  - FK'sız OrderReceiptItemId/OrderReceiptId kolonlarında da referans yoktu.
+  - Ardından kalemler ve siparişler silindi.
+  - Gerçek azalma kontrolü: 45 sipariş, 1099 kalem doğrulandı.
+- **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-siparis-tip1-20261126-151732.json`
+- **Sonuç:** Kalan tip 1 sipariş 0. Tip 2 (satış) siparişlerinin 21'i duruyor.
