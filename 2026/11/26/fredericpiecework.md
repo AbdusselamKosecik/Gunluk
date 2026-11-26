@@ -36,3 +36,17 @@
 - **Ne yapıldı:** `SeriTakip.cs`/`.Designer.cs` silindi, `Form1.cs`/`Form1.Designer.cs` `git checkout HEAD~1 --` ile özellik öncesine döndürüldü (menü kaldırıldı). Kod `fredericTr/seritakip` reposuna taşındı (bkz. `seritakip.md`).
 - **Sonuç / doğrulama:** `dotnet build` başarılı.
 - **Commit:** `1169b64` — Seri / QR Takip ekranini ayri projeye tasi (fredericTr/seritakip)
+
+### 3. İnceleme: 2. tamir turunda Yıkama-Tamir girişi yapılamıyor (QR `193693877575,5,122094`)
+- **Neden:** Kullanıcı bildirimi: Finish-Tamir çıkışı yapılmış seri Yıkama-Tamir girişine alınamıyor.
+- **Veri (WorkOrderItemId 78462, SentezLive):**
+  - 1. tur: 757/2 palet `T-757-74-261100029` (23.11) → 758/1 → 758/2 `T-758-73-261100083` → 757/1 (24.11).
+  - 2. tur: 757/2 palet `T-757-74-261100036` (25.11 09:30) 14 seri: 94,74,85,96 / 5,19,13,2 / 211,220 / 156 / 296 / 266 / 242,246 / 131,124 / 51,60.
+  - 758/1 `…036` (25.11 10:52): sadece 60,220,2,124,96 girebilmiş = 1. tura hiç girmemiş seriler. 1. turda tamir görmüş serilerin hiçbiri girememiş.
+- **Kod analizi:** f6fb34d (çoklu tamir) sonrası akış bu senaryoya izin veriyor: kaynak eşleşmede seçili palet tercih ediliyor, `CanReadTamirAgain` 5 için okutma=1 < kaynak=2. `LiteDbProcess.SaveAndRemoveSentez` seri reddetmiyor.
+  f6fb34d öncesi kod: `variants.FirstOrDefault` → eski palet (`…029`) seçilir → "…029 Paletinin Kaydi, …036 Paleti ile giris yapamazsiniz!!" ya da "Daha once okutulmus!". Desen eski sürümle birebir uyumlu.
+- **Sonuç:** Kod değişikliği yapılmadı. Muhtemel neden: Yıkama-Tamir PC'sinde (kullanıcı 73) f6fb34d öncesi sürüm çalışıyor. Doğrulama için ekrandaki hata mesajı istendi.
+
+## Açık kalanlar (ek)
+- Yıkama-Tamir PC'sindeki sürümü kontrol et; `fredericpiecework-paket-2026-11-17-f6fb34d.zip` kurulu mu?
+- Kurulu ise ekrandaki hata mesajıyla tekrar incele.
