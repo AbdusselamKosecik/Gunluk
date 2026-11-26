@@ -32,3 +32,11 @@ Dünkü muhasebe sıfırlamasının (bkz. 2026/11/25/malkabul.md §6–8) devam�
 ## Açık kalanlar
 - Geçmiş fiş satırlarındaki %8/%10 oranları değişmesin mi, yoksa fişler de mi temizlensin? Kullanıcı karar verecek.
 - KDV 18/19'un `Erp_TaxIA` muhasebe hesapları, yeni hesap planı girildikten sonra bağlanacak.
+
+### 2. Canlı SentezCore: GL hesapları tekrar silindi (yeni plan yüklenecek)
+- **Neden:** 25.11 16:11'de yüklenen 160 hesap yeniden yüklenecek; kullanıcı "silermisin, yenisini yükleyeceğim" dedi.
+- **Ne yapıldı:** `sqldene/glsil.cs` (2026/11/25 §7 betiği) önce ROLLBACK denemesiyle, sonra `--onayla` ile çalıştırıldı.
+  - FK kolonlarında dolu değer yoktu.
+  - GLAccountTotal 0, GLReceipt 0.
+  - Erp_GLAccount'tan 160 hesap silindi; kalan 0.
+- **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-glaccount-20261126-144943.json`
