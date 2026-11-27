@@ -67,3 +67,20 @@ Kullanıcı iki yeni proje istedi.
 ## Açık kalanlar / sonraki adım
 - Vuo_Devices şu an yalnız VERI-OK dönüyor. Gerçek iş mantığı (cihaz kaydı, vardiya, adet işleme ve Saas_erp ile bağlantı) henüz tanımlanmadı.
 - Port 85'te TechtsioService ile aynı anda çalışamaz; bir UDP portunu tek süreç dinleyebilir.
+
+### Canlı log sayfası ve Docker imajı
+- **Neden:** Kullanıcı gelen/giden trafiği bir adresten (`/logs`) görmek ve servisi Docker'a çıkarmak istedi.
+- **Ne yapıldı:**
+  - `src/weblog.rs`: `LogBook` halka tampon (Mutex<VecDeque>, varsayılan 5000, `VUO_DEVICES_LOG_CAPACITY`); her kayıt aynı zamanda stdout'a. Bağımlılıksız HTTP (std `TcpListener`, bağlantı başına thread, 5 sn timeout, 8 KB başlık sınırı): `GET /logs` (gömülü HTML, 1 sn'de bir `/logs.json?after=<son id>` çeker, filtre/yön/duraklat/temizle, koyu tema), `GET /logs.json?after=&limit=` (`{"last":N,"entries":[...]}`; after=0 ilk açılışta son `limit` kayıt), `GET /health`.
+  - `main.rs`: `VUO_DEVICES_HTTP_PORT` (varsayılan 8085, `0` kapalı). HTTP bind hatası UDP'yi durdurmaz. Paketler `escape_debug` ile kaydedilir (`\r\n` görünür).
+  - `clock.rs`: Linux için `localtime_r` + `tzset` FFI (önce UTC'ye düşüyordu; Docker'da `TZ=Europe/Istanbul`).
+  - `Dockerfile`: `rust:1.91-bookworm` derleme → `debian:bookworm-slim` + tzdata, `USER 65534`, EXPOSE 85/udp 8085/tcp. `.dockerignore`, `docker-compose.yml` (restart unless-stopped, json-file log 20m×3).
+- **Doğrulama:**
+  - `cargo test` 15/15 (yeni: halka tampon, ilk sayfa limiti, JSON kaçışı, query parse; uçtan uca `/logs.json` in/out/OK kaydı, `/logs`, `/health`, 404). Testler boş TCP portu verir, 8085'e çarpmaz.
+  - `cargo check --target x86_64-unknown-linux-gnu` (rustup target eklendi).
+  - `docker build -t vuo-devices .` → 114 MB. `docker run -p 9085:85/udp -p 18085:8085`: bağlı UDP soketle VERI-OK geldi (Docker NAT cevabı aynı porttan döndürüyor), OK'a cevap yok, saat İstanbul, süreç `nobody`. Sayfa Chrome'da açılıp kayıtlar görüldü. Test konteyneri silindi.
+- **Commit:** `07db5ce` — feat: canlı log sayfası (/logs) ve Docker imajı
+
+## Kararlar (ek)
+- Log sayfası `0.0.0.0`'a bağlanır (Docker'da zorunlu); kimlik doğrulama yok → port yalnız iç ağa açılmalı.
+- İmaj Docker Hub'a pushlanmadı (yerel `vuo-devices:latest`).
