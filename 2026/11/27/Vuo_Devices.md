@@ -84,3 +84,9 @@ Kullanıcı iki yeni proje istedi.
 ## Kararlar (ek)
 - Log sayfası `0.0.0.0`'a bağlanır (Docker'da zorunlu); kimlik doğrulama yok → port yalnız iç ağa açılmalı.
 - İmaj Docker Hub'a pushlanmadı (yerel `vuo-devices:latest`).
+
+### Docker Hub'a yayın
+- **Neden:** Kullanıcı imajın Docker Hub'a gönderilmesini istedi.
+- **Ne yapıldı:** İlk push "insufficient_scope" ile reddedildi (credential store boştu); kullanıcı `docker login` yaptı. `tekbirsoft/vuo-devices:0.1.0-07db5ce` ve `:latest` gönderildi, digest `sha256:0473591c…be51`. Anonim `GET hub.docker.com/v2/repositories/tekbirsoft/vuo-devices/` → 404, yani repo private.
+- `docker-compose.yml` imaj adı `tekbirsoft/vuo-devices:latest` yapıldı (sunucuda `docker compose pull && up -d`); README'ye not.
+- **Etiket kuralı:** `<Cargo sürümü>-<kısa commit>` + `latest`.
