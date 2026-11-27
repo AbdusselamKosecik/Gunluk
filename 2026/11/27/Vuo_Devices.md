@@ -90,3 +90,12 @@ Kullanıcı iki yeni proje istedi.
 - **Ne yapıldı:** İlk push "insufficient_scope" ile reddedildi (credential store boştu); kullanıcı `docker login` yaptı. `tekbirsoft/vuo-devices:0.1.0-07db5ce` ve `:latest` gönderildi, digest `sha256:0473591c…be51`. Anonim `GET hub.docker.com/v2/repositories/tekbirsoft/vuo-devices/` → 404, yani repo private.
 - `docker-compose.yml` imaj adı `tekbirsoft/vuo-devices:latest` yapıldı (ilk denemede sed ayraç hatasıyla uygulanmamıştı, Edit ile düzeltildi); README’ye başka makinede `docker login` + `docker run` tarifi eklendi.
 - **Etiket kuralı:** `<Cargo sürümü>-<kısa commit>` + `latest`.
+
+### Windows exe paketi ve GitHub Release
+- **Neden:** Kullanıcı Docker'sız, Windows'ta doğrudan çalışacak exe istedi.
+- **Ne yapıldı:**
+  - Exe zaten tek başına (GNU hedefi; import edilen DLL'ler yalnız sistem: KERNEL32, WS2_32, msvcrt, USERENV, ntdll, bcryptprimitives, api-ms-win-core-synch). libwinpthread gerekmiyor.
+  - `windows/`: `baslat.cmd`, `kur.cmd`→`kur.ps1` (Register-ScheduledTask: AtStartup, SYSTEM, RunLevel Highest, ExecutionTimeLimit=0 — varsayılan 72 saat sınırı sunucuyu öldürürdü —, RestartCount 999 / 1 dk, MultipleInstances IgnoreNew; NetFirewallRule UDP 85 + TCP 8085; eski görev/süreç önce durdurulur), `kaldir.cmd`→`kaldir.ps1`, `OKUBENI.txt`, `paketle.sh` (cargo build + py zipfile, cmd/ps1/txt CRLF, `dist/` gitignore). Betikler ASCII (cmd kod sayfası / PS 5.1 BOM'suz UTF-8 sorunu).
+  - `main.rs`: HTTP portu ikinci argüman da olabilir (`vuo_devices.exe 85 8086`). İlk tasarım görevde `cmd /c set VAR=..&& "exe"` idi; kırılgan bulundu, görev artık exe'yi doğrudan çalıştırıyor.
+- **Doğrulama:** `cargo test` 15/15; iki ps1 PowerShell parser ile hatasız; zip boşluklu klasöre açıldı, exe `Start-Process -ArgumentList '9087 18087' -WorkingDirectory` (görevle aynı biçim) ile başlatıldı → VERI-OK + doğru dakika:saniye, `/health` ok, `/logs.json` giden kayıt; PID ile durduruldu. `kur.ps1` gerçek kurulumu **denenmedi** (oturum yükseltilmiş değil).
+- **Commit:** `13e9832` — feat(windows): tek basina exe paketi, otomatik baslatma kurulumu; tag `v0.1.0`; Release: https://github.com/vuo-app/Vuo_Devices/releases/tag/v0.1.0 (`Vuo_Devices-0.1.0-13e9832-win-x64.zip`, 504 KB).
