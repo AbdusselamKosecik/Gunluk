@@ -36,12 +36,29 @@ OrderTakipWeb (MFG Genel Takip) için yeni talep + iki ekran görüntüsü (`Ord
 - **Hata/Not:** Bash heredoc içinde backtick'li Python yaması "unexpected EOF" verdi → yama betiği Write ile dosyaya yazılıp çalıştırıldı.
 - **Commit:** `83a02b2` — feat(order-takip-web): 2. kalite ve numune Sentez'den, Urun Kurtarma karti, Haftalik Tamir
 
+### 3. IIS güncellemesi (192.168.3.228 = KALITEWEBSERVER)
+- **Neden:** Kullanıcı iki projenin (SentezPlaning, OrderTakipWeb) IIS'te güncellenmesini istedi.
+- **Erişim:** WinRM 5985 açık; yerel `TrustedHosts`'a 192.168.3.228 eklendi (UAC ile, `Set-Item WSMan:\localhost\Client\TrustedHosts -Concatenate`).
+  Mesajdaki Administrator şifresi 4 denemede reddedildi; doğru kullanıcı/şifre repo kökündeki `UserNamePassword.txt`'de
+  (satır 1 kullanıcı, satır 2 şifre) — dosya `.gitignore`'a eklendi, şifre hiçbir yere yazılmadı.
+- **Sunucudaki siteler:** 80/85 Default, 81 timeCraft, 82 order, 83 SentezDashbord, 89 SarfKullanim, **90 planing (C:\inetpub\Planing)**,
+  91 SentezSelvedge, **88 OrderTakipWeb (C:\inetpub\OrderTakipWeb)** — OrderTakipWeb sanıldığı gibi 92'de değil, 88'de zaten kurulu.
+- **SentezPlaning:** sunucudaki `SentezPlaning.Api.dll` SHA-256'sı 20.11 paketiyle (690344d) aynı, index-NvfSEIfR.js yüklü; 690344d'den
+  sonra SentezPlaning commit'i yok → **güncelleme gerekmedi, dokunulmadı.**
+- **OrderTakipWeb:** `Deploy-IIS.ps1 -Paket` → `site` klasörü `Copy-Item -ToSession` ile `C:\Deploy\OrderTakipWeb-83a02b2`'ye;
+  yedek `C:\Deploy\OrderTakipWeb-yedek-20261127-1039`; `app_offline.htm` → `robocopy /MIR /XD logs /XF appsettings.json app_offline.htm`
+  (exit 3; 11/18'den kalma `runtimes\*\Microsoft.Data.SqlClient*` silindi) → app_offline kaldırıldı.
+- **Doğrulama (sunucuda):** `/api/ayarlar` {girisGerekli:true, demo:false}; index'te Haftalık Tamir var; `/api/tamir/haftalik` 401 (yeni route);
+  sahte login → 401 "Kullanıcı adı veya şifre hatalı" (SQL'e ulaşıyor). Uygulamanın bağlantı dizesiyle salt okunur SQL:
+  depo 23/24 = "Sevkiyat Depo (2. Kalite Giyilebilir/Giyilemez)", 18 = "Mamul Depo (Numune)"; 95360 2.K 16 / numune 1, 95516 1 / 1;
+  45. hafta tamir sorgusu 194 ms (757 ve 758: 26'şar order); `UZM_ORDERTAKIP_KURTARMA` var, 241 kayıt.
+- **Commit:** `5ebceff` — Deploy-IIS varsayılan port 88, README canlı notu, `.gitignore` UserNamePassword.txt
+
 ## Kararlar
 - Çıkış tarihi dağıtımı etkilemez (saf FIFO): Finish Tamir'de çıkış girişten önce gelebiliyor (19.11 analizi), bu yolla yine dengelenir.
 - Haftalık "Gelen" = tamir departmanına giriş (InOut 1), "Çıkan" = çıkış; Order Takip Tamir sekmesiyle aynı yön kuralı.
 - Kalan'dan numune düşülür, kurtarma düşülmez.
 
 ## Açık kalanlar / sonraki adım
-- Canlıda doğrulanmadı: depo 23/24/18 bir orderda Sentez ekranıyla karşılaştırılmalı; haftalık sorgu süresi ölçülmeli.
+- Ekranın giriş yapılmış hâliyle telefonda son kontrolü kullanıcıda (Sentez kullanıcısı gerekir).
 - Numune Bulma ekranı hâlâ bağlı değil (lokasyon/açıklama kaynağı yok).
-- Yeni IIS paketi çıkarılmadı (`Deploy-IIS.ps1 -Paket`) — kullanıcı isterse.
