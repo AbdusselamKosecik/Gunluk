@@ -52,3 +52,8 @@ GL hesapları 26.11'de silinmişti (bkz. 2026/11/26/malkabul.md §2). Yeni hesap
 - **Doğrulama:** her fiş borç=alacak (assert), tüm kodlar planda mevcut, kapanış sonrası 6/7 sınıfı sıfır; bilanço aktif=pasif 49.165.
 - **Çıktı:** `X:\Gitlab\modfex-apparel\Muhasebe-Ornek-Fisler.xlsx`
 - **Notlar:** 191'in detay hesabı yok; isimli "Ödenecek KDV" detay hesabı yok (360.01.008 adsız); Mısır kurumlar vergisi %22,5 varsayıldı.
+
+### 7. 191.01 / 191.01.001 İndirilecek KDV detay hesabı
+- **Neden:** Alış KDV'si 191'e bağlanacak; 191'in detay hesabı yoktu (391 → 391.01 → 391.01.001 yapısıyla aynı olsun). Kullanıcı tüm KDV'yi 391.01.001'e bağlamayı sordu; indirilecek/hesaplanan ayrımı (beyanname, TDHP, denetim) için ayrı tutulması önerildi, kabul etti.
+- **Ne yapıldı:** `gl191.cs` (scratchpad/sqldene): Erp_GLAccount'a `191.01` ve `191.01.001` eklendi; ad/TR/AR ve AccountType/CDType 191'den kopyalandı. ROLLBACK deneme → `--onayla`.
+- **Sonuç:** 191.01.001 eklendi (RecId'ler commit çıktısında). KDV kartındaki alış satırlarını kullanıcı Sentez'de bağlayacak.
