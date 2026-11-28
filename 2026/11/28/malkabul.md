@@ -19,3 +19,10 @@ GL hesapları 26.11'de silinmişti (bkz. 2026/11/26/malkabul.md §2). Yeni hesap
 
 ## Açık kalanlar
 - Kullanıcı çeviriyi gözden geçirip Sentez'e yükleyecek. Ardından KDV (Erp_TaxIA), cari ve banka hesap bağları yeniden kurulacak.
+
+### 2. SentezCore — eski cari kartları yeni carilere taşı ve sil
+- **Neden:** Yeni hesap planına geçiş; ilk kayıttaki geçici cari kodları (001–025, 20, 30, Bant-1/3/4/6/8, C, M, PZR) `320.99.999`'a, `120.01.012`→`120.02.005` (DEFACTO TURKEY), `120.01.048-1`→`120.02.004` (MODASIMA) taşınacak, eskiler silinecek.
+- **Ne yapıldı:** `carisil.cs` (scratchpad/sqldene): #K (kod eşleme, `COLLATE DATABASE_DEFAULT` — DB Turkish_CS_AS) → #M (eski RecId→yeni RecId, 37 eşleşme şartı). `sys.foreign_keys` ile Erp_CurrentAccount'a bağlı 116 kolon tarandı (isim taramasıyla FK dışı kolon çıkmadı), dolu olanlar UPDATE ile yeni cariye taşındı, eski Erp_CurrentAccountTotal (hepsi 0) silindi, 37 cari silindi. Serializable tek transaction, önce ROLLBACK deneme, sonra `--onayla`.
+- **Sonuç:** Taşınan satırlar: WorkOrder 1361, Inventory 27, OrderReceipt 19, InventoryReceipt 18, WorkOrderProduction 11, CurrentAccountTransaction 4, Address 3, InitialCost 2, PackingList 2, ProductivityTransaction 1. Silinen: 3 total, 37 cari. Yeniden tarama: eski Id'lere 0 bağ.
+- **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-birlestir-20261128-041459.json`
+- **Not:** Erp_CurrentAccount/Transaction/Total tablolarında trigger yok; taşınan 4 cari hareketinin bakiyesi Total'a yansımadı (eski cariler için de Total satırı yoktu).
