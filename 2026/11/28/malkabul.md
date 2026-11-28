@@ -26,3 +26,9 @@ GL hesapları 26.11'de silinmişti (bkz. 2026/11/26/malkabul.md §2). Yeni hesap
 - **Sonuç:** Taşınan satırlar: WorkOrder 1361, Inventory 27, OrderReceipt 19, InventoryReceipt 18, WorkOrderProduction 11, CurrentAccountTransaction 4, Address 3, InitialCost 2, PackingList 2, ProductivityTransaction 1. Silinen: 3 total, 37 cari. Yeniden tarama: eski Id'lere 0 bağ.
 - **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-birlestir-20261128-041459.json`
 - **Not:** Erp_CurrentAccount/Transaction/Total tablolarında trigger yok; taşınan 4 cari hareketinin bakiyesi Total'a yansımadı (eski cariler için de Total satırı yoktu).
+
+### 3. SentezCore — 320.01.xx / 320.02.xx cari kodları 3 haneye
+- **Neden:** Yeni hesap planı formatı `320.02.001` (son bölüm 3 hane).
+- **Ne yapıldı:** `kodguncel.cs` (scratchpad/sqldene): CompanyId=2, `LEN=9 AND LIKE '320.0[12].[0-9][0-9]'` kodlar → `LEFT(kod,7)+'0'+RIGHT(kod,2)`. Çakışma kontrolü (0), kodu metin olarak tutan kolonlar da tarandı (ECMCurrentAccountCode, Erp_OrderReceipt.UD_CargoCurrentAccountCode, Erp_BudgetItem, Erp_GLReceiptItemInv — hepsinde 0 kullanım). Önce ROLLBACK deneme, sonra `--onayla`.
+- **Sonuç:** 113 cari (320.01.001–099, 320.02.001–014) güncellendi; diğer tablolar Id ile bağlı olduğundan etkilenmedi.
+- **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-kod-3hane-*.json`
