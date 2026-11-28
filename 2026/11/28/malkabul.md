@@ -32,3 +32,13 @@ GL hesapları 26.11'de silinmişti (bkz. 2026/11/26/malkabul.md §2). Yeni hesap
 - **Ne yapıldı:** `kodguncel.cs` (scratchpad/sqldene): CompanyId=2, `LEN=9 AND LIKE '320.0[12].[0-9][0-9]'` kodlar → `LEFT(kod,7)+'0'+RIGHT(kod,2)`. Çakışma kontrolü (0), kodu metin olarak tutan kolonlar da tarandı (ECMCurrentAccountCode, Erp_OrderReceipt.UD_CargoCurrentAccountCode, Erp_BudgetItem, Erp_GLReceiptItemInv — hepsinde 0 kullanım). Önce ROLLBACK deneme, sonra `--onayla`.
 - **Sonuç:** 113 cari (320.01.001–099, 320.02.001–014) güncellendi; diğer tablolar Id ile bağlı olduğundan etkilenmedi.
 - **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-kod-3hane-*.json`
+
+### 4. SentezCore — her cari için GL hesabı + cari muhasebe bağı
+- **Neden:** Yeni hesap planı (653 hesap, 28.11 01:08'de yüklendi) 120.01/120.02/320.01/320.02 ana hesaplarını içeriyor ama cari detay hesapları yok; carilerin muhasebe kodu boş.
+- **Ne yapıldı:** `glcari.cs` (scratchpad/sqldene), tek transaction:
+  - Eksik ana hesaplar: `120.99` OTHER CUSTOMERS / DİĞER ALICILAR, `320.99` OTHER SUPPLIERS / DİĞER SATICILAR.
+  - Her cari (CompanyId=2, `120|320.NN.NNN`) için aynı kodlu Erp_GLAccount: AccountName/UD_Turkce/UD_Arabic = cari adı (özel isim, Latin harf), AccountType=1, CDType=3, InUse=1, IsApproved=1, CostDistributionType=0, InsertedBy=1 (yüklenen planla aynı değerler).
+  - Bağ: 120.* → `CustomerGLAccountId`, 320.* → `SupplierGLAccountId`.
+  - Önce ROLLBACK deneme, sonra `--onayla`. Koruma: 129/129 doğru bağ, çift kod 0, GL artışı = eklenen.
+- **Sonuç:** 2 ana + 129 detay GL hesabı; 15 müşteri, 114 satıcı bağı.
+- **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-glhesap-*.json` (önceki GL bağları; hepsi boştu). Geri alma: yeni GL'ler `InsertedAt` 28.11 04:3x ile ayırt edilir.
