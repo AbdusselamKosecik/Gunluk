@@ -42,3 +42,13 @@ GL hesapları 26.11'de silinmişti (bkz. 2026/11/26/malkabul.md §2). Yeni hesap
   - Önce ROLLBACK deneme, sonra `--onayla`. Koruma: 129/129 doğru bağ, çift kod 0, GL artışı = eklenen.
 - **Sonuç:** 2 ana + 129 detay GL hesabı; 15 müşteri, 114 satıcı bağı.
 - **Yedek:** `X:\Gitlab\modfex-apparel\yedek\sentez-cari-glhesap-*.json` (önceki GL bağları; hepsi boştu). Geri alma: yeni GL'ler `InsertedAt` 28.11 04:3x ile ayırt edilir.
+
+### 5. KDV muhasebe bağı — beklemede
+- Erp_TaxIA: %14 (TaxId 18) ve %5 (19) için TypeNo 1–25 satırları var, hepsi GLAccountId NULL; %0 için satır yok (kullanıcı: %0 boşver). TypeNo anlamları DB'de yok (Meta_* tablolarında da yok), Sentez kurulumu erişilemez → kullanıcıdan Sentez'de %14 kartını doldurması ya da satır adlarını vermesi istendi.
+
+### 6. Muhasebe-Ornek-Fisler.xlsx (eğitim materyali)
+- **Neden:** Mısırlı muhasebecilere Türk mevzuatına (TDHP, 7/A) göre eğitim; Mısır'da 7 sınıfı yok → 7 ve 6 sınıfının bilançoya nasıl taşındığını göstermek.
+- **Ne yapıldı:** `scratchpad/ornekfis.py` + `sss.py` (kopyası `X:\Gitlab\modfex-apparel\yedek\`), hesap adları canlı Erp_GLAccount'tan (`sqldene/plan4.cs` → planfull.tsv, TR/EN/AR). Sayfalar: Aciklama, Egitim Soru-Cevap (26 soru TR+EN), Ornek Fisler (24 fiş: satış/alış/gider faturası, banka tahsilat/ödeme, cariye banka/kasa ödemesi, virman, maaş), Yansitma ve Kapanis (12 fiş: 711/721/731→151→152, 761/771/781→631/632/660, 7 karşılıklı kapanış, 6→690, 691/370, 692→590), Mizan.
+- **Doğrulama:** her fiş borç=alacak (assert), tüm kodlar planda mevcut, kapanış sonrası 6/7 sınıfı sıfır; bilanço aktif=pasif 49.165.
+- **Çıktı:** `X:\Gitlab\modfex-apparel\Muhasebe-Ornek-Fisler.xlsx`
+- **Notlar:** 191'in detay hesabı yok; isimli "Ödenecek KDV" detay hesabı yok (360.01.008 adsız); Mısır kurumlar vergisi %22,5 varsayıldı.
